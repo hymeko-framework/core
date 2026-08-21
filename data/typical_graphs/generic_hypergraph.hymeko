@@ -1,0 +1,16 @@
+Generic_hypergraph{}
+generic
+{
+    a {}
+    b {}
+    c {}
+    d {}
+    e {}
+    f {}
+    g {}
+
+    @e0{ (~a, ~b, ~c); }
+    @e1{ (~c, ~d, ~f); }
+    @e2{ (~d, ~e); }
+    @e3{ (~c, ~g, ~f); }
+}

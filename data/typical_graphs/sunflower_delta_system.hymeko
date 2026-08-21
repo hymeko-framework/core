@@ -1,0 +1,16 @@
+Sunflower_delta{}
+sunflower
+{
+    core_a {}
+    core_b {}
+    p1a {}
+    p1b {}
+    p2a {}
+    p2b {}
+    p3a {}
+    p3b {}
+
+    @petal1{ (~core_a, ~core_b, ~p1a, ~p1b); }
+    @petal2{ (~core_a, ~core_b, ~p2a, ~p2b); }
+    @petal3{ (~core_a, ~core_b, ~p3a, ~p3b); }
+}

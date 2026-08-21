@@ -1,0 +1,16 @@
+# hymeko/core — standalone workspace: the HyMeKo semantic core.
+#   hymeko_core : IR, encoding (writers), tensor primitives
+#   hymeko_hnn  : hypergraph representation (traversal) + tensor-transformation operators
+# `parser` is an external repo (hymeko/parser), pulled as a git dependency.
+[workspace]
+resolver = "2"
+members = ["hymeko_core", "hymeko_hnn"]
+
+[workspace.dependencies]
+serde = "1.0.228"
+blake3 = "1.8.3"
+rayon = "1.11.0"
+arrow = "58.0.0"
+iceoryx2 = "0.8.1"
+log = "0.4.22"
+parser = { git = "ssh://git@amaterasu.local:2222/hymeko/parser.git", branch = "master" }

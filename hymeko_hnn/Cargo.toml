@@ -1,0 +1,23 @@
+[package]
+name = "hymeko_hnn"
+version = "0.1.0"
+edition = "2024"
+description = "Hypergraph neural network operators and bipartite incidence views for HyMeKo"
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "hymeko_hnn"
+crate-type = ["rlib"]
+
+[dependencies]
+# HyperGraphView and the tensor-layer operations that use it live here.
+# They need core for tensor primitives (TensorCoo / Real / aggregation /
+# tensor_val) and IR types (DeclId / NodeId / EdgeId / SignedRefR / Ir).
+hymeko_core = { path = "../hymeko_core" }
+rayon = { workspace = true }
+rustc-hash = "2"
+
+[dev-dependencies]
+# Fixture-based tests parse .hymeko sources through the full compile
+# pipeline — same pattern as hymeko_hre's dev tests.
+parser = { workspace = true }
