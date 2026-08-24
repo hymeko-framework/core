@@ -1,3 +1,9 @@
 /target
 **/target
 .DS_Store
+
+# Written by tests/hash/hashing_test.rs on every `cargo test`. Machine-specific
+# timings, tracked once by accident in the migration import and never updated
+# since — so every test run dirtied the tree for no reason.
+hymeko_core/hash_performance_runs.csv
+hymeko_core/hash_performance_summary.csv
