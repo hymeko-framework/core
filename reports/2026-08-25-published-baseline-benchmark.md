@@ -1,7 +1,8 @@
 # Published baseline benchmark — single-host provisional baseline
 
-**Date:** 2026-08-25, 19:47–21:20 CEST (UTC+02:00)
-**Host:** one machine only. No second host was available (§14.4).
+**Date:** 2026-08-25, 19:47–21:20 CEST (main run); 23:45–00:05 (second host, Appendix A)
+**Hosts:** two. Main body is single-host; a second host was added afterwards and
+is reported separately in **Appendix A**, not merged into the tables.
 
 | results in | source commit |
 |---|---|
@@ -27,8 +28,28 @@ commit (harnesses)      9bc4884bd8ccecf53cd0ceeeb3b5319c12bad92b
 branch / remote         main -> ssh://git@amaterasu.local:2222/hymeko/core.git
 worktree                clean at both measurement points
 Cargo.lock sha256       ca754daa0cc11107b19c8dbf35f1c377212886c7fcb5a9ba2631099a2ba8cb9f
-source manifest sha256  b5db41d475ac66876f3db09b694655493b5c9810f66e6420e4dcfc67c5057ca3   (at 8b9d82d)
+
+canonical source identity (git-normalised, portable across platforms):
+  tree at 9bc4884        1ba79d08ee6d4c7a05c51d622d571b7d1eeb01b4
+  source-subtree digest  356dc93a1c15fa60b6a916748b108d3d4648359ad18ffa6f0199fc83146561bd
+    = sha256 of: git ls-tree -r <sha> -- hymeko_core hymeko_hnn hymeko_wgpu
+
+working-tree manifest (NOT portable — see below):
+  b5db41d475ac66876f3db09b694655493b5c9810f66e6420e4dcfc67c5057ca3   (at 8b9d82d, Windows)
 ```
+
+> **Correction to the manifest method.** The working-tree manifest above hashes
+> files *as they sit on disk*, and that is not a portable identity. This host has
+> `core.autocrlf = true`, so its tree is mixed — files git checked out carry CRLF,
+> files written directly carry LF — while a fresh clone on Linux is uniformly LF.
+> The same commit therefore produces different disk manifests on different
+> platforms, and comparing them proves nothing about content.
+>
+> Discovered when the second host reported `1fce1802…` against this host's
+> `70efc247…` for the *same* commit. The git tree hash and the `ls-tree` digest
+> are content-normalised and match exactly on both hosts, so those are the
+> identifiers to use. The disk manifest is retained only because the §5–§10
+> numbers were recorded against it.
 
 Shader hashes (sha256, at `8b9d82d`):
 
@@ -512,10 +533,15 @@ qualified accordingly.
 
 ### 14.4 Amaterasu
 
-Still blocked; **no access attempts were made during this work**. The git service
-on port 2222 accepts the key (both pushes succeeded over it); interactive SSH on
-port 22 does not. Unblocking needs that key authorised for a login account, or a
-working account/host/port. All results are therefore **single-host**.
+**Resolved after the main run.** A user SSH key was authorised on the login
+account, and the second host was measured — see **Appendix A**. The main body
+(§5–§16) remains single-host; Appendix A is separate because the hardware
+differs and its numbers are a second data point, not a validation.
+
+What the second host changed: §12 throttling moves from inferred to confirmed,
+§11 gains a partial explanation (ambient load is about half the instability, the
+rest is harness order bias), §8.1 readback dominance is confirmed portable while
+its magnitude is not, and one portability defect is on record.
 
 ---
 
@@ -596,3 +622,161 @@ fetch it while online or supply a path override.
 5. **Do not pursue arena micro-optimisation.** A cache-hit acquire is 268 ns —
    0.33 % of the submit floor — and the pool already reaches the hand-written
    allocation minimum.
+
+---
+
+# Appendix A — Second host (amaterasu), 2026-08-25 23:45–00:05 CEST
+
+A second host became available after the main report was written. Its results are
+**appended, not merged**: different CPU, different GPU, different OS, so it
+produces its own numbers rather than validating this host's.
+
+## A.1 Environment
+
+| | this host | amaterasu |
+|---|---|---|
+| CPU | Core Ultra 9 275HX, 24c/24t | AMD Ryzen 7 3700X, 8c/16t, 4.43 GHz |
+| RAM | 63.4 GB | 31 GB |
+| GPU | RTX 5080 Laptop, 16 GB (Blackwell) | RTX 2070 SUPER, 8 GB (Turing) |
+| driver | 610.88 | 595.91.07 |
+| power limit | `[N/A]` — not readable | **215 W** — readable |
+| OS | Windows 11 26200 | Ubuntu 24.04.4 LTS |
+| rustc | 1.97.1 | **1.97.1** (installed to match; host default is 1.98.0) |
+| load at start | 14.2 % mean (4–79 % during runs) | **0.37** |
+
+Source identity verified identical by git tree hash (§1), not by disk manifest.
+Built `--locked` at `9bc4884`, dependencies from crates.io.
+
+## A.2 Correctness — identical
+
+**286 passed, 1 failed**, matching this host exactly, with the same drift values
+(`left: 58, right: 57`).
+
+Every GPU suite passes on a different GPU architecture, driver and OS —
+including the bit-exact comparisons in `tests/activation.rs`, `tests/arena.rs`,
+`src/fanout_tests.rs` and `tests/spmm.rs`. That is the strongest evidence so far
+that the numerical contracts are portable rather than incidental to one adapter.
+
+## A.3 Defect found: concurrent GPU device creation deadlocks on Linux
+
+The suite hung for **101 minutes**. Evidence:
+
+```
+STAT Sl   %CPU 100   WCHAN futex_do_wait   threads 19
+GPU: 0 % utilization, process holds a 145 MiB context
+```
+
+Vulkan device creation succeeded, so this is not a headless-display problem — it
+is a CPU-side spin. It resolves completely:
+
+| runner | result |
+|---|---|
+| default (multi-threaded) | hung, ≥12 min observed, 100 % CPU |
+| `--test-threads=1` | **31 passed in 1.98 s** |
+
+**Cause is the test design, not the operation code:** every test builds its own
+`WgpuBackend`, so the default runner creates ~16 Vulkan devices concurrently.
+That survives on Windows and deadlocks on Linux/Vulkan.
+
+**Required workaround on Linux:** `cargo test -- --test-threads=1`.
+
+**Proper fix (not applied here, since it changes measured source):** share one
+backend across tests via a `OnceLock`, which also removes ~16 redundant device
+creations from the suite. That is a source change and belongs in its own commit
+with its own re-measurement.
+
+## A.4 The ordering question — answered, and only half the way I expected
+
+The purpose of the second host was to settle whether §11's forward/reversed
+disagreement was ambient load. Measuring `|rev/fwd − 1|` across all 576 cell ×
+variant pairs:
+
+| host | ambient load | median | p75 | p90 | cells agreeing within 3 % |
+|---|---|---:|---:|---:|---:|
+| this host | 4–79 % | **12.6 %** | 24.2 % | 42.9 % | 100 / 576 = **17 %** |
+| amaterasu | 0.37 at start | **5.0 %** | 14.2 % | 38.9 % | 232 / 576 = **40 %** |
+
+**Ambient load was a major contributor — confirmed.** A quiet machine halves the
+median ordering effect and more than doubles the agreement rate.
+
+**It is not the whole cause.** An idle host still shows a 5.0 % median
+discrepancy — above the 3 % floor — with 60 % of cells still disagreeing. So the
+harness carries a residual order bias that quiet does not remove.
+
+Plausible remaining sources, none isolated: boost-clock decay across the four
+variants measured back-to-back within a cell, and cache/TLB state carried from
+one variant into the next. **Stated as hypotheses.**
+
+**Consequence for the method:** measuring variants in back-to-back *blocks* is
+insufficient. A harness that alternates single repetitions between variants, or
+randomises variant order per repetition, would suppress both candidate effects.
+Until then the crossover cannot be pinned closer than ~5 % on any host, and the
+§11 conclusion stands: report a bracket, never a point.
+
+## A.5 Readback scaling differs sharply between platforms
+
+Readback overhead (`gpu_readback − gpu_resident`), uniform, degree 8, mean of
+both directions:
+
+| rows | fd | this host | amaterasu | ratio |
+|---:|---:|---:|---:|---|
+| 200 000 | 8 | 2 410 µs | 901 µs | this host 2.67× slower |
+| 200 000 | 32 | 8 990 µs | 3 661 µs | this host 2.46× slower |
+| 50 000 | 128 | 8 609 µs | 3 649 µs | this host 2.36× slower |
+| 100 000 | 128 | 17 568 µs | **32 781 µs** | **inverts**, amaterasu 1.87× slower |
+| 200 000 | 128 | 42 134 µs | **90 249 µs** | **inverts**, amaterasu 2.14× slower |
+
+In bandwidth terms amaterasu moves ~41 MB at ~11 GB/s but ~102 MB at ~1.1 GB/s —
+a **~10× collapse between roughly 41 MB and 51 MB**. This host scales smoothly at
+~2.4 GB/s throughout.
+
+**Observed, not explained.** Candidate causes — a staging-buffer size threshold,
+a driver fallback from pinned to pageable memory, BAR size — were not isolated,
+so none is asserted. What it does establish: *readback dominates* is portable,
+but its magnitude and its scaling with transfer size are **not** — a
+readback-cost model calibrated on one machine should not be trusted on another.
+
+## A.6 Sustained — the throttling attribution is confirmed by control
+
+Same workload (200 000 × 200 000, nnz 5 442 303, fd 128, 8 layers), same code.
+
+| | this host | amaterasu |
+|---|---|---|
+| throughput | 103–111 GMAC/s | 34.6 GMAC/s |
+| first 10 s → last 10 s | **−4.5 %** | **−0.0 %** |
+| temperature | 71 → 81 °C | max 60 °C |
+| power | pinned ~129.5 W, limit unreadable | 108.8 W of **215 W** limit |
+| SM clock | 2 265 → 2 000 MHz (−12 %) | 1 200–1 605 MHz, stable |
+
+The desktop, with roughly half its power budget unused and 20 °C of thermal
+headroom, shows **no decline at all** across 60 s. The laptop, pinned at its
+power ceiling, loses 4.5 %.
+
+§12 inferred a power/thermal envelope limit from flat power plus falling clock.
+This is the controlled comparison that confirms it: removing the constraint
+removes the decline. The laptop is 3.1× faster in absolute throughput, which is
+the expected Blackwell-vs-Turing gap and not in question.
+
+## A.7 Housekeeping
+
+Work confined to `~/hymeko_bench_9bc4884/`. The pre-existing checkout at
+`~/backup/hymeko_framework` (Nov 2025) was not touched, and nothing was
+auto-deleted. No host key was added: `amaterasu.local:2222` failed host-key
+verification, so the `parser` fetch was redirected to `localhost:2222` with
+per-invocation `GIT_CONFIG_*` variables rather than by editing `~/.ssh/config`,
+`known_hosts` or global git config.
+
+Two orphaned process trees of my own were reaped by PID before measuring — a
+`cargo test` still running 101 minutes after its ssh session reported exit 0, and
+a spinning `skeleton` binary. Both would have contaminated the timings.
+
+## A.8 What this changes in the main report
+
+* §12's throttling cause moves from **inferred** to **confirmed** (A.6).
+* §11's crossover stays **provisional**, but the reason is now split: ambient
+  load explains roughly half the instability, and a residual harness order bias
+  explains the rest (A.4).
+* §8.1's *readback dominates* is confirmed as portable; its **magnitude is not**
+  (A.5).
+* A new portability defect is on record (A.3), with a workaround and a proper fix
+  that is deliberately not applied inside a measurement series.
