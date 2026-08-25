@@ -7,12 +7,11 @@
 use hymeko::tensor::common::Real;
 use hymeko::tensor::representations::tensor_csr::TensorCsr;
 
-use hymeko::tensor::conv::traits::{compute_degree, inv_sqrt_degree, DegreeMode, HypergraphConv};
-use hymeko::tensor::conv::weight_init::weight_init::{WeightInit, Xavier};
-use hymeko::tensor::tensor_val::{IncVal, EdgeWeight};
+use crate::tensor::message_passing::{CliqueStepCfg, build_explicit_a};
 use crate::traversal::hypergraphview::HyperGraphView;
-use crate::tensor::message_passing::{build_explicit_a, CliqueStepCfg};
-
+use hymeko::tensor::conv::traits::{DegreeMode, HypergraphConv, compute_degree, inv_sqrt_degree};
+use hymeko::tensor::conv::weight_init::weight_init::{WeightInit, Xavier};
+use hymeko::tensor::tensor_val::{EdgeWeight, IncVal};
 
 pub struct GcnCliqueLayer<F: Real> {
     /// Learnable weight matrix W: d_in × d_out (row-major)
@@ -24,9 +23,10 @@ pub struct GcnCliqueLayer<F: Real> {
 }
 
 impl<F: Real> GcnCliqueLayer<F> {
-
     pub fn from_view<V, EW>(hg: &HyperGraphView<V, EW, F>, d_in: usize, d_out: usize) -> Self
-    where V: IncVal<F>, EW: EdgeWeight<V, F>,
+    where
+        V: IncVal<F>,
+        EW: EdgeWeight<V, F>,
     {
         Self::from_view_with_init(hg, d_in, d_out, &Xavier)
     }
@@ -36,23 +36,30 @@ impl<F: Real> GcnCliqueLayer<F> {
         hg: &HyperGraphView<V, EW, F>,
         d_in: usize,
         d_out: usize,
-        init: &I
+        init: &I,
     ) -> Self
     where
         V: IncVal<F>,
         EW: EdgeWeight<V, F>,
         I: WeightInit<F>,
     {
-        let cfg = CliqueStepCfg { use_abs: true, include_self: true };
+        let cfg = CliqueStepCfg {
+            use_abs: true,
+            include_self: true,
+        };
         let a_coo = build_explicit_a(hg, cfg);
 
         // Convert COO → dense then build normalized CSR
         // For production: use COO→CSR directly + diagonal scaling
         let n = hg.num_nodes();
         let deg = compute_degree(
-            &hg.edge_offsets, &hg.node_offsets,
-            &hg.flat_edge_nodes, &hg.flat_edge_sign,
-            &hg.flat_edge_w, n, hg.num_edges(),
+            &hg.edge_offsets,
+            &hg.node_offsets,
+            &hg.flat_edge_nodes,
+            &hg.flat_edge_sign,
+            &hg.flat_edge_w,
+            n,
+            hg.num_edges(),
             DegreeMode::VertexSquaredSum,
         );
         let inv_sqrt_d = inv_sqrt_degree(&deg);
@@ -78,7 +85,9 @@ impl<F: Real> GcnCliqueLayer<F> {
             col_ind.push(j);
             val.push(v);
         }
-        for i in 0..n { row_ptr[i + 1] += row_ptr[i]; }
+        for i in 0..n {
+            row_ptr[i + 1] += row_ptr[i];
+        }
 
         let norm_adj = TensorCsr {
             num_rows: n,
@@ -91,7 +100,12 @@ impl<F: Real> GcnCliqueLayer<F> {
         // Initialize weights with Xavier uniform
         let weights = init.create(d_in, d_out);
 
-        Self { weights, d_in, d_out, norm_adj }
+        Self {
+            weights,
+            d_in,
+            d_out,
+            norm_adj,
+        }
     }
 
     pub fn reinit_weights<I: WeightInit<F>>(&mut self, init: &I) {
@@ -100,27 +114,45 @@ impl<F: Real> GcnCliqueLayer<F> {
 
     /// Forward: X' = ReLU(Ã · X · W)
     /// x_in: n × d_in (row-major flat), x_out: n × d_out (row-major flat)
+    ///
+    /// # Postconditions
+    /// The first `num_rows * d_out` elements of `x_out` are overwritten. A
+    /// longer `x_out` is tolerated and its tail left untouched, matching the
+    /// previous behaviour.
     pub fn forward_relu(&self, x_in: &[F], x_out: &mut [F]) {
         let n = self.norm_adj.num_rows;
 
         // Step 1: H = X · W  (dense matmul, n×d_in × d_in×d_out → n×d_out)
+        //
+        // Loop order i → k → j walks a contiguous row of `weights` in the
+        // innermost loop. Each H[i][j] still accumulates over k in 0..d_in
+        // order, so the result is unchanged bitwise; the previous i → j → k
+        // order strode `weights` by d_out and could not vectorise.
         let mut h = vec![F::zero(); n * self.d_out];
-        for i in 0..n {
-            for j in 0..self.d_out {
-                let mut acc = F::zero();
-                for k in 0..self.d_in {
-                    acc += x_in[i * self.d_in + k] * self.weights[k * self.d_out + j];
+        for (i, h_row) in h.chunks_mut(self.d_out).enumerate() {
+            let x_row = &x_in[i * self.d_in..(i + 1) * self.d_in];
+            for (k, &xik) in x_row.iter().enumerate() {
+                let w_row = &self.weights[k * self.d_out..(k + 1) * self.d_out];
+                for (hj, &wj) in h_row.iter_mut().zip(w_row.iter()) {
+                    *hj += xik * wj;
                 }
-                h[i * self.d_out + j] = acc;
             }
         }
 
-        // Step 2: X' = Ã · H  (sparse × dense, uses spmm)
-        let result = self.norm_adj.spmm(&h, self.d_out);
+        // Step 2: X' = Ã · H, written straight into the caller's buffer.
+        // The allocating `spmm` used to materialise a second n × d_out Vec
+        // here purely to be copied out again.
+        let (out, _tail) = x_out.split_at_mut(n * self.d_out);
+        self.norm_adj.spmm_into(&h, self.d_out, out);
 
-        // Step 3: ReLU
-        for i in 0..result.len() {
-            x_out[i] = if result[i] > F::zero() { result[i] } else { F::zero() };
+        // Step 3: ReLU, in place.
+        //
+        // Written as an explicit select rather than `if *slot <= zero`, so a
+        // NaN still maps to zero exactly as the original
+        // `if result[i] > zero { result[i] } else { zero }` did. `NaN <= 0` is
+        // false, so the inverted form would have let NaNs through.
+        for slot in out.iter_mut() {
+            *slot = if *slot > F::zero() { *slot } else { F::zero() };
         }
     }
 }
@@ -131,7 +163,13 @@ impl<F: Real> HypergraphConv<F> for GcnCliqueLayer<F> {
         debug_assert_eq!(d_out, self.d_out);
         self.forward_relu(x_in, x_out);
     }
-    fn num_params(&self) -> usize { self.weights.len() }
-    fn params_mut(&mut self) -> &mut [F] { &mut self.weights }
-    fn params(&self) -> &[F] { &self.weights }
+    fn num_params(&self) -> usize {
+        self.weights.len()
+    }
+    fn params_mut(&mut self) -> &mut [F] {
+        &mut self.weights
+    }
+    fn params(&self) -> &[F] {
+        &self.weights
+    }
 }

@@ -1,0 +1,58 @@
+[package]
+name = "hymeko_wgpu"
+version = "0.1.0"
+edition = "2024"
+description = "WGPU compute backend for the HyMeKo tensor / hypergraph kernels"
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "hymeko_wgpu"
+crate-type = ["rlib"]
+
+[dependencies]
+# Backend-independent vocabulary only (TensorShape, SparseCsrShape,
+# BackendKind, ComputeError). This crate deliberately does NOT depend on
+# hymeko_hnn: the GPU backend needs shapes and errors, not hypergraph views.
+hymeko_core = { path = "../hymeko_core" }
+
+# Minimal feature set for the target platforms: DX12 and Vulkan on Windows,
+# plus the WGSL front-end. GL/WebGPU/WebAssembly are explicitly OFF -- enabling
+# them pulls glow, khronos_api, gl_generator, web-sys and the Apple/Android
+# stacks into the vendor tree for no benefit here (26 crates, ~32 MiB measured).
+[dependencies.wgpu]
+version = "30.0.1"
+default-features = false
+features = ["dx12", "vulkan", "wgsl", "std"]
+
+# Zero-copy &[f32] -> &[u8] for buffer uploads. Already vendored (wgpu-types
+# depends on it), so this adds nothing to the dependency tree.
+[dependencies.bytemuck]
+version = "1"
+features = ["derive"]
+
+[dev-dependencies]
+# The skeleton tests build bind group layouts and compute passes directly,
+# so they name wgpu types. The library re-exports the vocabulary, not wgpu.
+#
+# hymeko_hnn is a DEV-dependency only. The library must never depend on it --
+# that was the whole reason the shared vocabulary went into hymeko_core -- but
+# the tests and benchmarks need `workloads::SparseSpec`, the existing
+# deterministic generator. Re-implementing it here would duplicate tested code
+# (CLAUDE.md Sec. 6.1) and a dev-dependency does not appear in any consumer's
+# dependency graph.
+hymeko_hnn = { path = "../hymeko_hnn" }
+wgpu = { version = "30.0.1", default-features = false, features = ["dx12", "vulkan", "wgsl", "std"] }
+bytemuck = "1"
+criterion = { version = "0.8.2", default-features = false }
+
+[[bench]]
+name = "spmm_bench"
+harness = false
+
+[[bench]]
+name = "chain_bench"
+harness = false
+
+[[bench]]
+name = "arena_bench"
+harness = false

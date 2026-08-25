@@ -1,9 +1,8 @@
+use crate::traversal::hypergraphview::HyperGraphView;
 use hymeko::common::ids::EdgeId;
-use hymeko::tensor::common::{Real};
+use hymeko::tensor::common::Real;
 use hymeko::tensor::representations::tensor_coo::TensorCoo;
 use hymeko::tensor::tensor_val::{EdgeWeight, IncVal};
-use crate::traversal::hypergraphview::HyperGraphView;
-
 
 pub fn dense_view_slice<F: Real>(coo: &TensorCoo<F>, k_sel: usize) -> Vec<Vec<F>> {
     assert!(k_sel < coo.num_slices, "k out of range");
@@ -11,7 +10,9 @@ pub fn dense_view_slice<F: Real>(coo: &TensorCoo<F>, k_sel: usize) -> Vec<Vec<F>
     let mut m = vec![vec![F::zero(); coo.dim_j]; coo.dim_i];
 
     for e in coo.iter() {
-        if e.k != k_sel { continue; }
+        if e.k != k_sel {
+            continue;
+        }
         m[e.i][e.j] += e.v; // coalesce by summation
     }
     m
@@ -32,7 +33,7 @@ pub fn compute_bipartite_degrees<V, EW, F>(
 where
     V: IncVal<F>,
     EW: EdgeWeight<V, F>,
-    F: Real
+    F: Real,
 {
     let n = hg.num_nodes();
     let m = hg.num_edges();
@@ -45,7 +46,9 @@ where
         for p in s..eend {
             let v = hg.flat_edge_nodes[p].0;
             let mut b = hg.flat_edge_w[p].degree_mass();
-            if use_abs { b = b.abs(); }
+            if use_abs {
+                b = b.abs();
+            }
             deg_v[v] += b;
             de += b;
         }
@@ -54,4 +57,3 @@ where
 
     (deg_v, deg_e)
 }
-

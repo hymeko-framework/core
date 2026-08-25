@@ -1,0 +1,128 @@
+% plan.tikz — architecture / dataflow / module boundaries
+% \input{plan.tikz} from plan.tex, or compile standalone by wrapping in
+% a minimal document with \usepackage{tikz} and the libraries below:
+%   \usetikzlibrary{arrows.meta,positioning,fit,backgrounds,calc}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  font=\small,
+  node distance=6mm and 10mm,
+  box/.style={draw, rounded corners=2pt, align=center, inner sep=4pt,
+              minimum height=8mm, text width=32mm},
+  core/.style={box, fill=blue!6},
+  hnn/.style={box, fill=green!7},
+  newk/.style={box, fill=orange!14, very thick},
+  future/.style={box, fill=gray!8, dashed},
+  flow/.style={-{Stealth[length=2mm]}, thick},
+  weak/.style={-{Stealth[length=2mm]}, dashed, gray}
+]
+
+% ---- data sources -------------------------------------------------
+\node[core] (ir) {\texttt{Ir}\\{\scriptsize nodes / edges / arcs}};
+\node[hnn, right=18mm of ir] (view) {\texttt{HyperGraphView}\\{\scriptsize bipartite incidence}};
+
+% ---- the two incidence CSRs (the load-bearing detail) -------------
+\node[hnn, above right=2mm and 16mm of view] (ecsr)
+  {edge-first CSR\\{\scriptsize \texttt{edge\_offsets},\\\texttt{flat\_edge\_nodes}}};
+\node[hnn, below right=2mm and 16mm of view] (ncsr)
+  {node-first CSR\\{\scriptsize \texttt{node\_offsets},\\\texttt{flat\_node\_edges}}};
+
+\draw[flow] (ir) -- node[above,font=\scriptsize] {\texttt{from\_ir}} (view);
+\draw[flow] (view) -- (ecsr);
+\draw[flow] (view) -- (ncsr);
+
+% ---- kernels ------------------------------------------------------
+\node[newk, right=14mm of ecsr] (gather) {\texttt{gather\_*}\\{\scriptsize par over edges}};
+\node[newk, right=14mm of ncsr] (scatter) {\texttt{scatter\_*}\\{\scriptsize par over nodes,\\no atomics}};
+
+\draw[flow] (ecsr) -- (gather);
+\draw[flow] (ncsr) -- (scatter);
+\draw[flow] (gather) to[bend left=12] node[right,font=\scriptsize] {$x_e$} (scatter);
+
+% ---- convolution layer -------------------------------------------
+\node[newk, right=14mm of $(gather)!0.5!(scatter)$] (conv)
+  {HGNN / Signed-HGNN\\{\scriptsize feature-blocked}};
+\draw[flow] (gather) -- (conv);
+\draw[flow] (scatter) -- (conv);
+
+% ---- CSR primitive path -------------------------------------------
+\node[core, below=16mm of ncsr] (csr) {\texttt{TensorCsr}};
+\node[newk, right=14mm of csr] (spmm)
+  {\texttt{spmv\_into}\\\texttt{spmm\_into}\\{\scriptsize par\_chunks\_mut}};
+\draw[flow] (csr) -- (spmm);
+\draw[flow] (spmm) -- node[below,font=\scriptsize] {\texttt{gcn\_clique}} (conv.south west);
+
+% ---- future backends ----------------------------------------------
+\node[future, right=14mm of conv] (be) {backend seam\\{\scriptsize \texttt{*\_into} = explicit\\output buffers}};
+\node[future, above=5mm of be] (cuda) {\texttt{CudaBackend}\\{\scriptsize feature-gated}};
+\node[future, below=5mm of be] (fpga) {\texttt{FpgaBackend}\\{\scriptsize feature-gated}};
+\draw[flow] (conv) -- (be);
+\draw[weak] (be) -- (cuda);
+\draw[weak] (be) -- (fpga);
+
+% ---- crate boundary ------------------------------------------------
+\begin{scope}[on background layer]
+  \node[draw, dashed, fill=blue!3, inner sep=6pt, rounded corners,
+        fit=(ir)(csr)(spmm), label={[font=\scriptsize\itshape]above left:hymeko\_core (lockdown: full)}] {};
+  \node[draw, dashed, fill=green!3, inner sep=6pt, rounded corners,
+        fit=(view)(ecsr)(ncsr)(gather)(scatter)(conv), label={[font=\scriptsize\itshape]above:hymeko\_hnn (non-core)}] {};
+\end{scope}
+
+\end{tikzpicture}
+\caption{Dataflow and module boundaries. Orange nodes are the kernels this
+plan rewrites. The load-bearing structural fact is that
+\texttt{HyperGraphView} already materialises \emph{both} incidence
+orientations from the same triple multiset: gather is naturally parallel over
+edges on the edge-first CSR, and scatter becomes naturally parallel over
+\emph{nodes} on the node-first CSR --- with per-element summation order
+unchanged, hence no atomics, no locks, and bitwise-identical output. The
+\texttt{*\_into} signatures (explicit caller-owned output buffers) are also
+the seam a later device backend needs.}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  font=\small,
+  box/.style={draw, rounded corners=2pt, align=center, inner sep=3pt,
+              minimum height=7mm, text width=40mm},
+  old/.style={box, fill=red!7},
+  new/.style={box, fill=orange!14},
+  flow/.style={-{Stealth[length=2mm]}, thick},
+  node distance=4mm
+]
+
+\node[old] (o1) {\textbf{before:} \texttt{for f in 0..d\_out}};
+\node[old, below=of o1] (o2) {alloc \texttt{z\_col} ($n$)};
+\node[old, below=of o2] (o3) {alloc \texttt{x\_edges} ($m$)};
+\node[old, below=of o3] (o4) {alloc \texttt{y\_col} ($n$)};
+\node[old, below=of o4] (o5) {walk \emph{all} incidences};
+\node[below=of o5, font=\scriptsize\itshape, text width=42mm, align=center]
+  (o6) {$3\,d_{\text{out}}$ allocations,\\$d_{\text{out}}$ full traversals};
+
+\draw[flow] (o1) -- (o2); \draw[flow] (o2) -- (o3);
+\draw[flow] (o3) -- (o4); \draw[flow] (o4) -- (o5);
+\draw[flow] (o5) -- (o6);
+
+\node[new, right=26mm of o1] (n1) {\textbf{after:} one traversal};
+\node[new, below=of n1] (n2) {row-major $Z$, stride $d_{\text{out}}$};
+\node[new, below=of n2] (n3) {inner loop over $f$ (SIMD)};
+\node[new, below=of n3] (n4) {reused scratch buffer};
+\node[below=of n4, font=\scriptsize\itshape, text width=42mm, align=center]
+  (n5) {$O(1)$ allocations,\\1 traversal, order preserved};
+
+\draw[flow] (n1) -- (n2); \draw[flow] (n2) -- (n3);
+\draw[flow] (n3) -- (n4); \draw[flow] (n4) -- (n5);
+
+\draw[flow, gray] (o1.east) to[bend left=18] node[above,font=\scriptsize]{H4} (n1.west);
+
+\end{tikzpicture}
+\caption{Hypothesis H4: the convolution forward passes re-walk the entire
+incidence structure once per output feature and allocate three temporaries
+each time. Blocking the feature loop \emph{inside} the traversal keeps the
+per-element summation order (and hence the numerics) but turns
+$d_{\text{out}}$ traversals into one. The expected gain grows with
+$d_{\text{out}}$ --- which is what the \texttt{feature\_dim} $\in
+\{1,8,32,128\}$ sweep is designed to confirm or refute.}
+\end{figure}

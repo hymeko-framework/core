@@ -21,3 +21,11 @@ rustc-hash = "2"
 # Fixture-based tests parse .hymeko sources through the full compile
 # pipeline — same pattern as hymeko_hre's dev tests.
 parser = { workspace = true }
+
+[dev-dependencies.criterion]
+version = "0.8.2"
+default-features = false
+
+[[bench]]
+name = "hnn_bench"
+harness = false

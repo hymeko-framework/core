@@ -1,0 +1,100 @@
+% plan.tikz — target layering for the multi-backend compute framework.
+% \input{plan.tikz} from plan.tex, or wrap in a minimal standalone document
+% with \usepackage{tikz} and \usetikzlibrary{arrows.meta,positioning,fit,backgrounds,calc}.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  font=\small,
+  node distance=5mm and 9mm,
+  layer/.style={draw, rounded corners=2pt, align=center, inner sep=4pt,
+                minimum height=8mm, text width=44mm},
+  exist/.style={layer, fill=green!10},
+  newc/.style={layer, fill=orange!16, very thick},
+  future/.style={layer, fill=gray!8, dashed},
+  flow/.style={-{Stealth[length=2mm]}, thick},
+  weak/.style={-{Stealth[length=2mm]}, dashed, gray}
+]
+
+\node[exist] (app) {Application / HNN API\\{\scriptsize HgnnLayer, SignedHgnnLayer}};
+\node[newc, below=of app] (facade) {ComputeRuntime / Facade\\{\scriptsize backend selection, planning}};
+\node[newc, below=of facade] (prep) {Prepared Operations\\{\scriptsize descriptor $\rightarrow$ validated op}};
+
+\draw[flow] (app) -- (facade);
+\draw[flow] (facade) -- (prep);
+
+% --- strategies -----------------------------------------------------
+\node[exist, below left=14mm and 26mm of prep] (ser) {CpuSerial\\{\scriptsize \texttt{*\_into\_serial}}};
+\node[exist, below=of ser] (par) {CpuRayon\\{\scriptsize \texttt{*\_into\_parallel}}};
+\node[newc, below right=14mm and 26mm of prep] (wgpu) {Wgpu\\{\scriptsize WGSL dispatch}};
+\node[future, below=of wgpu] (cuda) {CudaBackend / FpgaBackend\\{\scriptsize later}};
+
+\draw[flow] (prep) -- node[above left,font=\scriptsize]{static} (ser);
+\draw[flow] (prep) -- (par);
+\draw[flow] (prep) -- node[above right,font=\scriptsize]{enum facade} (wgpu);
+\draw[weak] (wgpu) -- (cuda);
+
+% --- resources ------------------------------------------------------
+\node[exist, below=22mm of par] (cpures) {CPU resources\\{\scriptsize \texttt{TensorCsr}, \texttt{HyperGraphView},\\ borrowed slices}};
+\node[newc, below=22mm of wgpu] (gpures) {GPU resources\\{\scriptsize \texttt{GpuTensor<f32>},\\\texttt{GpuCsrMatrix<f32>}, PipelineCache}};
+
+\draw[flow] (ser.south) to[bend right=10] (cpures.north);
+\draw[flow] (par) -- (cpures);
+\draw[flow] (wgpu) -- (gpures);
+\draw[weak] (cpures) -- node[below,font=\scriptsize]{upload adapter} (gpures);
+
+\begin{scope}[on background layer]
+  \node[draw, dashed, fill=green!4, inner sep=6pt, rounded corners,
+        fit=(ser)(par)(cpures),
+        label={[font=\scriptsize\itshape]below:existing, measured -- unchanged}] {};
+  \node[draw, dashed, fill=orange!5, inner sep=6pt, rounded corners,
+        fit=(wgpu)(gpures),
+        label={[font=\scriptsize\itshape]below:new: hymeko\_wgpu}] {};
+\end{scope}
+
+\end{tikzpicture}
+\caption{Target layering. The green region is the \emph{existing} CPU
+implementation, which becomes the first backend rather than being rewritten:
+\texttt{CpuSerial} and \texttt{CpuRayon} are the already-measured
+\texttt{*\_into\_serial} / \texttt{*\_into\_parallel} kernels, reached through
+static dispatch so the hot path keeps its current codegen. Only the outermost
+device choice uses an enum, paid once per invocation. Core tensor types never
+acquire a device handle; an upload \emph{adapter} produces the GPU
+representation instead.}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  font=\small,
+  ph/.style={draw, rounded corners=2pt, align=center, inner sep=3pt,
+             minimum height=7mm, text width=30mm},
+  done/.style={ph, fill=green!14},
+  ready/.style={ph, fill=orange!16},
+  gated/.style={ph, fill=gray!8, dashed},
+  flow/.style={-{Stealth[length=2mm]}, thick},
+  node distance=7mm
+]
+
+\node[done] (p0) {\textbf{Phase 0}\\{\scriptsize audit, backup, feasibility}};
+\node[ready, right=of p0] (p1) {\textbf{Phase 1}\\{\scriptsize skeleton, GpuTensor,\\PipelineCache}};
+\node[ready, right=of p1] (p2) {\textbf{Phase 2}\\{\scriptsize CSR SpMM kernel}};
+\node[gated, right=of p2] (p3) {Phase 3\\{\scriptsize 2nd operation}};
+\node[gated, right=of p3] (p4) {Phase 4\\{\scriptsize ComputeGraph}};
+
+\draw[flow] (p0) -- (p1);
+\draw[flow] (p1) -- (p2);
+\draw[flow] (p2) -- node[above,font=\scriptsize]{gate} (p3);
+\draw[flow] (p3) -- node[above,font=\scriptsize]{$\ge 2$ ops} (p4);
+
+\node[below=9mm of p0, font=\scriptsize\itshape, text width=32mm, align=center]
+  {done; vendor authorisation outstanding};
+\node[below=9mm of p2, font=\scriptsize\itshape, text width=34mm, align=center]
+  {crossover measured here decides Phase 3};
+
+\end{tikzpicture}
+\caption{Phase gating. Phases 3 and 4 are deliberately not scheduled: the
+second operation is chosen from \emph{measured} Phase 2 results, and the compute
+graph is not introduced until at least two GPU operations exist to compose ---
+avoiding an abstraction with no consumer.}
+\end{figure}

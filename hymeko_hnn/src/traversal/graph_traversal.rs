@@ -1,8 +1,8 @@
-use std::collections::{HashSet, VecDeque};
-use hymeko::tensor::common::Real;
-use hymeko::tensor::tensor_val::{EdgeWeight, IncVal};
 use crate::traversal::graphview::GraphView;
 use crate::traversal::hypergraphview::{BergeState, BergeView};
+use hymeko::tensor::common::Real;
+use hymeko::tensor::tensor_val::{EdgeWeight, IncVal};
+use std::collections::{HashSet, VecDeque};
 
 struct VisitedSet {
     nodes: Vec<bool>,
@@ -59,7 +59,9 @@ pub fn dfs_preorder<V: GraphView>(view: &V, start: V::Node) -> Vec<V::Node> {
     let mut st = vec![start];
 
     while let Some(u) = st.pop() {
-        if !seen.insert(u) { continue; }
+        if !seen.insert(u) {
+            continue;
+        }
         out.push(u);
 
         for v in view.neighbors(u) {
@@ -96,11 +98,14 @@ where
     out
 }
 
-pub fn dfs_preorder_dense<'a, V, EW, F>(view: &BergeView<'a, V, EW, F>, start: BergeState) -> Vec<BergeState>
+pub fn dfs_preorder_dense<'a, V, EW, F>(
+    view: &BergeView<'a, V, EW, F>,
+    start: BergeState,
+) -> Vec<BergeState>
 where
     V: IncVal<F>,
     EW: EdgeWeight<V, F>,
-    F: Real
+    F: Real,
 {
     let mut out = Vec::new();
     let mut st = vec![start];
@@ -110,7 +115,9 @@ where
     let mut seen = VisitedSet::new(num_nodes, num_edges);
 
     while let Some(u) = st.pop() {
-        if seen.mark_and_check(u) { continue; }
+        if seen.mark_and_check(u) {
+            continue;
+        }
         out.push(u);
 
         for v in view.neighbors(u) {

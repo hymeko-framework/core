@@ -10,9 +10,9 @@
 //! The mesh Laplacian: L_k = ∂_{k+1} ∂_{k+1}^T + ∂_k^T ∂_k
 //! For k=0 (node features): L_0 = B B^T (same as clique expansion!)
 
-use hymeko::tensor::common::Real;
-use hymeko::tensor::tensor_val::{IncVal, EdgeWeight};
 use crate::traversal::hypergraphview::HyperGraphView;
+use hymeko::tensor::common::Real;
+use hymeko::tensor::tensor_val::{EdgeWeight, IncVal};
 
 /// Mesh-aware message passing with boundary/co-boundary operators.
 pub struct MeshConvLayer<F: Real> {
@@ -30,7 +30,8 @@ impl<F: Real> MeshConvLayer<F> {
         Self {
             w_boundary: vec![scale; d_edge * d_node],
             w_coboundary: vec![scale; d_node * d_edge],
-            d_node, d_edge,
+            d_node,
+            d_edge,
         }
     }
 
@@ -41,11 +42,11 @@ impl<F: Real> MeshConvLayer<F> {
     pub fn forward<V, EW>(
         &self,
         hg: &HyperGraphView<V, EW, F>,
-        h_nodes: &[F],    // num_nodes × d_node
+        h_nodes: &[F],         // num_nodes × d_node
         h_nodes_out: &mut [F], // num_nodes × d_node
-    )
-    where
-        V: IncVal<F>, EW: EdgeWeight<V, F>,
+    ) where
+        V: IncVal<F>,
+        EW: EdgeWeight<V, F>,
     {
         let n = hg.num_nodes();
         let m = hg.num_edges();

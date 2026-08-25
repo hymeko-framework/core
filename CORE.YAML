@@ -1,0 +1,249 @@
+# CORE.YAML — Core Framework Lockdown Manifest (hymeko/core workspace)
+#
+# Canonical filename at repository root (CLAUDE.md §0). This file is core:
+# edits require approval (see `approval:` below).
+#
+# Provenance. This workspace was split out of the `hymeko_framework_rust`
+# monorepo (see README.md "Provenance / notes"). The monorepo carries its own
+# CORE.YAML, but none of the six split-out repositories under
+# `hymeko_framework/` (core, graph, network, parser, transformation, hotaru)
+# received one — governance stayed behind. Working the 2026-08-24 CPU
+# optimisation task surfaced the gap as a §1 / §11 `on_missing_file` halt.
+# Created with user approval in that chat turn ("CORE.yaml and tools can be
+# created"), scoped to the two crates that actually live here.
+#
+# Differences from the monorepo manifest, deliberate:
+#   * only `hymeko_core` and `hymeko_hnn` are in scope; crates that never
+#     migrated (hymeko_query, hymeko_client, hymeko_daemon, rtl/, docs/spec/)
+#     are dropped rather than inherited as dead entries.
+#   * `nalgebra` is pinned to the version this workspace actually builds
+#     (0.34.1). The monorepo pin (=0.33.0) was stale here and tripped
+#     `on_dependency_drift`; see `dependencies.pinned.rust` below.
+#   * `hymeko_hnn` is declared explicitly instead of falling through
+#     `on_unknown_path: treat_as_non_core`.
+
+schema_version: 1
+
+project:
+  name: HyMeKo semantic core
+  root_language: rust
+  notes: |
+    Items listed here are read-only by default. Modifying any of them
+    requires explicit user approval BEFORE any code change.
+    Workarounds in non-core code are always preferred over a "small"
+    core edit. When in doubt: halt and ask.
+
+  # ----------------------------------------------------------------------
+  # Lockdown levels (identical semantics to the monorepo manifest)
+  # ----------------------------------------------------------------------
+  #   full           No edits. Includes comments, whitespace, formatting.
+  #
+  #   implementation Public API may be extended (additive only).
+  #                  Internal logic frozen. Bug-fix patches require
+  #                  approval and a regression test.
+  #
+  #   api            Public API frozen (signatures, types, wire protocol,
+  #                  CLI flags). Internal refactors permitted from
+  #                  non-core PRs, gated on full integration test pass.
+  #
+  #   none           Not core. Ordinary review rules apply.
+  # ----------------------------------------------------------------------
+
+crates:
+  - name: hymeko_core
+    path: hymeko_core
+    lockdown: full
+    reason: >
+      Foundational types: IR, interning/resolution, canonical hashing,
+      COO/CSR tensor primitives, the `Real` numeric trait. Any change
+      propagates to every downstream crate and invalidates published
+      benchmarks.
+    approved_edits:
+      # APPROVED-CORE-EDIT: core-manifest-and-hymeko-core-clippy (2026-05-11)
+      # Pre-existing, inherited from the monorepo. Targeted lint allows in
+      # src/lib.rs and tests/mod.rs instead of one mega-refactor.
+      - slug: core-manifest-and-hymeko-core-clippy
+        date: 2026-05-11
+        scope: >
+          Lint allow-list in hymeko_core/src/lib.rs and tests/mod.rs;
+          manifest edits for the clippy policy alignment.
+
+      # APPROVED-CORE-EDIT: csr-spmv-spmm-into (2026-08-24, user chat)
+      - slug: csr-spmv-spmm-into
+        date: 2026-08-24
+        scope: >
+          hymeko_core/src/tensor/representations/tensor_csr.rs and the
+          hymeko_core/Cargo.toml entries needed to bench it. Additive
+          allocation-free `spmv_into` / `spmm_into` API plus explicit
+          serial and Rayon variants; the existing `spmv` / `spmm`
+          convenience methods delegate to them. Public signatures of
+          `spmv` / `spmm` and all numerical results are preserved —
+          the parallel path is required to be bitwise identical to the
+          serial one (row-disjoint output, no reassociation).
+        constraints:
+          - no change to existing public signatures
+          - no change to floating-point accumulation order
+          - regression tests required (serial vs parallel, vs reference)
+
+      # APPROVED-CORE-EDIT: extract-ref-weight-noalloc (2026-08-24, user chat)
+      - slug: extract-ref-weight-noalloc
+        date: 2026-08-24
+        scope: >
+          hymeko_core/src/tensor/tensor_val.rs, function
+          `extract_ref_weight_scalar` only. Removes the per-call temporary
+          `Vec<F>` (one heap allocation per incidence on the
+          `HyperGraphView::from_ir` path) in favour of a running count, first
+          value and sum. Public signature and semantics unchanged.
+        constraints:
+          - no change to the public function signature
+          - None / empty / single / multi-value results identical, including the
+            single-value verbatim path (zero + x differs from x for x = -0.0)
+          - List descended exactly one level, as before
+          - f32 and f64 results identical to the previous implementation
+          - regression tests written against the OLD implementation first
+
+      # APPROVED-CORE-EDIT: compute-backend-vocabulary (2026-08-24, user chat)
+      - slug: compute-backend-vocabulary
+        date: 2026-08-24
+        scope: >
+          New module hymeko_core/src/tensor/compute/ holding exactly four
+          backend-independent types: TensorShape, SparseCsrShape, BackendKind,
+          ComputeError (plus the checked try_u32 helper). Exists so hymeko_wgpu
+          need not depend on hymeko_hnn merely to name a shape or an error.
+        constraints:
+          - no dependency added to hymeko_core (errors hand-written, not thiserror)
+          - no wgpu type, async runtime, GPU handle, pipeline, bind group,
+            shader, command encoder, adapter/device object, backend-specific
+            usage flag, backend implementation, compute graph, resource
+            repository, factory hierarchy or dynamic dispatch
+          - no abstraction without a concrete CPU *and* WGPU consumer
+          - DType/ScalarType deliberately omitted (first GPU path is f32-explicit)
+
+  - name: hymeko_hnn
+    path: hymeko_hnn
+    lockdown: none
+    reason: >
+      Hypergraph NN operator layer, extracted from core on 2026-04-19.
+      Deliberately non-core: this is where HyperGraphView, message
+      passing, and the HGNN / Signed-HGNN convolutions evolve. Numerical
+      results are still covered by the regression tests in
+      hymeko_core/tests/, which are the acceptance gate for changes here.
+
+  - name: hymeko_wgpu
+    path: hymeko_wgpu
+    lockdown: none
+    reason: >
+      WGPU compute backend, created 2026-08-24 under
+      APPROVED-ARCHITECTURE-EVOLUTION: hymeko-compute-framework-wgpu.
+      Non-core by design: it is one backend among several planned
+      (CUDA/FPGA later), and its churn must not be gated on core review.
+      Depends on hymeko_core only -- never on hymeko_hnn.
+      Feature set is deliberately minimal (dx12, vulkan, wgsl, std); GL,
+      WebGPU and WebAssembly are OFF because enabling them pulls 26 extra
+      crates (~32 MiB) into the shared vendor tree for no benefit here.
+
+# ----------------------------------------------------------------------
+# Glob patterns (matched relative to repo root)
+# ----------------------------------------------------------------------
+globs:
+  - pattern: "hymeko_core/Cargo.toml"
+    lockdown: full
+    reason: Core crate manifest; dependency edits require approval.
+
+  - pattern: "hymeko_core/src/**"
+    lockdown: full
+    reason: Core library sources.
+
+  - pattern: "data/**"
+    lockdown: full
+    reason: >
+      `.hymeko` fixtures the integration tests load. Content-addressed by
+      the tests; editing one silently changes assertions. Note the known
+      documented drift: `test_load_meta_geometry` expects 57 nodes and the
+      current parser yields 58. That is a pre-existing upstream drift, NOT
+      a regression, and MUST NOT be "fixed" by editing the fixture or the
+      assertion to make the suite green.
+
+# ----------------------------------------------------------------------
+# Pinned dependencies
+# Touching these is treated as a core edit.
+# ----------------------------------------------------------------------
+dependencies:
+  pinned:
+    rust:
+      - name: serde
+        version: "1"
+        reason: API-stable; minor bumps allowed, major requires approval.
+      - name: nalgebra
+        version: "0.34.1"
+        reason: >
+          Numerical core; FP behaviour must be reproducible. Re-pinned from
+          the monorepo's "=0.33.0" to the version this workspace has built
+          and tested against since the migration. Drift resolved 2026-08-24
+          under the manifest-creation approval rather than left latent.
+      - name: nalgebra-sparse
+        version: "0.11.0"
+        reason: Sparse companion to nalgebra; same reproducibility argument.
+      - name: blake3
+        version: "1"
+        reason: >
+          Canonical IR hashing. A major bump changes `HashId` values and
+          invalidates every committed hash fixture.
+      - name: rustc-hash
+        version: "2"
+        reason: >
+          FxHash backs the interner. Changing the hasher changes iteration
+          order and therefore IR node numbering.
+      - name: parser
+        version: "git:master"
+        reason: >
+          External repo (hymeko/parser), pulled by git branch. Not semver;
+          declared here so that a parser bump is recognised as a core-level
+          event — it is the source of the known 57/58 fixture drift.
+
+# ----------------------------------------------------------------------
+# Allowlist — paths that may LOOK like core but are explicitly editable.
+# ----------------------------------------------------------------------
+allowlist:
+  - "**/tests/**"
+  - "**/benches/**"
+  - "**/examples/**"
+  - docs/plans/**
+  - reports/**
+  - scripts/dev/**
+  - .github/**
+
+# ----------------------------------------------------------------------
+# Approval mechanism
+# ----------------------------------------------------------------------
+approval:
+  required_for:
+    - any modification to a `lockdown: full` item
+    - any modification to a `lockdown: implementation` item beyond
+      additive public API
+    - any modification to `lockdown: api` items in core crates
+    - any addition, removal, or version change of a pinned dependency
+    - any change to this file (`CORE.YAML`)
+
+  mechanism: |
+    A change may proceed only after the user replies in the chat with
+    the literal token:
+
+        APPROVED-CORE-EDIT: <short-slug>
+
+    Claude Code must:
+      1. Quote that token verbatim in the plan document (see CLAUDE.md §2).
+      2. Include it in the resulting commit message footer.
+      3. Reference the approving chat turn ID if available.
+
+    A token applies only to the slug it names; it does not generalise.
+
+# ----------------------------------------------------------------------
+# Policies on edge cases
+# ----------------------------------------------------------------------
+policies:
+  on_violation: halt_and_ask
+  on_missing_file: halt_and_ask
+  on_malformed_file: halt_and_ask
+  on_unknown_path: treat_as_non_core
+  on_dependency_drift: halt_and_ask

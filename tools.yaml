@@ -1,0 +1,177 @@
+# tools.yaml — Development toolchain declaration (hymeko/core workspace)
+#
+# Read by Claude Code at session start, alongside `CORE.YAML` at repo root.
+# Mirrored in human-readable form by CLAUDE.md §10.
+#
+# Provenance: created 2026-08-24 alongside this workspace's CORE.YAML, under
+# the same user approval. Derived from the `hymeko_framework_rust` monorepo
+# tools.yaml, reduced to the Rust-only surface this workspace actually has,
+# with the Windows-host substitutions recorded below.
+#
+# Policy:
+#   - `tool` is BINDING. Substituting a different tool for the same
+#     role requires Section 1 approval.
+#   - `major_version` is BINDING. Bumping the major version requires
+#     Section 1 approval. Minor and patch upgrades are free and do
+#     not need to be reflected here.
+#   - `observed` is INFORMATIONAL — the version most recently verified
+#     on this host.
+#   - Versions must be valid semver (MAJOR.MINOR.PATCH). Non-semver
+#     markers are not accepted; halt and ask.
+#   - For 0.x tools: `major_version: "0"` allows any 0.y.z.
+#
+# This file is distinct from CORE.YAML:
+#   - CORE.YAML pins runtime dependencies (numerical reproducibility,
+#     API stability).
+#   - tools.yaml declares the development toolchain (test, profile,
+#     lint, coverage). Identity fixed; version major-locked.
+
+schema_version: 1
+
+host:
+  os: Windows 11 Home 10.0.26200
+  cpu: Intel Core Ultra 9 275HX (24 logical cores)
+  ram_gib: 63.4
+  gpu: NVIDIA RTX 5080 Laptop (16 GiB)
+  notes: >
+    Single measurement host. CLAUDE.md §3 "run on a quiet machine" applies:
+    benchmark runs must not overlap other CPU work, and the report records
+    this block verbatim as the measurement environment.
+
+# ---------------------------------------------------------------------
+# Rust
+# ---------------------------------------------------------------------
+rust:
+  test_runner:
+    tool: cargo test
+    notes: tracks rustup toolchain; release mode for performance tests
+
+  benchmark:
+    tool: criterion
+    major_version: "0"
+    observed: "0.8.2"
+    notes: >
+      Already a hymeko_core dev-dependency pre-migration. Bench targets are
+      registered explicitly because both crates set `autobenches = false`
+      or carry `[[bench]]` entries.
+
+  profiler_cpu:
+    tool: samply
+    major_version: "0"
+    observed: "0.13.1"
+    output: profile.json.gz
+    substitution:
+      replaces: cargo flamegraph
+      approved: 2026-08-24
+      reason: >
+        `cargo flamegraph` needs a perf (Linux) or dtrace (macOS) backend;
+        neither exists on this Windows host, so the monorepo-pinned tool
+        cannot run here at all. `samply` samples natively on Windows via
+        ETW and serves the same role (CPU wall-time attribution). Approved
+        by the user in chat, 2026-08-24 ("approve samply").
+    notes: >
+      CLAUDE.md §10 requires flamegraph SVG as the profile artifact. samply
+      emits the Firefox Profiler format; export the inverted-call-tree view
+      to SVG, or attach the .json.gz plus the extracted hot-symbol table,
+      and say which was done in the report.
+
+  profiler_mem:
+    tool: dhat
+    major_version: "0"
+    observed: null
+    notes: >
+      Not yet wired in this workspace. Allocation counts are currently
+      argued structurally (allocation sites removed from hot loops) and
+      measured process-side as peak working set — see `peak_memory` below.
+      Adding the `dhat` dev-dependency is a CORE.YAML dependency event for
+      hymeko_core; halt and ask before wiring it there.
+
+  peak_memory:
+    tool: powershell Process.PeakWorkingSet64
+    notes: >
+      Windows substitute for the Linux RSS gate in CLAUDE.md §4. A harness
+      launches the workload with `Start-Process -PassThru`, waits, then reads
+      `PeakWorkingSet64` / `PeakPagedMemorySize64` from the exited process
+      object (.NET caches both). This measures peak, not instantaneous, as
+      §3 requires. `systemd-run --user -p MemoryMax=16G` has no Windows
+      equivalent; the 16 GB cap is therefore observed and asserted, not
+      kernel-enforced.
+
+  coverage:
+    tool: cargo llvm-cov
+    major_version: "0"
+    observed: null
+    flags: "--lcov"
+    output: lcov
+    notes: not installed on this host; install before making a coverage claim
+
+  property_test:
+    tool: proptest
+    major_version: "1"
+    observed: null
+    notes: >
+      Not a dependency of either crate. Adding it to hymeko_core is a
+      CORE.YAML dependency event; hymeko_hnn is non-core and may take it.
+
+  lint:
+    tool: clippy
+    flags: "--workspace --all-targets -- -D warnings"
+    notes: tracks rustup toolchain
+
+  format:
+    tool: rustfmt
+    flags: "--all -- --check"
+    notes: tracks rustup toolchain
+
+  complexity:
+    tool: rust-code-analysis
+    major_version: "0"
+    observed: null
+    notes: >
+      Not installed. The §6.2 thresholds are enforced by review plus
+      `clippy::cognitive_complexity` until it is.
+
+# ---------------------------------------------------------------------
+# Documentation / plan artifacts (CLAUDE.md §2)
+# ---------------------------------------------------------------------
+docs:
+  latex:
+    tool: pdflatex
+    observed: null
+    status: absent
+    notes: >
+      No TeX engine on this host (pdflatex / lualatex / xelatex / tectonic
+      / latexmk / MiKTeX all absent, checked 2026-08-24). `plan.tex` and
+      `plan.tikz` are authored as compilable sources but `plan.pdf` cannot
+      be rendered here. Every task that ships a plan under this condition
+      must declare the missing PDF as a waiver in its report (§9), not
+      omit it silently. Install tectonic or MiKTeX to clear the waiver.
+
+  mermaid:
+    tool: mermaid-cli
+    observed: null
+    status: absent
+    notes: >
+      No node / npx on this host, so `plan.mmd` is authored as source and
+      not rendered. Same waiver rule as `latex` above. GitHub and most
+      editors render .mmd inline, so the source is not useless on its own.
+
+# ---------------------------------------------------------------------
+# Cross-language reporting conventions
+# (echoed from CLAUDE.md §3 and §10)
+# ---------------------------------------------------------------------
+output_formats:
+  profile: samply_json_gz          # SVG where the export path is available.
+  coverage: lcov                   # Common format for delta tracking.
+  benchmark: median_iqr_worst      # Single-shot wall-clock not accepted.
+
+# ---------------------------------------------------------------------
+# Policies
+# ---------------------------------------------------------------------
+policies:
+  on_tool_substitution: require_section_1_approval
+  on_major_version_bump: require_section_1_approval
+  on_minor_or_patch_drift: allowed
+  on_minor_drift_with_behavior_change: document_in_report
+  on_non_semver_version: halt_and_ask
+  on_absent_tool: document_waiver_in_report

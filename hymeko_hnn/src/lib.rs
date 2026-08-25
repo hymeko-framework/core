@@ -27,8 +27,9 @@
 #![allow(
     clippy::module_inception,
     clippy::needless_range_loop,
-    clippy::unnecessary_cast,
+    clippy::unnecessary_cast
 )]
 
-pub mod traversal;
 pub mod tensor;
+pub mod traversal;
+pub mod workloads;

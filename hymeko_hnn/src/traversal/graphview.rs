@@ -8,6 +8,3 @@ pub trait GraphView {
 
     fn neighbors<'a>(&'a self, n: Self::Node) -> Self::NeighIter<'a>;
 }
-
-
-

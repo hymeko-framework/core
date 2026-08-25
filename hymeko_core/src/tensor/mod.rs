@@ -3,6 +3,7 @@ pub mod aggregation_impl;
 #[cfg(feature = "arrow-schema")]
 pub mod arrow_schema;
 pub mod common;
+pub mod compute;
 pub mod conv;
 mod decomposition;
 pub mod representations;

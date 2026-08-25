@@ -1,0 +1,49 @@
+%% plan.mmd — Mermaid view for the 2026-08-24 compute-framework migration.
+%% Render: mmdc -i plan.mmd -o plan.svg  (mermaid-cli absent on this host;
+%% GitHub and most editors render this inline).
+%%
+%% Sequence view: how one SpMM travels through the framework, showing the
+%% explicit encode/submit/readback boundary that distinguishes this design
+%% from an auto-submitting one.
+
+sequenceDiagram
+    autonumber
+    actor App as HNN layer
+    participant RT as ComputeRuntime (facade)
+    participant Prep as PreparedSpmm
+    participant Cpu as CpuBackend
+    participant Gpu as WgpuBackend
+    participant Dev as GPU device
+
+    Note over App,Dev: preparation - once per matrix, not per call
+    App->>RT: spmm_descriptor(csr, feature_dim)
+    RT->>RT: select backend (size, residency, chain)
+
+    alt CPU path
+        RT->>Cpu: prepare(descriptor)
+        Cpu-->>Prep: delegates to spmm_into_serial / _parallel
+        Note right of Cpu: no new algorithm code;<br/>existing measured kernels
+        App->>Prep: run(x, y)
+        Prep-->>App: y filled, zero allocation
+    else WGPU path
+        RT->>Gpu: prepare(descriptor)
+        Gpu->>Gpu: PipelineCache lookup (build once)
+        Gpu->>Dev: upload CSR -> GpuCsrMatrix
+        Gpu-->>Prep: PreparedSpmm (bind group cached)
+
+        Note over App,Dev: steady state - CSR stays resident
+        App->>Prep: encode(&mut encoder)
+        Note right of Prep: NO submit here -<br/>several ops share one buffer
+        App->>Gpu: submit(encoder)
+        Gpu->>Dev: dispatch workgroups
+        Dev-->>Gpu: done
+        opt only at an explicit boundary
+            App->>Gpu: readback(y)
+            Gpu-->>App: host Vec<f32>
+        end
+    end
+
+    Note over App,Dev: correctness gate
+    App->>Cpu: same input via spmm_into_serial
+    App->>App: compare abs+rel tolerance, NaN/Inf explicit
+    Note right of App: bitwise equality NOT promised<br/>across devices

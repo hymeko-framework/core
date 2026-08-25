@@ -1,12 +1,12 @@
-use std::marker::PhantomData;
-use rayon::prelude::*;
-use hymeko::common::ids::{NodeId, EdgeId, DeclId};
+use crate::traversal::graphview::GraphView;
+use hymeko::common::ids::{DeclId, EdgeId, NodeId};
 use hymeko::ir::ir::{Ir, SignedRefR};
-use hymeko::tensor::aggregation::{agg_sign, AggCfg};
+use hymeko::tensor::aggregation::{AggCfg, agg_sign};
 use hymeko::tensor::common::Real;
 use hymeko::tensor::representations::tensor_coo::TensorInc;
 use hymeko::tensor::tensor_val::{EdgeWeight, IncVal, RefValueExtractor};
-use crate::traversal::graphview::{GraphView};
+use rayon::prelude::*;
+use std::marker::PhantomData;
 
 /// Bipartite vertex of the hypergraph's incidence graph.
 ///
@@ -48,7 +48,7 @@ pub struct HyperGraphView<V: IncVal<F>, EW: EdgeWeight<V, F>, F: Real>
 where
     F: Real,
     V: IncVal<F>,
-    EW: EdgeWeight<V, F>
+    EW: EdgeWeight<V, F>,
 {
     pub node_decl: Vec<DeclId>, // NodeId -> DeclId
     pub edge_decl: Vec<DeclId>, // EdgeId -> DeclId
@@ -66,7 +66,7 @@ where
     pub edge_offsets: Vec<usize>,
     /// Optional weights (e.g., for GNNs), aligned with the corresponding flat arrays.
     pub flat_node_w: Vec<V>, // aligned with flat_node_edges
-    pub flat_edge_w: Vec<V>, // aligned with flat_edge_nodes
+    pub flat_edge_w: Vec<V>,  // aligned with flat_edge_nodes
     pub edge_weight: Vec<EW>, // per EdgeId (global)
     /// This PhantomData is needed to tell the compiler that HyperGraphView is generic over F,
     /// even though it doesn't directly contain any F values.
@@ -74,8 +74,6 @@ where
     /// (sucks, I know)
     pub _phantom: core::marker::PhantomData<F>,
 }
-
-
 
 impl<V, EW, F> HyperGraphView<V, EW, F>
 where
@@ -87,7 +85,7 @@ where
     #[inline(always)]
     fn sign_of(r: &SignedRefR) -> i8 {
         match r {
-            SignedRefR::Plus(_) =>  1,
+            SignedRefR::Plus(_) => 1,
             SignedRefR::Minus(_) => -1,
             SignedRefR::Neutral(_) => 0,
         }
@@ -148,15 +146,21 @@ where
                 let arc = &ir.arcs[aid.0];
                 for r in &arc.refs {
                     let (target, _sgn) = match r {
-                        SignedRefR::Plus(a) | SignedRefR::Minus(a) | SignedRefR::Neutral(a)
-                        => (a.target, Self::sign_of(r)),
+                        SignedRefR::Plus(a) | SignedRefR::Minus(a) | SignedRefR::Neutral(a) => {
+                            (a.target, Self::sign_of(r))
+                        }
                     };
 
                     if let Some(nid) = ir.decl_to_node[target.0] {
                         let sgn = Self::sign_of(r);
                         let v = ex.value_of(r);
-                        out.push(TensorInc{
-                            e: eid,  n: nid, s: sgn, w: v, _pd: PhantomData });
+                        out.push(TensorInc {
+                            e: eid,
+                            n: nid,
+                            s: sgn,
+                            w: v,
+                            _pd: PhantomData,
+                        });
                     }
                 }
             }
@@ -164,11 +168,7 @@ where
         out
     }
 
-    fn sort_reduce_pairs(
-        mut triples: Vec<TensorInc<F, V>>,
-        cfg: &AggCfg,
-    ) -> Vec<TensorInc<F, V>> {
-
+    fn sort_reduce_pairs(mut triples: Vec<TensorInc<F, V>>, cfg: &AggCfg) -> Vec<TensorInc<F, V>> {
         if triples.len() >= Self::PAR_SORT_THRESHOLD {
             triples.par_sort_unstable_by_key(|x| (x.e.0, x.n.0));
         } else {
@@ -188,7 +188,7 @@ where
                 let new_s = agg_sign(cfg, last.s, inc.s, wa, wb);
                 last.w = new_w;
                 last.s = new_s;
-            }else {
+            } else {
                 out.push(inc);
             }
         }
@@ -198,12 +198,11 @@ where
     fn build_csr_edge_to_nodes(
         pairs: &[TensorInc<F, V>],
         num_edges: usize,
-    ) -> (Vec<NodeId>, Vec<i8>, Vec<V>, Vec<usize>)
-    {
+    ) -> (Vec<NodeId>, Vec<i8>, Vec<V>, Vec<usize>) {
         // CSR: Edge -> Nodes
         let mut flat_nodes = Vec::with_capacity(pairs.len());
-        let mut flat_sign  = Vec::with_capacity(pairs.len());
-        let mut flat_w     = Vec::with_capacity(pairs.len());
+        let mut flat_sign = Vec::with_capacity(pairs.len());
+        let mut flat_w = Vec::with_capacity(pairs.len());
         let mut offsets = vec![0usize; num_edges + 1];
 
         for entry in pairs {
@@ -212,46 +211,73 @@ where
             flat_w.push(entry.w.clone());
             offsets[entry.e.0 + 1] += 1;
         }
-        for i in 0..num_edges { offsets[i+1] += offsets[i]; }
+        for i in 0..num_edges {
+            offsets[i + 1] += offsets[i];
+        }
 
         (flat_nodes, flat_sign, flat_w, offsets)
     }
 
+    /// Build the node-first CSR by **counting sort**, not by re-sorting.
+    ///
+    /// # Preconditions
+    /// `pairs` is ordered by `(edge, node)` and deduplicated — i.e. exactly
+    /// what [`Self::sort_reduce_pairs`] returns.
+    ///
+    /// # Postconditions
+    /// Returns the same arrays the previous `sort_unstable_by_key(|x| (x.n.0,
+    /// x.e.0))` implementation returned, element for element.
+    ///
+    /// Why that holds: counting sort is **stable**, so scattering `pairs` into
+    /// per-node buckets in input order leaves each node's slice in increasing
+    /// edge order. Combined with the bucket ordering by node, that is precisely
+    /// `(node, edge)` order — and since the keys are unique after
+    /// deduplication, the sorted order is unique, so the comparison sort could
+    /// not have produced anything else.
+    ///
+    /// This replaces an `O(nnz log nnz)` comparison sort (parallel above
+    /// `PAR_SORT_THRESHOLD`) with an `O(nnz + num_nodes)` pass, and no longer
+    /// needs `&mut` access to `pairs`. The `(node, edge)` ordering it produces
+    /// is load-bearing beyond construction: the parallel scatter in
+    /// `tensor::message_passing` depends on it for bitwise-identical results.
     fn build_csr_node_to_edges(
-        pairs: &mut [TensorInc<F, V>],
+        pairs: &[TensorInc<F, V>],
         num_nodes: usize,
     ) -> (Vec<EdgeId>, Vec<i8>, Vec<V>, Vec<usize>)
     where
-        V: IncVal<F>
+        V: IncVal<F>,
     {
-        // node-first order
-        if pairs.len() >= Self::PAR_SORT_THRESHOLD {
-            pairs.par_sort_unstable_by_key(|x| (x.n.0, x.e.0));
-        } else {
-            pairs.sort_unstable_by_key(|x| (x.n.0, x.e.0));
-        }
+        let nnz = pairs.len();
 
-        let mut flat_edges = Vec::with_capacity(pairs.len());
-        let mut flat_sign  = Vec::with_capacity(pairs.len());
-        let mut flat_w     = Vec::with_capacity(pairs.len());
         let mut offsets = vec![0usize; num_nodes + 1];
-
-        for entry in pairs.iter() {
-            flat_edges.push(entry.e);
-            flat_sign.push(entry.s);
-            flat_w.push(entry.w.clone());
+        for entry in pairs {
             offsets[entry.n.0 + 1] += 1;
         }
-        for i in 0..num_nodes { offsets[i + 1] += offsets[i]; }
+        for i in 0..num_nodes {
+            offsets[i + 1] += offsets[i];
+        }
+
+        let mut flat_edges = vec![EdgeId::new(0); nnz];
+        let mut flat_sign = vec![0i8; nnz];
+        let mut flat_w = vec![V::zero(); nnz];
+
+        // Running write cursor per node; starts at each bucket's base.
+        let mut cursor = offsets.clone();
+        for entry in pairs {
+            let slot = cursor[entry.n.0];
+            flat_edges[slot] = entry.e;
+            flat_sign[slot] = entry.s;
+            flat_w[slot] = entry.w.clone();
+            cursor[entry.n.0] = slot + 1;
+        }
 
         (flat_edges, flat_sign, flat_w, offsets)
     }
 
-
     /// Build incidence tables from IR (single source of truth).
     pub fn from_ir<E>(ir: &Ir, cfg: &AggCfg, ex: &E) -> Self
     where
-        E: RefValueExtractor<F, V>
+        E: RefValueExtractor<F, V>,
     {
         let num_nodes = ir.nodes.len();
         let num_edges = ir.edges.len();
@@ -262,15 +288,16 @@ where
         let triples = Self::collect_triples(ir, ex);
 
         // sort by (eid,nid)
-        let mut pairs = Self::sort_reduce_pairs(triples, cfg);
+        let pairs = Self::sort_reduce_pairs(triples, cfg);
 
         // Edge -> Nodes CSR
         let (flat_edge_nodes, flat_edge_sign, flat_edge_w, edge_offsets) =
             Self::build_csr_edge_to_nodes(&pairs, num_edges);
 
-        // Node -> Edges CSR (needs pairs sorted node-first)
+        // Node -> Edges CSR, by counting sort over the same (edge, node)-ordered
+        // pairs -- no second sort, and `pairs` stays immutable.
         let (flat_node_edges, flat_node_sign, flat_node_w, node_offsets) =
-            Self::build_csr_node_to_edges(&mut pairs, num_nodes);
+            Self::build_csr_node_to_edges(&pairs, num_nodes);
 
         Self {
             node_decl,
@@ -301,7 +328,7 @@ pub struct BergeView<'a, V, EW, F>
 where
     V: IncVal<F>,
     EW: EdgeWeight<V, F>,
-    F: Real
+    F: Real,
 {
     pub hg: &'a HyperGraphView<V, EW, F>,
 }
@@ -316,7 +343,10 @@ where
     EW: EdgeWeight<V, F>,
 {
     type Node = BergeState;
-    type NeighIter<'b> = BergeIter<'b> where Self: 'b;
+    type NeighIter<'b>
+        = BergeIter<'b>
+    where
+        Self: 'b;
 
     #[inline(always)]
     fn neighbors<'b>(&'b self, s: BergeState) -> Self::NeighIter<'b> {
@@ -325,12 +355,12 @@ where
                 let start = self.hg.node_offsets[nid.0];
                 let end = self.hg.node_offsets[nid.0 + 1];
                 BergeIter::Node(self.hg.flat_node_edges[start..end].iter())
-            },
+            }
             BergeState::Edge(eid) => {
                 let start = self.hg.edge_offsets[eid.0];
                 let end = self.hg.edge_offsets[eid.0 + 1];
                 BergeIter::Edge(self.hg.flat_edge_nodes[start..end].iter())
-            },
+            }
         }
     }
 }

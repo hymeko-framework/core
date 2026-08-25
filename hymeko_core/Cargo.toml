@@ -53,3 +53,10 @@ path = "tests/mod.rs"
 [[bench]]
 name = "interning_bench"
 harness = false
+
+# APPROVED-CORE-EDIT: csr-spmv-spmm-into (2026-08-24, user chat) — bench
+# target for the CSR SpMV/SpMM kernels. Registration is required because
+# this crate sets `autobenches = false`.
+[[bench]]
+name = "csr_bench"
+harness = false
