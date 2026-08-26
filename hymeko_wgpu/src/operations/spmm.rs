@@ -681,16 +681,28 @@ pub struct PreparedSpmm<'a, S: EncodeScope = Untracked> {
 }
 
 impl<S: EncodeScope> PreparedSpmm<'_, S> {
-    /// Record the dispatch into `encoder`. Does **not** submit.
+    /// Record the dispatch into `encoder`, optionally with timestamp writes
+    /// around the compute pass. Does **not** submit.
     ///
     /// Several `PreparedSpmm` (and other operations) may encode into the same
     /// encoder and execute in one submit.
     ///
+    /// `timestamp_writes` is threaded through rather than branched on: the
+    /// descriptor field already exists and the public `encode` supplies `None`,
+    /// which is byte-for-byte the value the literal used to carry. The
+    /// non-profiled path therefore gains no branch and no overhead — the
+    /// profiled path is a different caller, not a runtime mode.
+    ///
     /// # Errors
+    ///
     /// Currently infallible — the `Result` is part of the operation contract so
     /// that an operation needing per-encode validation can be added later
     /// without a breaking change.
-    fn encode_into(&self, encoder: &mut wgpu::CommandEncoder) -> Result<(), ComputeError> {
+    fn encode_into(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        timestamp_writes: Option<wgpu::ComputePassTimestampWrites<'_>>,
+    ) -> Result<(), ComputeError> {
         // Zero-extent dispatches are invalid; with no rows or no features there
         // is nothing to compute and the zeroed output is already correct.
         if self.empty {
@@ -699,7 +711,7 @@ impl<S: EncodeScope> PreparedSpmm<'_, S> {
 
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some(&self.label),
-            timestamp_writes: None,
+            timestamp_writes,
         });
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &self.bind_group, &[]);
@@ -767,7 +779,7 @@ impl PreparedSpmm<'_, Untracked> {
     /// # Errors
     /// Currently infallible; the `Result` is part of the operation contract.
     pub fn encode(&self, encoder: &mut wgpu::CommandEncoder) -> Result<(), ComputeError> {
-        self.encode_into(encoder)
+        self.encode_into(encoder, None)
     }
 }
 
@@ -781,7 +793,24 @@ impl PreparedSpmm<'_, Tracked> {
     /// # Errors
     /// Currently infallible; the `Result` is part of the operation contract.
     pub fn encode(&self, session: &mut crate::TrackedSession<'_>) -> Result<(), ComputeError> {
-        self.encode_into(session.note_encoded())
+        self.encode_into(session.note_encoded(), None)
+    }
+
+    /// Record the dispatch with timestamp queries written around the compute
+    /// pass, for kernel-only measurement.
+    ///
+    /// Crate-internal: this exists for `crate::profiling`, not as public API.
+    /// Only the tracked scope has it — the profiling probe goes through a
+    /// session, so an untracked twin would be dead code.
+    ///
+    /// # Errors
+    /// As [`Self::encode`].
+    pub(crate) fn encode_with_timestamps(
+        &self,
+        session: &mut crate::TrackedSession<'_>,
+        writes: wgpu::ComputePassTimestampWrites<'_>,
+    ) -> Result<(), ComputeError> {
+        self.encode_into(session.note_encoded(), Some(writes))
     }
 }
 /// Unit tests for the workgroup rule.

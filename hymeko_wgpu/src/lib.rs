@@ -80,6 +80,8 @@ mod block_on;
 
 pub mod arena;
 pub mod completion;
+#[doc(hidden)]
+pub mod profiling;
 pub mod scope;
 
 pub mod backend;

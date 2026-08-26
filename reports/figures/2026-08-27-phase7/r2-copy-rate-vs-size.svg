@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="460" viewBox="0 0 900 460" font-family="DejaVu Sans, Segoe UI, sans-serif">
+<rect width="900" height="460" fill="#ffffff"/>
+<text x="78" y="30" font-size="17" font-weight="600" fill="#111">R2 device-to-staging copy rate vs transfer size (median of 24)</text>
+<line x1="78" y1="398.0" x2="690" y2="398.0" stroke="#e3e3e3" stroke-width="1"/>
+<text x="69" y="402.0" font-size="12" fill="#555" text-anchor="end">0.00</text>
+<line x1="78" y1="329.2" x2="690" y2="329.2" stroke="#e3e3e3" stroke-width="1"/>
+<text x="69" y="333.2" font-size="12" fill="#555" text-anchor="end">5.69</text>
+<line x1="78" y1="260.4" x2="690" y2="260.4" stroke="#e3e3e3" stroke-width="1"/>
+<text x="69" y="264.4" font-size="12" fill="#555" text-anchor="end">11.4</text>
+<line x1="78" y1="191.6" x2="690" y2="191.6" stroke="#e3e3e3" stroke-width="1"/>
+<text x="69" y="195.6" font-size="12" fill="#555" text-anchor="end">17.1</text>
+<line x1="78" y1="122.8" x2="690" y2="122.8" stroke="#e3e3e3" stroke-width="1"/>
+<text x="69" y="126.8" font-size="12" fill="#555" text-anchor="end">22.7</text>
+<line x1="78" y1="54.0" x2="690" y2="54.0" stroke="#e3e3e3" stroke-width="1"/>
+<text x="69" y="58.0" font-size="12" fill="#555" text-anchor="end">28.4</text>
+<line x1="78" y1="398" x2="690" y2="398" stroke="#333" stroke-width="1.4"/>
+<line x1="78" y1="40" x2="78" y2="398" stroke="#333" stroke-width="1.4"/>
+<text x="384" y="444" font-size="13" fill="#333" text-anchor="middle">transfer size (MiB)</text>
+<text x="18" y="226" font-size="13" fill="#333" text-anchor="middle" transform="rotate(-90 18 226)">GB/s</text>
+<line x1="78.0" y1="398" x2="78.0" y2="403" stroke="#333" stroke-width="1"/>
+<text x="78.0" y="417" font-size="11" fill="#555" text-anchor="middle">32.0</text>
+<line x1="103.5" y1="398" x2="103.5" y2="403" stroke="#333" stroke-width="1"/>
+<text x="103.5" y="417" font-size="11" fill="#555" text-anchor="middle">36.0</text>
+<line x1="129.0" y1="398" x2="129.0" y2="403" stroke="#333" stroke-width="1"/>
+<text x="129.0" y="417" font-size="11" fill="#555" text-anchor="middle">40.0</text>
+<line x1="154.5" y1="398" x2="154.5" y2="403" stroke="#333" stroke-width="1"/>
+<text x="154.5" y="417" font-size="11" fill="#555" text-anchor="middle">44.0</text>
+<line x1="180.0" y1="398" x2="180.0" y2="403" stroke="#333" stroke-width="1"/>
+<text x="180.0" y="417" font-size="11" fill="#555" text-anchor="middle">48.0</text>
+<line x1="231.0" y1="398" x2="231.0" y2="403" stroke="#333" stroke-width="1"/>
+<text x="231.0" y="417" font-size="11" fill="#555" text-anchor="middle">56.0</text>
+<line x1="282.0" y1="398" x2="282.0" y2="403" stroke="#333" stroke-width="1"/>
+<text x="282.0" y="417" font-size="11" fill="#555" text-anchor="middle">64.0</text>
+<line x1="384.0" y1="398" x2="384.0" y2="403" stroke="#333" stroke-width="1"/>
+<text x="384.0" y="417" font-size="11" fill="#555" text-anchor="middle">80.0</text>
+<line x1="486.0" y1="398" x2="486.0" y2="403" stroke="#333" stroke-width="1"/>
+<text x="486.0" y="417" font-size="11" fill="#555" text-anchor="middle">96.0</text>
+<line x1="690.0" y1="398" x2="690.0" y2="403" stroke="#333" stroke-width="1"/>
+<text x="690.0" y="417" font-size="11" fill="#555" text-anchor="middle">128</text>
+<polyline fill="none" stroke="#0072B2" stroke-width="2.4" points="78.0,246.8 103.5,359.7 129.0,359.8 154.5,359.8 180.0,359.8 231.0,359.8 282.0,357.5 384.0,357.5 486.0,357.5 690.0,357.5 "/>
+<circle cx="78.0" cy="246.8" r="3.1" fill="#0072B2"/>
+<circle cx="103.5" cy="359.7" r="3.1" fill="#0072B2"/>
+<circle cx="129.0" cy="359.8" r="3.1" fill="#0072B2"/>
+<circle cx="154.5" cy="359.8" r="3.1" fill="#0072B2"/>
+<circle cx="180.0" cy="359.8" r="3.1" fill="#0072B2"/>
+<circle cx="231.0" cy="359.8" r="3.1" fill="#0072B2"/>
+<circle cx="282.0" cy="357.5" r="3.1" fill="#0072B2"/>
+<circle cx="384.0" cy="357.5" r="3.1" fill="#0072B2"/>
+<circle cx="486.0" cy="357.5" r="3.1" fill="#0072B2"/>
+<circle cx="690.0" cy="357.5" r="3.1" fill="#0072B2"/>
+<polyline fill="none" stroke="#D55E00" stroke-width="2.4" points="78.0,242.0 103.5,242.0 129.0,242.0 154.5,242.0 180.0,241.9 231.0,242.0 282.0,234.4 384.0,234.3 486.0,234.3 690.0,234.3 "/>
+<circle cx="78.0" cy="242.0" r="3.1" fill="#D55E00"/>
+<circle cx="103.5" cy="242.0" r="3.1" fill="#D55E00"/>
+<circle cx="129.0" cy="242.0" r="3.1" fill="#D55E00"/>
+<circle cx="154.5" cy="242.0" r="3.1" fill="#D55E00"/>
+<circle cx="180.0" cy="241.9" r="3.1" fill="#D55E00"/>
+<circle cx="231.0" cy="242.0" r="3.1" fill="#D55E00"/>
+<circle cx="282.0" cy="234.4" r="3.1" fill="#D55E00"/>
+<circle cx="384.0" cy="234.3" r="3.1" fill="#D55E00"/>
+<circle cx="486.0" cy="234.3" r="3.1" fill="#D55E00"/>
+<circle cx="690.0" cy="234.3" r="3.1" fill="#D55E00"/>
+<polyline fill="none" stroke="#009E73" stroke-width="2.4" points="78.0,328.5 103.5,328.3 129.0,326.9 154.5,329.2 180.0,333.6 231.0,326.3 282.0,106.5 384.0,100.0 486.0,107.8 690.0,111.2 "/>
+<circle cx="78.0" cy="328.5" r="3.1" fill="#009E73"/>
+<circle cx="103.5" cy="328.3" r="3.1" fill="#009E73"/>
+<circle cx="129.0" cy="326.9" r="3.1" fill="#009E73"/>
+<circle cx="154.5" cy="329.2" r="3.1" fill="#009E73"/>
+<circle cx="180.0" cy="333.6" r="3.1" fill="#009E73"/>
+<circle cx="231.0" cy="326.3" r="3.1" fill="#009E73"/>
+<circle cx="282.0" cy="106.5" r="3.1" fill="#009E73"/>
+<circle cx="384.0" cy="100.0" r="3.1" fill="#009E73"/>
+<circle cx="486.0" cy="107.8" r="3.1" fill="#009E73"/>
+<circle cx="690.0" cy="111.2" r="3.1" fill="#009E73"/>
+<polyline fill="none" stroke="#CC79A7" stroke-width="2.4" points="78.0,327.2 103.5,322.6 129.0,327.0 154.5,326.4 180.0,327.6 231.0,330.9 282.0,96.4 384.0,79.5 486.0,79.8 690.0,96.0 "/>
+<circle cx="78.0" cy="327.2" r="3.1" fill="#CC79A7"/>
+<circle cx="103.5" cy="322.6" r="3.1" fill="#CC79A7"/>
+<circle cx="129.0" cy="327.0" r="3.1" fill="#CC79A7"/>
+<circle cx="154.5" cy="326.4" r="3.1" fill="#CC79A7"/>
+<circle cx="180.0" cy="327.6" r="3.1" fill="#CC79A7"/>
+<circle cx="231.0" cy="330.9" r="3.1" fill="#CC79A7"/>
+<circle cx="282.0" cy="96.4" r="3.1" fill="#CC79A7"/>
+<circle cx="384.0" cy="79.5" r="3.1" fill="#CC79A7"/>
+<circle cx="486.0" cy="79.8" r="3.1" fill="#CC79A7"/>
+<circle cx="690.0" cy="96.0" r="3.1" fill="#CC79A7"/>
+<rect x="704" y="60" width="14" height="11" fill="#0072B2"/>
+<text x="724" y="70" font-size="12" fill="#222">amaterasu fresh dest</text>
+<rect x="704" y="81" width="14" height="11" fill="#D55E00"/>
+<text x="724" y="91" font-size="12" fill="#222">amaterasu warm dest</text>
+<rect x="704" y="102" width="14" height="11" fill="#009E73"/>
+<text x="724" y="112" font-size="12" fill="#222">blackwell fresh dest</text>
+<rect x="704" y="123" width="14" height="11" fill="#CC79A7"/>
+<text x="724" y="133" font-size="12" fill="#222">blackwell warm dest</text>
+</svg>

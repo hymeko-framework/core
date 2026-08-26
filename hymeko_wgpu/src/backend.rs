@@ -41,6 +41,12 @@ pub struct DeviceCapabilities {
     pub max_compute_invocations_per_workgroup: u32,
     pub max_compute_workgroups_per_dimension: u32,
     pub max_storage_buffers_per_shader_stage: u32,
+    /// Whether `Features::TIMESTAMP_QUERY_INSIDE_ENCODERS` was granted.
+    ///
+    /// Separate from [`Self::timestamp_query`] because timing a buffer *copy*
+    /// needs `write_timestamp` between commands, which the base feature does
+    /// not provide. An adapter can grant one without the other.
+    pub timestamp_inside_encoders: bool,
     /// Whether `Features::TIMESTAMP_QUERY` was granted on this device.
     ///
     /// Gates kernel-only timing. When false, kernel time must be reported as
@@ -72,6 +78,8 @@ impl DeviceCapabilities {
             max_compute_workgroups_per_dimension: limits.max_compute_workgroups_per_dimension,
             max_storage_buffers_per_shader_stage: limits.max_storage_buffers_per_shader_stage,
             timestamp_query: features.contains(wgpu::Features::TIMESTAMP_QUERY),
+            timestamp_inside_encoders: features
+                .contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS),
             timestamp_period_ns,
         }
     }

@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="460" viewBox="0 0 900 460" font-family="DejaVu Sans, Segoe UI, sans-serif">
+<rect width="900" height="460" fill="#ffffff"/>
+<text x="78" y="30" font-size="17" font-weight="600" fill="#111">Host copy rate: source (cached vs mapped) x destination (fresh vs warm)</text>
+<line x1="78" y1="398.0" x2="690" y2="398.0" stroke="#e3e3e3" stroke-width="1"/>
+<text x="69" y="402.0" font-size="12" fill="#555" text-anchor="end">0.00</text>
+<line x1="78" y1="329.2" x2="690" y2="329.2" stroke="#e3e3e3" stroke-width="1"/>
+<text x="69" y="333.2" font-size="12" fill="#555" text-anchor="end">13566</text>
+<line x1="78" y1="260.4" x2="690" y2="260.4" stroke="#e3e3e3" stroke-width="1"/>
+<text x="69" y="264.4" font-size="12" fill="#555" text-anchor="end">27132</text>
+<line x1="78" y1="191.6" x2="690" y2="191.6" stroke="#e3e3e3" stroke-width="1"/>
+<text x="69" y="195.6" font-size="12" fill="#555" text-anchor="end">40699</text>
+<line x1="78" y1="122.8" x2="690" y2="122.8" stroke="#e3e3e3" stroke-width="1"/>
+<text x="69" y="126.8" font-size="12" fill="#555" text-anchor="end">54265</text>
+<line x1="78" y1="54.0" x2="690" y2="54.0" stroke="#e3e3e3" stroke-width="1"/>
+<text x="69" y="58.0" font-size="12" fill="#555" text-anchor="end">67831</text>
+<line x1="78" y1="398" x2="690" y2="398" stroke="#333" stroke-width="1.4"/>
+<line x1="78" y1="40" x2="78" y2="398" stroke="#333" stroke-width="1.4"/>
+<text x="384" y="444" font-size="13" fill="#333" text-anchor="middle">payload size (MiB)</text>
+<text x="18" y="226" font-size="13" fill="#333" text-anchor="middle" transform="rotate(-90 18 226)">GB/s</text>
+<line x1="78.0" y1="398" x2="78.0" y2="403" stroke="#333" stroke-width="1"/>
+<text x="78.0" y="417" font-size="11" fill="#555" text-anchor="middle">32.0</text>
+<line x1="282.0" y1="398" x2="282.0" y2="403" stroke="#333" stroke-width="1"/>
+<text x="282.0" y="417" font-size="11" fill="#555" text-anchor="middle">64.0</text>
+<line x1="690.0" y1="398" x2="690.0" y2="403" stroke="#333" stroke-width="1"/>
+<text x="690.0" y="417" font-size="11" fill="#555" text-anchor="middle">128</text>
+<rect x="89.3" y="387.0" width="20.9" height="11.0" fill="#0072B2" opacity="0.9"/>
+<text x="99.8" y="383.0" font-size="10" fill="#333" text-anchor="middle">2171</text>
+<rect x="520.0" y="79.5" width="20.9" height="318.5" fill="#D55E00" opacity="0.9"/>
+<text x="530.4" y="75.5" font-size="10" fill="#333" text-anchor="middle">62807</text>
+<rect x="542.7" y="355.1" width="20.9" height="42.9" fill="#009E73" opacity="0.9"/>
+<text x="553.1" y="351.1" font-size="10" fill="#333" text-anchor="middle">8465</text>
+<rect x="565.3" y="80.8" width="20.9" height="317.2" fill="#CC79A7" opacity="0.9"/>
+<text x="575.8" y="76.8" font-size="10" fill="#333" text-anchor="middle">62543</text>
+<rect x="316.0" y="235.7" width="20.9" height="162.3" fill="#D55E00" opacity="0.9"/>
+<text x="326.4" y="231.7" font-size="10" fill="#333" text-anchor="middle">32002</text>
+<rect x="134.7" y="387.2" width="20.9" height="10.8" fill="#009E73" opacity="0.9"/>
+<text x="145.1" y="383.2" font-size="10" fill="#333" text-anchor="middle">2131</text>
+<rect x="361.3" y="238.6" width="20.9" height="159.4" fill="#CC79A7" opacity="0.9"/>
+<text x="371.8" y="234.6" font-size="10" fill="#333" text-anchor="middle">31433</text>
+<rect x="293.3" y="376.2" width="20.9" height="21.8" fill="#0072B2" opacity="0.9"/>
+<text x="303.8" y="372.2" font-size="10" fill="#333" text-anchor="middle">4306</text>
+<rect x="112.0" y="316.8" width="20.9" height="81.2" fill="#D55E00" opacity="0.9"/>
+<text x="122.4" y="312.8" font-size="10" fill="#333" text-anchor="middle">16009</text>
+<rect x="157.3" y="317.7" width="20.9" height="80.3" fill="#CC79A7" opacity="0.9"/>
+<text x="167.8" y="313.7" font-size="10" fill="#333" text-anchor="middle">15843</text>
+<rect x="497.3" y="354.7" width="20.9" height="43.3" fill="#0072B2" opacity="0.9"/>
+<text x="507.8" y="350.7" font-size="10" fill="#333" text-anchor="middle">8531</text>
+<rect x="338.7" y="376.2" width="20.9" height="21.8" fill="#009E73" opacity="0.9"/>
+<text x="349.1" y="372.2" font-size="10" fill="#333" text-anchor="middle">4292</text>
+<rect x="180.0" y="390.2" width="20.9" height="7.8" fill="#E69F00" opacity="0.9"/>
+<text x="190.4" y="386.2" font-size="10" fill="#333" text-anchor="middle">1533</text>
+<rect x="610.7" y="229.0" width="20.9" height="169.0" fill="#56B4E9" opacity="0.9"/>
+<text x="621.1" y="225.0" font-size="10" fill="#333" text-anchor="middle">33329</text>
+<rect x="633.3" y="364.6" width="20.9" height="33.4" fill="#000000" opacity="0.9"/>
+<text x="643.8" y="360.6" font-size="10" fill="#333" text-anchor="middle">6577</text>
+<rect x="656.0" y="214.2" width="20.9" height="183.8" fill="#F0E442" opacity="0.9"/>
+<text x="666.4" y="210.2" font-size="10" fill="#333" text-anchor="middle">36246</text>
+<rect x="406.7" y="313.5" width="20.9" height="84.5" fill="#56B4E9" opacity="0.9"/>
+<text x="417.1" y="309.5" font-size="10" fill="#333" text-anchor="middle">16665</text>
+<rect x="225.3" y="389.5" width="20.9" height="8.5" fill="#000000" opacity="0.9"/>
+<text x="235.8" y="385.5" font-size="10" fill="#333" text-anchor="middle">1676</text>
+<rect x="452.0" y="307.0" width="20.9" height="91.0" fill="#F0E442" opacity="0.9"/>
+<text x="462.4" y="303.0" font-size="10" fill="#333" text-anchor="middle">17939</text>
+<rect x="384.0" y="381.8" width="20.9" height="16.2" fill="#E69F00" opacity="0.9"/>
+<text x="394.4" y="377.8" font-size="10" fill="#333" text-anchor="middle">3192</text>
+<rect x="202.7" y="355.8" width="20.9" height="42.2" fill="#56B4E9" opacity="0.9"/>
+<text x="213.1" y="351.8" font-size="10" fill="#333" text-anchor="middle">8330</text>
+<rect x="248.0" y="352.0" width="20.9" height="46.0" fill="#F0E442" opacity="0.9"/>
+<text x="258.4" y="348.0" font-size="10" fill="#333" text-anchor="middle">9074</text>
+<rect x="588.0" y="367.2" width="20.9" height="30.8" fill="#E69F00" opacity="0.9"/>
+<text x="598.4" y="363.2" font-size="10" fill="#333" text-anchor="middle">6081</text>
+<rect x="429.3" y="380.9" width="20.9" height="17.1" fill="#000000" opacity="0.9"/>
+<text x="439.8" y="376.9" font-size="10" fill="#333" text-anchor="middle">3372</text>
+<rect x="704" y="60" width="14" height="11" fill="#0072B2"/>
+<text x="724" y="70" font-size="12" fill="#222">amaterasu cached-warm</text>
+<rect x="704" y="81" width="14" height="11" fill="#D55E00"/>
+<text x="724" y="91" font-size="12" fill="#222">amaterasu mapped-fresh</text>
+<rect x="704" y="102" width="14" height="11" fill="#009E73"/>
+<text x="724" y="112" font-size="12" fill="#222">amaterasu mapped-warm</text>
+<rect x="704" y="123" width="14" height="11" fill="#CC79A7"/>
+<text x="724" y="133" font-size="12" fill="#222">amaterasu cached-fresh</text>
+<rect x="704" y="144" width="14" height="11" fill="#E69F00"/>
+<text x="724" y="154" font-size="12" fill="#222">blackwell cached-warm</text>
+<rect x="704" y="165" width="14" height="11" fill="#56B4E9"/>
+<text x="724" y="175" font-size="12" fill="#222">blackwell mapped-fresh</text>
+<rect x="704" y="186" width="14" height="11" fill="#000000"/>
+<text x="724" y="196" font-size="12" fill="#222">blackwell mapped-warm</text>
+<rect x="704" y="207" width="14" height="11" fill="#F0E442"/>
+<text x="724" y="217" font-size="12" fill="#222">blackwell cached-fresh</text>
+</svg>
