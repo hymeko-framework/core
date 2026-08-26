@@ -780,3 +780,53 @@ a spinning `skeleton` binary. Both would have contaminated the timings.
   (A.5).
 * A new portability defect is on record (A.3), with a workaround and a proper fix
   that is deliberately not applied inside a measurement series.
+
+---
+
+# Appendix B — Correction to A.5: the readback cliff is isolated (2026-08-27)
+
+**A.5 is not rewritten.** Its "observed, not explained" wording was accurate when
+written and remains above, unchanged. This appendix records what a later
+measurement added.
+
+## B.1 What A.5 said
+
+On amaterasu, through wgpu: ~41 MB at ~11 GB/s but ~102 MB at ~1.1 GB/s — a ~10×
+collapse between roughly 41 MB and 51 MB, with candidate causes listed and none
+asserted.
+
+## B.2 What was measured afterwards
+
+A standalone CUDA C prototype (`tools/cuda_prototype/`, no dependency added) ran
+`cudaMemcpy` device-to-host on the **same GPU, driver, host and transfer sizes**:
+
+| size | 32 MB | 48 MB | 64 MB | 80 MB | 96 MB | 112 MB | 128 MB |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| GB/s | 10.86 | 10.95 | 11.02 | 11.05 | 11.06 | 11.06 | 11.16 |
+
+Flat to slightly rising across the entire region where the wgpu path collapses.
+Full method, environment and identity in
+`reports/2026-08-27-phase6-cuda-feasibility.md`.
+
+## B.3 What this licenses saying
+
+**Established:** PCIe link bandwidth and the GPU DMA engine alone do not explain
+the cliff. If either were the limiting mechanism, CUDA would show it on the same
+hardware, and it does not.
+
+**Strongly isolated, carefully phrased:** the cliff lies in the tested wgpu
+readback path — `WgpuBackend::read_tensor` as implemented here — or in that
+path's interaction with the backend/driver mapping machinery on this platform.
+
+**Still not claimed:** that wgpu is universally defective (one implementation,
+one backend, one driver, one OS, one GPU, one size range was measured); or that
+the mechanism is known. Staging allocation, buffer mapping, submit-to-map
+synchronisation, chunking — **none was isolated**, and naming one would be a
+guess dressed as a finding.
+
+## B.4 The experiment that would name it
+
+Decompose readback into GPU-side copy, submission and wait, map completion, and
+host `memcpy`, then sweep the wgpu side as densely as the CUDA side now is. That
+converts "somewhere in the software path" into a specific stage. Listed with the
+other next steps in the Phase 6 report §6.
