@@ -8,20 +8,10 @@
 //! and are documented as such at the bottom of this file rather than faked with a
 //! test that cannot fail.
 
-use hymeko::tensor::compute::{ComputeError, TensorShape};
+use hymeko::tensor::compute::TensorShape;
 use hymeko_hnn::workloads::SparseSpec;
-use hymeko_wgpu::{ActivationKind, TensorArenaConfig, WgpuBackend};
-
-fn backend_or_skip(test: &str) -> Option<WgpuBackend> {
-    match WgpuBackend::builder().label("hymeko-session-test").build() {
-        Ok(b) => Some(b),
-        Err(ComputeError::BackendUnavailable { reason, .. }) => {
-            eprintln!("[{test}] SKIPPED - no GPU adapter: {reason}");
-            None
-        }
-        Err(other) => panic!("[{test}] backend init failed (not availability): {other}"),
-    }
-}
+use hymeko_wgpu::testing::backend_or_skip;
+use hymeko_wgpu::{ActivationKind, TensorArenaConfig};
 
 /// Dropping a session without submitting must free its pending releases
 /// immediately: commands that were never submitted can never run, so nothing

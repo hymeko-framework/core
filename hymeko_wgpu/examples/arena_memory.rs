@@ -21,9 +21,9 @@
 //! cargo run -p hymeko_wgpu --release --example arena_memory
 //! ```
 
-use hymeko::tensor::compute::TensorShape;
 use hymeko_hnn::workloads::SparseSpec;
-use hymeko_wgpu::{ActivationKind, ArenaTensor, TensorArenaConfig, TrackedSession, WgpuBackend};
+use hymeko_wgpu::testing::{Fixture, encode_chain};
+use hymeko_wgpu::{ActivationKind, TensorArenaConfig, WgpuBackend};
 
 const LAYERS: usize = 8;
 const REPEATS: usize = 4;
@@ -99,14 +99,14 @@ fn main() {
     println!("{}", "-".repeat(112));
 
     for case in &cases {
-        let csr = case.spec.build();
         let fd = case.fd;
-        let res = backend.resources();
-        let matrix = res.upload_csr_from("a", &csr).unwrap();
-        let shape = matrix.shape();
+        let csr = case.spec.build();
         let x = case.spec.dense_block(fd);
-        let input = res.upload_tensor("x", shape.input_shape(fd), &x).unwrap();
-        let out_shape = shape.output_shape(fd);
+        // The spec-to-CSR step stays here: `SparseSpec` lives in `hymeko_hnn`,
+        // which the library must not depend on.
+        let fx = Fixture::build(&backend, &csr, &x, fd);
+        let (matrix, input, out_shape) = (&fx.matrix, &fx.input, fx.out_shape);
+        let res = backend.resources();
 
         // One intermediate, in bytes. `max(1)` mirrors the allocator's padding.
         let one = (out_shape.elements().max(1) * std::mem::size_of::<f32>()) as u64;
@@ -120,11 +120,11 @@ fn main() {
             let mut enc = backend.encoder(Some("naive"));
             let ops: Vec<_> = (0..LAYERS)
                 .map(|i| {
-                    let src = if i == 0 { &input } else { &buffers[i - 1] };
+                    let src = if i == 0 { input } else { &buffers[i - 1] };
                     let spmm = backend
                         .operations()
                         .spmm()
-                        .matrix(&matrix)
+                        .matrix(matrix)
                         .input(src)
                         .output(&buffers[i])
                         .prepare()
@@ -169,14 +169,14 @@ fn main() {
             let ops: Vec<_> = (0..LAYERS)
                 .map(|i| {
                     let (src, dst) = match i {
-                        0 => (&input, &a),
+                        0 => (input, &a),
                         _ if i % 2 == 1 => (&a, &b),
                         _ => (&b, &a),
                     };
                     let spmm = backend
                         .operations()
                         .spmm()
-                        .matrix(&matrix)
+                        .matrix(matrix)
                         .input(src)
                         .output(dst)
                         .prepare()
@@ -216,7 +216,7 @@ fn main() {
         // --- C: arena --------------------------------------------------------
         {
             let arena = backend.tensor_arena(TensorArenaConfig::default());
-            run_arena_chain(&backend, &arena, &matrix, &input, out_shape, 1);
+            run_arena_chain(&backend, &arena, &fx, 1);
             let s = arena.stats();
             row(
                 case.label,
@@ -236,7 +236,7 @@ fn main() {
         // --- D: arena, repeated inferences ------------------------------------
         {
             let arena = backend.tensor_arena(TensorArenaConfig::default());
-            run_arena_chain(&backend, &arena, &matrix, &input, out_shape, REPEATS);
+            run_arena_chain(&backend, &arena, &fx, REPEATS);
             let s = arena.stats();
             row(
                 case.label,
@@ -264,16 +264,22 @@ fn main() {
 fn run_arena_chain(
     backend: &WgpuBackend,
     arena: &hymeko_wgpu::TensorArena<'_>,
-    matrix: &hymeko_wgpu::GpuCsrMatrix<f32>,
-    input: &hymeko_wgpu::GpuTensor<f32>,
-    out_shape: TensorShape,
+    fx: &Fixture,
     repeats: usize,
 ) {
     for _ in 0..repeats {
-        let a = arena.acquire(out_shape).unwrap();
-        let b = arena.acquire(out_shape).unwrap();
+        let a = arena.acquire(fx.out_shape).unwrap();
+        let b = arena.acquire(fx.out_shape).unwrap();
         let mut session = arena.session(Some("arena-chain"));
-        encode_layers(backend, matrix, input, &a, &b, &mut session);
+        encode_chain(
+            backend,
+            fx,
+            &a,
+            &b,
+            LAYERS,
+            ActivationKind::Relu,
+            &mut session,
+        );
         session.submit_and_wait().unwrap();
         arena.reclaim_all().unwrap();
     }
@@ -300,57 +306,4 @@ fn row(
         mib(cached),
         mib(logical),
     );
-}
-
-/// Encode the alternating layers into a tracked session.
-///
-/// Split out because pooled operands make the operations `Tracked`, so their
-/// `encode` takes the session rather than a raw encoder.
-fn encode_layers(
-    backend: &WgpuBackend,
-    matrix: &hymeko_wgpu::GpuCsrMatrix<f32>,
-    input: &hymeko_wgpu::GpuTensor<f32>,
-    a: &ArenaTensor<'_>,
-    b: &ArenaTensor<'_>,
-    session: &mut TrackedSession<'_>,
-) {
-    let ops: Vec<_> = (0..LAYERS)
-        .map(|i| {
-            let (src, dst) = match i {
-                0 => (None, a),
-                _ if i % 2 == 1 => (Some(a), b),
-                _ => (Some(b), a),
-            };
-            let spmm = match src {
-                None => backend
-                    .operations()
-                    .spmm()
-                    .matrix(matrix)
-                    .input(input)
-                    .output(dst)
-                    .prepare()
-                    .unwrap(),
-                Some(s) => backend
-                    .operations()
-                    .spmm()
-                    .matrix(matrix)
-                    .input(s)
-                    .output(dst)
-                    .prepare()
-                    .unwrap(),
-            };
-            let act = backend
-                .operations()
-                .activation()
-                .kind(ActivationKind::Relu)
-                .in_place(dst)
-                .prepare()
-                .unwrap();
-            (spmm, act)
-        })
-        .collect();
-    for (s, act) in &ops {
-        s.encode(session).unwrap();
-        act.encode(session).unwrap();
-    }
 }

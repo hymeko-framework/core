@@ -30,6 +30,7 @@
 use std::time::{Duration, Instant};
 
 use hymeko_hnn::workloads::SparseSpec;
+use hymeko_wgpu::testing::{Fixture, encode_chain};
 use hymeko_wgpu::{ActivationKind, TensorArenaConfig, WgpuBackend};
 
 const LAYERS: usize = 8;
@@ -50,18 +51,12 @@ fn main() {
 
     let spec = SparseSpec::large();
     let csr = spec.build();
-    let res = backend.resources();
-    let matrix = res.upload_csr_from("a", &csr).unwrap();
-    let shape = matrix.shape();
     let x = spec.dense_block(FEATURE_DIM);
-    let input = res
-        .upload_tensor("x", shape.input_shape(FEATURE_DIM), &x)
-        .unwrap();
-    let out_shape = shape.output_shape(FEATURE_DIM);
+    let fx = Fixture::build(&backend, &csr, &x, FEATURE_DIM);
 
     let arena = backend.tensor_arena(TensorArenaConfig::default());
-    let a = arena.acquire(out_shape).unwrap();
-    let b = arena.acquire(out_shape).unwrap();
+    let a = arena.acquire(fx.out_shape).unwrap();
+    let b = arena.acquire(fx.out_shape).unwrap();
 
     // MACs per chain: every layer is one SpMM over the whole matrix.
     let macs_per_chain = (csr.nnz() * FEATURE_DIM * LAYERS) as f64;
@@ -78,45 +73,15 @@ fn main() {
 
     let one_chain = |arena: &hymeko_wgpu::TensorArena<'_>| {
         let mut session = arena.session(None);
-        let ops: Vec<_> = (0..LAYERS)
-            .map(|i| {
-                let (src, dst) = match i {
-                    0 => (None, &a),
-                    _ if i % 2 == 1 => (Some(&a), &b),
-                    _ => (Some(&b), &a),
-                };
-                let spmm = match src {
-                    None => backend
-                        .operations()
-                        .spmm()
-                        .matrix(&matrix)
-                        .input(&input)
-                        .output(dst)
-                        .prepare()
-                        .unwrap(),
-                    Some(s) => backend
-                        .operations()
-                        .spmm()
-                        .matrix(&matrix)
-                        .input(s)
-                        .output(dst)
-                        .prepare()
-                        .unwrap(),
-                };
-                let act = backend
-                    .operations()
-                    .activation()
-                    .kind(ActivationKind::Relu)
-                    .in_place(dst)
-                    .prepare()
-                    .unwrap();
-                (spmm, act)
-            })
-            .collect();
-        for (s, act) in &ops {
-            s.encode(&mut session).unwrap();
-            act.encode(&mut session).unwrap();
-        }
+        encode_chain(
+            &backend,
+            &fx,
+            &a,
+            &b,
+            LAYERS,
+            ActivationKind::Relu,
+            &mut session,
+        );
         session.submit_and_wait().unwrap();
     };
 

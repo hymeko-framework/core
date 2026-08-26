@@ -17,21 +17,11 @@
 use hymeko::tensor::compute::{ComputeError, TensorShape};
 use hymeko::tensor::representations::tensor_csr::TensorCsr;
 use hymeko_hnn::workloads::SparseSpec;
-use hymeko_wgpu::{ActivationKind, ReusePolicy, SubmissionEpoch, TensorArenaConfig, WgpuBackend};
+use hymeko_wgpu::testing::backend_or_skip;
+use hymeko_wgpu::{ActivationKind, ReusePolicy, SubmissionEpoch, TensorArenaConfig};
 
 /// A value the computation cannot produce, so its appearance proves a leak.
 const POISON: f32 = -98765.5;
-
-fn backend_or_skip(test: &str) -> Option<WgpuBackend> {
-    match WgpuBackend::builder().label("hymeko-arena-test").build() {
-        Ok(b) => Some(b),
-        Err(ComputeError::BackendUnavailable { reason, .. }) => {
-            eprintln!("[{test}] SKIPPED - no GPU adapter: {reason}");
-            None
-        }
-        Err(other) => panic!("[{test}] backend init failed (not availability): {other}"),
-    }
-}
 
 fn small_csr() -> TensorCsr<f32> {
     SparseSpec::small().build()

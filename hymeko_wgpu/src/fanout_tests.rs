@@ -66,25 +66,14 @@
 //! the brief forbids growing this phase into a kernel framework, and a merge
 //! kernel with no measured consumer would be precisely that.
 
+use crate::testing::backend_or_skip;
 use crate::{ActivationKind, ArenaTensor, TensorArenaConfig, TrackedSession, WgpuBackend};
-use hymeko::tensor::compute::ComputeError;
 use hymeko::tensor::representations::tensor_csr::TensorCsr;
 use hymeko_hnn::workloads::SparseSpec;
 
 const POISON: f32 = -98765.5;
 const MERGE_SHADER: &str = include_str!("../tests/shaders/merge_add.wgsl");
 const MERGE_WORKGROUP: u32 = 64;
-
-fn backend_or_skip(test: &str) -> Option<WgpuBackend> {
-    match WgpuBackend::builder().label("hymeko-diamond-test").build() {
-        Ok(b) => Some(b),
-        Err(ComputeError::BackendUnavailable { reason, .. }) => {
-            eprintln!("[{test}] SKIPPED - no GPU adapter: {reason}");
-            None
-        }
-        Err(other) => panic!("[{test}] backend init failed (not availability): {other}"),
-    }
-}
 
 // ---------------------------------------------------------------------------
 // test-only merge operation

@@ -25,20 +25,10 @@
 use hymeko::tensor::compute::{ComputeError, TensorShape};
 use hymeko::tensor::representations::tensor_csr::TensorCsr;
 use hymeko_hnn::workloads::SparseSpec;
+use hymeko_wgpu::testing::backend_or_skip;
 use hymeko_wgpu::{ActivationKind, GpuTensor, PreparedActivation, WgpuBackend};
 
 const POISON: f32 = -98765.5;
-
-fn backend_or_skip(test: &str) -> Option<WgpuBackend> {
-    match WgpuBackend::builder().label("hymeko-act-test").build() {
-        Ok(b) => Some(b),
-        Err(ComputeError::BackendUnavailable { reason, .. }) => {
-            eprintln!("[{test}] SKIPPED - no GPU adapter: {reason}");
-            None
-        }
-        Err(other) => panic!("[{test}] backend init failed (not availability): {other}"),
-    }
-}
 
 /// Independent CPU reference.
 fn cpu_activation(kind: ActivationKind, v: f32) -> f32 {

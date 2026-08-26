@@ -117,3 +117,6 @@ pub const FILL_SHADER: &str = include_str!("../shaders/fill.wgsl");
 
 #[cfg(test)]
 mod fanout_tests;
+
+#[doc(hidden)]
+pub mod testing;

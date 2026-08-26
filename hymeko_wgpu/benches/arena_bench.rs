@@ -32,10 +32,8 @@ use std::time::Duration;
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use hymeko::tensor::compute::TensorShape;
 use hymeko_hnn::workloads::SparseSpec;
-use hymeko_wgpu::{
-    ActivationKind, ArenaTensor, GpuCsrMatrix, GpuTensor, TensorArenaConfig, TrackedSession,
-    WgpuBackend,
-};
+use hymeko_wgpu::testing::{Fixture, encode_chain};
+use hymeko_wgpu::{ActivationKind, GpuTensor, TensorArenaConfig, WgpuBackend};
 use std::hint::black_box;
 
 const LAYERS: usize = 8;
@@ -123,26 +121,12 @@ fn bench_lease(c: &mut Criterion) {
 // the 8-layer chain, three ways
 // ---------------------------------------------------------------------------
 
-struct Fixture {
-    csr_nnz: usize,
-    matrix: GpuCsrMatrix<f32>,
-    input: GpuTensor<f32>,
-    out_shape: TensorShape,
-}
-
+/// Build a device fixture from a workload spec.
+///
+/// The spec-to-CSR step stays here rather than in `testing::Fixture`, because
+/// `SparseSpec` lives in `hymeko_hnn`, which the library must never depend on.
 fn fixture(backend: &WgpuBackend, spec: &SparseSpec, fd: usize) -> Fixture {
-    let csr = spec.build();
-    let res = backend.resources();
-    let matrix = res.upload_csr_from("a", &csr).unwrap();
-    let shape = matrix.shape();
-    let x = spec.dense_block(fd);
-    let input = res.upload_tensor("x", shape.input_shape(fd), &x).unwrap();
-    Fixture {
-        csr_nnz: csr.nnz(),
-        matrix,
-        input,
-        out_shape: shape.output_shape(fd),
-    }
+    Fixture::build(backend, &spec.build(), &spec.dense_block(fd), fd)
 }
 
 /// Encode an 8-layer chain over two pooled leases, alternating.
@@ -151,54 +135,6 @@ fn fixture(backend: &WgpuBackend, spec: &SparseSpec, fd: usize) -> Fixture {
 /// `ArenaTensor`, which makes the operations `Tracked`, which makes their
 /// `encode` take the session rather than a raw encoder. That is the type-level
 /// guarantee working as designed; the duplication is its visible cost.
-fn encode_pingpong_arena(
-    backend: &WgpuBackend,
-    fx: &Fixture,
-    a: &ArenaTensor<'_>,
-    b: &ArenaTensor<'_>,
-    session: &mut TrackedSession<'_>,
-) {
-    let ops: Vec<_> = (0..LAYERS)
-        .map(|i| {
-            let (src, dst) = match i {
-                0 => (None, a),
-                _ if i % 2 == 1 => (Some(a), b),
-                _ => (Some(b), a),
-            };
-            let spmm = match src {
-                None => backend
-                    .operations()
-                    .spmm()
-                    .matrix(&fx.matrix)
-                    .input(&fx.input)
-                    .output(dst)
-                    .prepare()
-                    .unwrap(),
-                Some(s) => backend
-                    .operations()
-                    .spmm()
-                    .matrix(&fx.matrix)
-                    .input(s)
-                    .output(dst)
-                    .prepare()
-                    .unwrap(),
-            };
-            let act = backend
-                .operations()
-                .activation()
-                .kind(ActivationKind::Relu)
-                .in_place(dst)
-                .prepare()
-                .unwrap();
-            (spmm, act)
-        })
-        .collect();
-    for (s, act) in &ops {
-        s.encode(session).unwrap();
-        act.encode(session).unwrap();
-    }
-}
-
 /// Encode an 8-layer chain over the two supplied buffers, alternating.
 fn encode_pingpong(
     backend: &WgpuBackend,
@@ -313,7 +249,15 @@ fn bench_chain(c: &mut Criterion) {
                     let a = arena.acquire(fx.out_shape).unwrap();
                     let bb = arena.acquire(fx.out_shape).unwrap();
                     let mut session = arena.session(None);
-                    encode_pingpong_arena(&backend, &fx, &a, &bb, &mut session);
+                    encode_chain(
+                        &backend,
+                        &fx,
+                        &a,
+                        &bb,
+                        LAYERS,
+                        ActivationKind::Relu,
+                        &mut session,
+                    );
                     session.submit_and_wait().unwrap();
                 });
             });
@@ -355,7 +299,15 @@ fn bench_encode(c: &mut Criterion) {
                 let a = arena.acquire(fx.out_shape).unwrap();
                 let bb = arena.acquire(fx.out_shape).unwrap();
                 let mut session = arena.session(None);
-                encode_pingpong_arena(&backend, &fx, &a, &bb, &mut session);
+                encode_chain(
+                    &backend,
+                    &fx,
+                    &a,
+                    &bb,
+                    LAYERS,
+                    ActivationKind::Relu,
+                    &mut session,
+                );
                 black_box(session.operations_encoded());
             });
         });
@@ -402,7 +354,15 @@ fn bench_inference(c: &mut Criterion) {
                     let a = arena.acquire(fx.out_shape).unwrap();
                     let bb = arena.acquire(fx.out_shape).unwrap();
                     let mut session = arena.session(None);
-                    encode_pingpong_arena(&backend, &fx, &a, &bb, &mut session);
+                    encode_chain(
+                        &backend,
+                        &fx,
+                        &a,
+                        &bb,
+                        LAYERS,
+                        ActivationKind::Relu,
+                        &mut session,
+                    );
                     session.submit_and_wait().unwrap();
                 }
             });

@@ -20,6 +20,7 @@
 use hymeko::tensor::compute::{ComputeError, SparseCsrShape, TensorShape};
 use hymeko::tensor::representations::tensor_csr::TensorCsr;
 use hymeko_hnn::workloads::{DegreeShape, SparseSpec};
+use hymeko_wgpu::testing::backend_or_skip;
 use hymeko_wgpu::{GpuTensor, WgpuBackend, WorkgroupShape};
 
 const POISON: f32 = -12345.5;
@@ -27,17 +28,6 @@ const POISON: f32 = -12345.5;
 // ---------------------------------------------------------------------------
 // harness
 // ---------------------------------------------------------------------------
-
-fn backend_or_skip(test: &str) -> Option<WgpuBackend> {
-    match WgpuBackend::builder().label("hymeko-spmm-test").build() {
-        Ok(b) => Some(b),
-        Err(ComputeError::BackendUnavailable { reason, .. }) => {
-            eprintln!("[{test}] SKIPPED - no GPU adapter: {reason}");
-            None
-        }
-        Err(other) => panic!("[{test}] backend init failed (not availability): {other}"),
-    }
-}
 
 /// CPU oracle.
 fn cpu_reference(csr: &TensorCsr<f32>, x: &[f32], fd: usize) -> Vec<f32> {
