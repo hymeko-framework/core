@@ -6,7 +6,7 @@
 //! |---|---|
 //! | CSR SpMM (`spmm.wgsl`), optionally fused with an activation | implemented, tested |
 //! | elementwise activation, out-of-place and in-place | implemented, tested |
-//! | pipeline cache, explicit encode / submit / readback | implemented, tested |
+//! | pipeline cache keyed on [`KernelId`], explicit encode / submit / readback | implemented, tested |
 //! | `TensorArena` buffer reuse + non-blocking completion tracking | implemented, tested |
 //! | `ReadbackWorkspace` staging + destination reuse ([`readback`]) | implemented, tested |
 //! | `TrackedSession` and type-level operand provenance ([`scope`]) | implemented, tested |
@@ -42,6 +42,10 @@
 //!   [`ReadbackWorkspace`] and use [`WgpuBackend::read_tensor_into`], which
 //!   reuses both the device staging buffer and the host destination and is
 //!   4.0-7.6x faster on measured hardware (see the Phase 8 report).
+//! * It does not let a cache key denote more than one kernel. [`PipelineCache`]
+//!   is keyed on [`KernelId`], a closed enum that owns the WGSL source, the
+//!   entry point and the bind-group layout, so an equal key necessarily means
+//!   source-compatible code and a compatible layout. Source is not a parameter.
 //! * It does not own any core tensor type, and no core type owns a GPU handle.
 //!   [`ResourceFactory`] adapts host data into device resources.
 //!
@@ -108,6 +112,7 @@
 //! ```
 
 mod block_on;
+mod sizing;
 
 pub mod arena;
 pub mod completion;
@@ -130,10 +135,9 @@ pub use completion::{CompletionTracker, SubmissionEpoch};
 pub use operations::{
     ACTIVATION_INPLACE_SHADER, ACTIVATION_SHADER, ACTIVATION_WORKGROUP_SWEEP, ActivationBuilder,
     ActivationKind, DEFAULT_ACTIVATION_WORKGROUP, OperationFactory, PreparedActivation,
-    PreparedSpmm, SPMM_ACTIVATION_SHADER, SPMM_SHADER, SpmmBuilder, WorkgroupShape,
-    spmm_workgroup_for,
+    PreparedSpmm, SPMM_SHADER, SpmmBuilder, WorkgroupShape, spmm_workgroup_for,
 };
-pub use pipeline::{PipelineCache, PipelineKey};
+pub use pipeline::{ActivationEntry, KernelId, LayoutId, PipelineBundle, PipelineCache};
 pub use readback::{ReadbackWorkspace, StagingStorage};
 pub use resources::{GpuCsrMatrix, GpuTensor, ResourceFactory};
 pub use scope::{EncodeScope, JoinScope, Joined, TensorOperand, Tracked, Untracked};

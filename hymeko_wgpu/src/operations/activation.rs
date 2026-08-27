@@ -18,17 +18,24 @@ use std::sync::Arc;
 
 use hymeko::tensor::compute::{BackendKind, ComputeError, TensorShape, try_u32};
 
-use crate::pipeline::PipelineKey;
+use crate::operations::dispatch::PreparedDispatch;
+use crate::pipeline::{ActivationEntry, KernelId};
 use crate::resources::GpuTensor;
 use crate::scope::{EncodeScope, JoinScope, Joined, TensorOperand, Tracked, Untracked};
 
-/// WGSL source, out-of-place (`out[i] = f(in[i])`).
-pub const ACTIVATION_SHADER: &str = include_str!("../../shaders/activation.wgsl");
-/// WGSL source, in-place (`data[i] = f(data[i])`).
-pub const ACTIVATION_INPLACE_SHADER: &str = include_str!("../../shaders/activation_inplace.wgsl");
-
-const SHADER_NAME: &str = "activation";
-const SHADER_NAME_INPLACE: &str = "activation_inplace";
+/// WGSL source for the out-of-place activation kernel.
+///
+/// `activation_formulas.wgsl` prepended by compile-time concatenation, so each
+/// formula has one definition shared with the in-place and fused-SpMM kernels.
+pub const ACTIVATION_SHADER: &str = concat!(
+    include_str!("../../shaders/activation_formulas.wgsl"),
+    include_str!("../../shaders/activation.wgsl")
+);
+/// WGSL source for the in-place activation kernel. Same shared formulas.
+pub const ACTIVATION_INPLACE_SHADER: &str = concat!(
+    include_str!("../../shaders/activation_formulas.wgsl"),
+    include_str!("../../shaders/activation_inplace.wgsl")
+);
 
 /// Which elementwise function to apply.
 ///
@@ -78,17 +85,19 @@ pub enum ActivationKind {
 }
 
 impl ActivationKind {
-    /// WGSL entry point implementing this kind.
+    /// The compiled-code identity of this kind, without the LeakyReLU slope.
     ///
-    /// Part of the pipeline key: same module, different pipeline.
+    /// `alpha` is a runtime uniform: two LeakyReLU operations with different
+    /// slopes share one pipeline. Folding it into kernel identity would compile
+    /// a pipeline per slope value.
     #[must_use]
-    pub const fn entry_point(self) -> &'static str {
+    pub const fn entry(self) -> ActivationEntry {
         match self {
-            Self::Identity => "main_identity",
-            Self::Relu => "main_relu",
-            Self::LeakyRelu { .. } => "main_leaky_relu",
-            Self::Sigmoid => "main_sigmoid",
-            Self::Tanh => "main_tanh",
+            Self::Identity => ActivationEntry::Identity,
+            Self::Relu => ActivationEntry::Relu,
+            Self::LeakyRelu { .. } => ActivationEntry::LeakyRelu,
+            Self::Sigmoid => ActivationEntry::Sigmoid,
+            Self::Tanh => ActivationEntry::Tanh,
         }
     }
 
@@ -361,35 +370,12 @@ impl<'a, S: EncodeScope> ActivationBuilder<'a, S> {
         // nothing to compute. Recorded here, skipped in `encode`.
         let empty = count == 0;
 
-        let (shader_name, shader_src, layout) = if in_place {
-            (
-                SHADER_NAME_INPLACE,
-                ACTIVATION_INPLACE_SHADER,
-                Self::in_place_layout(self.device),
-            )
+        let kernel = if in_place {
+            KernelId::ActivationInPlace(self.kind.entry())
         } else {
-            (
-                SHADER_NAME,
-                ACTIVATION_SHADER,
-                Self::out_of_place_layout(self.device),
-            )
+            KernelId::ActivationOutOfPlace(self.kind.entry())
         };
-
-        let pipeline_layout = self
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("activation.pipeline_layout"),
-                bind_group_layouts: &[Some(&layout)],
-                immediate_size: 0,
-            });
-
-        let key = PipelineKey::new_2d(shader_name, self.kind.entry_point(), self.workgroup, 1);
-        let pipeline = self.cache.get_or_create(
-            self.device,
-            key.clone(),
-            shader_src,
-            Some(&pipeline_layout),
-        )?;
+        let bundle = self.cache.bundle(self.device, kernel, self.workgroup, 1)?;
 
         let params = ActivationParams {
             count,
@@ -409,7 +395,7 @@ impl<'a, S: EncodeScope> ActivationBuilder<'a, S> {
         let bind_group = if in_place {
             self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("activation.bind_group.in_place"),
-                layout: &layout,
+                layout: bundle.bind_group_layout(),
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
@@ -424,7 +410,7 @@ impl<'a, S: EncodeScope> ActivationBuilder<'a, S> {
         } else {
             self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("activation.bind_group"),
-                layout: &layout,
+                layout: bundle.bind_group_layout(),
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
@@ -442,67 +428,27 @@ impl<'a, S: EncodeScope> ActivationBuilder<'a, S> {
             })
         };
 
+        let label = self
+            .label
+            .unwrap_or_else(|| format!("activation.{}", self.kind.as_str()));
+
         Ok(PreparedActivation {
             _operands: core::marker::PhantomData,
             _scope: core::marker::PhantomData,
-            pipeline,
-            bind_group,
-            _params_buffer: params_buffer,
-            groups,
-            empty,
+            dispatch: PreparedDispatch::new(
+                Arc::clone(bundle.pipeline()),
+                bind_group,
+                params_buffer,
+                [groups, 1, 1],
+                empty,
+                label,
+            ),
             in_place,
             workgroup: self.workgroup,
             kind: self.kind,
-            key,
+            kernel,
             elements,
-            label: self
-                .label
-                .unwrap_or_else(|| format!("activation.{}", self.kind.as_str())),
         })
-    }
-
-    fn out_of_place_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
-        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("activation.layout"),
-            entries: &[
-                storage_entry(0, true),
-                storage_entry(1, false),
-                uniform_entry(2),
-            ],
-        })
-    }
-
-    fn in_place_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
-        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("activation.layout.in_place"),
-            entries: &[storage_entry(0, false), uniform_entry(1)],
-        })
-    }
-}
-
-fn storage_entry(binding: u32, read_only: bool) -> wgpu::BindGroupLayoutEntry {
-    wgpu::BindGroupLayoutEntry {
-        binding,
-        visibility: wgpu::ShaderStages::COMPUTE,
-        ty: wgpu::BindingType::Buffer {
-            ty: wgpu::BufferBindingType::Storage { read_only },
-            has_dynamic_offset: false,
-            min_binding_size: None,
-        },
-        count: None,
-    }
-}
-
-fn uniform_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
-    wgpu::BindGroupLayoutEntry {
-        binding,
-        visibility: wgpu::ShaderStages::COMPUTE,
-        ty: wgpu::BindingType::Buffer {
-            ty: wgpu::BufferBindingType::Uniform,
-            has_dynamic_offset: false,
-            min_binding_size: None,
-        },
-        count: None,
     }
 }
 
@@ -513,17 +459,14 @@ pub struct PreparedActivation<'a, S: EncodeScope = Untracked> {
     /// [`crate::PreparedSpmm`] for the argument.
     _operands: core::marker::PhantomData<&'a ()>,
     _scope: core::marker::PhantomData<S>,
-    pipeline: Arc<wgpu::ComputePipeline>,
-    bind_group: wgpu::BindGroup,
-    _params_buffer: wgpu::Buffer,
-    groups: u32,
-    empty: bool,
+    /// Pipeline, bind group, params buffer, extent and label — shared with
+    /// every other prepared operation.
+    dispatch: PreparedDispatch,
     in_place: bool,
     workgroup: u32,
     kind: ActivationKind,
-    key: PipelineKey,
+    kernel: KernelId,
     elements: usize,
-    label: String,
 }
 
 impl<S: EncodeScope> PreparedActivation<'_, S> {
@@ -536,17 +479,7 @@ impl<S: EncodeScope> PreparedActivation<'_, S> {
     /// # Errors
     /// Currently infallible; the `Result` keeps the operation contract uniform.
     fn encode_into(&self, encoder: &mut wgpu::CommandEncoder) -> Result<(), ComputeError> {
-        if self.empty {
-            return Ok(());
-        }
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some(&self.label),
-            timestamp_writes: None,
-        });
-        pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &self.bind_group, &[]);
-        pass.dispatch_workgroups(self.groups, 1, 1);
-        Ok(())
+        self.dispatch.encode_into(encoder, None)
     }
 
     /// Whether this runs in place (input and output are the same buffer).
@@ -558,7 +491,7 @@ impl<S: EncodeScope> PreparedActivation<'_, S> {
     /// Workgroups dispatched — `0` when there is nothing to do.
     #[must_use]
     pub const fn dispatch_groups(&self) -> u32 {
-        if self.empty { 0 } else { self.groups }
+        self.dispatch.groups()[0]
     }
 
     #[must_use]
@@ -571,11 +504,13 @@ impl<S: EncodeScope> PreparedActivation<'_, S> {
         self.kind
     }
 
+    /// Which kernel this operation compiled to.
+    ///
+    /// Replaces the former `pipeline_key()`; see [`crate::PreparedSpmm::kernel`].
     #[must_use]
-    pub const fn pipeline_key(&self) -> &PipelineKey {
-        &self.key
+    pub const fn kernel(&self) -> KernelId {
+        self.kernel
     }
-
     #[must_use]
     pub const fn elements(&self) -> usize {
         self.elements

@@ -1,107 +1,278 @@
-//! Shader module and compute pipeline cache.
+//! Kernel identity, layouts, shader modules and compute pipelines.
 //!
 //! # Why this exists
 //!
 //! Pipeline creation compiles WGSL and is orders of magnitude more expensive
 //! than a dispatch. Rebuilding one per call is the single most common way to
-//! make a GPU backend slower than the CPU it replaced, and the task names it
-//! explicitly: *"Pipeline ne épüljön újra dispatchenként."*
+//! make a GPU backend slower than the CPU it replaced.
 //!
-//! # Key design (Flyweight)
+//! # The invariant, and why the previous design did not hold it
 //!
-//! [`PipelineKey`] contains **only** properties that genuinely require a
-//! distinct pipeline: which shader source, which entry point, and the workgroup
-//! size (which is baked into the WGSL at specialisation time, so two sizes are
-//! two pipelines). Buffer identity, tensor shape and dispatch extent are *not*
-//! in the key — they vary per call and do not change the pipeline.
+//! Phase 9 replaced a key of `(shader name, entry point, workgroup)` where the
+//! WGSL **source** and the **pipeline layout** were passed in beside it. On a
+//! cache hit both were ignored, so an equal key could return a pipeline built
+//! from different source with a different layout. That was demonstrated, not
+//! assumed: two modules under one key, the second silently discarded, the
+//! first's pipeline returned and executed (Phase 9 report, Part A).
+//!
+//! The invariant is now structural rather than conventional:
+//!
+//! > **An equal cache key necessarily denotes source-compatible compiled code
+//! > and a compatible layout.**
+//!
+//! It holds because [`KernelId`] is a closed enum that *owns* the mapping to
+//! source text, entry point and layout. There is no way to name a kernel and
+//! supply a different body for it, because the body is not a parameter.
+//!
+//! # What is, and is not, part of kernel identity
+//!
+//! Workgroup extent **is**: WGSL has no runtime workgroup size, so each extent
+//! is a distinct compiled module. The LeakyReLU slope **is not**: `alpha` is a
+//! uniform read at runtime, so every slope shares one pipeline. That is why
+//! [`ActivationEntry`] carries the discriminant only — folding `alpha` into the
+//! key would compile a pipeline per slope value.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use hymeko::tensor::compute::{BackendKind, ComputeError};
 
-/// Identifies a compute pipeline.
+/// Which activation formula a kernel compiles.
 ///
-/// # Invariants
-/// Two calls with an equal key must be able to share one pipeline object. If a
-/// property would change the compiled code, it belongs here; if it only changes
-/// the arguments, it does not.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct PipelineKey {
-    /// Logical shader name, e.g. `"spmm"`. Not the source text.
-    pub shader: &'static str,
-    /// WGSL entry point.
-    pub entry_point: &'static str,
-    /// Workgroup extent along X, baked into the module via specialisation.
-    pub workgroup_x: u32,
-    /// Workgroup extent along Y, baked into the module via specialisation.
-    ///
-    /// Phase 1 carried a single scalar size, which was sufficient for the
-    /// 1D validation kernel. SpMM maps one invocation to one `(row, feature)`
-    /// element and therefore needs a 2D workgroup, and the phase brief calls
-    /// for measuring 8x8 / 16x8 / 16x16. Widening the key to 2D is the minimal
-    /// change that supports that — a separate 2D cache beside the 1D one would
-    /// have been duplicate infrastructure. 1D kernels use `workgroup_y = 1`.
-    pub workgroup_y: u32,
+/// Discriminant only. [`crate::ActivationKind`] additionally carries the
+/// LeakyReLU slope, which is a runtime uniform and must not multiply pipelines.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ActivationEntry {
+    Identity,
+    Relu,
+    LeakyRelu,
+    Sigmoid,
+    Tanh,
 }
 
-impl PipelineKey {
-    /// 2D workgroup key.
+impl ActivationEntry {
+    /// The WGSL entry point implementing this formula.
+    ///
+    /// The same names are used by the out-of-place, in-place and fused-SpMM
+    /// modules, which is what lets one `ActivationEntry` address all three.
     #[must_use]
-    pub const fn new_2d(
-        shader: &'static str,
-        entry_point: &'static str,
-        workgroup_x: u32,
-        workgroup_y: u32,
-    ) -> Self {
-        Self {
-            shader,
-            entry_point,
-            workgroup_x,
-            workgroup_y,
+    pub const fn entry_point(self) -> &'static str {
+        match self {
+            Self::Identity => "main_identity",
+            Self::Relu => "main_relu",
+            Self::LeakyRelu => "main_leaky_relu",
+            Self::Sigmoid => "main_sigmoid",
+            Self::Tanh => "main_tanh",
+        }
+    }
+}
+
+/// The bind-group shape a kernel requires.
+///
+/// Separate from [`KernelId`] because several kernels share one shape: raw and
+/// fused SpMM bind the same six resources, so they share one cached
+/// `BindGroupLayout` and one `PipelineLayout` instead of rebuilding both on
+/// every `prepare()`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum LayoutId {
+    /// CSR row_ptr/col_ind/values, X, Y, params.
+    Spmm,
+    /// input (read), output (read_write), params.
+    ActivationOutOfPlace,
+    /// data (read_write), params.
+    ActivationInPlace,
+    /// output (read_write), params.
+    Fill,
+}
+
+impl LayoutId {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Spmm => "spmm.layout",
+            Self::ActivationOutOfPlace => "activation.layout",
+            Self::ActivationInPlace => "activation.layout.in_place",
+            Self::Fill => "fill.layout",
         }
     }
 
-    /// 1D workgroup key — shorthand for `new_2d(.., x, 1)`.
-    #[must_use]
-    pub const fn new(shader: &'static str, entry_point: &'static str, workgroup_size: u32) -> Self {
-        Self::new_2d(shader, entry_point, workgroup_size, 1)
-    }
-
-    /// Invocations per workgroup, for validation against
-    /// `max_compute_invocations_per_workgroup`.
-    #[must_use]
-    pub const fn invocations(&self) -> u32 {
-        self.workgroup_x * self.workgroup_y
-    }
-}
-
-impl core::fmt::Display for PipelineKey {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(
-            f,
-            "{}::{}@{}x{}",
-            self.shader, self.entry_point, self.workgroup_x, self.workgroup_y
-        )
+    fn entries(self) -> Vec<wgpu::BindGroupLayoutEntry> {
+        match self {
+            Self::Spmm => vec![
+                storage_entry(0, true),
+                storage_entry(1, true),
+                storage_entry(2, true),
+                storage_entry(3, true),
+                storage_entry(4, false),
+                uniform_entry(5),
+            ],
+            Self::ActivationOutOfPlace => vec![
+                storage_entry(0, true),
+                storage_entry(1, false),
+                uniform_entry(2),
+            ],
+            Self::ActivationInPlace | Self::Fill => {
+                vec![storage_entry(0, false), uniform_entry(1)]
+            }
+        }
     }
 }
 
-/// Identifies a *specialised shader module*: `(shader name, wg_x, wg_y)`.
+fn storage_entry(binding: u32, read_only: bool) -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::COMPUTE,
+        ty: wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Storage { read_only },
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    }
+}
+
+fn uniform_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::COMPUTE,
+        ty: wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Uniform,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    }
+}
+
+/// Every compute kernel this crate can build.
 ///
-/// Coarser than [`PipelineKey`] — it omits the entry point, because two entry
-/// points in the same source with the same workgroup extent share one compiled
-/// module and only need distinct pipelines.
+/// A closed enum on purpose. Because it maps to source, entry point and layout,
+/// naming a kernel fully determines what will be compiled — which is what makes
+/// the cache invariant structural instead of a convention callers must honour.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum KernelId {
+    /// Raw `Y = A·X`, no activation.
+    Spmm,
+    /// Fused `Y = f(A·X)`.
+    SpmmActivation(ActivationEntry),
+    /// `out[i] = f(in[i])`.
+    ActivationOutOfPlace(ActivationEntry),
+    /// `data[i] = f(data[i])`.
+    ActivationInPlace(ActivationEntry),
+    /// Skeleton validation kernel. Not an operation; retained because
+    /// `tests/skeleton.rs` exercises the encode/submit/readback machinery with
+    /// it in isolation from any real kernel.
+    Fill,
+}
+
+impl KernelId {
+    /// Logical module name. Two kernels sharing a name share a compiled module
+    /// when their workgroup extent matches.
+    #[must_use]
+    pub const fn shader_name(self) -> &'static str {
+        match self {
+            // Raw SpMM is an entry point of the fused module: Phase 9 Part D
+            // made `spmm_activation.wgsl` canonical so one `spmm_acc` serves
+            // every variant.
+            Self::Spmm | Self::SpmmActivation(_) => "spmm",
+            Self::ActivationOutOfPlace(_) => "activation",
+            Self::ActivationInPlace(_) => "activation_inplace",
+            Self::Fill => "fill",
+        }
+    }
+
+    /// WGSL source. Not a parameter — this is what closes the aliasing hole.
+    #[must_use]
+    pub const fn source(self) -> &'static str {
+        match self {
+            Self::Spmm | Self::SpmmActivation(_) => crate::operations::SPMM_SHADER,
+            Self::ActivationOutOfPlace(_) => crate::operations::ACTIVATION_SHADER,
+            Self::ActivationInPlace(_) => crate::operations::ACTIVATION_INPLACE_SHADER,
+            Self::Fill => crate::FILL_SHADER,
+        }
+    }
+
+    #[must_use]
+    pub const fn entry_point(self) -> &'static str {
+        match self {
+            Self::Spmm => "main_raw",
+            Self::SpmmActivation(a)
+            | Self::ActivationOutOfPlace(a)
+            | Self::ActivationInPlace(a) => a.entry_point(),
+            Self::Fill => "main",
+        }
+    }
+
+    #[must_use]
+    pub const fn layout(self) -> LayoutId {
+        match self {
+            Self::Spmm | Self::SpmmActivation(_) => LayoutId::Spmm,
+            Self::ActivationOutOfPlace(_) => LayoutId::ActivationOutOfPlace,
+            Self::ActivationInPlace(_) => LayoutId::ActivationInPlace,
+            Self::Fill => LayoutId::Fill,
+        }
+    }
+}
+
+/// Everything a prepared operation needs to encode a dispatch, built together
+/// and cached together so they cannot be mismatched.
+#[derive(Debug)]
+pub struct PipelineBundle {
+    bind_group_layout: Arc<wgpu::BindGroupLayout>,
+    pipeline_layout: Arc<wgpu::PipelineLayout>,
+    pipeline: Arc<wgpu::ComputePipeline>,
+}
+
+impl PipelineBundle {
+    /// The layout a caller must use to build a compatible bind group.
+    #[must_use]
+    pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+        &self.bind_group_layout
+    }
+
+    #[must_use]
+    pub fn pipeline_layout(&self) -> &wgpu::PipelineLayout {
+        &self.pipeline_layout
+    }
+
+    #[must_use]
+    pub fn pipeline(&self) -> &Arc<wgpu::ComputePipeline> {
+        &self.pipeline
+    }
+}
+
+/// Identifies a specialised shader module: `(module name, wg_x, wg_y)`.
+///
+/// Omits the entry point, because entry points in one source with one workgroup
+/// extent share a compiled module and need only distinct pipelines.
 type ModuleKey = (&'static str, u32, u32);
 
-/// Caches shader modules and compute pipelines by [`PipelineKey`].
+/// Identifies a pipeline: a kernel plus the workgroup extent baked into it.
+type BundleKey = (KernelId, u32, u32);
+
+/// Caches bind-group layouts, pipeline layouts, shader modules and pipelines.
 ///
 /// Interior mutability so the backend can hand out `&self` and still populate
-/// the cache. This is **not** global state — the cache is owned by one
-/// [`crate::WgpuBackend`] and dies with it.
+/// the cache. **Not** global state — owned by one [`crate::WgpuBackend`] and
+/// dropped with it.
+///
+/// # Concurrency contract
+///
+/// No lock is held across `create_shader_module` or `create_compute_pipeline`;
+/// driver compilation can take milliseconds and serialising every backend
+/// thread behind it would be a worse trade than the race below.
+///
+/// The consequence is that two threads missing on the same key concurrently may
+/// both compile. That is accepted and bounded: **insertion is idempotent**, so
+/// the first value to land wins and every later caller — including the thread
+/// that lost — receives that same `Arc`. A transiently duplicated compilation is
+/// discarded; the cache never returns two different objects for one key
+/// afterwards. `pipeline_cache_converges_under_concurrent_misses` tests it.
 #[derive(Debug, Default)]
 pub struct PipelineCache {
-    pipelines: Mutex<HashMap<PipelineKey, Arc<wgpu::ComputePipeline>>>,
+    bundles: Mutex<HashMap<BundleKey, Arc<PipelineBundle>>>,
     modules: Mutex<HashMap<ModuleKey, Arc<wgpu::ShaderModule>>>,
+    bind_group_layouts: Mutex<HashMap<LayoutId, Arc<wgpu::BindGroupLayout>>>,
+    pipeline_layouts: Mutex<HashMap<LayoutId, Arc<wgpu::PipelineLayout>>>,
 }
 
 impl PipelineCache {
@@ -114,7 +285,7 @@ impl PipelineCache {
     /// once and reused, rather than asserting it indirectly through timing.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.pipelines.lock().map(|m| m.len()).unwrap_or(0)
+        self.bundles.lock().map(|m| m.len()).unwrap_or(0)
     }
 
     #[must_use]
@@ -122,24 +293,30 @@ impl PipelineCache {
         self.len() == 0
     }
 
-    /// Fetch or build the pipeline for `key`.
-    ///
-    /// `source` is the WGSL text, supplied by the caller so the cache does not
-    /// need to know about any particular operation. `{{WORKGROUP_X}}` and
-    /// `{{WORKGROUP_Y}}` in the source are substituted from the key — WGSL has
-    /// no runtime workgroup size, so a different extent is a different module.
+    /// Number of cached bind-group layouts, for the test that proves layouts
+    /// are not rebuilt on every `prepare()`.
+    #[must_use]
+    pub fn layout_count(&self) -> usize {
+        self.bind_group_layouts.lock().map(|m| m.len()).unwrap_or(0)
+    }
+
+    /// Fetch or build the bundle for `kernel` at this workgroup extent.
     ///
     /// # Errors
-    /// [`ComputeError::Backend`] if the device rejects the module or pipeline.
-    pub fn get_or_create(
+    ///
+    /// [`ComputeError::Backend`] if a cache mutex is poisoned. Module and
+    /// pipeline creation itself is infallible in wgpu — a malformed shader
+    /// surfaces through the device error scope, not here.
+    pub fn bundle(
         &self,
         device: &wgpu::Device,
-        key: PipelineKey,
-        source: &str,
-        layout: Option<&wgpu::PipelineLayout>,
-    ) -> Result<Arc<wgpu::ComputePipeline>, ComputeError> {
+        kernel: KernelId,
+        workgroup_x: u32,
+        workgroup_y: u32,
+    ) -> Result<Arc<PipelineBundle>, ComputeError> {
+        let key = (kernel, workgroup_x, workgroup_y);
         if let Some(found) = self
-            .pipelines
+            .bundles
             .lock()
             .map_err(Self::poisoned)?
             .get(&key)
@@ -148,27 +325,106 @@ impl PipelineCache {
             return Ok(found);
         }
 
-        let module =
-            self.module_for(device, key.shader, key.workgroup_x, key.workgroup_y, source)?;
+        let layout_id = kernel.layout();
+        let bind_group_layout = self.bind_group_layout(device, layout_id)?;
+        let pipeline_layout = self.pipeline_layout(device, layout_id, &bind_group_layout)?;
+        let module = self.module(
+            device,
+            kernel.shader_name(),
+            workgroup_x,
+            workgroup_y,
+            kernel.source(),
+        )?;
 
-        let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some(key.shader),
-            layout,
-            module: &module,
-            entry_point: Some(key.entry_point),
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-            cache: None,
+        let pipeline = Arc::new(
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some(kernel.shader_name()),
+                layout: Some(&pipeline_layout),
+                module: &module,
+                entry_point: Some(kernel.entry_point()),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                cache: None,
+            }),
+        );
+
+        let bundle = Arc::new(PipelineBundle {
+            bind_group_layout,
+            pipeline_layout,
+            pipeline,
         });
 
-        let pipeline = Arc::new(pipeline);
-        self.pipelines
-            .lock()
-            .map_err(Self::poisoned)?
-            .insert(key, Arc::clone(&pipeline));
-        Ok(pipeline)
+        // Idempotent insert: a concurrent miss that lost the race gets the
+        // winner's bundle, so one key never yields two objects.
+        Ok(Arc::clone(
+            self.bundles
+                .lock()
+                .map_err(Self::poisoned)?
+                .entry(key)
+                .or_insert(bundle),
+        ))
     }
 
-    fn module_for(
+    fn bind_group_layout(
+        &self,
+        device: &wgpu::Device,
+        id: LayoutId,
+    ) -> Result<Arc<wgpu::BindGroupLayout>, ComputeError> {
+        if let Some(found) = self
+            .bind_group_layouts
+            .lock()
+            .map_err(Self::poisoned)?
+            .get(&id)
+            .cloned()
+        {
+            return Ok(found);
+        }
+        let layout = Arc::new(
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some(id.label()),
+                entries: &id.entries(),
+            }),
+        );
+        Ok(Arc::clone(
+            self.bind_group_layouts
+                .lock()
+                .map_err(Self::poisoned)?
+                .entry(id)
+                .or_insert(layout),
+        ))
+    }
+
+    fn pipeline_layout(
+        &self,
+        device: &wgpu::Device,
+        id: LayoutId,
+        bind_group_layout: &wgpu::BindGroupLayout,
+    ) -> Result<Arc<wgpu::PipelineLayout>, ComputeError> {
+        if let Some(found) = self
+            .pipeline_layouts
+            .lock()
+            .map_err(Self::poisoned)?
+            .get(&id)
+            .cloned()
+        {
+            return Ok(found);
+        }
+        let layout = Arc::new(
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some(id.label()),
+                bind_group_layouts: &[Some(bind_group_layout)],
+                immediate_size: 0,
+            }),
+        );
+        Ok(Arc::clone(
+            self.pipeline_layouts
+                .lock()
+                .map_err(Self::poisoned)?
+                .entry(id)
+                .or_insert(layout),
+        ))
+    }
+
+    fn module(
         &self,
         device: &wgpu::Device,
         shader: &'static str,
@@ -187,26 +443,113 @@ impl PipelineCache {
             return Ok(found);
         }
 
+        // WGSL has no runtime workgroup size, so the extent is substituted
+        // before compilation and a different extent is a different module.
         let specialised = source
             .replace("{{WORKGROUP_X}}", &workgroup_x.to_string())
             .replace("{{WORKGROUP_Y}}", &workgroup_y.to_string());
-        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        let module = Arc::new(device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(shader),
             source: wgpu::ShaderSource::Wgsl(specialised.into()),
-        });
-
-        let module = Arc::new(module);
-        self.modules
-            .lock()
-            .map_err(Self::poisoned)?
-            .insert(mkey, Arc::clone(&module));
-        Ok(module)
+        }));
+        Ok(Arc::clone(
+            self.modules
+                .lock()
+                .map_err(Self::poisoned)?
+                .entry(mkey)
+                .or_insert(module),
+        ))
     }
 
     fn poisoned<T>(_: std::sync::PoisonError<T>) -> ComputeError {
         ComputeError::Backend {
             backend: BackendKind::Wgpu,
             message: "pipeline cache mutex poisoned".to_owned(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn kernel_identity_determines_source_entry_and_layout() {
+        // The invariant, stated as a test: nothing about a kernel's compiled
+        // form is supplied from outside.
+        assert_eq!(KernelId::Spmm.layout(), LayoutId::Spmm);
+        assert_eq!(
+            KernelId::SpmmActivation(ActivationEntry::Relu).layout(),
+            LayoutId::Spmm
+        );
+        assert_eq!(KernelId::Spmm.shader_name(), "spmm");
+        assert_eq!(KernelId::Spmm.entry_point(), "main_raw");
+        assert_eq!(
+            KernelId::SpmmActivation(ActivationEntry::Relu).entry_point(),
+            "main_relu"
+        );
+        // Raw and fused SpMM share source and layout, differing only by entry.
+        assert_eq!(
+            KernelId::Spmm.source().as_ptr(),
+            KernelId::SpmmActivation(ActivationEntry::Tanh)
+                .source()
+                .as_ptr(),
+            "raw and fused SpMM must be the same module"
+        );
+    }
+
+    #[test]
+    fn distinct_kernels_cannot_alias() {
+        // Every kernel identity must differ from every other, or two kernels
+        // would share a cache slot. This is the property the old string-keyed
+        // design could not guarantee.
+        let all = [
+            KernelId::Spmm,
+            KernelId::SpmmActivation(ActivationEntry::Relu),
+            KernelId::SpmmActivation(ActivationEntry::Tanh),
+            KernelId::ActivationOutOfPlace(ActivationEntry::Relu),
+            KernelId::ActivationInPlace(ActivationEntry::Relu),
+            KernelId::ActivationOutOfPlace(ActivationEntry::Identity),
+            KernelId::Fill,
+        ];
+        for (i, a) in all.iter().enumerate() {
+            for (j, b) in all.iter().enumerate() {
+                if i != j {
+                    assert_ne!(a, b, "{a:?} and {b:?} share an identity");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn in_place_and_out_of_place_activation_do_not_share_a_layout() {
+        // They bind different resources; sharing a layout would let a bind
+        // group built for one be used with the other's pipeline.
+        assert_ne!(
+            KernelId::ActivationInPlace(ActivationEntry::Relu).layout(),
+            KernelId::ActivationOutOfPlace(ActivationEntry::Relu).layout()
+        );
+    }
+
+    #[test]
+    fn layout_entries_match_the_declared_shader_interfaces() {
+        assert_eq!(LayoutId::Spmm.entries().len(), 6);
+        assert_eq!(LayoutId::ActivationOutOfPlace.entries().len(), 3);
+        assert_eq!(LayoutId::ActivationInPlace.entries().len(), 2);
+        assert_eq!(LayoutId::Fill.entries().len(), 2);
+        // SpMM binds Y writable and everything else read-only.
+        let spmm = LayoutId::Spmm.entries();
+        for (i, e) in spmm.iter().enumerate().take(4) {
+            assert!(
+                matches!(
+                    e.ty,
+                    wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        ..
+                    }
+                ),
+                "SpMM binding {i} must be read-only"
+            );
         }
     }
 }

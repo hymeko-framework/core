@@ -14,14 +14,22 @@
 // ONE `read_write` binding and reads and writes the same element. No aliasing
 // exists to violate, no unsafe, no backend-specific escape hatch.
 //
-// The cost is that the activation expressions appear in two WGSL files. WGSL
-// has no include mechanism and runtime shader-string assembly is explicitly out
-// of scope, so the duplication is the honest price of a legal in-place path.
-// It is bounded: each kind is one line, and both files are covered by the same
-// CPU-reference tests, so a divergence between them fails a test rather than
-// going unnoticed.
+// ---------------------------------------------------------------------------
+// What Phase 9 changed, and what it deliberately did not
+// ---------------------------------------------------------------------------
+// The activation FORMULAS are no longer duplicated: they come from
+// `activation_formulas.wgsl`, prepended at compile time, so this module and the
+// out-of-place one share one definition of each kind.
 //
-// Numerical semantics are identical to `activation.wgsl` -- see its header.
+// The two modules still exist separately, and that is a genuine WGSL resource-
+// interface limit rather than laziness. A single module would have to declare
+// binding 0 as `read_write` to serve the in-place entry points, which would
+// force the out-of-place path to bind its INPUT as a writable storage buffer --
+// losing the read-only guarantee at the API boundary and the driver's
+// read-only optimisation, to save two declarations. The trade is not worth it.
+// See the Phase 9 report, Part D.
+//
+// Numerical semantics are defined once in `activation_formulas.wgsl`.
 
 struct Params {
     count: u32,
@@ -41,36 +49,34 @@ fn main_identity(@builtin(global_invocation_id) gid: vec3<u32>) {
         // A genuine no-op on the values, but still a real dispatch: it keeps
         // the in-place path uniform across kinds and is what a caller
         // selecting Identity at runtime expects to cost.
-        data[i] = data[i];
+        data[i] = act_identity(data[i], params.alpha);
     }
 }
 
 @compute @workgroup_size({{WORKGROUP_X}}, {{WORKGROUP_Y}})
 fn main_relu(@builtin(global_invocation_id) gid: vec3<u32>) {
     for (var i = gid.x; i < params.count; i = i + params.stride) {
-        let v = data[i];
-        data[i] = select(0.0, v, v > 0.0);
+        data[i] = act_relu(data[i], params.alpha);
     }
 }
 
 @compute @workgroup_size({{WORKGROUP_X}}, {{WORKGROUP_Y}})
 fn main_leaky_relu(@builtin(global_invocation_id) gid: vec3<u32>) {
     for (var i = gid.x; i < params.count; i = i + params.stride) {
-        let v = data[i];
-        data[i] = select(params.alpha * v, v, v > 0.0);
+        data[i] = act_leaky_relu(data[i], params.alpha);
     }
 }
 
 @compute @workgroup_size({{WORKGROUP_X}}, {{WORKGROUP_Y}})
 fn main_sigmoid(@builtin(global_invocation_id) gid: vec3<u32>) {
     for (var i = gid.x; i < params.count; i = i + params.stride) {
-        data[i] = 1.0 / (1.0 + exp(-data[i]));
+        data[i] = act_sigmoid(data[i], params.alpha);
     }
 }
 
 @compute @workgroup_size({{WORKGROUP_X}}, {{WORKGROUP_Y}})
 fn main_tanh(@builtin(global_invocation_id) gid: vec3<u32>) {
     for (var i = gid.x; i < params.count; i = i + params.stride) {
-        data[i] = tanh(data[i]);
+        data[i] = act_tanh(data[i], params.alpha);
     }
 }

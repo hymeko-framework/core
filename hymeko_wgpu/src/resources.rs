@@ -125,12 +125,22 @@ impl<T> GpuCsrMatrix<T> {
 pub struct ResourceFactory<'a> {
     device: &'a wgpu::Device,
     queue: &'a wgpu::Queue,
+    /// The device allocation ceiling, so every size check names the real limit.
+    max_buffer_size: u64,
 }
 
 impl<'a> ResourceFactory<'a> {
     #[must_use]
-    pub const fn new(device: &'a wgpu::Device, queue: &'a wgpu::Queue) -> Self {
-        Self { device, queue }
+    pub const fn new(
+        device: &'a wgpu::Device,
+        queue: &'a wgpu::Queue,
+        max_buffer_size: u64,
+    ) -> Self {
+        Self {
+            device,
+            queue,
+            max_buffer_size,
+        }
     }
 
     /// Standard usage for a compute input/output: storage, plus copy in/out.
@@ -184,14 +194,9 @@ impl<'a> ResourceFactory<'a> {
         label: &str,
         shape: TensorShape,
     ) -> Result<GpuTensor<f32>, ComputeError> {
-        let elements = shape
-            .checked_elements()
-            .ok_or(ComputeError::IndexOverflow {
-                what: "tensor elements",
-                value: usize::MAX,
-            })?;
-        let len = elements.max(1); // never allocate a zero-sized buffer
-        let size = (len * std::mem::size_of::<f32>()) as u64;
+        // One checked computation, shared with the arena and the readback path.
+        let extent = crate::sizing::f32_storage_extent(shape, self.max_buffer_size)?;
+        let size = extent.padded_bytes;
 
         let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(label),
@@ -216,9 +221,17 @@ impl<'a> ResourceFactory<'a> {
     /// # Preconditions
     /// `row_ptr.len() == shape.rows + 1`, `col_ind.len() == values.len() == shape.nnz`.
     ///
+    /// # Preconditions
+    ///
+    /// Beyond the array lengths, the CSR must be structurally valid:
+    /// `row_ptr[0] == 0`, `row_ptr` monotonically non-decreasing, every entry
+    /// `<= nnz`, `row_ptr[rows] == nnz`, and every `col_ind` entry `< cols`.
+    /// All are checked here rather than left to the shader.
+    ///
     /// # Errors
-    /// [`ComputeError::ShapeMismatch`] on a length disagreement;
-    /// [`ComputeError::IndexOverflow`] if any index exceeds `u32::MAX`.
+    /// [`ComputeError::ShapeMismatch`] on a length disagreement or a structural
+    /// violation, naming which one; [`ComputeError::IndexOverflow`] if any index
+    /// exceeds `u32::MAX`.
     pub fn upload_csr(
         &self,
         label: &str,
@@ -246,6 +259,50 @@ impl<'a> ResourceFactory<'a> {
                 operand: "csr values",
                 expected: shape.nnz,
                 actual: values.len(),
+            });
+        }
+
+        // --- structural validation ------------------------------------------
+        // A malformed CSR must be rejected here with a message naming the
+        // defect. Left to the shader it would read out of bounds within the
+        // buffer -- WGPU clamps the access, so the kernel would silently
+        // compute the wrong answer rather than fail.
+        if row_ptr[0] != 0 {
+            return Err(ComputeError::ShapeMismatch {
+                operand: "csr row_ptr must start at 0",
+                expected: 0,
+                actual: row_ptr[0],
+            });
+        }
+        for pair in row_ptr.windows(2) {
+            if pair[1] < pair[0] {
+                return Err(ComputeError::ShapeMismatch {
+                    operand: "csr row_ptr must be monotonically non-decreasing",
+                    expected: pair[0],
+                    actual: pair[1],
+                });
+            }
+            if pair[1] > shape.nnz {
+                return Err(ComputeError::ShapeMismatch {
+                    operand: "csr row_ptr entry exceeds nnz",
+                    expected: shape.nnz,
+                    actual: pair[1],
+                });
+            }
+        }
+        let last = row_ptr[shape.rows];
+        if last != shape.nnz {
+            return Err(ComputeError::ShapeMismatch {
+                operand: "csr row_ptr must end at nnz",
+                expected: shape.nnz,
+                actual: last,
+            });
+        }
+        if let Some(&bad) = col_ind.iter().find(|&&c| c >= shape.cols) {
+            return Err(ComputeError::ShapeMismatch {
+                operand: "csr col_ind entry is not a valid column",
+                expected: shape.cols,
+                actual: bad,
             });
         }
 

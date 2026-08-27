@@ -24,18 +24,22 @@ use std::sync::Arc;
 use hymeko::tensor::compute::{BackendKind, ComputeError, SparseCsrShape, TensorShape, try_u32};
 
 use crate::operations::activation::ActivationKind;
-use crate::pipeline::PipelineKey;
+use crate::operations::dispatch::PreparedDispatch;
+use crate::pipeline::KernelId;
 use crate::resources::{GpuCsrMatrix, GpuTensor};
 use crate::scope::{EncodeScope, JoinScope, Joined, TensorOperand, Tracked, Untracked};
 
-/// WGSL source for the SpMM kernel.
-pub const SPMM_SHADER: &str = include_str!("../../shaders/spmm.wgsl");
-/// WGSL source for the fused SpMM + activation kernel.
-pub const SPMM_ACTIVATION_SHADER: &str = include_str!("../../shaders/spmm_activation.wgsl");
-
-const SHADER_NAME: &str = "spmm";
-const SHADER_NAME_FUSED: &str = "spmm_activation";
-const ENTRY_POINT: &str = "main";
+/// WGSL source for the SpMM kernel, raw and fused.
+///
+/// One module. `activation_formulas.wgsl` is prepended to `spmm.wgsl` by
+/// compile-time concatenation, so every activation formula has a single
+/// definition shared with the elementwise kernels, and `spmm_acc` has a single
+/// definition shared by every entry point. There is no runtime shader-string
+/// assembly: both halves are string literals fixed in the binary.
+pub const SPMM_SHADER: &str = concat!(
+    include_str!("../../shaders/activation_formulas.wgsl"),
+    include_str!("../../shaders/spmm.wgsl")
+);
 
 /// Workgroup extent for the SpMM kernel.
 ///
@@ -501,20 +505,12 @@ impl<'a, S: EncodeScope> SpmmBuilder<'a, S> {
         let empty = num_rows == 0 || fd_u32 == 0;
 
         // --- pipeline ---------------------------------------------------------
-        let bind_group_layout = Self::bind_group_layout(self.device);
-        let pipeline_layout = self
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("spmm.pipeline_layout"),
-                bind_group_layouts: &[Some(&bind_group_layout)],
-                immediate_size: 0,
-            });
-
-        // Fusion selects a different shader; everything else — bind group,
-        // buffer layout, params — is shared, which is why this is a config
-        // field rather than a second operation type.
-        let (shader_name, entry_point, source) = match self.fused_activation {
-            None => (SHADER_NAME, ENTRY_POINT, SPMM_SHADER),
+        // Kernel identity fully determines source, entry point and layout, so
+        // there is nothing here that could be mismatched with the cache key.
+        // Bind-group and pipeline layouts are cached per LayoutId and are no
+        // longer rebuilt on every prepare().
+        let kernel = match self.fused_activation {
+            None => KernelId::Spmm,
             Some(ActivationKind::Identity) => {
                 return Err(ComputeError::Backend {
                     backend: BackendKind::Wgpu,
@@ -522,17 +518,12 @@ impl<'a, S: EncodeScope> SpmmBuilder<'a, S> {
                         .to_string(),
                 });
             }
-            Some(kind) => (
-                SHADER_NAME_FUSED,
-                kind.entry_point(),
-                SPMM_ACTIVATION_SHADER,
-            ),
+            Some(kind) => KernelId::SpmmActivation(kind.entry()),
         };
 
-        let key = PipelineKey::new_2d(shader_name, entry_point, workgroup.x, workgroup.y);
-        let pipeline =
-            self.cache
-                .get_or_create(self.device, key.clone(), source, Some(&pipeline_layout))?;
+        let bundle = self
+            .cache
+            .bundle(self.device, kernel, workgroup.x, workgroup.y)?;
 
         // --- params -----------------------------------------------------------
         let params = SpmmParams {
@@ -551,11 +542,11 @@ impl<'a, S: EncodeScope> SpmmBuilder<'a, S> {
             .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
         // --- bind group --------------------------------------------------------
-        // Built once. Re-dispatch and in-place input rewrites reuse it, because
-        // it binds buffers rather than contents.
+        // Built once against the bundle's layout. Re-dispatch and in-place input
+        // rewrites reuse it, because it binds buffers rather than contents.
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("spmm.bind_group"),
-            layout: &bind_group_layout,
+            layout: bundle.bind_group_layout(),
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -587,54 +578,18 @@ impl<'a, S: EncodeScope> SpmmBuilder<'a, S> {
         Ok(PreparedSpmm {
             _operands: core::marker::PhantomData,
             _scope: core::marker::PhantomData,
-            pipeline,
-            bind_group,
-            _params_buffer: params_buffer,
-            groups_x,
-            groups_y,
-            empty,
+            dispatch: PreparedDispatch::new(
+                Arc::clone(bundle.pipeline()),
+                bind_group,
+                params_buffer,
+                [groups_x, groups_y, 1],
+                empty,
+                self.label.unwrap_or_else(|| "spmm".to_owned()),
+            ),
             workgroup,
-            key,
+            kernel,
             matrix_shape: a,
             feature_dim,
-            label: self.label.unwrap_or_else(|| "spmm".to_owned()),
-        })
-    }
-
-    /// Bind group layout: 3 CSR arrays + X read-only, Y read-write, params.
-    fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
-        fn storage(binding: u32, read_only: bool) -> wgpu::BindGroupLayoutEntry {
-            wgpu::BindGroupLayoutEntry {
-                binding,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }
-        }
-
-        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("spmm.layout"),
-            entries: &[
-                storage(0, true),  // row_ptr
-                storage(1, true),  // col_ind
-                storage(2, true),  // values
-                storage(3, true),  // x
-                storage(4, false), // y  (the only writable binding)
-                wgpu::BindGroupLayoutEntry {
-                    binding: 5,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-            ],
         })
     }
 }
@@ -666,18 +621,13 @@ pub struct PreparedSpmm<'a, S: EncodeScope = Untracked> {
     /// Nothing in this crate does, and the alternative was a documented hazard.
     _operands: core::marker::PhantomData<&'a ()>,
     _scope: core::marker::PhantomData<S>,
-    pipeline: Arc<wgpu::ComputePipeline>,
-    bind_group: wgpu::BindGroup,
-    /// Owned so the uniform outlives every dispatch; never rebound.
-    _params_buffer: wgpu::Buffer,
-    groups_x: u32,
-    groups_y: u32,
-    empty: bool,
+    /// Pipeline, bind group, params buffer, extent and label — the part every
+    /// prepared operation has in common, implemented once.
+    dispatch: PreparedDispatch,
     workgroup: WorkgroupShape,
-    key: PipelineKey,
+    kernel: KernelId,
     matrix_shape: SparseCsrShape,
     feature_dim: usize,
-    label: String,
 }
 
 impl<S: EncodeScope> PreparedSpmm<'_, S> {
@@ -703,30 +653,14 @@ impl<S: EncodeScope> PreparedSpmm<'_, S> {
         encoder: &mut wgpu::CommandEncoder,
         timestamp_writes: Option<wgpu::ComputePassTimestampWrites<'_>>,
     ) -> Result<(), ComputeError> {
-        // Zero-extent dispatches are invalid; with no rows or no features there
-        // is nothing to compute and the zeroed output is already correct.
-        if self.empty {
-            return Ok(());
-        }
-
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some(&self.label),
-            timestamp_writes,
-        });
-        pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &self.bind_group, &[]);
-        pass.dispatch_workgroups(self.groups_x, self.groups_y, 1);
-        Ok(())
+        self.dispatch.encode_into(encoder, timestamp_writes)
     }
 
     /// `(groups_x, groups_y)` actually dispatched — `(0, 0)` when empty.
     #[must_use]
     pub const fn dispatch_groups(&self) -> (u32, u32) {
-        if self.empty {
-            (0, 0)
-        } else {
-            (self.groups_x, self.groups_y)
-        }
+        let g = self.dispatch.groups();
+        (g[0], g[1])
     }
 
     #[must_use]
@@ -734,9 +668,14 @@ impl<S: EncodeScope> PreparedSpmm<'_, S> {
         self.workgroup
     }
 
+    /// Which kernel this operation compiled to.
+    ///
+    /// Replaces the former `pipeline_key()`. A [`KernelId`] plus the workgroup
+    /// extent *is* the cache key now, and unlike the old key it cannot be
+    /// paired with a different shader body.
     #[must_use]
-    pub const fn pipeline_key(&self) -> &PipelineKey {
-        &self.key
+    pub const fn kernel(&self) -> KernelId {
+        self.kernel
     }
 
     #[must_use]

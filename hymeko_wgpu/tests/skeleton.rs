@@ -11,7 +11,7 @@
 //! and collapsing the two would let real regressions pass silently in CI.
 
 use hymeko::tensor::compute::{ComputeError, SparseCsrShape, TensorShape};
-use hymeko_wgpu::{FILL_SHADER, PipelineKey, WgpuBackend};
+use hymeko_wgpu::{KernelId, WgpuBackend};
 
 /// Acquire a backend, or return `None` if this environment has no adapter.
 ///
@@ -31,49 +31,10 @@ fn backend_or_skip(test: &str) -> Option<WgpuBackend> {
 }
 
 /// Bind group layout for `fill.wgsl`: one read-write storage buffer + params.
-fn fill_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
-    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("fill.layout"),
-        entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: false },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-        ],
-    })
-}
-
 /// Pipeline layout for `fill.wgsl`.
 ///
 /// wgpu 30 takes `Option<&BindGroupLayout>` per slot and replaced push
 /// constants with `immediate_size`.
-fn fill_pipeline_layout(
-    device: &wgpu::Device,
-    bgl: &wgpu::BindGroupLayout,
-) -> wgpu::PipelineLayout {
-    device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("fill.pipeline_layout"),
-        bind_group_layouts: &[Some(bgl)],
-        immediate_size: 0,
-    })
-}
-
 #[test]
 fn test_backend_reports_capabilities() {
     let Some(backend) = backend_or_skip("capabilities") else {
@@ -211,19 +172,13 @@ fn test_pipeline_cache_builds_once_and_is_reused() {
     let cache = backend.pipelines();
     assert!(cache.is_empty(), "cache starts empty");
 
-    let bgl = fill_layout(device);
-    let layout = fill_pipeline_layout(device, &bgl);
-
-    let key = PipelineKey::new("fill", "main", 64);
     let first = cache
-        .get_or_create(device, key.clone(), FILL_SHADER, Some(&layout))
+        .bundle(device, KernelId::Fill, 64, 1)
         .expect("shader must compile - a compile failure is a defect, not a skip");
     assert_eq!(cache.len(), 1);
 
-    // Same key -> same pipeline object, cache does not grow.
-    let second = cache
-        .get_or_create(device, key, FILL_SHADER, Some(&layout))
-        .unwrap();
+    // Same kernel and extent -> same bundle; the cache does not grow.
+    let second = cache.bundle(device, KernelId::Fill, 64, 1).unwrap();
     assert_eq!(
         cache.len(),
         1,
@@ -235,14 +190,7 @@ fn test_pipeline_cache_builds_once_and_is_reused() {
     );
 
     // A different workgroup size IS a different module, so it must add an entry.
-    let _wide = cache
-        .get_or_create(
-            device,
-            PipelineKey::new("fill", "main", 128),
-            FILL_SHADER,
-            Some(&layout),
-        )
-        .unwrap();
+    let _wide = cache.bundle(device, KernelId::Fill, 128, 1).unwrap();
     assert_eq!(
         cache.len(),
         2,
@@ -280,21 +228,15 @@ fn test_encode_submit_readback_roundtrip() {
         .queue()
         .write_buffer(&params_buf, 0, bytemuck::cast_slice(&params));
 
-    let bgl = fill_layout(device);
-    let layout = fill_pipeline_layout(device, &bgl);
-    let pipeline = backend
+    let bundle = backend
         .pipelines()
-        .get_or_create(
-            device,
-            PipelineKey::new("fill", "main", WORKGROUP),
-            FILL_SHADER,
-            Some(&layout),
-        )
+        .bundle(device, KernelId::Fill, WORKGROUP, 1)
         .expect("shader must compile");
+    let pipeline = bundle.pipeline();
 
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("fill.bind_group"),
-        layout: &bgl,
+        layout: bundle.bind_group_layout(),
         entries: &[
             wgpu::BindGroupEntry {
                 binding: 0,
@@ -314,7 +256,7 @@ fn test_encode_submit_readback_roundtrip() {
             label: Some("fill"),
             timestamp_writes: None,
         });
-        pass.set_pipeline(&pipeline);
+        pass.set_pipeline(pipeline);
         pass.set_bind_group(0, &bind_group, &[]);
         let groups = (COUNT as u32).div_ceil(WORKGROUP);
         pass.dispatch_workgroups(groups, 1, 1);
@@ -342,17 +284,11 @@ fn test_two_dispatches_share_one_encoder_and_submit() {
     const COUNT: usize = 32;
     const WORKGROUP: u32 = 64;
 
-    let bgl = fill_layout(device);
-    let layout = fill_pipeline_layout(device, &bgl);
-    let pipeline = backend
+    let bundle = backend
         .pipelines()
-        .get_or_create(
-            device,
-            PipelineKey::new("fill", "main", WORKGROUP),
-            FILL_SHADER,
-            Some(&layout),
-        )
+        .bundle(device, KernelId::Fill, WORKGROUP, 1)
         .unwrap();
+    let pipeline = bundle.pipeline();
 
     let shape = TensorShape::new(COUNT, 1);
     let mut outs = Vec::new();
@@ -375,7 +311,7 @@ fn test_two_dispatches_share_one_encoder_and_submit() {
         );
         let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
-            layout: &bgl,
+            layout: bundle.bind_group_layout(),
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -398,7 +334,7 @@ fn test_two_dispatches_share_one_encoder_and_submit() {
             label: None,
             timestamp_writes: None,
         });
-        pass.set_pipeline(&pipeline);
+        pass.set_pipeline(pipeline);
         pass.set_bind_group(0, bg, &[]);
         pass.dispatch_workgroups((COUNT as u32).div_ceil(WORKGROUP), 1, 1);
     }
@@ -444,4 +380,231 @@ fn test_write_tensor_allows_redispatch_without_new_resources() {
         res.write_tensor(&t, &[1.0, 2.0]),
         Err(ComputeError::ShapeMismatch { .. })
     ));
+}
+
+// ---------------------------------------------------------------------------
+// Phase 9 Part A — the cache invariant
+// ---------------------------------------------------------------------------
+
+/// Distinct kernel identities must never share a cache slot.
+///
+/// The property the previous string-keyed design could not hold. It was not a
+/// theoretical gap: registering two different WGSL sources under one key was
+/// measured to return the first source's pipeline and execute it, silently
+/// discarding the second (Phase 9 report, Part A). That is now impossible to
+/// express, because source is no longer a parameter — `KernelId` owns it.
+#[test]
+fn distinct_kernels_get_distinct_pipelines() {
+    let Some(backend) = backend_or_skip("kernel_identity") else {
+        return;
+    };
+    let device = backend.device();
+    let cache = backend.pipelines();
+
+    let kernels = [
+        KernelId::Spmm,
+        KernelId::SpmmActivation(hymeko_wgpu::ActivationEntry::Relu),
+        KernelId::ActivationOutOfPlace(hymeko_wgpu::ActivationEntry::Relu),
+        KernelId::ActivationInPlace(hymeko_wgpu::ActivationEntry::Relu),
+        KernelId::Fill,
+    ];
+    let mut bundles = Vec::new();
+    for k in kernels {
+        bundles.push((k, cache.bundle(device, k, 8, 8).expect("bundle")));
+    }
+    assert_eq!(
+        cache.len(),
+        kernels.len(),
+        "each distinct kernel must occupy its own cache slot"
+    );
+    for (i, (ka, a)) in bundles.iter().enumerate() {
+        for (j, (kb, b)) in bundles.iter().enumerate() {
+            if i != j {
+                assert!(
+                    !std::sync::Arc::ptr_eq(a.pipeline(), b.pipeline()),
+                    "{ka:?} and {kb:?} share a pipeline object"
+                );
+            }
+        }
+    }
+}
+
+/// Raw and fused SpMM share a module and a layout but not a pipeline.
+#[test]
+fn raw_and_fused_spmm_share_layout_but_not_pipeline() {
+    let Some(backend) = backend_or_skip("spmm_layout_sharing") else {
+        return;
+    };
+    let device = backend.device();
+    let cache = backend.pipelines();
+
+    let raw = cache.bundle(device, KernelId::Spmm, 16, 8).expect("raw");
+    let fused = cache
+        .bundle(
+            device,
+            KernelId::SpmmActivation(hymeko_wgpu::ActivationEntry::Relu),
+            16,
+            8,
+        )
+        .expect("fused");
+
+    assert!(
+        std::ptr::eq(raw.bind_group_layout(), fused.bind_group_layout()),
+        "raw and fused SpMM must reuse one cached bind group layout"
+    );
+    assert!(
+        !std::sync::Arc::ptr_eq(raw.pipeline(), fused.pipeline()),
+        "raw and fused SpMM are different entry points and need different pipelines"
+    );
+    assert_eq!(
+        cache.layout_count(),
+        1,
+        "two SpMM kernels must not build two layouts"
+    );
+}
+
+/// Concurrent misses on one key converge to one object.
+///
+/// No lock is held across driver compilation, so two threads can both miss and
+/// both compile. The contract is that insertion is idempotent: whoever lands
+/// first wins and everyone — including the loser — ends up with that `Arc`.
+#[test]
+fn pipeline_cache_converges_under_concurrent_misses() {
+    let Some(backend) = backend_or_skip("cache_concurrency") else {
+        return;
+    };
+    let device = backend.device();
+    let cache = backend.pipelines();
+
+    let bundles: Vec<_> = std::thread::scope(|s| {
+        let handles: Vec<_> = (0..8)
+            .map(|_| {
+                s.spawn(|| {
+                    cache
+                        .bundle(device, KernelId::Fill, 64, 1)
+                        .expect("bundle under contention")
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|h| h.join().expect("thread"))
+            .collect()
+    });
+
+    assert_eq!(
+        cache.len(),
+        1,
+        "concurrent misses on one key must leave exactly one cache entry"
+    );
+    for (i, b) in bundles.iter().enumerate() {
+        assert!(
+            std::sync::Arc::ptr_eq(b.pipeline(), bundles[0].pipeline()),
+            "thread {i} received a different pipeline object than thread 0"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 9 Part C — CSR structural validation
+// ---------------------------------------------------------------------------
+
+/// A malformed CSR must be refused by name, not left to the shader.
+///
+/// WGPU clamps an out-of-bounds storage access rather than faulting, so an
+/// invalid `col_ind` or `row_ptr` would produce a silently wrong result instead
+/// of an error. These are cheap host-side checks paid once per upload.
+#[test]
+fn malformed_csr_is_refused_with_a_named_defect() {
+    let Some(backend) = backend_or_skip("csr_validation") else {
+        return;
+    };
+    let res = backend.resources();
+    // Valid reference: 3x3, nnz 3, one entry per row.
+    let shape = hymeko_wgpu::SparseCsrShape::new(3, 3, 3);
+    assert!(
+        res.upload_csr("ok", shape, &[0, 1, 2, 3], &[0, 1, 2], &[1.0, 2.0, 3.0])
+            .is_ok(),
+        "the reference CSR must be accepted"
+    );
+
+    let cases: [(&str, Vec<usize>, Vec<usize>); 5] = [
+        // row_ptr does not start at 0
+        ("start at 0", vec![1, 2, 3, 4], vec![0, 1, 2]),
+        // row_ptr goes backwards
+        ("non-decreasing", vec![0, 2, 1, 3], vec![0, 1, 2]),
+        // row_ptr entry exceeds nnz
+        ("exceeds nnz", vec![0, 1, 9, 3], vec![0, 1, 2]),
+        // row_ptr does not end at nnz
+        ("end at nnz", vec![0, 1, 2, 2], vec![0, 1, 2]),
+        // col_ind out of range
+        ("valid column", vec![0, 1, 2, 3], vec![0, 1, 7]),
+    ];
+    for (needle, rp, ci) in cases {
+        let err = res
+            .upload_csr("bad", shape, &rp, &ci, &[1.0, 2.0, 3.0])
+            .expect_err("malformed CSR must be refused");
+        match err {
+            hymeko_wgpu::ComputeError::ShapeMismatch { operand, .. } => assert!(
+                operand.contains(needle),
+                "expected an error naming {needle:?}, got {operand:?}"
+            ),
+            other => panic!("expected ShapeMismatch for {needle:?}, got {other:?}"),
+        }
+    }
+}
+
+/// A zero-row CSR is legal and must not trip the structural checks.
+#[test]
+fn degenerate_but_valid_csr_shapes_are_accepted() {
+    let Some(backend) = backend_or_skip("csr_degenerate") else {
+        return;
+    };
+    let res = backend.resources();
+    // No rows, no nonzeros.
+    assert!(
+        res.upload_csr(
+            "empty",
+            hymeko_wgpu::SparseCsrShape::new(0, 0, 0),
+            &[0],
+            &[],
+            &[]
+        )
+        .is_ok(),
+        "an empty CSR must be accepted"
+    );
+    // Rows present, all empty.
+    assert!(
+        res.upload_csr(
+            "all_empty_rows",
+            hymeko_wgpu::SparseCsrShape::new(3, 3, 0),
+            &[0, 0, 0, 0],
+            &[],
+            &[]
+        )
+        .is_ok(),
+        "a CSR whose rows are all empty must be accepted"
+    );
+}
+
+/// Oversized allocations are refused by the shared size check without ever
+/// asking the driver for the memory.
+#[test]
+fn an_allocation_beyond_the_device_limit_is_refused_cheaply() {
+    let Some(backend) = backend_or_skip("size_limit") else {
+        return;
+    };
+    let max = backend.capabilities().max_buffer_size;
+    let Ok(too_many) = usize::try_from(max / 4 + 1) else {
+        eprintln!("[size_limit] SKIPPED - device limit exceeds usize");
+        return;
+    };
+    let err = backend
+        .resources()
+        .zeroed_tensor("huge", TensorShape::new(too_many, 1))
+        .expect_err("an allocation past max_buffer_size must be refused");
+    assert!(
+        matches!(err, hymeko_wgpu::ComputeError::ShapeMismatch { .. }),
+        "expected ShapeMismatch naming the device limit, got {err:?}"
+    );
 }

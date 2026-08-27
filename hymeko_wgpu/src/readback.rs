@@ -56,9 +56,6 @@ use hymeko::tensor::compute::{BackendKind, ComputeError, TensorShape};
 
 use crate::WgpuBackend;
 
-/// Bytes per `f32` element, named so the arithmetic below reads as intent.
-const F32_BYTES: usize = std::mem::size_of::<f32>();
-
 // ---------------------------------------------------------------------------
 // Step 1 — shape and byte-count validation
 // ---------------------------------------------------------------------------
@@ -78,30 +75,11 @@ pub(crate) fn readback_extent(
     shape: TensorShape,
     max_buffer_size: u64,
 ) -> Result<(usize, u64), ComputeError> {
-    let elements = shape
-        .checked_elements()
-        .ok_or(ComputeError::IndexOverflow {
-            what: "tensor elements",
-            value: usize::MAX,
-        })?;
-
-    let bytes = elements
-        .checked_mul(F32_BYTES)
-        .and_then(|b| u64::try_from(b).ok())
-        .ok_or(ComputeError::IndexOverflow {
-            what: "readback byte length",
-            value: elements,
-        })?;
-
-    if bytes > max_buffer_size {
-        return Err(ComputeError::ShapeMismatch {
-            operand: "readback exceeds the device maximum buffer size",
-            expected: usize::try_from(max_buffer_size).unwrap_or(usize::MAX),
-            actual: usize::try_from(bytes).unwrap_or(usize::MAX),
-        });
-    }
-
-    Ok((elements, bytes))
+    // Delegates to the one checked size computation; readback transfers the
+    // LOGICAL byte count, never the padded allocation, so an empty tensor moves
+    // nothing rather than four bytes of padding.
+    let extent = crate::sizing::f32_storage_extent(shape, max_buffer_size)?;
+    Ok((extent.elements, extent.bytes))
 }
 
 // ---------------------------------------------------------------------------

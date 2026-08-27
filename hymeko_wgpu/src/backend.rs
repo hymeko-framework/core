@@ -297,7 +297,7 @@ impl WgpuBackend {
     /// Resource factory bound to this device.
     #[must_use]
     pub const fn resources(&self) -> ResourceFactory<'_> {
-        ResourceFactory::new(&self.device, &self.queue)
+        ResourceFactory::new(&self.device, &self.queue, self.capabilities.max_buffer_size)
     }
 
     /// Operation factory bound to this device.

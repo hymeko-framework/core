@@ -3,43 +3,24 @@
 // ---------------------------------------------------------------------------
 // Variant strategy
 // ---------------------------------------------------------------------------
-// One module, one entry point per activation kind. `PipelineCache`'s module key
-// is (shader, workgroup_x, workgroup_y) and deliberately omits the entry point,
-// so all kinds share ONE compiled module and differ only by pipeline. That is
-// what "separate pipeline variant" costs here: a pipeline object, not a
-// recompile.
+// One module, one entry point per activation kind, selected statically when the
+// pipeline is built. PipelineCache's module key is (module, workgroup_x,
+// workgroup_y) and omits the entry point, so all kinds share ONE compiled
+// module and differ only by pipeline. That is what "separate pipeline variant"
+// costs here: a pipeline object, not a recompile.
 //
 // The alternative -- a `kind: u32` in the params and a switch in the body --
 // was rejected: it puts a branch in every invocation for a value that is
 // uniform across the whole dispatch, and it makes the transcendental kinds pay
 // for the cheap ones' register budget.
 //
+// The formulas live in `activation_formulas.wgsl`, prepended at compile time,
+// so this module and `activation_inplace.wgsl` cannot disagree about what a
+// kind means. See that file for the numerical semantics of each kind.
+//
 // No runtime shader-string generation anywhere; `{{WORKGROUP_X}}` /
 // `{{WORKGROUP_Y}}` are the same two substitutions every kernel in this crate
 // uses, applied by PipelineCache before compilation.
-//
-// ---------------------------------------------------------------------------
-// Numerical semantics (deliberate, and matched to the CPU convention)
-// ---------------------------------------------------------------------------
-// identity     v            -- bit-preserving: NaN payload and -0.0 survive
-// relu         v > 0 ? v : +0.0
-//                           -- NaN -> +0.0  (NaN > 0 is false)
-//                           -- -0.0 -> +0.0, +0.0 -> +0.0
-//                           -- -Inf -> +0.0, +Inf -> +Inf
-// leaky_relu   v > 0 ? v : alpha * v
-//                           -- NaN -> NaN   (alpha * NaN)
-//                           -- -0.0 -> -0.0 for alpha > 0 (sign preserved)
-//                           -- -Inf -> -Inf for alpha > 0
-// sigmoid      1 / (1 + exp(-v))
-//                           -- NaN -> NaN, +Inf -> 1, -Inf -> 0
-// tanh         tanh(v)      -- NaN -> NaN, +Inf -> 1, -Inf -> -1
-//
-// `relu` and `leaky_relu` use `select` rather than `max(v, 0.0)` on purpose:
-// WGSL leaves `max` with a NaN operand implementation-defined, whereas the
-// comparison in `select` is well-defined (any comparison with NaN is false).
-// The resulting behaviour is exactly what the CPU layers already do --
-// `if val > F::zero() { val } else { F::zero() }` in `conv/hgnn.rs`, and
-// `if c > 0 { c } else { c * 0.01 }` in `conv/signed_hgnn.rs`.
 
 struct Params {
     // Number of valid elements. Buffers are padded to a 1-element minimum for
@@ -70,36 +51,34 @@ struct Params {
 @compute @workgroup_size({{WORKGROUP_X}}, {{WORKGROUP_Y}})
 fn main_identity(@builtin(global_invocation_id) gid: vec3<u32>) {
     for (var i = gid.x; i < params.count; i = i + params.stride) {
-        out_data[i] = in_data[i];
+        out_data[i] = act_identity(in_data[i], params.alpha);
     }
 }
 
 @compute @workgroup_size({{WORKGROUP_X}}, {{WORKGROUP_Y}})
 fn main_relu(@builtin(global_invocation_id) gid: vec3<u32>) {
     for (var i = gid.x; i < params.count; i = i + params.stride) {
-        let v = in_data[i];
-        out_data[i] = select(0.0, v, v > 0.0);
+        out_data[i] = act_relu(in_data[i], params.alpha);
     }
 }
 
 @compute @workgroup_size({{WORKGROUP_X}}, {{WORKGROUP_Y}})
 fn main_leaky_relu(@builtin(global_invocation_id) gid: vec3<u32>) {
     for (var i = gid.x; i < params.count; i = i + params.stride) {
-        let v = in_data[i];
-        out_data[i] = select(params.alpha * v, v, v > 0.0);
+        out_data[i] = act_leaky_relu(in_data[i], params.alpha);
     }
 }
 
 @compute @workgroup_size({{WORKGROUP_X}}, {{WORKGROUP_Y}})
 fn main_sigmoid(@builtin(global_invocation_id) gid: vec3<u32>) {
     for (var i = gid.x; i < params.count; i = i + params.stride) {
-        out_data[i] = 1.0 / (1.0 + exp(-in_data[i]));
+        out_data[i] = act_sigmoid(in_data[i], params.alpha);
     }
 }
 
 @compute @workgroup_size({{WORKGROUP_X}}, {{WORKGROUP_Y}})
 fn main_tanh(@builtin(global_invocation_id) gid: vec3<u32>) {
     for (var i = gid.x; i < params.count; i = i + params.stride) {
-        out_data[i] = tanh(in_data[i]);
+        out_data[i] = act_tanh(in_data[i], params.alpha);
     }
 }

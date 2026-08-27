@@ -1,8 +1,39 @@
-// CSR x dense SpMM:  Y = A * X    (f32)
+// CSR x dense SpMM:  Y = A * X, optionally fused with an activation.  (f32)
 //
 // A : CSR [num_rows x num_cols], nnz stored values
 // X : dense row-major [num_cols x feature_dim]
 // Y : dense row-major [num_rows x feature_dim]
+//
+// ---------------------------------------------------------------------------
+// One module, one accumulation
+// ---------------------------------------------------------------------------
+// Phase 9 merged the former `spmm.wgsl` and `spmm_activation.wgsl`. They had
+// carried two byte-identical copies of the accumulation loop, and a change to
+// one would silently not reach the other.
+//
+// Now `spmm_acc` is written once and every entry point calls it:
+//
+//   main_raw          Y = A*X            (what the old spmm.wgsl `main` did)
+//   main_relu         Y = relu(A*X)
+//   main_leaky_relu   Y = leaky_relu(A*X)
+//   main_sigmoid      Y = sigmoid(A*X)
+//   main_tanh         Y = tanh(A*X)
+//
+// The entry point is selected statically when the pipeline is built, from
+// `KernelId`. There is NO runtime activation-kind branch: a `kind: u32` in the
+// params plus a switch would put a branch in every invocation for a value that
+// is uniform across the whole dispatch, and would make the cheap kinds pay the
+// transcendental kinds' register budget.
+//
+// The activation formulas themselves come from `activation_formulas.wgsl`,
+// prepended at compile time, so `relu` means one thing across the fused,
+// out-of-place and in-place kernels.
+//
+// Fusion is selected explicitly by the caller through
+// `SpmmBuilder::fused_activation`. There is no automatic fusion pass: see
+// `docs/compute-graph-decision.md`, which argues that fusion is a
+// code-generation problem and a graph that fuses automatically reintroduces
+// codegen through the back door.
 //
 // ---------------------------------------------------------------------------
 // Invocation mapping
@@ -35,7 +66,8 @@
 // Consequences that are deliberate, not accidental:
 //   * a duplicate column index appears as two separate k iterations and is
 //     therefore summed as two separate terms, matching the CPU;
-//   * an empty CSR row (start == end) leaves acc at 0 and writes 0;
+//   * an empty CSR row (start == end) leaves acc at 0 and writes 0 (or f(0)
+//     for a fused kind);
 //   * no reassociation across invocations occurs, because the whole row is
 //     summed by one invocation.
 //
@@ -58,10 +90,10 @@ struct Params {
     num_rows: u32,
     num_cols: u32,
     feature_dim: u32,
-    // Explicit tail padding to 16 bytes. WGSL requires a uniform-address-space
-    // struct to be 16-byte aligned; the Rust `SpmmParams` mirrors this field so
-    // the two layouts cannot drift apart silently.
-    _pad: u32,
+    // Occupies the 16-byte tail-padding slot a uniform-address-space struct
+    // requires. Unfused entry points ignore it; the Rust `SpmmParams` mirrors
+    // this field so the two layouts cannot drift apart silently.
+    alpha: f32,
 };
 
 @group(0) @binding(0) var<storage, read>       row_ptr:  array<u32>;
@@ -71,16 +103,8 @@ struct Params {
 @group(0) @binding(4) var<storage, read_write> y_data:   array<f32>;
 @group(0) @binding(5) var<uniform>             params:   Params;
 
-@compute @workgroup_size({{WORKGROUP_X}}, {{WORKGROUP_Y}})
-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let feature = gid.x;
-    let row     = gid.y;
-
-    // Tail guard in both dimensions.
-    if (feature >= params.feature_dim || row >= params.num_rows) {
-        return;
-    }
-
+// The one accumulation. Returns the raw dot product for one (row, feature).
+fn spmm_acc(row: u32, feature: u32) -> f32 {
     let start = row_ptr[row];
     let end   = row_ptr[row + 1u];
 
@@ -89,6 +113,43 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         let col = col_ind[k];
         acc = acc + values[k] * x_data[col * params.feature_dim + feature];
     }
+    return acc;
+}
 
-    y_data[row * params.feature_dim + feature] = acc;
+fn in_bounds(gid: vec3<u32>) -> bool {
+    return gid.x < params.feature_dim && gid.y < params.num_rows;
+}
+
+@compute @workgroup_size({{WORKGROUP_X}}, {{WORKGROUP_Y}})
+fn main_raw(@builtin(global_invocation_id) gid: vec3<u32>) {
+    if (!in_bounds(gid)) { return; }
+    y_data[gid.y * params.feature_dim + gid.x] = spmm_acc(gid.y, gid.x);
+}
+
+@compute @workgroup_size({{WORKGROUP_X}}, {{WORKGROUP_Y}})
+fn main_relu(@builtin(global_invocation_id) gid: vec3<u32>) {
+    if (!in_bounds(gid)) { return; }
+    let acc = spmm_acc(gid.y, gid.x);
+    y_data[gid.y * params.feature_dim + gid.x] = act_relu(acc, params.alpha);
+}
+
+@compute @workgroup_size({{WORKGROUP_X}}, {{WORKGROUP_Y}})
+fn main_leaky_relu(@builtin(global_invocation_id) gid: vec3<u32>) {
+    if (!in_bounds(gid)) { return; }
+    let acc = spmm_acc(gid.y, gid.x);
+    y_data[gid.y * params.feature_dim + gid.x] = act_leaky_relu(acc, params.alpha);
+}
+
+@compute @workgroup_size({{WORKGROUP_X}}, {{WORKGROUP_Y}})
+fn main_sigmoid(@builtin(global_invocation_id) gid: vec3<u32>) {
+    if (!in_bounds(gid)) { return; }
+    let acc = spmm_acc(gid.y, gid.x);
+    y_data[gid.y * params.feature_dim + gid.x] = act_sigmoid(acc, params.alpha);
+}
+
+@compute @workgroup_size({{WORKGROUP_X}}, {{WORKGROUP_Y}})
+fn main_tanh(@builtin(global_invocation_id) gid: vec3<u32>) {
+    if (!in_bounds(gid)) { return; }
+    let acc = spmm_acc(gid.y, gid.x);
+    y_data[gid.y * params.feature_dim + gid.x] = act_tanh(acc, params.alpha);
 }

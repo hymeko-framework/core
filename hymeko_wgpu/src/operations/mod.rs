@@ -10,16 +10,14 @@
 //! earlier would have been a factory with nothing to make.
 
 pub mod activation;
+pub(crate) mod dispatch;
 pub mod spmm;
 
 pub use activation::{
     ACTIVATION_INPLACE_SHADER, ACTIVATION_SHADER, ACTIVATION_WORKGROUP_SWEEP, ActivationBuilder,
     ActivationKind, DEFAULT_ACTIVATION_WORKGROUP, PreparedActivation,
 };
-pub use spmm::{
-    PreparedSpmm, SPMM_ACTIVATION_SHADER, SPMM_SHADER, SpmmBuilder, WorkgroupShape,
-    spmm_workgroup_for,
-};
+pub use spmm::{PreparedSpmm, SPMM_SHADER, SpmmBuilder, WorkgroupShape, spmm_workgroup_for};
 
 use crate::pipeline::PipelineCache;
 use activation::ActivationLimits;

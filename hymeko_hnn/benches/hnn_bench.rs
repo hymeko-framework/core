@@ -17,8 +17,10 @@ use std::time::Duration;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
+use hymeko::common::ids::NodeId;
 use hymeko::tensor::aggregation::{AggCfg, SignAgg, WeightAgg};
 use hymeko::tensor::tensor_val::{EdgeWScalar, ScalarWeightExtractor};
+use hymeko_hnn::tensor::conv::gcn_clique::GcnCliqueLayer;
 use hymeko_hnn::tensor::conv::hgnn::HgnnLayer;
 use hymeko_hnn::tensor::conv::signed_hgnn::SignedHgnnLayer;
 use hymeko_hnn::tensor::message_passing::{
@@ -26,7 +28,13 @@ use hymeko_hnn::tensor::message_passing::{
     gather_edges_from_nodes_serial, implicit_clique_step, scatter_nodes_from_edges,
     scatter_nodes_from_edges_parallel, scatter_nodes_from_edges_serial,
 };
-use hymeko_hnn::traversal::hypergraphview::HyperGraphView;
+use hymeko_hnn::tensor::message_passing::{build_explicit_a, remove_self_effect};
+use hymeko_hnn::tensor::representations::tensor_csr_representations::{
+    clique_expansion_csr, star_expansion_csr,
+};
+use hymeko_hnn::tensor::tensor::compute_bipartite_degrees;
+use hymeko_hnn::traversal::graph_traversal::{bfs, bfs_dense, dfs_preorder, dfs_preorder_dense};
+use hymeko_hnn::traversal::hypergraphview::{BergeState, BergeView, HyperGraphView};
 use hymeko_hnn::workloads::{DegreeShape, HyperSpec, SignPattern};
 
 type View = HyperGraphView<f32, EdgeWScalar<f32>, f32>;
@@ -474,6 +482,243 @@ fn bench_from_ir_weight_extraction(c: &mut Criterion) {
     group.finish();
 }
 
+// ---------------------------------------------------------------------------
+// Phase 9 Part E — representation conversion, traversal and remaining models
+// ---------------------------------------------------------------------------
+//
+// These complete the operation inventory the Phase 9 brief asked for. They sit
+// beside the existing groups rather than in a second file, so one harness, one
+// workload generator and one sample-size policy cover every graph operation.
+//
+// Cost categories are kept apart deliberately (brief, Part E): construction is
+// its own group, representation conversion is its own group, and the kernels
+// below time only the operation on already-resident CPU data. Nothing here is
+// compared against a GPU resident kernel or a GPU end-to-end path.
+
+/// Expansions are the one family whose OUTPUT size is not known from the input:
+/// star expansion is linear in incidences, clique expansion is superlinear in
+/// hyperedge cardinality (an edge of size k contributes k*(k-1) off-diagonal
+/// entries). Throughput is therefore declared in output nonzeros, and the sizes
+/// are reported so a reader can see the growth rather than infer it.
+fn bench_expansions(c: &mut Criterion) {
+    let mut group = c.benchmark_group("representation_expansion");
+    for (label, spec) in scales() {
+        let hg = spec.build();
+        let inc = incidences(&hg);
+
+        // Measure the output size once, outside the timed region, both to
+        // declare throughput and to report the expansion factor.
+        let star_nnz = star_expansion_csr(&hg).nnz();
+        let clique_nnz = clique_expansion_csr(&hg).nnz();
+        eprintln!(
+            "[expansion {label}] incidences={inc} star_nnz={star_nnz} \
+             clique_nnz={clique_nnz} clique/star={:.2}x",
+            clique_nnz as f64 / star_nnz.max(1) as f64
+        );
+
+        tune(&mut group, label);
+
+        group.throughput(Throughput::Elements(star_nnz as u64));
+        group.bench_with_input(BenchmarkId::new("star", label), &hg, |b, hg| {
+            b.iter(|| black_box(star_expansion_csr(black_box(hg))));
+        });
+
+        group.throughput(Throughput::Elements(clique_nnz as u64));
+        group.bench_with_input(BenchmarkId::new("clique", label), &hg, |b, hg| {
+            b.iter(|| black_box(clique_expansion_csr(black_box(hg))));
+        });
+    }
+    group.finish();
+}
+
+/// Clique expansion under deliberately high hyperedge cardinality.
+///
+/// The quadratic term only shows up when edges are large, which the standard
+/// specs do not exercise. Sizes are chosen so the largest case stays well under
+/// the 16 GB cap: the estimate is computed first and the cell is SKIPPED with a
+/// printed projection rather than run into an allocation failure.
+fn bench_clique_expansion_growth(c: &mut Criterion) {
+    let mut group = c.benchmark_group("representation_clique_growth");
+    group
+        .sample_size(10)
+        .measurement_time(Duration::from_secs(8));
+
+    // A few high-cardinality shapes: fewer, much larger edges.
+    for &(nodes, edges, card) in &[
+        (20_000usize, 400usize, 64usize),
+        (20_000, 400, 128),
+        (20_000, 200, 256),
+        (20_000, 100, 512),
+    ] {
+        let spec = HyperSpec {
+            nodes,
+            edges,
+            avg_cardinality: card,
+            shape: DegreeShape::Uniform,
+            signs: SignPattern::AllPlus,
+            seed: 0x9E37_79B9_7F4A_7C15,
+        };
+        let hg = spec.build();
+
+        // Upper bound on off-diagonal output entries, before building anything.
+        let estimated_nnz: u128 = hg
+            .edge_offsets
+            .windows(2)
+            .map(|w| {
+                let k = (w[1] - w[0]) as u128;
+                k * k
+            })
+            .sum();
+        let estimated_bytes = estimated_nnz * 8; // u32 col + f32 val
+        const BUDGET_BYTES: u128 = 2 << 30; // 2 GiB, far under the 16 GB cap
+        if estimated_bytes > BUDGET_BYTES {
+            eprintln!(
+                "[clique_growth card={card}] SKIPPED - estimated {estimated_nnz} nnz \
+                 (~{:.1} GiB) exceeds the {:.0} GiB budget; reported, not forced",
+                estimated_bytes as f64 / (1u128 << 30) as f64,
+                BUDGET_BYTES as f64 / (1u128 << 30) as f64
+            );
+            continue;
+        }
+
+        let actual_nnz = clique_expansion_csr(&hg).nnz();
+        eprintln!(
+            "[clique_growth card={card}] edges={edges} estimated<={estimated_nnz} \
+             actual_nnz={actual_nnz}"
+        );
+        group.throughput(Throughput::Elements(actual_nnz as u64));
+        group.bench_with_input(
+            BenchmarkId::new("clique", format!("card{card}")),
+            &hg,
+            |b, hg| b.iter(|| black_box(clique_expansion_csr(black_box(hg)))),
+        );
+    }
+    group.finish();
+}
+
+/// Explicit clique adjacency (COO) and bipartite degrees.
+///
+/// `build_explicit_a` is what `GcnCliqueLayer` pays once at construction, so it
+/// is timed on its own rather than hidden inside the layer benchmark.
+fn bench_explicit_clique_and_degrees(c: &mut Criterion) {
+    let mut group = c.benchmark_group("representation_explicit");
+    let cfg = CliqueStepCfg {
+        use_abs: true,
+        include_self: true,
+    };
+    for (label, spec) in scales() {
+        let hg = spec.build();
+        let inc = incidences(&hg);
+        tune(&mut group, label);
+
+        group.throughput(Throughput::Elements(inc as u64));
+        group.bench_with_input(BenchmarkId::new("build_explicit_a", label), &hg, |b, hg| {
+            b.iter(|| black_box(build_explicit_a(black_box(hg), cfg)));
+        });
+
+        group.bench_with_input(
+            BenchmarkId::new("bipartite_degrees", label),
+            &hg,
+            |b, hg| {
+                b.iter(|| black_box(compute_bipartite_degrees(black_box(hg), true)));
+            },
+        );
+    }
+    group.finish();
+}
+
+/// Traversal over the Berge (Levi) bipartite expansion.
+///
+/// Throughput is declared in visited states rather than incidences: a traversal
+/// from one start vertex reaches only its connected component, so incidences/s
+/// would silently mix components of different sizes across scales.
+fn bench_traversal(c: &mut Criterion) {
+    let mut group = c.benchmark_group("traversal");
+    for (label, spec) in scales() {
+        let hg = spec.build();
+        let view = BergeView { hg: &hg };
+        let start = BergeState::Node(NodeId::new(0));
+
+        let reached = bfs(&view, start).len();
+        eprintln!("[traversal {label}] reachable states from node 0: {reached}");
+        tune(&mut group, label);
+        group.throughput(Throughput::Elements(reached as u64));
+
+        group.bench_with_input(BenchmarkId::new("bfs", label), &view, |b, v| {
+            b.iter(|| black_box(bfs(black_box(v), start)));
+        });
+        group.bench_with_input(BenchmarkId::new("dfs_preorder", label), &view, |b, v| {
+            b.iter(|| black_box(dfs_preorder(black_box(v), start)));
+        });
+        group.bench_with_input(BenchmarkId::new("bfs_dense", label), &view, |b, v| {
+            b.iter(|| black_box(bfs_dense(black_box(v), start)));
+        });
+        group.bench_with_input(
+            BenchmarkId::new("dfs_preorder_dense", label),
+            &view,
+            |b, v| b.iter(|| black_box(dfs_preorder_dense(black_box(v), start))),
+        );
+    }
+    group.finish();
+}
+
+/// `remove_self_effect` — the diagonal correction applied after an implicit
+/// clique step. Cheap and elementwise, but on the hot path of every
+/// clique-style layer, so it is measured rather than assumed negligible.
+fn bench_remove_self_effect(c: &mut Criterion) {
+    let mut group = c.benchmark_group("mp_remove_self_effect");
+    let cfg = CliqueStepCfg {
+        use_abs: true,
+        include_self: true,
+    };
+    for (label, spec) in scales() {
+        let hg = spec.build();
+        let n = hg.num_nodes();
+        let diag = clique_diag(&hg, cfg.use_abs);
+        let x = spec.node_vector();
+        let y0 = vec![1.0f32; n];
+        tune(&mut group, label);
+        group.throughput(Throughput::Elements(n as u64));
+        group.bench_with_input(BenchmarkId::new("nodes", label), &n, |b, _| {
+            b.iter_batched_ref(
+                || y0.clone(),
+                |y| remove_self_effect(black_box(y), black_box(&diag), black_box(&x)),
+                criterion::BatchSize::SmallInput,
+            );
+        });
+    }
+    group.finish();
+}
+
+/// Clique-GCN forward, and the adjacency construction it depends on, timed
+/// separately so the one-off cost is not amortised into the per-step cost.
+fn bench_clique_gcn_forward(c: &mut Criterion) {
+    let mut group = c.benchmark_group("conv_clique_gcn_forward");
+    for (label, spec) in scales() {
+        let hg = spec.build();
+        let n = hg.num_nodes();
+        let inc = incidences(&hg);
+        tune(&mut group, label);
+
+        for &(d_in, d_out) in &[(8usize, 8usize), (32, 32)] {
+            let layer = GcnCliqueLayer::<f32>::from_view(&hg, d_in, d_out);
+            let x_in = spec.node_block(d_in);
+            let mut x_out = vec![0.0f32; n * d_out];
+            group.throughput(Throughput::Elements((inc * d_out) as u64));
+            group.bench_with_input(
+                BenchmarkId::new(format!("{label}/d{d_in}x{d_out}"), inc),
+                &x_in,
+                |b, x| {
+                    b.iter(|| {
+                        layer.forward_relu(black_box(x), black_box(&mut x_out));
+                    });
+                },
+            );
+        }
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_gather,
@@ -486,6 +731,12 @@ criterion_group!(
     bench_signed_hgnn_forward,
     bench_view_construction,
     bench_view_from_ir,
-    bench_from_ir_weight_extraction
+    bench_from_ir_weight_extraction,
+    bench_expansions,
+    bench_clique_expansion_growth,
+    bench_explicit_clique_and_degrees,
+    bench_traversal,
+    bench_remove_self_effect,
+    bench_clique_gcn_forward
 );
 criterion_main!(benches);

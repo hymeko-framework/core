@@ -432,12 +432,22 @@ impl<'b> TensorArena<'b> {
         .union(wgpu::BufferUsages::COPY_DST)
         .union(wgpu::BufferUsages::COPY_SRC);
 
-    fn key_for(&self, bytes: u64, usage: wgpu::BufferUsages) -> AllocationKey {
+    /// # Errors
+    ///
+    /// [`ComputeError::IndexOverflow`] when a size class would exceed the
+    /// largest representable power of two. The unchecked `next_power_of_two`
+    /// this replaced wrapped to zero there in release builds, which would have
+    /// handed out a zero-sized buffer for an enormous request.
+    fn key_for(
+        &self,
+        bytes: u64,
+        usage: wgpu::BufferUsages,
+    ) -> Result<AllocationKey, ComputeError> {
         let bytes = match self.inner.borrow().config.reuse_policy {
             ReusePolicy::ExactSize => bytes,
-            ReusePolicy::SizeClass => bytes.next_power_of_two(),
+            ReusePolicy::SizeClass => crate::sizing::checked_size_class(bytes)?,
         };
-        AllocationKey { bytes, usage }
+        Ok(AllocationKey { bytes, usage })
     }
 
     /// Acquire an intermediate tensor of `shape` with the default storage usage.
@@ -479,9 +489,10 @@ impl<'b> TensorArena<'b> {
         // A zero-sized tensor still needs a valid allocation: wgpu rejects
         // zero-length buffers, and Phase 2/3 kernels bound themselves by the
         // params block rather than arrayLength, so a 1-element pad is invisible.
-        let len = elements.max(1);
-        let bytes = (len * std::mem::size_of::<f32>()) as u64;
-        let key = self.key_for(bytes, usage);
+        let extent =
+            crate::sizing::f32_extent_for(elements, self.backend.capabilities().max_buffer_size)?;
+        let bytes = extent.padded_bytes;
+        let key = self.key_for(bytes, usage)?;
 
         // A miss is the one moment when polling is unambiguously worth it: the
         // alternative is `create_buffer`, which costs far more than a
@@ -950,14 +961,12 @@ impl<'a> TrackedSession<'a> {
         shape: TensorShape,
         usage: wgpu::BufferUsages,
     ) -> Result<ArenaTensor<'a>, ComputeError> {
-        let elements = shape
-            .checked_elements()
-            .ok_or(ComputeError::IndexOverflow {
-                what: "arena tensor elements",
-                value: usize::MAX,
-            })?;
-        let bytes = (elements.max(1) * std::mem::size_of::<f32>()) as u64;
-        let key = self.arena.key_for(bytes, usage);
+        let extent = crate::sizing::f32_storage_extent(
+            shape,
+            self.arena.backend.capabilities().max_buffer_size,
+        )?;
+        let bytes = extent.padded_bytes;
+        let key = self.arena.key_for(bytes, usage)?;
 
         // Try this session's own pending releases first.
         let reclaimed = {
