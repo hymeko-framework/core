@@ -8,6 +8,7 @@
 //! | elementwise activation, out-of-place and in-place | implemented, tested |
 //! | pipeline cache, explicit encode / submit / readback | implemented, tested |
 //! | `TensorArena` buffer reuse + non-blocking completion tracking | implemented, tested |
+//! | `ReadbackWorkspace` staging + destination reuse ([`readback`]) | implemented, tested |
 //! | `TrackedSession` and type-level operand provenance ([`scope`]) | implemented, tested |
 //!
 //! (An earlier version of this header claimed two operations existed *and* that
@@ -37,6 +38,10 @@
 //! * It does not submit implicitly. [`WgpuBackend::encoder`] hands out an
 //!   encoder; several operations share it; [`WgpuBackend::submit`] is explicit.
 //! * It does not read back implicitly. Readback is a separate, explicit step.
+//!   [`WgpuBackend::read_tensor`] allocates per call; a loop should hold a
+//!   [`ReadbackWorkspace`] and use [`WgpuBackend::read_tensor_into`], which
+//!   reuses both the device staging buffer and the host destination and is
+//!   4.0-7.6x faster on measured hardware (see the Phase 8 report).
 //! * It does not own any core tensor type, and no core type owns a GPU handle.
 //!   [`ResourceFactory`] adapts host data into device resources.
 //!
@@ -75,6 +80,32 @@
 //! # Ok(())
 //! # }
 //! ```
+//!
+//! # Example — repeated readback without per-call allocation
+//!
+//! The workspace owns the device staging buffer and the host destination and
+//! reuses both. After the first read of a given size, neither side allocates.
+//!
+//! ```no_run
+//! use hymeko::tensor::compute::TensorShape;
+//! use hymeko_wgpu::WgpuBackend;
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let backend = WgpuBackend::builder().build()?;
+//! let res = backend.resources();
+//! let out = res.upload_tensor("out", TensorShape::new(4, 1), &[1.0, 2.0, 3.0, 4.0])?;
+//!
+//! let mut workspace = backend.create_readback_workspace();
+//! for _step in 0..100 {
+//!     // ... encode and submit work that writes into `out` ...
+//!     let values: &[f32] = backend.read_tensor_into(&out, &mut workspace)?;
+//!     assert_eq!(values.len(), 4);
+//! }
+//! // One staging buffer and one host buffer for all 100 iterations.
+//! assert_eq!(workspace.staging_allocations(), 1);
+//! # Ok(())
+//! # }
+//! ```
 
 mod block_on;
 
@@ -82,6 +113,7 @@ pub mod arena;
 pub mod completion;
 #[doc(hidden)]
 pub mod profiling;
+pub mod readback;
 pub mod scope;
 
 pub mod backend;
@@ -102,6 +134,7 @@ pub use operations::{
     spmm_workgroup_for,
 };
 pub use pipeline::{PipelineCache, PipelineKey};
+pub use readback::{ReadbackWorkspace, StagingStorage};
 pub use resources::{GpuCsrMatrix, GpuTensor, ResourceFactory};
 pub use scope::{EncodeScope, JoinScope, Joined, TensorOperand, Tracked, Untracked};
 

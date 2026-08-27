@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="460" viewBox="0 0 900 460" font-family="DejaVu Sans, Segoe UI, sans-serif">
+<rect width="900" height="460" fill="#ffffff"/>
+<text x="78" y="30" font-size="17" font-weight="600" fill="#111">Allocation churn from neighbouring variants degrades the reusable path</text>
+<line x1="78" y1="398.0" x2="690" y2="398.0" stroke="#e3e3e3" stroke-width="1"/>
+<text x="69" y="402.0" font-size="12" fill="#555" text-anchor="end">0.00</text>
+<line x1="78" y1="329.2" x2="690" y2="329.2" stroke="#e3e3e3" stroke-width="1"/>
+<text x="69" y="333.2" font-size="12" fill="#555" text-anchor="end">1.57</text>
+<line x1="78" y1="260.4" x2="690" y2="260.4" stroke="#e3e3e3" stroke-width="1"/>
+<text x="69" y="264.4" font-size="12" fill="#555" text-anchor="end">3.14</text>
+<line x1="78" y1="191.6" x2="690" y2="191.6" stroke="#e3e3e3" stroke-width="1"/>
+<text x="69" y="195.6" font-size="12" fill="#555" text-anchor="end">4.71</text>
+<line x1="78" y1="122.8" x2="690" y2="122.8" stroke="#e3e3e3" stroke-width="1"/>
+<text x="69" y="126.8" font-size="12" fill="#555" text-anchor="end">6.28</text>
+<line x1="78" y1="54.0" x2="690" y2="54.0" stroke="#e3e3e3" stroke-width="1"/>
+<text x="69" y="58.0" font-size="12" fill="#555" text-anchor="end">7.85</text>
+<line x1="78" y1="398" x2="690" y2="398" stroke="#333" stroke-width="1.4"/>
+<line x1="78" y1="40" x2="78" y2="398" stroke="#333" stroke-width="1.4"/>
+<text x="384" y="444" font-size="13" fill="#333" text-anchor="middle">tensor size (MiB)</text>
+<text x="18" y="226" font-size="13" fill="#333" text-anchor="middle" transform="rotate(-90 18 226)">GB/s</text>
+<line x1="78.0" y1="398" x2="78.0" y2="403" stroke="#333" stroke-width="1"/>
+<text x="78.0" y="417" font-size="11" fill="#555" text-anchor="middle">32.0</text>
+<line x1="282.0" y1="398" x2="282.0" y2="403" stroke="#333" stroke-width="1"/>
+<text x="282.0" y="417" font-size="11" fill="#555" text-anchor="middle">64.0</text>
+<line x1="486.0" y1="398" x2="486.0" y2="403" stroke="#333" stroke-width="1"/>
+<text x="486.0" y="417" font-size="11" fill="#555" text-anchor="middle">96.0</text>
+<line x1="690.0" y1="398" x2="690.0" y2="403" stroke="#333" stroke-width="1"/>
+<text x="690.0" y="417" font-size="11" fill="#555" text-anchor="middle">128</text>
+<rect x="103.5" y="93.7" width="46.9" height="304.3" fill="#0072B2" opacity="0.9"/>
+<text x="127.0" y="89.7" font-size="10" fill="#333" text-anchor="middle">6.94</text>
+<rect x="154.5" y="87.0" width="46.9" height="311.0" fill="#D55E00" opacity="0.9"/>
+<text x="178.0" y="83.0" font-size="10" fill="#333" text-anchor="middle">7.09</text>
+<rect x="256.5" y="199.7" width="46.9" height="198.3" fill="#0072B2" opacity="0.9"/>
+<text x="280.0" y="195.7" font-size="10" fill="#333" text-anchor="middle">4.52</text>
+<rect x="307.5" y="83.7" width="46.9" height="314.3" fill="#D55E00" opacity="0.9"/>
+<text x="331.0" y="79.7" font-size="10" fill="#333" text-anchor="middle">7.17</text>
+<rect x="409.5" y="198.3" width="46.9" height="199.7" fill="#0072B2" opacity="0.9"/>
+<text x="433.0" y="194.3" font-size="10" fill="#333" text-anchor="middle">4.55</text>
+<rect x="460.5" y="81.4" width="46.9" height="316.6" fill="#D55E00" opacity="0.9"/>
+<text x="484.0" y="77.4" font-size="10" fill="#333" text-anchor="middle">7.22</text>
+<rect x="562.5" y="197.8" width="46.9" height="200.2" fill="#0072B2" opacity="0.9"/>
+<text x="586.0" y="193.8" font-size="10" fill="#333" text-anchor="middle">4.57</text>
+<rect x="613.5" y="79.5" width="46.9" height="318.5" fill="#D55E00" opacity="0.9"/>
+<text x="637.0" y="75.5" font-size="10" fill="#333" text-anchor="middle">7.26</text>
+<rect x="704" y="60" width="14" height="11" fill="#0072B2"/>
+<text x="724" y="70" font-size="12" fill="#222">D measured alongside A,B,C</text>
+<rect x="704" y="81" width="14" height="11" fill="#D55E00"/>
+<text x="724" y="91" font-size="12" fill="#222">D measured in isolation</text>
+</svg>

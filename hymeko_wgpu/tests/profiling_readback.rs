@@ -6,10 +6,8 @@
 //! `--test-threads=1`; concurrent `WgpuBackend` construction deadlocks in the
 //! Vulkan loader. That is a property of device creation, not of these tests.
 
-use hymeko_wgpu::profiling::{
-    GpuTimer, ReadbackPlan, StagingBuffer, TimestampSupport, timed_readback,
-};
-use hymeko_wgpu::{ComputeError, TensorShape, WgpuBackend};
+use hymeko_wgpu::profiling::{GpuTimer, ReadbackPlan, TimestampSupport, timed_readback};
+use hymeko_wgpu::{ComputeError, StagingStorage, TensorShape, WgpuBackend};
 
 /// A backend that requests both timestamp features. Returns `None` when there
 /// is no adapter at all, so the suite skips rather than fails on a headless
@@ -112,7 +110,7 @@ fn readback_returns_exact_bytes_for_every_staging_and_chunk_combination() {
         .resources()
         .upload_tensor("src", TensorShape::new(elements, 1), &pattern(elements))
         .expect("upload");
-    let mut staging = StagingBuffer::new(&backend, bytes);
+    let mut staging = StagingStorage::new();
     let expected = pattern(elements);
 
     // fresh staging, single copy
@@ -229,30 +227,87 @@ fn readback_handles_zero_length_and_non_chunk_multiple_payloads() {
     assert_eq!(data.len(), odd, "non-multiple payload lost elements");
     assert_eq!(data, pattern(odd), "non-multiple payload corrupted");
 }
-
-// --- staging buffer reuse preconditions ------------------------------------
+// --- staging storage growth and reuse ---------------------------------------
 
 #[test]
-fn staging_reuse_is_refused_while_mapped_and_when_too_small() {
-    let Some(backend) = timed_backend("staging_preconditions") else {
+fn staging_storage_grows_on_demand_and_never_shrinks() {
+    let Some(backend) = timed_backend("staging_growth") else {
         return;
     };
-    let staging = StagingBuffer::new(&backend, 4096);
-    assert_eq!(staging.size(), 4096);
-    assert!(!staging.is_mapped());
+    let mut staging = StagingStorage::new();
+    assert_eq!(staging.capacity(), 0, "nothing is allocated up front");
+    assert_eq!(staging.allocations(), 0);
 
-    assert!(
-        staging.begin_reuse(4096).is_ok(),
-        "exact fit must be allowed"
+    let small = 4_096usize;
+    let large = 65_536usize;
+    let res = backend.resources();
+    let s = res
+        .upload_tensor("s", TensorShape::new(small, 1), &pattern(small))
+        .expect("upload small");
+    let l = res
+        .upload_tensor("l", TensorShape::new(large, 1), &pattern(large))
+        .expect("upload large");
+
+    let read = |staging: &mut StagingStorage, buf, bytes| {
+        timed_readback(
+            &backend,
+            buf,
+            bytes,
+            ReadbackPlan {
+                staging: Some(staging),
+                ..ReadbackPlan::default()
+            },
+        )
+        .expect("readback")
+        .0
+    };
+
+    // First read allocates.
+    let got = read(&mut staging, s.buffer(), (small * 4) as u64);
+    assert_eq!(got, pattern(small));
+    assert_eq!(staging.allocations(), 1);
+    let after_small = staging.capacity();
+    assert!(after_small >= (small * 4) as u64);
+
+    // Same size again: no new allocation.
+    let got = read(&mut staging, s.buffer(), (small * 4) as u64);
+    assert_eq!(got, pattern(small));
+    assert_eq!(
+        staging.allocations(),
+        1,
+        "an identical-size readback must not allocate"
     );
-    assert!(staging.begin_reuse(2048).is_ok(), "smaller must be allowed");
-    assert!(
-        matches!(
-            staging.begin_reuse(4097),
-            Err(ComputeError::ShapeMismatch { .. })
-        ),
-        "a transfer larger than the buffer must be refused, not truncated"
+
+    // Larger: grows exactly once more.
+    let got = read(&mut staging, l.buffer(), (large * 4) as u64);
+    assert_eq!(got, pattern(large));
+    assert_eq!(staging.allocations(), 2, "growth costs one allocation");
+    let after_large = staging.capacity();
+    assert!(after_large >= (large * 4) as u64);
+
+    // Smaller after larger: reuses the larger buffer, does not shrink.
+    let got = read(&mut staging, s.buffer(), (small * 4) as u64);
+    assert_eq!(got, pattern(small));
+    assert_eq!(
+        staging.allocations(),
+        2,
+        "a smaller readback after a larger one must not reallocate"
     );
+    assert_eq!(
+        staging.capacity(),
+        after_large,
+        "capacity must not shrink implicitly"
+    );
+}
+
+#[test]
+fn staging_storage_can_be_presized() {
+    let Some(backend) = timed_backend("staging_presize") else {
+        return;
+    };
+    let staging = StagingStorage::with_capacity(&backend, 1 << 20);
+    assert!(staging.capacity() >= (1 << 20));
+    assert_eq!(staging.allocations(), 1);
 }
 
 #[test]
@@ -266,12 +321,12 @@ fn staging_buffer_stays_correct_across_repeated_reuse() {
         .resources()
         .upload_tensor("src", TensorShape::new(elements, 1), &pattern(elements))
         .expect("upload");
-    let mut staging = StagingBuffer::new(&backend, bytes);
+    let mut staging = StagingStorage::new();
     let expected = pattern(elements);
 
-    // Ten consecutive readbacks through one buffer. A missing unmap, or reuse
-    // before the previous map completed, would surface here as an error or as
-    // stale bytes rather than as a slow path.
+    // Ten consecutive readbacks through one buffer. A missing unmap would fail
+    // the very next map with a validation error, so this is a direct test that
+    // the drain primitive unmaps on every path — not a timing observation.
     for round in 0..10 {
         let (data, _) = timed_readback(
             &backend,
@@ -287,9 +342,10 @@ fn staging_buffer_stays_correct_across_repeated_reuse() {
             data, expected,
             "round {round} returned stale or wrong bytes"
         );
-        assert!(
-            !staging.is_mapped(),
-            "round {round} left the buffer mapped; the next reuse would be refused"
-        );
     }
+    assert_eq!(
+        staging.allocations(),
+        1,
+        "ten same-size readbacks must allocate exactly once"
+    );
 }

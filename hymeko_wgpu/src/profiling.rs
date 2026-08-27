@@ -45,6 +45,7 @@ use std::time::{Duration, Instant};
 use hymeko::tensor::compute::{BackendKind, ComputeError};
 
 use crate::WgpuBackend;
+use crate::readback::StagingStorage;
 
 /// A pair of raw timestamp ticks and the period needed to interpret them.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -290,36 +291,16 @@ impl GpuTimer {
     /// [`ComputeError::Backend`] on map or poll failure.
     pub fn read(&self, backend: &WgpuBackend, count: u32) -> Result<Vec<u64>, ComputeError> {
         let bytes = u64::from(count) * TIMESTAMP_BYTES;
-        let slice = self.readback.slice(..bytes);
-        let (tx, rx) = std::sync::mpsc::channel();
-        slice.map_async(wgpu::MapMode::Read, move |r| {
-            let _ = tx.send(r);
-        });
-        backend
-            .device()
-            .poll(wgpu::PollType::wait_indefinitely())
-            .map_err(|e| ComputeError::Backend {
-                backend: BackendKind::Wgpu,
-                message: format!("poll during timestamp readback failed: {e}"),
-            })?;
-        rx.recv()
-            .map_err(|e| ComputeError::Backend {
-                backend: BackendKind::Wgpu,
-                message: format!("timestamp map callback never fired: {e}"),
-            })?
-            .map_err(|e| ComputeError::Backend {
-                backend: BackendKind::Wgpu,
-                message: format!("timestamp buffer map failed: {e}"),
-            })?;
-        let view = slice
-            .get_mapped_range()
-            .map_err(|e| ComputeError::Backend {
-                backend: BackendKind::Wgpu,
-                message: format!("timestamp mapped range unavailable: {e}"),
-            })?;
-        let ticks: Vec<u64> = bytemuck::cast_slice::<u8, u64>(&view).to_vec();
-        drop(view);
-        self.readback.unmap();
+        // Same map and drain primitives the production readback uses; only the
+        // element type differs, and that is a type parameter rather than a
+        // second hand-written copy loop.
+        crate::readback::map_blocking(backend, self.readback.slice(..bytes))?;
+        let mut ticks: Vec<u64> = Vec::new();
+        crate::readback::drain_mapped_into(
+            &self.readback,
+            self.readback.slice(..bytes),
+            &mut ticks,
+        )?;
         Ok(ticks)
     }
 
@@ -388,65 +369,10 @@ impl ReadbackTiming {
     }
 }
 
-/// Reusable staging buffer with the ownership rule enforced in code.
-///
-/// # The rule
-///
-/// A staging buffer must not be re-copied into or re-mapped while the GPU or a
-/// previous mapping still owns it. Violating that is a validation error at best
-/// and silent corruption at worst, so `mapped` is tracked and
-/// [`Self::begin_reuse`] refuses rather than trusting the caller to unmap.
-pub struct StagingBuffer {
-    buffer: wgpu::Buffer,
-    size: u64,
-    mapped: bool,
-}
-
-impl StagingBuffer {
-    /// Allocate a staging buffer of `size` bytes (minimum 4, as wgpu rejects
-    /// zero-sized buffers).
-    #[must_use]
-    pub fn new(backend: &WgpuBackend, size: u64) -> Self {
-        Self {
-            buffer: backend.resources().staging_buffer("phase7.staging", size),
-            size: size.max(4),
-            mapped: false,
-        }
-    }
-
-    #[must_use]
-    pub const fn size(&self) -> u64 {
-        self.size
-    }
-
-    #[must_use]
-    pub const fn is_mapped(&self) -> bool {
-        self.mapped
-    }
-
-    /// Check the buffer is large enough and not still mapped.
-    ///
-    /// # Errors
-    ///
-    /// [`ComputeError::Backend`] if still mapped, [`ComputeError::ShapeMismatch`]
-    /// if too small for the requested transfer.
-    pub fn begin_reuse(&self, bytes: u64) -> Result<(), ComputeError> {
-        if self.mapped {
-            return Err(ComputeError::Backend {
-                backend: BackendKind::Wgpu,
-                message: "staging buffer is still mapped; unmap before reusing it".to_string(),
-            });
-        }
-        if bytes > self.size {
-            return Err(ComputeError::ShapeMismatch {
-                operand: "staging buffer smaller than the requested transfer",
-                expected: self.size as usize,
-                actual: bytes as usize,
-            });
-        }
-        Ok(())
-    }
-}
+// The reusable staging buffer that used to live here was Phase 7 scaffolding.
+// Production now owns that concept as `crate::readback::StagingStorage`, and
+// this module uses it directly rather than keeping a parallel type with the
+// same ownership rule written a second time.
 
 /// Optional knobs for [`timed_readback`].
 ///
@@ -456,8 +382,9 @@ impl StagingBuffer {
 /// the anti-pattern this codebase forbids.
 #[derive(Default)]
 pub struct ReadbackPlan<'a> {
-    /// Reuse this staging buffer instead of allocating a fresh one.
-    pub staging: Option<&'a mut StagingBuffer>,
+    /// Reuse this staging storage instead of allocating a fresh one. Same type
+    /// production uses, so "reused" and "fresh" differ only in lifetime.
+    pub staging: Option<&'a mut StagingStorage>,
     /// Split the device-to-staging copy into this many bytes per
     /// `copy_buffer_to_buffer` call, all within one encoder and one submit —
     /// testing whether the driver's path is sensitive to per-copy size rather
@@ -471,8 +398,22 @@ pub struct ReadbackPlan<'a> {
     /// conflates the two and cannot attribute either.
     pub dest: Option<&'a mut Vec<f32>>,
 }
-
 /// Time a full readback, stage by stage.
+///
+/// # Relationship to the production engine
+///
+/// This does **not** call [`crate::readback::readback_into`], and that is
+/// deliberate rather than an oversight. The engine treats encode-submit-wait as
+/// one step; this function's entire purpose is to time the boundaries *between*
+/// the steps, and with a timer it must additionally write GPU timestamps
+/// between the encode and the submit. A measurement that delegated the whole
+/// composition could not report its components.
+///
+/// What it does share is every individual step: staging growth through
+/// [`crate::readback::StagingStorage`], mapping through
+/// [`crate::readback::map_blocking`], and mapped-range validation, the byte
+/// copy and unmap through [`crate::readback::drain_mapped_into`]. There is no
+/// second copy loop, no second map implementation and no second unmap rule.
 ///
 /// Returns the data as a `Vec`, except when [`ReadbackPlan::dest`] is set, in
 /// which case the data lands in that buffer and an empty `Vec` is returned.
@@ -513,20 +454,25 @@ pub fn timed_readback(
         return Ok((Vec::new(), t));
     }
 
+    // A caller that passes no storage gets a private one, so "fresh staging"
+    // and "reused staging" differ only in the lifetime of the same type.
+    let mut owned = StagingStorage::new();
+    let store: &mut StagingStorage = match staging {
+        Some(s) => s,
+        None => &mut owned,
+    };
+
     // --- R1: staging allocation ------------------------------------------
     let a0 = Instant::now();
-    let mut owned;
-    let staging_ref: &mut StagingBuffer = match staging {
-        Some(s) => {
-            s.begin_reuse(bytes)?;
-            s
-        }
-        None => {
-            owned = Some(StagingBuffer::new(backend, bytes));
-            owned.as_mut().expect("just constructed")
-        }
-    };
+    store.ensure(backend, bytes);
     t.alloc_us = us(a0.elapsed());
+    let staging_buffer = store
+        .buffer()
+        .ok_or_else(|| ComputeError::Backend {
+            backend: BackendKind::Wgpu,
+            message: "staging storage empty immediately after ensure".to_string(),
+        })?
+        .clone();
 
     // --- encode: optional begin timestamp, copies, optional end timestamp -
     let mut encoder = backend.encoder(Some("phase7.readback"));
@@ -536,14 +482,18 @@ pub fn timed_readback(
     }
 
     match chunk_bytes {
-        None => encoder.copy_buffer_to_buffer(source, 0, &staging_ref.buffer, 0, bytes),
+        None => encoder.copy_buffer_to_buffer(source, 0, &staging_buffer, 0, bytes),
+        // Measurement-only. Phase 7 established that splitting the copy changes
+        // the rate by under 2 % at every size on both hosts, so production does
+        // not chunk. Retained here because no third GPU vendor has been tested
+        // and the hypothesis may need re-running on one.
         Some(chunk) => {
             let chunk = chunk.max(4);
             let mut offset = 0u64;
             while offset < bytes {
                 let remaining = bytes - offset;
                 let this = remaining.min(chunk);
-                encoder.copy_buffer_to_buffer(source, offset, &staging_ref.buffer, offset, this);
+                encoder.copy_buffer_to_buffer(source, offset, &staging_buffer, offset, this);
                 offset = offset
                     .checked_add(this)
                     .ok_or(ComputeError::IndexOverflow {
@@ -568,61 +518,34 @@ pub fn timed_readback(
 
     // --- R4: map_async until callback ------------------------------------
     let m0 = Instant::now();
-    let slice = staging_ref.buffer.slice(..bytes);
-    let (tx, rx) = std::sync::mpsc::channel();
-    slice.map_async(wgpu::MapMode::Read, move |r| {
-        let _ = tx.send(r);
-    });
-    backend
-        .device()
-        .poll(wgpu::PollType::wait_indefinitely())
-        .map_err(|e| ComputeError::Backend {
-            backend: BackendKind::Wgpu,
-            message: format!("poll during readback failed: {e}"),
-        })?;
-    rx.recv()
-        .map_err(|e| ComputeError::Backend {
-            backend: BackendKind::Wgpu,
-            message: format!("map callback never fired: {e}"),
-        })?
-        .map_err(|e| ComputeError::Backend {
-            backend: BackendKind::Wgpu,
-            message: format!("buffer map failed: {e}"),
-        })?;
-    staging_ref.mapped = true;
+    if let Err(e) = crate::readback::map_blocking(backend, staging_buffer.slice(..bytes)) {
+        store.discard();
+        return Err(e);
+    }
     t.map_us = us(m0.elapsed());
 
-    // --- R5: mapped range -> Vec -----------------------------------------
+    // --- R5: mapped range -> destination ---------------------------------
     // Timed with the destination already allocated when `dest` is supplied, so
     // the interval is the copy alone; otherwise it also includes allocating and
     // first-touching a fresh Vec, and the two cannot be told apart.
-    let c0 = Instant::now();
-    let view = slice
-        .get_mapped_range()
-        .map_err(|e| ComputeError::Backend {
-            backend: BackendKind::Wgpu,
-            message: format!("mapped range unavailable: {e}"),
-        })?;
-    let src: &[f32] = bytemuck::cast_slice(&view);
-    let out: Vec<f32> = match dest {
-        Some(buf) => {
-            buf.clear();
-            buf.extend_from_slice(src);
-            t.memcpy_us = us(c0.elapsed());
-            // The data is in `buf`; returning a clone here would add an
-            // allocation to R6 and make it incomparable with the fresh-dest
-            // variant. The caller validates through its own buffer.
-            Vec::new()
-        }
-        None => {
-            let v = src.to_vec();
-            t.memcpy_us = us(c0.elapsed());
-            v
-        }
+    let mut local: Vec<f32> = Vec::new();
+    let returns_owned = dest.is_none();
+    let target: &mut Vec<f32> = match dest {
+        Some(d) => d,
+        None => &mut local,
     };
-    drop(view);
-    staging_ref.buffer.unmap();
-    staging_ref.mapped = false;
+    let c0 = Instant::now();
+    crate::readback::drain_mapped_into(&staging_buffer, staging_buffer.slice(..bytes), target)?;
+    t.memcpy_us = us(c0.elapsed());
+
+    // The data is in the caller's buffer when one was supplied; returning a
+    // clone there would add an allocation to R6 and make it incomparable with
+    // the fresh-destination variant.
+    let out = if returns_owned {
+        std::mem::take(&mut local)
+    } else {
+        Vec::new()
+    };
 
     // --- R2: GPU copy, from resolved timestamps ---------------------------
     if use_gpu_timer {

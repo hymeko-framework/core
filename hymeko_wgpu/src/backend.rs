@@ -19,6 +19,7 @@ use hymeko::tensor::compute::{BackendKind, ComputeError};
 
 use crate::block_on::block_on;
 use crate::pipeline::PipelineCache;
+use crate::readback::{ReadbackWorkspace, readback_extent, readback_into};
 use crate::resources::ResourceFactory;
 
 /// What the acquired adapter and device actually support.
@@ -331,13 +332,18 @@ impl WgpuBackend {
         self.queue.submit(Some(encoder.finish()))
     }
 
-    /// Copy a device tensor back to the host. **This is the explicit readback
-    /// boundary** — nothing else in this crate moves data device→host.
+    /// Copy a device tensor back to the host, allocating a fresh buffer for
+    /// the result. **This is the explicit readback boundary** — nothing else
+    /// in this crate moves data device→host.
     ///
-    /// Costs a staging buffer, a copy, a submit and a device wait, which is
-    /// exactly why the benchmark plan measures `gpu_resident` separately from
-    /// `gpu_resident_readback`: calling this per operation defeats the point of
-    /// keeping data resident.
+    /// Convenience, and it costs what convenience costs: a staging buffer and
+    /// a host `Vec` are allocated and dropped on every call. Phase 7 measured
+    /// those two allocations as the dominant term in readback wall time — up
+    /// to 84 % of it — so a loop that reads repeatedly should hold a
+    /// [`ReadbackWorkspace`] and call [`Self::read_tensor_into`] instead.
+    ///
+    /// This is not a second implementation: it creates a temporary workspace,
+    /// runs the same engine, and moves the destination buffer out.
     ///
     /// # Errors
     /// [`ComputeError::Backend`] if the copy, poll or buffer mapping fails.
@@ -345,64 +351,51 @@ impl WgpuBackend {
     where
         T: crate::scope::TensorOperand,
     {
+        let mut workspace = ReadbackWorkspace::new();
+        self.read_tensor_into(operand, &mut workspace)?;
+        // Moved, not cloned — the legacy signature costs no extra copy.
+        Ok(workspace.take_result())
+    }
+
+    /// Copy a device tensor back into a caller-owned workspace, reusing its
+    /// staging buffer and host destination.
+    ///
+    /// The returned slice borrows the workspace and holds exactly the tensor’s
+    /// elements — never the spare capacity behind them. Because the borrow is
+    /// held, the compiler refuses a second readback into the same workspace
+    /// while the first result is still alive; see [`ReadbackWorkspace`].
+    ///
+    /// After a warm-up read of the largest size, repeated reads of that size or
+    /// smaller allocate nothing on either side.
+    ///
+    /// # Errors
+    /// [`ComputeError::IndexOverflow`] if the element or byte count overflows;
+    /// [`ComputeError::ShapeMismatch`] if the transfer exceeds the device
+    /// maximum buffer size; [`ComputeError::Backend`] if the copy, poll or
+    /// mapping fails.
+    pub fn read_tensor_into<'w, T>(
+        &self,
+        operand: &T,
+        workspace: &'w mut ReadbackWorkspace,
+    ) -> Result<&'w [f32], ComputeError>
+    where
+        T: crate::scope::TensorOperand,
+    {
         let tensor = operand.gpu_tensor();
-        let elements = tensor
-            .shape()
-            .checked_elements()
-            .ok_or(ComputeError::IndexOverflow {
-                what: "tensor elements",
-                value: usize::MAX,
-            })?;
-        if elements == 0 {
-            return Ok(Vec::new());
-        }
+        let (_, bytes) = readback_extent(tensor.shape(), self.capabilities.max_buffer_size)?;
+        let (staging, destination) = workspace.parts();
+        let written = readback_into(self, tensor.buffer(), bytes, staging, destination)?;
+        Ok(&destination[..written])
+    }
 
-        let bytes = (elements * std::mem::size_of::<f32>()) as u64;
-        let staging = self.resources().staging_buffer("readback", bytes);
-
-        let mut encoder = self.encoder(Some("readback"));
-        encoder.copy_buffer_to_buffer(tensor.buffer(), 0, &staging, 0, bytes);
-        let index = self.submit(encoder);
-        self.wait(index)?;
-
-        let slice = staging.slice(..bytes);
-        let (tx, rx) = std::sync::mpsc::channel();
-        slice.map_async(wgpu::MapMode::Read, move |result| {
-            let _ = tx.send(result);
-        });
-
-        // Drive the mapping callback. `PollType::Wait` blocks in the driver
-        // rather than spinning.
-        self.device
-            .poll(wgpu::PollType::Wait {
-                submission_index: None,
-                timeout: None,
-            })
-            .map_err(|e| ComputeError::Backend {
-                backend: BackendKind::Wgpu,
-                message: format!("poll during readback failed: {e}"),
-            })?;
-
-        rx.recv()
-            .map_err(|e| ComputeError::Backend {
-                backend: BackendKind::Wgpu,
-                message: format!("map callback never fired: {e}"),
-            })?
-            .map_err(|e| ComputeError::Backend {
-                backend: BackendKind::Wgpu,
-                message: format!("buffer map failed: {e}"),
-            })?;
-
-        let view = slice
-            .get_mapped_range()
-            .map_err(|e| ComputeError::Backend {
-                backend: BackendKind::Wgpu,
-                message: format!("mapped range unavailable: {e}"),
-            })?;
-        let out: Vec<f32> = bytemuck::cast_slice(&view).to_vec();
-        drop(view);
-        staging.unmap();
-        Ok(out)
+    /// A new, empty [`ReadbackWorkspace`] for this backend.
+    ///
+    /// Holds no device resources until its first use. There is deliberately no
+    /// cached or global workspace: like [`Self::tensor_arena`], the caller owns
+    /// one per loop so buffer lifetime stays visible at the call site.
+    #[must_use]
+    pub fn create_readback_workspace(&self) -> ReadbackWorkspace {
+        ReadbackWorkspace::new()
     }
 
     /// Block until a submission completes.

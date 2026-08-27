@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="460" viewBox="0 0 900 460" font-family="DejaVu Sans, Segoe UI, sans-serif">
+<rect width="900" height="460" fill="#ffffff"/>
+<text x="78" y="30" font-size="17" font-weight="600" fill="#111">Which reuse axis pays: amaterasu, interleaved matrix</text>
+<line x1="78" y1="398.0" x2="690" y2="398.0" stroke="#e3e3e3" stroke-width="1"/>
+<text x="69" y="402.0" font-size="12" fill="#555" text-anchor="end">0.00</text>
+<line x1="78" y1="329.2" x2="690" y2="329.2" stroke="#e3e3e3" stroke-width="1"/>
+<text x="69" y="333.2" font-size="12" fill="#555" text-anchor="end">1.50</text>
+<line x1="78" y1="260.4" x2="690" y2="260.4" stroke="#e3e3e3" stroke-width="1"/>
+<text x="69" y="264.4" font-size="12" fill="#555" text-anchor="end">3.00</text>
+<line x1="78" y1="191.6" x2="690" y2="191.6" stroke="#e3e3e3" stroke-width="1"/>
+<text x="69" y="195.6" font-size="12" fill="#555" text-anchor="end">4.50</text>
+<line x1="78" y1="122.8" x2="690" y2="122.8" stroke="#e3e3e3" stroke-width="1"/>
+<text x="69" y="126.8" font-size="12" fill="#555" text-anchor="end">6.00</text>
+<line x1="78" y1="54.0" x2="690" y2="54.0" stroke="#e3e3e3" stroke-width="1"/>
+<text x="69" y="58.0" font-size="12" fill="#555" text-anchor="end">7.50</text>
+<line x1="78" y1="398" x2="690" y2="398" stroke="#333" stroke-width="1.4"/>
+<line x1="78" y1="40" x2="78" y2="398" stroke="#333" stroke-width="1.4"/>
+<text x="384" y="444" font-size="13" fill="#333" text-anchor="middle">tensor size (MiB)</text>
+<text x="18" y="226" font-size="13" fill="#333" text-anchor="middle" transform="rotate(-90 18 226)">GB/s</text>
+<line x1="78.0" y1="398" x2="78.0" y2="403" stroke="#333" stroke-width="1"/>
+<text x="78.0" y="417" font-size="11" fill="#555" text-anchor="middle">32.0</text>
+<line x1="282.0" y1="398" x2="282.0" y2="403" stroke="#333" stroke-width="1"/>
+<text x="282.0" y="417" font-size="11" fill="#555" text-anchor="middle">64.0</text>
+<line x1="486.0" y1="398" x2="486.0" y2="403" stroke="#333" stroke-width="1"/>
+<text x="486.0" y="417" font-size="11" fill="#555" text-anchor="middle">96.0</text>
+<line x1="690.0" y1="398" x2="690.0" y2="403" stroke="#333" stroke-width="1"/>
+<text x="690.0" y="417" font-size="11" fill="#555" text-anchor="middle">128</text>
+<rect x="93.3" y="363.0" width="28.2" height="35.0" fill="#0072B2" opacity="0.9"/>
+<text x="107.4" y="359.0" font-size="10" fill="#333" text-anchor="middle">0.76</text>
+<rect x="123.9" y="322.9" width="28.2" height="75.1" fill="#D55E00" opacity="0.9"/>
+<text x="138.0" y="318.9" font-size="10" fill="#333" text-anchor="middle">1.64</text>
+<rect x="154.5" y="329.3" width="28.2" height="68.7" fill="#009E73" opacity="0.9"/>
+<text x="168.6" y="325.3" font-size="10" fill="#333" text-anchor="middle">1.50</text>
+<rect x="185.1" y="79.5" width="28.2" height="318.5" fill="#CC79A7" opacity="0.9"/>
+<text x="199.2" y="75.5" font-size="10" fill="#333" text-anchor="middle">6.94</text>
+<rect x="246.3" y="325.1" width="28.2" height="72.9" fill="#0072B2" opacity="0.9"/>
+<text x="260.4" y="321.1" font-size="10" fill="#333" text-anchor="middle">1.59</text>
+<rect x="276.9" y="326.0" width="28.2" height="72.0" fill="#D55E00" opacity="0.9"/>
+<text x="291.0" y="322.0" font-size="10" fill="#333" text-anchor="middle">1.57</text>
+<rect x="307.5" y="191.9" width="28.2" height="206.1" fill="#009E73" opacity="0.9"/>
+<text x="321.6" y="187.9" font-size="10" fill="#333" text-anchor="middle">4.49</text>
+<rect x="338.1" y="190.4" width="28.2" height="207.6" fill="#CC79A7" opacity="0.9"/>
+<text x="352.2" y="186.4" font-size="10" fill="#333" text-anchor="middle">4.52</text>
+<rect x="399.3" y="346.5" width="28.2" height="51.5" fill="#0072B2" opacity="0.9"/>
+<text x="413.4" y="342.5" font-size="10" fill="#333" text-anchor="middle">1.12</text>
+<rect x="429.9" y="325.7" width="28.2" height="72.3" fill="#D55E00" opacity="0.9"/>
+<text x="444.0" y="321.7" font-size="10" fill="#333" text-anchor="middle">1.57</text>
+<rect x="460.5" y="283.2" width="28.2" height="114.8" fill="#009E73" opacity="0.9"/>
+<text x="474.6" y="279.2" font-size="10" fill="#333" text-anchor="middle">2.50</text>
+<rect x="491.1" y="189.0" width="28.2" height="209.0" fill="#CC79A7" opacity="0.9"/>
+<text x="505.2" y="185.0" font-size="10" fill="#333" text-anchor="middle">4.55</text>
+<rect x="552.3" y="342.5" width="28.2" height="55.5" fill="#0072B2" opacity="0.9"/>
+<text x="566.4" y="338.5" font-size="10" fill="#333" text-anchor="middle">1.21</text>
+<rect x="582.9" y="325.2" width="28.2" height="72.8" fill="#D55E00" opacity="0.9"/>
+<text x="597.0" y="321.2" font-size="10" fill="#333" text-anchor="middle">1.59</text>
+<rect x="613.5" y="269.2" width="28.2" height="128.8" fill="#009E73" opacity="0.9"/>
+<text x="627.6" y="265.2" font-size="10" fill="#333" text-anchor="middle">2.81</text>
+<rect x="644.1" y="188.5" width="28.2" height="209.5" fill="#CC79A7" opacity="0.9"/>
+<text x="658.2" y="184.5" font-size="10" fill="#333" text-anchor="middle">4.57</text>
+<rect x="704" y="60" width="14" height="11" fill="#0072B2"/>
+<text x="724" y="70" font-size="12" fill="#222">A neither</text>
+<rect x="704" y="81" width="14" height="11" fill="#D55E00"/>
+<text x="724" y="91" font-size="12" fill="#222">C staging only</text>
+<rect x="704" y="102" width="14" height="11" fill="#009E73"/>
+<text x="724" y="112" font-size="12" fill="#222">B destination only</text>
+<rect x="704" y="123" width="14" height="11" fill="#CC79A7"/>
+<text x="724" y="133" font-size="12" fill="#222">D both</text>
+</svg>

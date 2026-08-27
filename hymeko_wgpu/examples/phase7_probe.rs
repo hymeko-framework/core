@@ -30,11 +30,10 @@ use std::time::Instant;
 use hymeko::tensor::compute::TensorShape;
 use hymeko_hnn::workloads::{DegreeShape, SparseSpec};
 use hymeko_wgpu::profiling::{
-    GpuTimer, ReadbackPlan, ReadbackTiming, StagingBuffer, TimestampSupport, encode_spmm_profiled,
-    timed_readback,
+    GpuTimer, ReadbackPlan, ReadbackTiming, TimestampSupport, encode_spmm_profiled, timed_readback,
 };
 use hymeko_wgpu::testing::Fixture;
-use hymeko_wgpu::{TensorArenaConfig, WgpuBackend};
+use hymeko_wgpu::{StagingStorage, TensorArenaConfig, WgpuBackend};
 
 const SEED: u64 = 0x005E_EDC0_FFEE_u64;
 const WARMUP: usize = 3;
@@ -202,7 +201,7 @@ fn part_b(backend: &WgpuBackend, support: TimestampSupport) {
         let src = res.upload_tensor("src", shape, &pattern).expect("upload");
 
         // One correctly-sized reusable staging buffer for the reuse variant.
-        let mut reused = StagingBuffer::new(backend, bytes);
+        let mut reused = StagingStorage::new();
 
         for rep in 0..(WARMUP + PAIRS * 2) {
             let phase = if rep < WARMUP { "warmup" } else { "steady" };
@@ -387,7 +386,7 @@ fn part_d(backend: &WgpuBackend, support: TimestampSupport) {
         let pattern: Vec<f32> = (0..elements).map(|i| (i % 1024) as f32).collect();
         let res = backend.resources();
         let src = res.upload_tensor("src", shape, &pattern).expect("upload");
-        let mut staging = StagingBuffer::new(backend, bytes);
+        let mut staging = StagingStorage::new();
         let mut warm: Vec<f32> = Vec::with_capacity(elements);
         // Force the warm destination fully resident before it is used, so it is
         // genuinely warm rather than merely reserved.
@@ -498,7 +497,7 @@ fn part_e(backend: &WgpuBackend, support: TimestampSupport) {
             if cap_mib < xfer_mib {
                 continue;
             }
-            let mut staging = StagingBuffer::new(backend, cap_mib * 1024 * 1024);
+            let mut staging = StagingStorage::with_capacity(backend, cap_mib * 1024 * 1024);
             let mut warm: Vec<f32> = vec![0.0; elements];
 
             for rep in 0..(WARMUP + PAIRS) {
@@ -565,7 +564,7 @@ fn part_f(backend: &WgpuBackend, support: TimestampSupport) {
         let src = res
             .upload_tensor("src", TensorShape::new(elements, 1), &pattern)
             .expect("upload");
-        let mut staging = StagingBuffer::new(backend, bytes);
+        let mut staging = StagingStorage::new();
         let mut warm: Vec<f32> = vec![0.0; elements];
 
         for rep in 0..(WARMUP + PAIRS) {
