@@ -32,9 +32,13 @@ use std::time::Duration;
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
 use hymeko::common::ids::{DeclId, EdgeId, HyperArcId, NodeId, SymId};
+use hymeko::common::pathkey::PathKey;
+use hymeko::ir::canonical_hash::{CanonHashCfg, canonical_program_hash};
 use hymeko::ir::ir::{
     AnnoR, ArcRec, DeclKind, DeclNode, EdgeRec, Ir, NodeRec, RefAtomR, SignedRefR,
 };
+use hymeko::resolution::interner::Interner;
+use hymeko::resolution::resolve::Index;
 
 /// Append one declaration, keeping every parallel array in lockstep.
 ///
@@ -280,6 +284,224 @@ criterion_group!(
     benches,
     bench_ir_construction,
     bench_ir_state_identity,
-    bench_ir_redundancy_footprint
+    bench_ir_redundancy_footprint,
+    bench_ir_lookup,
+    bench_ir_clone,
+    bench_ir_canonical_hash,
+    bench_ir_serde
 );
 criterion_main!(benches);
+
+// ---------------------------------------------------------------------------
+// M0.5 Part F additions.
+//
+// APPROVED-CORE-EDIT: unified-ir-m0-5-tests-and-benchmarks (2026-08-28).
+//
+// Scope is deliberately narrow: only paths nothing else in the workspace
+// measures. Already covered elsewhere, and therefore NOT duplicated here
+// (CLAUDE.md 6.1):
+//
+//   HyperGraphView::from_ir  -> hymeko_hnn/benches/hnn_bench.rs groups
+//                               "view_construction_from_ir" and
+//                               "view_from_ir_weight_path"
+//   clique/star expansion    -> hnn_bench "representation_expansion",
+//                               "representation_clique_growth"
+//   CSR SpMV / SpMM          -> hymeko_core/benches/csr_bench.rs
+//
+// Not measurable from this crate, reported as MISSING rather than substituted:
+// the editor->compiler bridge, the compiler->editor bridge, and the round trip.
+// They live in transformation/hymeko_emitter, which depends on hymeko_core;
+// benchmarking them from here would invert the dependency.
+// ---------------------------------------------------------------------------
+
+/// Build an IR together with the `Index` and `Interner` the canonical hash
+/// needs. Paths are two segments deep, matching the real-corpus median of 3
+/// measured in M0.5 Part E rather than a synthetic extreme.
+fn build_indexed(nodes: usize, edges: usize, arity: usize) -> (Ir, Index, Interner) {
+    let mut it = Interner::new();
+    let mut idx = Index::new();
+    let mut ir = Ir::default();
+    let root_sym = it.intern("m");
+
+    fn push(ir: &mut Ir, idx: &mut Index, root: SymId, leaf: SymId, kind: DeclKind) -> DeclId {
+        let id = DeclId::new(ir.decl_nodes.len());
+        ir.decl_nodes.push(DeclNode {
+            kind,
+            name: leaf,
+            parent: DeclId::NONE,
+            first_child: DeclId::NONE,
+            last_child: DeclId::NONE,
+            next_sibling: DeclId::NONE,
+            anno: AnnoR::default(),
+        });
+        ir.decl_hash.push(None);
+        ir.decl_to_node.push(None);
+        ir.decl_to_edge.push(None);
+        ir.decl_to_arc.push(None);
+        idx.by_path.insert(PathKey(vec![root, leaf]), id);
+        id
+    }
+
+    let node_decls: Vec<DeclId> = (0..nodes)
+        .map(|i| {
+            let s = it.intern(&format!("n{i}"));
+            let d = push(&mut ir, &mut idx, root_sym, s, DeclKind::Node);
+            let nid = NodeId::new(ir.nodes.len());
+            ir.nodes.push(NodeRec::new(d, Vec::new()));
+            ir.decl_to_node[d.0] = Some(nid);
+            d
+        })
+        .collect();
+
+    for e in 0..edges {
+        let s = it.intern(&format!("e{e}"));
+        let ed = push(&mut ir, &mut idx, root_sym, s, DeclKind::Edge);
+        let eid = EdgeId::new(ir.edges.len());
+        ir.edges.push(EdgeRec::new(ed, Vec::new()));
+        ir.decl_to_edge[ed.0] = Some(eid);
+
+        let aid = HyperArcId::new(ir.arcs.len());
+        let refs: Vec<SignedRefR> = (0..arity)
+            .map(|k| {
+                let target = node_decls[(e * arity + k) % node_decls.len().max(1)];
+                let atom = RefAtomR {
+                    target,
+                    anno: AnnoR::default(),
+                    weights: None,
+                };
+                match k % 3 {
+                    0 => SignedRefR::Plus(atom),
+                    1 => SignedRefR::Minus(atom),
+                    _ => SignedRefR::Neutral(atom),
+                }
+            })
+            .collect();
+        ir.arcs.push(ArcRec {
+            anno: AnnoR::default(),
+            in_edge: ed,
+            refs,
+        });
+        ir.arc_hash.push(None);
+        ir.edges[eid.0].arcs.push(aid);
+    }
+
+    (ir, idx, it)
+}
+
+/// Lookup: the axis M2d could regress when the stored `decl_to_*` maps become a
+/// derived index. Measures the current dense path so a later change has a
+/// baseline to be compared against.
+fn bench_ir_lookup(c: &mut Criterion) {
+    let mut group = c.benchmark_group("ir_lookup");
+    for &(nodes, edges) in &[(1_000usize, 500usize), (10_000, 5_000)] {
+        let (ir, _, _) = build_indexed(nodes, edges, 4);
+        let ids: Vec<DeclId> = (0..ir.decl_nodes.len()).map(DeclId::new).collect();
+        group.throughput(Throughput::Elements(ids.len() as u64));
+        group
+            .sample_size(30)
+            .measurement_time(Duration::from_secs(5));
+
+        group.bench_function(BenchmarkId::new("decl_node_dense", nodes), |b| {
+            b.iter(|| {
+                let mut acc = 0usize;
+                for &d in black_box(&ids) {
+                    acc += ir.decl_nodes[d.0].name.raw();
+                }
+                black_box(acc)
+            });
+        });
+        group.bench_function(BenchmarkId::new("decl_to_node_dense", nodes), |b| {
+            b.iter(|| {
+                let mut hits = 0usize;
+                for &d in black_box(&ids) {
+                    if ir.decl_to_node[d.0].is_some() {
+                        hits += 1;
+                    }
+                }
+                black_box(hits)
+            });
+        });
+    }
+    group.finish();
+}
+
+/// Clone: bounds any transactional overlay that copies before mutating.
+fn bench_ir_clone(c: &mut Criterion) {
+    let mut group = c.benchmark_group("ir_clone");
+    for &(nodes, edges) in &[(1_000usize, 500usize), (10_000, 5_000)] {
+        let (ir, _, _) = build_indexed(nodes, edges, 4);
+        group.throughput(Throughput::Elements(ir.decl_nodes.len() as u64));
+        group
+            .sample_size(30)
+            .measurement_time(Duration::from_secs(5));
+        group.bench_function(BenchmarkId::from_parameter(nodes), |b| {
+            b.iter(|| black_box(black_box(&ir).clone()));
+        });
+    }
+    group.finish();
+}
+
+/// The real canonical hash, not a flat BLAKE3 sweep.
+///
+/// The Phase 0 appendix measured a flat sweep and said so explicitly: it was a
+/// lower bound. This measures `canonical_program_hash` itself - path map,
+/// skeleton forest, subtree fold, Prufer encoding and incidence bytes - which
+/// is the figure the 10 ms commit budget must actually be compared against.
+fn bench_ir_canonical_hash(c: &mut Criterion) {
+    let mut group = c.benchmark_group("ir_canonical_hash");
+    for &(nodes, edges, arity) in &[
+        (1_000usize, 500usize, 4usize),
+        (10_000, 5_000, 4),
+        (10_000, 5_000, 32),
+    ] {
+        let (ir, idx, it) = build_indexed(nodes, edges, arity);
+        let incidences: usize = ir.arcs.iter().map(|a| a.refs.len()).sum();
+        eprintln!(
+            "[ir_canonical_hash n{nodes}_a{arity}] decls={} incidences={incidences}",
+            ir.decl_nodes.len()
+        );
+        group.throughput(Throughput::Elements(incidences as u64));
+        group
+            .sample_size(20)
+            .measurement_time(Duration::from_secs(6));
+        group.bench_function(
+            BenchmarkId::from_parameter(format!("n{nodes}_a{arity}")),
+            |b| {
+                b.iter(|| {
+                    black_box(canonical_program_hash(
+                        CanonHashCfg::default(),
+                        black_box(&idx),
+                        black_box(&ir),
+                        black_box(&it),
+                    ))
+                });
+            },
+        );
+    }
+    group.finish();
+}
+
+/// Serialization, separated from construction and from hashing.
+fn bench_ir_serde(c: &mut Criterion) {
+    let mut group = c.benchmark_group("ir_serde");
+    for &(nodes, edges) in &[(1_000usize, 500usize), (10_000, 5_000)] {
+        let (ir, _, _) = build_indexed(nodes, edges, 4);
+        let json = serde_json::to_vec(&ir).expect("serialize");
+        eprintln!("[ir_serde n{nodes}] json_bytes={}", json.len());
+        group.throughput(Throughput::Bytes(json.len() as u64));
+        group
+            .sample_size(20)
+            .measurement_time(Duration::from_secs(5));
+
+        group.bench_function(BenchmarkId::new("serialize", nodes), |b| {
+            b.iter(|| black_box(serde_json::to_vec(black_box(&ir)).expect("serialize")));
+        });
+        group.bench_function(BenchmarkId::new("deserialize", nodes), |b| {
+            b.iter(|| {
+                let v: Ir = serde_json::from_slice(black_box(&json)).expect("deserialize");
+                black_box(v)
+            });
+        });
+    }
+    group.finish();
+}

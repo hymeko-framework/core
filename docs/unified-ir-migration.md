@@ -21,15 +21,41 @@ This converts M1 — the widest, riskiest step, spanning four repositories — i
 The ordering consequence is decisive and does **not** depend on any timing (correcting the earlier draft, which justified ordering partly on contaminated numbers):
 
 ```
-M0  repairs           core-local
-M2a add accessors     core-local, purely additive
-M2b migrate call sites  per-repository, independent, one at a time  ← the long tail
-M2c seal direct access  core-local; the point of no return
-M1  representation      CORE-LOCAL — because of M2b
-M3  generational keys   core-local
-M4  transactions        core-local + wire
-M5  bridge removal      transformation
+M0   repairs             core-local
+M0.5 ✅ DONE 2026-08-28  invariance + depth + quiet baseline
+M0.6 iterative traversal core-local          ← U5; prerequisite for M2e
+M2a  add accessors       core-local, purely additive
+M2b  migrate call sites  per-repository, one at a time   ← the long tail
+M2c  seal direct access  core-local; the point of no return
+M2d  collapse maps       core-local
+M2e  hierarchy authority core-local          ← U2; needs M0.6
+M1   representation      CORE-LOCAL — because of M2b
+M3   generational keys   core-local
+M4   transactions        core-local + wire
+M5   bridge removal      transformation
 ```
+
+### M0.6 — make canonical-hash traversal iterative (U5)
+
+`compute_subtree_hashes_with_kinds` recurses once per hierarchy level; the boundary is **215 levels (debug) / 458 (release)**, measured. Convert the fold to an explicit work-stack.
+
+- **Behaviour-preserving.** The digest must be **bit-identical** before and after — the M0.5 invariance suite is the gate, plus a fixed-vector check on a real fixture.
+- **No depth limit is added** (U5). Iterative traversal removes the stack ceiling; it does not impose a semantic one.
+- **This is a production change to `canonical_hash.rs`** and needs §1 approval. M0.5 was explicitly forbidden from touching it.
+
+**Why it is a prerequisite for M2e, not merely adjacent:** M2e makes the intrusive hierarchy authoritative, putting it on the traversal hot path. Making a structure authoritative while its traversal can abort the process at 215 levels is not an acceptable intermediate state.
+
+### M2e — flip hierarchy authority (U2)
+
+Today the canonical hash reads `Index` **path prefixes** and never reads `DeclNode.parent` — proven by M0.5. U2 inverts this: `parent`/`children` becomes canonical, the path `Index` becomes a derived versioned view.
+
+1. Add `validate_hierarchy_coherence(ir, index)` and run it on **lowering output**, not only synthetic fixtures — the two structures are populated by different code paths, so real programs are where divergence would appear.
+2. Fix any divergence found. **Expect some:** nothing has ever enforced agreement, so nothing guarantees it.
+3. Switch the skeleton forest to read `parent`/`children`.
+4. Derive the `Index` from the hierarchy and stamp it as a view (§E.6).
+5. **Delete the validator.** Once the index is derived *from* the hierarchy, incoherence is unrepresentable and the validator is dead code. Keeping it would be ballast that implies a risk that no longer exists.
+
+**Risk:** step 3 changes what the canonical hash reads. If any real program has a hierarchy that disagrees with its paths, its canonical hash **changes** — a stored-digest invalidation. Step 1 exists to find that before step 3, and its result decides whether a digest migration is needed.
 
 ---
 
@@ -137,7 +163,18 @@ The operating envelope (100 Hz non-topology / 10 Hz topology, non-blocking reade
 | M4.3 | **Structure/value split** in dense views, structure shared by `Arc` across value-only commits | 100 Hz without deep-copying incidence tables (§E.6) |
 | M4.4 | **Incremental non-topology refresh**; full rebuild only on topology, coalescing permitted | §H.4 |
 
-**Sequencing inside M4:** M4.1 first — it is the item most likely to invalidate the design. If the declaration tree proves deep enough that O(changed × depth) does not fit the budget, either the fold moves off the declaration hierarchy or a second cheap hot-path digest is introduced with the canonical hash reserved for publication boundaries. **Settle that before building M4.2–M4.4 on top of it.**
+**Sequencing inside M4:** M4.1 first — it is the item most likely to invalidate the design.
+
+**M0.5 has now measured the two inputs M4.1 needs, and the answer is not the one anticipated:**
+
+| Question | Answer | Source |
+|---|---|---|
+| Is the declaration tree deep enough that O(changed × depth) hurts? | **No.** Median 3, p99 5, max 5 across 96 fixtures / 6 840 declarations. The fold's depth term is negligible. | M0.5 §5 |
+| Does a Merkle fold bring identity into budget? | **Not on its own.** `canonical_program_hash` is **10.74 ms at 15 000 declarations** against a 10 ms budget — and the cost lives in the *whole-graph* stages (path map, skeleton forest, Prüfer, incidence sort), not the subtree fold. | M0.5 §6 |
+
+**M4.1 is now decided, not open (U6).** Maintain **two identities**: an O(delta), history-sensitive **commit-chain digest** on every commit, and a history-independent **canonical semantic hash** for checkpoint, audit and convergence. **Full `canonical_program_hash` is forbidden on the 100 Hz commit hot path.** M4.1 therefore builds the chain digest and the checkpoint format; it does *not* attempt to make the whole-graph canonicalisation stages incremental.
+
+Two further M0.5 results constrain it: the subtree fold is **recursive** with a 215-level (debug) stack boundary (→ U5, and see M0.6 below), and **arc/reference slot order is semantic** (U1) — so any incremental scheme must reproduce slot ordering exactly, and any rewrite that reorders arcs changes program identity.
 
 Also includes the `resuming_at` signature change (§G.3) and the `SnapshotVersion` **annotation axis** (§H.3) — the latter now a correctness requirement, since annotation edits arrive at 100 Hz and without their own axis would over-invalidate compute views a hundred times a second. **Both are separate approvals**, recorded not made.
 

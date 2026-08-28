@@ -34,6 +34,47 @@ The conclusion does not depend on the contaminated figure's precision. For full-
 
 **4. Commit throughput and topology-materialization throughput are distinct metrics.** They are decoupled by design and must be measured, budgeted and reported separately. §H.5.
 
+---
+
+## Language and architecture contracts
+
+**Decided 2026-08-28.** These are binding contracts, not preferences. Evidence in `reports/2026-08-28-unified-ir-m05.md` §0.5.
+
+| # | Contract |
+|---|---|
+| **U1** | **Arc order and reference-slot order are semantic and must be preserved.** Reordering arcs within an edge, or references within an arc, changes program meaning. |
+| **U2** | **The canonical hierarchy is `parent`/`children` in `Ir`.** The path `Index` becomes a **derived, versioned view**. A **coherence validator** is required for as long as both exist. |
+| **U3** | **Duplicate incidences are distinct entities with distinct `HyperArcId`s.** Multiplicity is semantic. **Removal is by incidence ID**, never by pattern. |
+| **U4** | **`ValueR::Num` preserves all IEEE-754 bit patterns.** Algebraic incidence/edge weights must be **finite**. **Negative zero is permitted and bit-preserved.** Canonical ordering uses **`total_cmp`**, never `partial_cmp`. |
+| **U5** | **No language-level depth limit.** Recursive traversal must become **iterative before** the U2 migration. Any future depth cap is a configurable **resource** limit, outside language semantics. |
+| **U6** | **Two identities.** An **O(delta), history-sensitive commit-chain digest** on every commit; a **history-independent canonical semantic hash** for checkpoint, audit and convergence. **Full `canonical_program_hash` is forbidden on the 100 Hz commit hot path.** |
+
+### U2 inverts current behaviour — the largest single migration item
+
+**[measured, M0.5]** `canonical_program_hash` today builds its skeleton forest from `Index` **path prefixes** and never reads `DeclNode.parent`, `first_child` or `next_sibling`. A dedicated test proves it: two IRs with deliberately contradicting intrusive hierarchies hash identically.
+
+U2 makes the intrusive hierarchy authoritative and demotes the path index to a derived view. So the migration must **flip which structure is truth**, and while both exist a **coherence validator** must prove they agree:
+
+```
+validate_hierarchy_coherence(ir, index) -> Result<(), Incoherence>
+    for every declaration d:
+        path_parent(index, d)  ==  ir.decl_nodes[d].parent
+    and every parent/child link is mutually consistent
+    and the parent relation is acyclic
+```
+
+Three properties of this validator matter:
+
+- It is **temporary by construction** — once the index is derived *from* the hierarchy, incoherence becomes unrepresentable and the validator becomes dead code. It should be deleted then, not kept as ballast.
+- It must run on **lowering output**, not only on synthetic fixtures: the two structures are populated by different code paths today, so real programs are where a divergence would actually appear.
+- **U5 is a hard prerequisite.** U2 puts the intrusive hierarchy on the traversal hot path, and that traversal is still the recursive one with a measured 215-level (debug) overflow boundary. Making a structure authoritative while its traversal can abort the process is not an acceptable intermediate state.
+
+### U4's consequence for existing code
+
+`total_cmp` is not a drop-in for `partial_cmp`. Every sort, comparison or dedup over `ValueR::Num` must be audited: `partial_cmp` returns `None` on NaN, so a sort built on it is not merely wrong but **unstable**, and an unstable sort feeding a digest makes the digest nondeterministic. Because U4 keeps NaN *representable*, this is reachable rather than theoretical. **No such audit has been performed** — recorded as migration work.
+
+The `-0.0` rule has a matching consequence: digests must hash the **bit pattern**, not a normalised value, or `-0.0` and `+0.0` would collide despite being distinguishable under `total_cmp`.
+
 ### E.1 The choice that frames the rest
 
 Two requirements pull in opposite directions:
@@ -281,10 +322,34 @@ struct CommitReceipt {
 
 Two design obligations follow, both load-bearing at 100 Hz:
 
-1. **The fold must be shallow, or depth must be bounded.** O(changed × depth) is only cheap while `depth` is small. HyMeKo's declaration hierarchy is user-authored and unbounded, so the fold must either be over a balanced structure independent of the declaration tree, or the implementation must measure and bound realistic depth. **[hypothesis]** — depth distribution in real HyMeKo programs is unmeasured, and it is the one input this design most needs. Added to §I.6's measurement list.
+1. ~~**The fold must be shallow, or depth must be bounded.**~~ **RESOLVED by M0.5 — this was the wrong worry.** Real declaration depth was measured across 96 lowered fixtures and 6 840 declarations: **median 3, p99 5, maximum 5**. At depth 5 the fold's O(changed × depth) term is ~5 digest recomputations per changed declaration — negligible. The concern this obligation raised is not the concern that materialised; see obligation 3.
 2. **Annotation edits must be as cheap as weight edits.** Annotations sit in the 100 Hz bucket, so `SetAnno` must touch only its declaration's subtree digest and the path to the root — never trigger a structural recomputation.
+3. **The whole-graph stages, not the fold, are the problem. [measured, M0.5]** `canonical_program_hash` costs **10.74 ms at 15 000 declarations** on a quiet host — the *entire* 100 Hz commit budget, at a graph 7× smaller than the 10⁵ target, and 26.9 ms at 160 000 incidences. Phase 0's flat-sweep proxy was ~12× optimistic per declaration, exactly as it warned it might be.
 
-`canonical_program_hash` already computes per-subtree hashes (`compute_subtree_hashes_with_kinds`), so the ingredient exists; it is not currently exposed as an incrementally updatable fold, and its Prüfer/skeleton stages are whole-graph passes that an incremental path must avoid or restructure. Whether the existing canonical hash can *be* the incremental digest, or whether a second cheaper digest is needed for hot-path identity with the canonical hash reserved for publication boundaries, is an open design question — **[hypothesis]**, and the first thing M4 must settle.
+   The cost is not in the subtree fold. It is in `build_did_to_path`, `build_skeleton_forest`, the Prüfer encoding and the incidence sort — **every one of them a whole-graph pass**. So:
+
+   > **A Merkle fold over subtree digests does not by itself bring identity into budget.**
+
+   → **Decided (U6): two identities, with different jobs.**
+
+   | | **Commit-chain digest** | **Canonical semantic hash** |
+   |---|---|---|
+   | Question it answers | "is this the same *sequence of changes* I already applied?" | "do two independently-built graphs *mean* the same thing?" |
+   | Cost | **O(delta)** | O(graph) — measured 10.74 ms @ 15 000 decls |
+   | History | **sensitive** — chains over the previous digest | **insensitive** — identical for equivalent histories |
+   | Runs on | **every commit**, including the 100 Hz path | checkpoint, audit, convergence |
+   | On the hot path? | yes | **forbidden** |
+
+   Neither substitutes for the other, and that is the point. Replay and conflict detection need to know whether *this exact change* was already seen — inherently history-sensitive, and cheap because it folds only the delta into the previous digest. Convergence and audit need to know whether two replicas that took different routes arrived at the same graph — inherently history-**in**sensitive, and expensive because it must canonicalise the whole structure.
+
+   **The M0.5 invariance results are what make the second identity trustworthy.** C1, C2, C3, C5, C6 and C10 each produced identical canonical hashes from IRs whose dense IDs genuinely differed, so "history-independent" is measured, not assumed. Without that evidence a convergence check built on this hash would be resting on hope.
+
+   Two obligations this creates:
+
+   - The commit-chain digest must commit to **enough** to be a real identity — the delta content, the base digest, and the resulting version — or two different change sequences could chain to the same value.
+   - A checkpoint must record **both**, so a replica resuming from it can verify its own state canonically *and* continue the chain. Recording only the chain digest would make cross-replica verification impossible; recording only the canonical hash would break replay detection.
+
+`canonical_program_hash` already computes per-subtree hashes (`compute_subtree_hashes_with_kinds`), so the fold ingredient exists — but note it is **recursive**, with a measured stack-overflow boundary of 215 levels (debug) / 458 (release). Against a real maximum depth of 5 the margin is 43–92×, so this is a latent hazard rather than a live one; no depth limit is enforced anywhere.
 
 ### F.7 Publication — immutable snapshots
 
