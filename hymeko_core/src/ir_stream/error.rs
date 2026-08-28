@@ -87,6 +87,16 @@ pub enum WireError {
         expected: u64,
         got: u64,
     },
+    /// A section declared zero bytes. Refused so that offsets are strictly
+    /// increasing rather than merely non-decreasing: a zero-length body lets two
+    /// sections share an offset. A producer with nothing to send omits the
+    /// section.
+    EmptySection { index: usize },
+    /// A typed accessor was used on a section of a different element kind.
+    SectionTypeMismatch {
+        expected: crate::ir_stream::section::ElementKind,
+        actual: crate::ir_stream::section::ElementKind,
+    },
     /// The section body starts before the end of the section table.
     SectionOverlapsTable {
         index: usize,
@@ -187,6 +197,13 @@ impl fmt::Display for WireError {
                 f,
                 "section {index} declares {got} bytes but its element count implies {expected}"
             ),
+            Self::EmptySection { index } => write!(
+                f,
+                "section {index} declares zero bytes; omit the section instead"
+            ),
+            Self::SectionTypeMismatch { expected, actual } => {
+                write!(f, "section holds {actual:?} elements, not {expected:?}")
+            }
             Self::SectionOverlapsTable {
                 index,
                 offset,

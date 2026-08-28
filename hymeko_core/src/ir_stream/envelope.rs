@@ -164,20 +164,23 @@ impl MessageType {
 pub const FLAG_LAST_CHUNK: u16 = 0x0001;
 const KNOWN_FLAGS: u16 = FLAG_LAST_CHUNK;
 
-/// A decoded and structurally validated envelope.
+/// Producer-side envelope fields.
 ///
-/// Holding one means: the magic matched, the schema is supported, the header
-/// length is sane, the message type is known, reserved bits were zero, and the
-/// declared payload length is within limits. It does **not** mean the digest
-/// has been checked — that requires the payload, and is done by
-/// [`super::codec::validate_message`].
+/// # Why this is separate from [`ValidatedEnvelope`]
+///
+/// A type called "validated" must not be constructible by anyone who has not
+/// performed the validation — otherwise a caller can hand a forged one to a
+/// function that trusts the name. Phase 10A had a single type with public
+/// fields serving both roles, which meant any downstream crate could build a
+/// `ValidatedEnvelope` containing arbitrary values. The Phase 10B1 audit
+/// recorded that as a defect against invariant 12 and split the two.
+///
+/// A draft carries only what a producer legitimately chooses. `schema_version`
+/// and `header_bytes` are constants of this build, and `payload_len` and
+/// `payload_hash` are derived from the payload — so none of them appear here,
+/// and a producer cannot get them wrong.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ValidatedEnvelope {
-    pub schema_version: u16,
-    /// The producer's header length. May exceed [`HEADER_BYTES`] when a newer
-    /// producer has appended fields; the extra bytes are skipped, which is the
-    /// forward-compatibility mechanism.
-    pub header_bytes: u16,
+pub struct EnvelopeDraft {
     pub msg_type: MessageType,
     pub flags: u16,
     pub stream_id: u64,
@@ -185,27 +188,37 @@ pub struct ValidatedEnvelope {
     pub txn_id: u64,
     pub base_version: SnapshotVersion,
     pub target_version: SnapshotVersion,
-    pub payload_len: u64,
-    pub payload_hash: [u8; 32],
 }
 
-impl ValidatedEnvelope {
-    /// Whether this is the final chunk of its transaction.
+impl EnvelopeDraft {
+    /// A draft with zeroed identity, for a caller that fills in fields.
     #[must_use]
-    pub const fn is_last_chunk(&self) -> bool {
-        self.flags & FLAG_LAST_CHUNK != 0
+    pub const fn new(msg_type: MessageType) -> Self {
+        Self {
+            msg_type,
+            flags: 0,
+            stream_id: 0,
+            seq: 0,
+            txn_id: 0,
+            base_version: SnapshotVersion::ZERO,
+            target_version: SnapshotVersion::ZERO,
+        }
     }
 
-    /// Encode to the fixed 144-byte image.
+    /// Encode the fixed 144-byte header, given the payload's length and digest.
     ///
-    /// Always emits [`HEADER_BYTES`]; this build has no extended fields to
-    /// write. Present so tests can build golden images and round-trip without
-    /// reaching through memory layout.
+    /// Callers normally reach this through
+    /// [`crate::ir_stream::encode_message`], which computes both. It is exposed
+    /// so a producer that already has the digest need not hash twice.
     #[must_use]
-    pub fn to_bytes(&self) -> [u8; HEADER_BYTES as usize] {
+    pub fn to_bytes(
+        &self,
+        payload_len: u64,
+        payload_hash: &[u8; 32],
+    ) -> [u8; HEADER_BYTES as usize] {
         let mut b = [0u8; HEADER_BYTES as usize];
         b[OFF_MAGIC..OFF_MAGIC + 4].copy_from_slice(&MAGIC.to_le_bytes());
-        b[OFF_SCHEMA..OFF_SCHEMA + 2].copy_from_slice(&self.schema_version.to_le_bytes());
+        b[OFF_SCHEMA..OFF_SCHEMA + 2].copy_from_slice(&SCHEMA_VERSION.to_le_bytes());
         b[OFF_HEADER_BYTES..OFF_HEADER_BYTES + 2].copy_from_slice(&HEADER_BYTES.to_le_bytes());
         b[OFF_MSG_TYPE..OFF_MSG_TYPE + 2].copy_from_slice(&self.msg_type.to_wire().to_le_bytes());
         b[OFF_FLAGS..OFF_FLAGS + 2].copy_from_slice(&self.flags.to_le_bytes());
@@ -217,9 +230,105 @@ impl ValidatedEnvelope {
             .copy_from_slice(&self.base_version.to_le_bytes());
         b[OFF_TARGET_VERSION..OFF_TARGET_VERSION + VERSION_WIRE_BYTES]
             .copy_from_slice(&self.target_version.to_le_bytes());
-        b[OFF_PAYLOAD_LEN..OFF_PAYLOAD_LEN + 8].copy_from_slice(&self.payload_len.to_le_bytes());
-        b[OFF_PAYLOAD_HASH..OFF_PAYLOAD_HASH + 32].copy_from_slice(&self.payload_hash);
+        b[OFF_PAYLOAD_LEN..OFF_PAYLOAD_LEN + 8].copy_from_slice(&payload_len.to_le_bytes());
+        b[OFF_PAYLOAD_HASH..OFF_PAYLOAD_HASH + 32].copy_from_slice(payload_hash);
         b
+    }
+}
+
+/// A decoded and structurally validated envelope.
+///
+/// Holding one means the magic matched, the schema is supported, the header
+/// length is sane, the message type is known, reserved bits were zero, and the
+/// declared payload length is within limits. It does **not** mean the digest has
+/// been checked — that requires the payload, and is done by
+/// [`crate::ir_stream::validate_message`].
+///
+/// # Constructibility
+///
+/// Fields are private and there is no public constructor: the only way to
+/// obtain one is [`ValidatedEnvelope::decode`], which performs the checks. A
+/// producer describes a message with [`EnvelopeDraft`] instead.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ValidatedEnvelope {
+    schema_version: u16,
+    header_bytes: u16,
+    msg_type: MessageType,
+    flags: u16,
+    stream_id: u64,
+    seq: u64,
+    txn_id: u64,
+    base_version: SnapshotVersion,
+    target_version: SnapshotVersion,
+    payload_len: u64,
+    payload_hash: [u8; 32],
+}
+
+impl ValidatedEnvelope {
+    #[must_use]
+    pub const fn schema_version(&self) -> u16 {
+        self.schema_version
+    }
+
+    /// The producer's header length. May exceed [`HEADER_BYTES`] when a newer
+    /// producer has appended fields; the extra bytes are skipped, which is the
+    /// forward-compatibility mechanism.
+    #[must_use]
+    pub const fn header_bytes(&self) -> u16 {
+        self.header_bytes
+    }
+
+    #[must_use]
+    pub const fn msg_type(&self) -> MessageType {
+        self.msg_type
+    }
+
+    #[must_use]
+    pub const fn flags(&self) -> u16 {
+        self.flags
+    }
+
+    #[must_use]
+    pub const fn stream_id(&self) -> u64 {
+        self.stream_id
+    }
+
+    #[must_use]
+    pub const fn seq(&self) -> u64 {
+        self.seq
+    }
+
+    #[must_use]
+    pub const fn txn_id(&self) -> u64 {
+        self.txn_id
+    }
+
+    /// The version the producer believes the consumer holds.
+    #[must_use]
+    pub const fn base_version(&self) -> SnapshotVersion {
+        self.base_version
+    }
+
+    /// The version applying this transaction yields.
+    #[must_use]
+    pub const fn target_version(&self) -> SnapshotVersion {
+        self.target_version
+    }
+
+    #[must_use]
+    pub const fn payload_len(&self) -> u64 {
+        self.payload_len
+    }
+
+    #[must_use]
+    pub const fn payload_hash(&self) -> &[u8; 32] {
+        &self.payload_hash
+    }
+
+    /// Whether this is the final chunk of its transaction.
+    #[must_use]
+    pub const fn is_last_chunk(&self) -> bool {
+        self.flags & FLAG_LAST_CHUNK != 0
     }
 
     /// Decode and structurally validate an envelope from the front of `bytes`.
@@ -324,26 +433,28 @@ fn rd_version(b: &[u8], off: usize) -> SnapshotVersion {
 mod tests {
     use super::*;
 
-    fn sample() -> ValidatedEnvelope {
-        ValidatedEnvelope {
-            schema_version: SCHEMA_VERSION,
-            header_bytes: HEADER_BYTES,
-            msg_type: MessageType::SnapshotBegin,
+    fn sample() -> EnvelopeDraft {
+        EnvelopeDraft {
             flags: FLAG_LAST_CHUNK,
             stream_id: 0x1122_3344_5566_7788,
             seq: 7,
             txn_id: 9,
             base_version: SnapshotVersion::new(1, 2, 3, 4),
             target_version: SnapshotVersion::new(2, 2, 3, 4),
-            payload_len: 0,
-            payload_hash: [0xAB; 32],
+            ..EnvelopeDraft::new(MessageType::SnapshotBegin)
         }
+    }
+
+    /// The sample encoded with a recognisable digest, so offset assertions can
+    /// see it.
+    fn sample_bytes() -> [u8; HEADER_BYTES as usize] {
+        sample().to_bytes(0, &[0xAB; 32])
     }
 
     #[test]
     fn header_is_exactly_144_bytes() {
         assert_eq!(HEADER_BYTES, 144);
-        assert_eq!(sample().to_bytes().len(), 144);
+        assert_eq!(sample_bytes().len(), 144);
     }
 
     #[test]
@@ -351,8 +462,7 @@ mod tests {
         // Golden-image assertion: encode a value with a unique marker in each
         // field and check it lands at the documented offset. This is what makes
         // a future field reordering fail loudly.
-        let e = sample();
-        let b = e.to_bytes();
+        let b = sample_bytes();
         assert_eq!(rd_u32(&b, 0), MAGIC, "magic at 0");
         assert_eq!(rd_u16(&b, 4), SCHEMA_VERSION, "schema at 4");
         assert_eq!(rd_u16(&b, 6), HEADER_BYTES, "header_bytes at 6");
@@ -376,7 +486,7 @@ mod tests {
     fn encoding_is_little_endian_on_every_host() {
         let mut e = sample();
         e.stream_id = 0x0102_0304_0506_0708;
-        let b = e.to_bytes();
+        let b = e.to_bytes(0, &[0xAB; 32]);
         // Least significant byte first. This assertion is what fails if the
         // implementation ever reverts to native-order writes.
         assert_eq!(
@@ -387,13 +497,22 @@ mod tests {
 
     #[test]
     fn round_trip_is_identity() {
-        let e = sample();
-        assert_eq!(ValidatedEnvelope::decode(&e.to_bytes()).expect("decode"), e);
+        let d = sample();
+        let v = ValidatedEnvelope::decode(&sample_bytes()).expect("decode");
+        assert_eq!(v.msg_type(), d.msg_type);
+        assert_eq!(v.flags(), d.flags);
+        assert_eq!(v.stream_id(), d.stream_id);
+        assert_eq!(v.seq(), d.seq);
+        assert_eq!(v.txn_id(), d.txn_id);
+        assert_eq!(v.base_version(), d.base_version);
+        assert_eq!(v.target_version(), d.target_version);
+        assert_eq!(v.schema_version(), SCHEMA_VERSION);
+        assert_eq!(v.header_bytes(), HEADER_BYTES);
     }
 
     #[test]
     fn every_truncation_errors_rather_than_panics() {
-        let full = sample().to_bytes();
+        let full = sample_bytes();
         for n in 0..full.len() {
             let err = ValidatedEnvelope::decode(&full[..n])
                 .expect_err("a truncated header must be rejected");
@@ -408,7 +527,7 @@ mod tests {
     fn magic_is_checked_before_anything_else() {
         // A buffer from an unrelated protocol: everything after the magic is
         // nonsense, and the error must still name the magic.
-        let mut b = sample().to_bytes();
+        let mut b = sample_bytes();
         b[0..4].copy_from_slice(&0xDEAD_BEEFu32.to_le_bytes());
         b[4..6].copy_from_slice(&999u16.to_le_bytes()); // bogus schema too
         b[8..10].copy_from_slice(&999u16.to_le_bytes()); // bogus type too
@@ -420,7 +539,7 @@ mod tests {
 
     #[test]
     fn unsupported_schema_is_refused() {
-        let mut b = sample().to_bytes();
+        let mut b = sample_bytes();
         b[4..6].copy_from_slice(&2u16.to_le_bytes());
         assert!(matches!(
             ValidatedEnvelope::decode(&b),
@@ -431,7 +550,7 @@ mod tests {
     #[test]
     fn header_length_bounds_are_enforced() {
         for bad in [0u16, 1, HEADER_BYTES - 1, MAX_HEADER_BYTES + 1, u16::MAX] {
-            let mut b = sample().to_bytes();
+            let mut b = sample_bytes();
             b[6..8].copy_from_slice(&bad.to_le_bytes());
             assert!(
                 matches!(
@@ -447,15 +566,15 @@ mod tests {
     fn a_longer_header_from_a_newer_producer_is_tolerated() {
         // Forward compatibility: the extra bytes are not understood, but the
         // message is not refused for having them.
-        let mut b = sample().to_bytes();
+        let mut b = sample_bytes();
         b[6..8].copy_from_slice(&200u16.to_le_bytes());
         let e = ValidatedEnvelope::decode(&b).expect("a longer header must decode");
-        assert_eq!(e.header_bytes, 200);
+        assert_eq!(e.header_bytes(), 200);
     }
 
     #[test]
     fn reserved_must_be_zero() {
-        let mut b = sample().to_bytes();
+        let mut b = sample_bytes();
         b[12..16].copy_from_slice(&1u32.to_le_bytes());
         assert!(matches!(
             ValidatedEnvelope::decode(&b),
@@ -465,14 +584,14 @@ mod tests {
 
     #[test]
     fn unknown_message_types_and_flags_are_refused() {
-        let mut b = sample().to_bytes();
+        let mut b = sample_bytes();
         b[8..10].copy_from_slice(&0u16.to_le_bytes());
         assert!(matches!(
             ValidatedEnvelope::decode(&b),
             Err(WireError::UnknownMessageType { got: 0 })
         ));
 
-        let mut b = sample().to_bytes();
+        let mut b = sample_bytes();
         b[10..12].copy_from_slice(&0x8000u16.to_le_bytes());
         assert!(matches!(
             ValidatedEnvelope::decode(&b),

@@ -5,13 +5,17 @@ Supersedes the first draft of this note, which treated dynamic and distributed
 synchronization as hypothetical extensions.
 
 > **Implementation status.** Phase 10A implemented §5.1 (the envelope) and §5.3
-> (the section table) as `hymeko::ir_stream`, together with the resource limits
-> and the digest rule — see
-> `reports/2026-08-28-phase10a-ir-stream-wire-codec.md`. Claims **C6, C13 and
-> C14** of §12 are now proved by tests; C5 is half proved. **Everything else in
-> this document remains unimplemented**: the transaction lifecycle (§6), CPU
-> snapshot publication (§7), orientation rebuilding (§8) and GPU materialization
-> and retirement (§9) are all still design only.
+> (the section table) as `hymeko::ir_stream`. Phase 10B1 audited that codec
+> (verdict A1: five defects corrected, no protocol change) and added the
+> consumer-side transaction lifecycle of §6 as `ir_stream::assembler` — staging,
+> commit/abort, sequence-gap and stale-base detection, idempotence and bounded
+> staging. See `reports/2026-08-28-phase10a-ir-stream-wire-codec.md` and
+> `reports/2026-08-28-phase10b1-audit-and-transaction-assembler.md`.
+>
+> Claims **C1–C6, C13 and C14** of §12 are now proved by tests; C7 partly.
+> **Still unimplemented**: the producer side (coalescing, delta log, resync
+> emission), CPU snapshot publication (§7), orientation rebuilding (§8) and GPU
+> materialization and retirement (§9).
 
 ---
 

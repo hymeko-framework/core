@@ -53,6 +53,9 @@
 //!   200-byte message cannot request a four-billion-entry `Vec`.
 //! * Trailing bytes are rejected; the buffer length must equal
 //!   `header_bytes + payload_len` exactly.
+//! * A type whose name says "validated" cannot be built without validating.
+//!   [`ValidatedEnvelope`], [`ValidatedMessage`] and [`ValidatedSection`] have
+//!   private fields and no public constructor; producers use [`EnvelopeDraft`].
 //!
 //! # Relationship to `tensor::shared_state`
 //!
@@ -61,32 +64,53 @@
 //! retained only so that a downstream caller outside this repository does not
 //! break on an import; nothing here is derived from it.
 //!
+//! # Invariant: "validated" types cannot be forged
+//!
+//! A downstream crate cannot construct a [`ValidatedEnvelope`] without going
+//! through [`ValidatedEnvelope::decode`]. This is the property that lets a
+//! later layer take one on trust:
+//!
+//! ```compile_fail
+//! use hymeko::ir_stream::{MessageType, SnapshotVersion, ValidatedEnvelope};
+//!
+//! // Refused: every field is private and there is no public constructor.
+//! let forged = ValidatedEnvelope {
+//!     schema_version: 1,
+//!     header_bytes: 144,
+//!     msg_type: MessageType::Commit,
+//!     flags: 0,
+//!     stream_id: 0,
+//!     seq: 0,
+//!     txn_id: 0,
+//!     base_version: SnapshotVersion::ZERO,
+//!     target_version: SnapshotVersion::ZERO,
+//!     payload_len: 0,
+//!     payload_hash: [0; 32],
+//! };
+//! ```
+//!
 //! # Example
 //!
 //! ```
 //! use hymeko::ir_stream::{
-//!     DecodeLimits, MessageType, SnapshotVersion, ValidatedEnvelope,
+//!     DecodeLimits, EnvelopeDraft, MessageType, SnapshotVersion,
 //!     encode_message, validate_message,
 //! };
-//! use hymeko::ir_stream::envelope::{HEADER_BYTES, SCHEMA_VERSION};
+//! use hymeko::ir_stream::envelope::HEADER_BYTES;
 //!
-//! let envelope = ValidatedEnvelope {
-//!     schema_version: SCHEMA_VERSION,
-//!     header_bytes: HEADER_BYTES,
-//!     msg_type: MessageType::Heartbeat,
-//!     flags: 0,
+//! // A producer describes a message with a draft. Schema, header length,
+//! // payload length and digest are filled in by the encoder, so they cannot
+//! // be set wrong.
+//! let draft = EnvelopeDraft {
 //!     stream_id: 1,
 //!     seq: 1,
-//!     txn_id: 0,
-//!     base_version: SnapshotVersion::ZERO,
 //!     target_version: SnapshotVersion::new(3, 1, 1, 0),
-//!     payload_len: 0,
-//!     payload_hash: [0; 32],
+//!     ..EnvelopeDraft::new(MessageType::Heartbeat)
 //! };
 //!
-//! let bytes = encode_message(&envelope, b"payload");
+//! let bytes = encode_message(&draft, b"payload");
 //! let message = validate_message(&bytes, &DecodeLimits::DEFAULT)?;
-//! assert_eq!(message.envelope().target_version.topology, 3);
+//! assert_eq!(message.envelope().target_version().topology, 3);
 //! assert_eq!(message.payload(), b"payload");
 //!
 //! // A single flipped bit is rejected, not tolerated.
@@ -96,6 +120,7 @@
 //! # Ok::<(), hymeko::ir_stream::WireError>(())
 //! ```
 
+pub mod assembler;
 pub mod codec;
 pub mod envelope;
 pub mod error;
@@ -103,8 +128,12 @@ pub mod limits;
 pub mod section;
 pub mod version;
 
+pub use assembler::{
+    ApplyOutcome, AssemblerLimits, CommittedTransaction, ResyncReason, StagedSection,
+    TransactionAssembler, TransactionKind,
+};
 pub use codec::{ValidatedMessage, encode_message, validate_message};
-pub use envelope::{FLAG_LAST_CHUNK, MessageType, ValidatedEnvelope};
+pub use envelope::{EnvelopeDraft, FLAG_LAST_CHUNK, MessageType, ValidatedEnvelope};
 pub use error::WireError;
 pub use limits::DecodeLimits;
 pub use section::{ElementKind, SectionEntry, SectionKind, ValidatedSection};

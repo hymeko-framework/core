@@ -21,26 +21,20 @@ use std::time::Duration;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
-use hymeko::ir_stream::envelope::{HEADER_BYTES, SCHEMA_VERSION};
 use hymeko::ir_stream::section::{ENTRY_BYTES, TABLE_PREFIX_BYTES};
 use hymeko::ir_stream::{
-    DecodeLimits, ElementKind, MessageType, SectionEntry, SectionKind, SnapshotVersion,
-    ValidatedEnvelope, encode_message, validate_message,
+    ApplyOutcome, AssemblerLimits, DecodeLimits, ElementKind, EnvelopeDraft, MessageType,
+    SectionEntry, SectionKind, SnapshotVersion, TransactionAssembler, encode_message,
+    validate_message,
 };
 
-fn envelope(msg_type: MessageType) -> ValidatedEnvelope {
-    ValidatedEnvelope {
-        schema_version: SCHEMA_VERSION,
-        header_bytes: HEADER_BYTES,
-        msg_type,
-        flags: 0,
+fn envelope(msg_type: MessageType) -> EnvelopeDraft {
+    EnvelopeDraft {
         stream_id: 1,
         seq: 1,
         txn_id: 1,
-        base_version: SnapshotVersion::ZERO,
         target_version: SnapshotVersion::new(1, 1, 1, 0),
-        payload_len: 0,
-        payload_hash: [0; 32],
+        ..EnvelopeDraft::new(msg_type)
     }
 }
 
@@ -191,10 +185,137 @@ fn bench_rejection_is_cheap(c: &mut Criterion) {
     group.finish();
 }
 
+// --- Phase 10B1: the transaction assembler ---------------------------------
+
+/// What does staging cost per transaction, and how does it scale with chunks?
+///
+/// The assembler copies section bodies into owned buffers, so its cost should
+/// be a memcpy of the staged bytes plus a small fixed per-message cost. These
+/// separate the two, so a future change that adds a per-section scan is visible
+/// as a departure from the copy rate.
+fn bench_assembler_transaction(c: &mut Criterion) {
+    let mut group = c.benchmark_group("ir_stream_assemble");
+    let limits = DecodeLimits::DEFAULT;
+    let target = SnapshotVersion::new(1, 1, 1, 0);
+
+    // A begin, N chunks and a commit, pre-encoded so the benchmark measures the
+    // assembler rather than the encoder.
+    let build = |chunks: usize, body_bytes: usize| -> Vec<Vec<u8>> {
+        let mut seq = 0u64;
+        let mut out = Vec::new();
+        let mut next = |msg_type: MessageType, payload: &[u8]| -> Vec<u8> {
+            seq += 1;
+            let d = EnvelopeDraft {
+                stream_id: 1,
+                seq,
+                txn_id: 1,
+                target_version: target,
+                ..EnvelopeDraft::new(msg_type)
+            };
+            encode_message(&d, payload)
+        };
+        let empty = {
+            let mut p = Vec::new();
+            p.extend_from_slice(&0u32.to_le_bytes());
+            p.extend_from_slice(&0u32.to_le_bytes());
+            p
+        };
+        out.push(next(MessageType::SnapshotBegin, &empty));
+        let body = sectioned_payload(1, body_bytes);
+        for _ in 0..chunks {
+            out.push(next(MessageType::SnapshotChunk, &body));
+        }
+        out.push(next(MessageType::Commit, &[]));
+        out
+    };
+
+    for &(chunks, kib) in &[(1usize, 64usize), (8, 64), (64, 64), (8, 512)] {
+        let msgs = build(chunks, kib * 1024);
+        let staged: usize = msgs.iter().map(std::vec::Vec::len).sum();
+
+        group.throughput(Throughput::Bytes(staged as u64));
+        group
+            .sample_size(50)
+            .measurement_time(Duration::from_secs(4));
+        group.bench_with_input(
+            BenchmarkId::from_parameter(format!("{chunks}x{kib}KiB")),
+            &msgs,
+            |b, msgs| {
+                b.iter(|| {
+                    let mut a = TransactionAssembler::new(AssemblerLimits::DEFAULT);
+                    let mut committed = 0usize;
+                    for m in msgs {
+                        let v = validate_message(black_box(m), &limits).expect("valid");
+                        if let ApplyOutcome::Committed(t) = a.apply(&v) {
+                            committed += t.sections().len();
+                        }
+                    }
+                    black_box(committed)
+                });
+            },
+        );
+    }
+    group.finish();
+}
+
+/// Rejection paths must stay cheap, for the same anti-amplification reason the
+/// codec benchmark checks: a diverging producer must not cost the consumer more
+/// than a well-behaved one.
+fn bench_assembler_rejection(c: &mut Criterion) {
+    let mut group = c.benchmark_group("ir_stream_assemble_reject");
+    let limits = DecodeLimits::DEFAULT;
+    group
+        .sample_size(100)
+        .measurement_time(Duration::from_secs(4));
+
+    let empty = {
+        let mut p = Vec::new();
+        p.extend_from_slice(&0u32.to_le_bytes());
+        p.extend_from_slice(&0u32.to_le_bytes());
+        p
+    };
+    let mk = |seq: u64, msg_type: MessageType, payload: &[u8]| {
+        let d = EnvelopeDraft {
+            stream_id: 1,
+            seq,
+            txn_id: 1,
+            target_version: SnapshotVersion::new(1, 1, 1, 0),
+            ..EnvelopeDraft::new(msg_type)
+        };
+        encode_message(&d, payload)
+    };
+
+    let first = mk(1, MessageType::SnapshotBegin, &empty);
+    let gap = mk(99, MessageType::SnapshotChunk, &empty);
+    let orphan = mk(2, MessageType::Commit, &[]);
+
+    group.bench_function("sequence_gap", |b| {
+        b.iter(|| {
+            let mut a = TransactionAssembler::new(AssemblerLimits::DEFAULT);
+            let v1 = validate_message(&first, &limits).expect("valid");
+            let _ = a.apply(&v1);
+            let v2 = validate_message(black_box(&gap), &limits).expect("valid");
+            black_box(matches!(a.apply(&v2), ApplyOutcome::ResyncRequired(_)))
+        });
+    });
+
+    group.bench_function("orphan_commit", |b| {
+        b.iter(|| {
+            let mut a = TransactionAssembler::new(AssemblerLimits::DEFAULT);
+            let v = validate_message(black_box(&orphan), &limits).expect("valid");
+            black_box(matches!(a.apply(&v), ApplyOutcome::ResyncRequired(_)))
+        });
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_validate_by_payload_size,
     bench_validate_by_section_count,
-    bench_rejection_is_cheap
+    bench_rejection_is_cheap,
+    bench_assembler_transaction,
+    bench_assembler_rejection
 );
 criterion_main!(benches);

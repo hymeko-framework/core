@@ -213,6 +213,16 @@ impl ElementKind {
     /// Bytes per element.
     #[must_use]
     pub const fn size(self) -> u64 {
+        self.size_usize() as u64
+    }
+
+    /// Bytes per element, as a `usize`.
+    ///
+    /// Defined in terms of `usize` and widened to `u64` by [`Self::size`],
+    /// rather than the reverse: narrowing a `u64` would be a truncating cast on
+    /// a 32-bit target even though the values are 1 and 4.
+    #[must_use]
+    pub const fn size_usize(self) -> usize {
         match self {
             Self::U32 | Self::F32 => 4,
             Self::I8 | Self::Raw8 => 1,
@@ -322,13 +332,12 @@ impl<'a> ValidatedSection<'a> {
         convert: impl Fn(&[u8]) -> T,
     ) -> Result<Vec<T>, WireError> {
         if self.entry.element_kind != want {
-            return Err(WireError::SectionLengthMismatch {
-                index: 0,
-                expected: want.size(),
-                got: self.entry.element_kind.size(),
+            return Err(WireError::SectionTypeMismatch {
+                expected: want,
+                actual: self.entry.element_kind,
             });
         }
-        let step = want.size() as usize;
+        let step = want.size_usize();
         // `byte_len == element_count * size` was proved during validation, so
         // this division is exact and the collect cannot be short.
         Ok(self.body.chunks_exact(step).map(convert).collect())
@@ -439,7 +448,14 @@ pub(crate) fn validate_sections<'a>(
             });
         }
 
-        // Guard 2: the body may not start inside the table.
+        // Guard 2: a zero-length section would let two sections share an offset,
+        // weakening the strictly-increasing rule below to merely
+        // non-decreasing. It also carries no information.
+        if byte_len == 0 {
+            return Err(WireError::EmptySection { index });
+        }
+
+        // Guard 3: the body may not start inside the table.
         if byte_offset < table_bytes {
             return Err(WireError::SectionOverlapsTable {
                 index,
@@ -448,7 +464,7 @@ pub(crate) fn validate_sections<'a>(
             });
         }
 
-        // Guard 3: strictly increasing and non-overlapping. This alone rejects
+        // Guard 4: strictly increasing and non-overlapping. This alone rejects
         // the descending offsets the audited code produced.
         if byte_offset < previous_end {
             return Err(WireError::SectionNotIncreasing {
@@ -466,7 +482,7 @@ pub(crate) fn validate_sections<'a>(
             });
         }
 
-        // Guard 4: checked end, then bounds against the real payload length.
+        // Guard 5: checked end, then bounds against the real payload length.
         let end = byte_offset
             .checked_add(byte_len)
             .ok_or(WireError::LengthOverflow {
@@ -748,6 +764,34 @@ mod tests {
     }
 
     #[test]
+    fn a_section_bearing_payload_must_carry_a_table_even_when_empty() {
+        // The payload IS the section table, so "no sections" is an eight-byte
+        // table with count = 0, not a zero-byte payload. Discovered while
+        // writing the assembler tests, where a Begin with no sections was
+        // rejected; the rule is correct and is pinned here so it cannot be
+        // loosened by accident.
+        let mut zero_sections = Vec::new();
+        zero_sections.extend_from_slice(&0u32.to_le_bytes());
+        zero_sections.extend_from_slice(&0u32.to_le_bytes());
+        assert!(
+            validate_sections(&zero_sections, &DecodeLimits::strict())
+                .expect("an empty table is legal")
+                .is_empty()
+        );
+
+        assert!(
+            matches!(
+                validate_sections(&[], &DecodeLimits::strict()),
+                Err(WireError::SectionTableOutOfBounds {
+                    need: 8,
+                    payload_len: 0
+                })
+            ),
+            "a zero-byte payload is not an empty table"
+        );
+    }
+
+    #[test]
     fn a_tiny_message_cannot_request_an_enormous_allocation() {
         // 8 bytes of table prefix claiming u32::MAX entries. The count check
         // must fire before Vec::with_capacity is reached.
@@ -779,6 +823,78 @@ mod tests {
         assert!(
             secs[0].to_u32_vec().is_err(),
             "reading an f32 section as u32 must be refused"
+        );
+    }
+
+    // --- Phase 10B1 audit regressions -----------------------------------
+
+    #[test]
+    fn zero_length_sections_are_rejected() {
+        // Audit invariant 10: offsets must be STRICTLY increasing. A zero-length
+        // section makes `previous_end == offset`, so a second section at the same
+        // offset passes the non-overlap rule and the sequence is only
+        // non-decreasing. A zero-length section also carries no information: a
+        // producer with nothing to send omits it. Rejecting them restores the
+        // strict rule unconditionally.
+        let table_end = (TABLE_PREFIX_BYTES + ENTRY_BYTES) as u64;
+        let empty = entry(
+            SectionKind::WeightPatchRange,
+            ElementKind::F32,
+            0,
+            table_end,
+        );
+        let p = payload_with(&[empty], 32);
+        assert!(
+            matches!(
+                validate_sections(&p, &DecodeLimits::strict()),
+                Err(WireError::EmptySection { index: 0 })
+            ),
+            "a zero-length section must be refused"
+        );
+    }
+
+    #[test]
+    fn two_zero_length_sections_cannot_share_an_offset() {
+        // The concrete consequence the rule above prevents.
+        let table_end = (TABLE_PREFIX_BYTES + 2 * ENTRY_BYTES) as u64;
+        let a = entry(
+            SectionKind::WeightPatchRange,
+            ElementKind::F32,
+            0,
+            table_end,
+        );
+        let b = entry(SectionKind::ParamPatchRange, ElementKind::F32, 0, table_end);
+        let p = payload_with(&[a, b], 32);
+        assert!(
+            validate_sections(&p, &DecodeLimits::strict()).is_err(),
+            "two sections at one offset must not both be accepted"
+        );
+    }
+
+    #[test]
+    fn a_type_mismatch_reports_a_type_mismatch() {
+        // Audit: reading an f32 section as u32 previously returned
+        // SectionLengthMismatch with a fabricated index 0 and element SIZES in
+        // the expected/got fields -- an error that names the wrong rule and
+        // invents a location.
+        let table_end = (TABLE_PREFIX_BYTES + ENTRY_BYTES) as u64;
+        let a = entry(
+            SectionKind::IncidenceWeights,
+            ElementKind::F32,
+            2,
+            table_end,
+        );
+        let p = payload_with(&[a], 8);
+        let secs = validate_sections(&p, &DecodeLimits::strict()).expect("valid");
+        assert!(
+            matches!(
+                secs[0].to_u32_vec(),
+                Err(WireError::SectionTypeMismatch {
+                    expected: ElementKind::U32,
+                    actual: ElementKind::F32
+                })
+            ),
+            "expected a type mismatch naming both kinds"
         );
     }
 
