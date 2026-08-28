@@ -295,3 +295,45 @@ M2a changes no hash. These remain exactly as M0.6 left them, and accessor work i
 - **Not touched:** `Id<T>`, `Ir` field types and storage, parser, lowering, canonical hashes, hierarchy authority, `hymeko_hnn`, `hymeko_wgpu`, every sibling repository. No dependency added.
 - **§6.5 anti-patterns:** none. Two requested methods were *not* added because equivalents existed — the inventory came before the design.
 - **57/58 fixture drift:** untouched and unsilenced.
+
+---
+
+## Correction — 2026-08-29, after M2a.1
+
+**§E's diagnosis was wrong, and §E.4's REGRESSION verdict is superseded.**
+
+### What was wrong
+
+§E.2 concluded: *"it is the cost of materialising `Option<&T>` and branching on it."* **`Option<&T>` is niche-optimised** — `size_of::<Option<&DeclNode>>() == size_of::<&DeclNode>() == 8`. There is no materialisation cost, and I asserted one without running the one-line check that would have refuted it.
+
+The real cause was a **redundant sentinel branch in code M2a itself introduced**. `DeclId::NONE` is `usize::MAX`, and `[..].get(usize::MAX)` already returns `None`, so:
+
+```rust
+if id.is_none() { return None; }   // redundant
+self.nodes.get(id.0)
+```
+
+Generated code, per element: **6 instructions versus 2**. With two independent conditions LLVM abandons the branch and emits `setne`/`setb`/`testb`; with one it emits a single predicted branch. LLVM cannot remove the redundancy itself — that needs proving `x < len ⟹ x ≠ usize::MAX`.
+
+### What the numbers become
+
+Removing the guard, on the identical cell and Criterion's own stored baseline:
+
+| Cell | M2a | M2a.1 | Change |
+|---|---:|---:|---:|
+| `m2a_decl_lookup/accessor` @ 1 000 | 785 ns | **527.9 ns** | **−32.7 %** (p = 0.00) |
+| `m2a_decl_lookup/accessor` @ 10 000 | — | — | **−18.3 %** (p = 0.00) |
+
+527.9 ns against M2a's own `direct_guarded` control of 527 ns: **the gap is gone**. Corrected verdict: **SCALAR = ZERO-COST**, confirmed on random point lookup and on a dependent chain that removes load overlap.
+
+### The benchmark model was also wrong
+
+§E looped **sequentially over dense ids**, which measures a scan, not point lookup. M2a.1 adds random-point, dependent-chain, mixed-validity and end-to-end cells.
+
+§E.3's `as_node` row (+63 %, later +24 %) was **also** an unfair control: it compared `.is_some()` — which loads only the 8-byte discriminant — against `as_node`, which returns the id and loads the whole 16-byte `Option<NodeId>`. With a control that extracts the id, **MAP is +1.6…2.7 %, inside its gate.**
+
+### What stands
+
+§E.5's measurement-integrity finding stands and is partly explained: that group is load-sensitive, moving ~70 % at 37 % ambient load. The original 16.5 → 7.0 µs shift at 2–4 % ambient remains unexplained.
+
+The M2a measurements above are **retained unedited** as the historical record. They were correctly *reported*; they were incorrectly *explained*, and they were measured against controls that did not do equivalent work.

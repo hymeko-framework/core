@@ -298,3 +298,22 @@ Two requested read methods were **not added** because equivalents already existe
 **Cost, measured rather than assumed:** scalar lookup through an accessor is **+20 % to +49 %** against a hand-written guarded control — about **0.17 ns per lookup** in absolute terms — while iteration is **within noise**. It is *not* zero-cost, and M2b should not claim it is. The absolute impact on real workloads is small: `canonical_program_hash` is 10.3 ms at 15 000 declarations and lookup is a minor fraction of it.
 
 **M2b may begin.** The mapping table in `docs/unified-ir-consumer-map.md` is complete for every read path in the 196-site inventory.
+
+---
+
+## M2a.1 status (2026-08-29)
+
+**M2a.1 is complete.** `perf(ir): optimize storage-independent accessors`.
+
+The M2a cost caveat above is **withdrawn**. Scalar lookup through an accessor is now **zero-cost**, measured on random point lookup and on a dependent chain that removes load overlap; iteration is identical to raw `Vec` iteration; mapping is within 3 %.
+
+The +20…49 % M2a reported was a **redundant sentinel guard M2a itself introduced**, not an inherent abstraction cost — `DeclId::NONE` is `usize::MAX` and `Vec::get` already rejects it, so the explicit `is_none()` check cost 4 extra instructions per lookup and pushed LLVM into a branchless `setne`/`setb`/`testb` chain instead of one predicted branch. Removing it: **−32.7 % at 1 000, −18.3 % at 10 000, p = 0.00**.
+
+### M2b migration rules (binding)
+
+1. **Dense scans use the iterators** — `decls()`, `node_records()`, `edge_records()`, `arc_records()`. Measured identical to raw `Vec` iteration.
+2. **Point lookups use the accessors** — `decl_node`, `node`, `edge`, `arc`. Measured zero-cost.
+3. **Mapping-only migration uses `as_node`/`as_edge`/`as_arc`.** Do **not** substitute `node_for_decl` mechanically — it also resolves the record and validates the back-link, which is more work and a different contract.
+4. **Do not** collapse repeated accessor lookups into a hidden dense iterator. The contracts are deliberately distinct.
+
+**M2b may begin on performance grounds.**

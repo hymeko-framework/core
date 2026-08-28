@@ -602,4 +602,6 @@ Iteration order is documented as deterministic for one snapshot and **not part o
 
 **Absence is `Option`, not error.** `node_for_decl` and `edge_for_decl` additionally reject a record whose `decl` back-link names a *different* declaration, so a malformed mapping yields absence rather than a silent wrong answer. `arc_for_decl` cannot do this: `ArcRec` has no own-declaration back-pointer (`in_edge` names the owning edge), so it checks presence only — a property of the record layout, recorded rather than papered over. Structural diagnosis stays in `ir/coherence.rs` and is not re-implemented per lookup.
 
-**Not zero-cost, measured:** +20…49 % on scalar lookup against a hand-written guarded control (~0.17 ns/lookup absolute); iteration within noise; no allocation on any valid-lookup path; invalid lookup O(1).
+**Zero-cost, measured (corrected by M2a.1, 2026-08-29):** scalar lookup is within noise of a hand-written guarded control on random-point *and* dependent-chain latency; iteration identical to raw `Vec` iteration; mapping within 3 %. No allocation on any valid-lookup path; invalid lookup O(1).
+
+The M2a report initially recorded +20…49 % and attributed it to `Option<&T>` materialisation. That was wrong twice over: `Option<&T>` is niche-optimised (8 bytes), and the real cause was a redundant `is_none()` guard M2a itself introduced — `NONE` is `usize::MAX`, which `Vec::get` already rejects. Removing it cost 4 fewer instructions per lookup and closed the gap entirely (−32.7 %, p = 0.00). See `reports/2026-08-29-unified-ir-m2a1.md`.

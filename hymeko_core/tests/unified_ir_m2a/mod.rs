@@ -3,3 +3,4 @@
 // M2a - storage-independent read accessor contract tests.
 
 pub mod accessors;
+pub mod sentinel;

@@ -76,30 +76,29 @@ impl Ir {
     #[inline]
     #[must_use]
     pub fn node(&self, id: NodeId) -> Option<&NodeRec> {
-        if id.is_none() {
-            return None;
-        }
-        self.nodes.get(id.0)
+        // No explicit `is_none()` guard: `NONE` is `usize::MAX`, and a `Vec`
+        // length can never reach it, so the bounds check already rejects the
+        // sentinel. Adding the guard is not merely redundant -- M2a.1 measured
+        // it costing 4 extra instructions per lookup, because LLVM cannot
+        // prove `x < len` implies `x != usize::MAX` and lowers the pair to
+        // branchless `setne`/`setb`/`testb` instead of one predicted branch.
+        self.nodes.get(id.raw())
     }
 
     /// The edge record for `id`, or `None` if `id` does not name one here.
     #[inline]
     #[must_use]
     pub fn edge(&self, id: EdgeId) -> Option<&EdgeRec> {
-        if id.is_none() {
-            return None;
-        }
-        self.edges.get(id.0)
+        // See `Ir::node` for why there is no sentinel guard here.
+        self.edges.get(id.raw())
     }
 
     /// The arc record for `id`, or `None` if `id` does not name one here.
     #[inline]
     #[must_use]
     pub fn arc(&self, id: HyperArcId) -> Option<&ArcRec> {
-        if id.is_none() {
-            return None;
-        }
-        self.arcs.get(id.0)
+        // See `Ir::node` for why there is no sentinel guard here.
+        self.arcs.get(id.raw())
     }
 
     // -- declaration → record ----------------------------------------------

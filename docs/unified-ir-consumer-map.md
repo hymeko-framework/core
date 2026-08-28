@@ -137,3 +137,16 @@ M2a added the storage-independent read surface M2b migrates onto. **Two of the r
 | **Malformed-state tests** | Construct incoherence on purpose. |
 
 **Nothing in the read paths of the 196-site inventory needs an API M2a did not provide.** M2b can proceed repository by repository without inventing further read APIs.
+
+### M2a.1 (2026-08-29) — migration rules
+
+The M2a performance caveat is withdrawn: accessors are **zero-cost** for point lookup and **identical** for scans (`reports/2026-08-29-unified-ir-m2a1.md`).
+
+| Access pattern | Use | Do not use |
+|---|---|---|
+| dense scan | `decls()` / `node_records()` / `edge_records()` / `arc_records()` | repeated point lookup over `0..count()` |
+| point lookup | `decl_node` / `node` / `edge` / `arc` | direct indexing |
+| declaration → record **id** only | `as_node` / `as_edge` / `as_arc` | `node_for_decl` — different contract, more work |
+| declaration → record **with back-link guarantee** | `node_for_decl` / `edge_for_decl` / `arc_for_decl` | mapping-only, if the guarantee is wanted |
+
+Rule 3 is the one most likely to be got wrong mechanically: `node_for_decl` is **not** a drop-in for `decl_to_node[d.0]`. It resolves the record and verifies its `decl` back-link, so substituting it everywhere would add work and change behaviour on malformed input.

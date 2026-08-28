@@ -49,12 +49,17 @@ impl Ir {
         }
     }
 
+    // M2a.1: no explicit `is_none()` guard on the Option-returning lookups.
+    // `NONE` is `usize::MAX` and a `Vec` length can never reach it, so the bounds
+    // check already rejects the sentinel. The guard was not merely redundant --
+    // it cost 4 extra instructions per lookup, because LLVM cannot prove
+    // `x < len` implies `x != usize::MAX` and lowered the pair to branchless
+    // `setne`/`setb`/`testb` rather than a single predicted branch. The guards on
+    // `parent`/`first_child`/`next_sibling` are NOT redundant and are retained:
+    // those index directly afterward and would panic.
     #[inline]
     pub fn decl_node(&self, id: DeclId) -> Option<&DeclNode> {
-        if id.is_none() {
-            return None;
-        }
-        self.decl_nodes.get(id.0)
+        self.decl_nodes.get(id.raw())
     }
 
     #[inline]
@@ -110,23 +115,17 @@ impl Ir {
         self.decl_children(parent)
     }
 
+    #[inline]
     pub fn as_node(&self, d: DeclId) -> Option<NodeId> {
-        if d.is_none() {
-            return None;
-        }
-        self.decl_to_node.get(d.0).copied().flatten()
+        self.decl_to_node.get(d.raw()).copied().flatten()
     }
+    #[inline]
     pub fn as_edge(&self, d: DeclId) -> Option<EdgeId> {
-        if d.is_none() {
-            return None;
-        }
-        self.decl_to_edge.get(d.0).copied().flatten()
+        self.decl_to_edge.get(d.raw()).copied().flatten()
     }
+    #[inline]
     pub fn as_arc(&self, d: DeclId) -> Option<HyperArcId> {
-        if d.is_none() {
-            return None;
-        }
-        self.decl_to_arc.get(d.0).copied().flatten()
+        self.decl_to_arc.get(d.raw()).copied().flatten()
     }
 
     pub fn preallocate_from_index(&mut self, total_named_decls: usize) {

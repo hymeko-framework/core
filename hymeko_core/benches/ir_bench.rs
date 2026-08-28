@@ -293,7 +293,12 @@ criterion_group!(
     bench_m2a_record_lookup,
     bench_m2a_map_lookup,
     bench_m2a_iteration,
-    bench_m2a_hierarchy
+    bench_m2a_hierarchy,
+    bench_m2a1_random_point,
+    bench_m2a1_dependent_chain,
+    bench_m2a1_mixed_validity,
+    bench_m2a1_decl_to_record,
+    bench_m2a1_end_to_end
 );
 criterion_main!(benches);
 
@@ -744,6 +749,351 @@ fn bench_m2a_hierarchy(c: &mut Criterion) {
                 });
             });
         }
+    }
+    group.finish();
+}
+
+// ---------------------------------------------------------------------------
+// M2a.1 Part A - corrected benchmark model.
+//
+// APPROVED-CORE-EDIT: unified-ir-m2a1-accessor-performance (2026-08-29).
+//
+// The M2a cells looped sequentially over every dense id, which measures a SCAN
+// with fully predictable, independent loads - not scalar point lookup. These
+// cells separate the two, and add a dependent chain that defeats load overlap.
+//
+// No dependency is added: the shuffle uses the same LCG pattern already used by
+// the Phase 10B1 model tests.
+// ---------------------------------------------------------------------------
+
+/// Deterministic LCG. Numerical Recipes constants; used only to choose indices.
+struct Lcg(u64);
+impl Lcg {
+    const fn new(seed: u64) -> Self {
+        Self(seed)
+    }
+    fn next(&mut self) -> u64 {
+        self.0 = self
+            .0
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        self.0 >> 33
+    }
+}
+
+/// Deterministically shuffled valid declaration ids.
+fn shuffled_decl_ids(n: usize, seed: u64) -> Vec<DeclId> {
+    let mut v: Vec<DeclId> = (0..n).map(DeclId::new).collect();
+    let mut rng = Lcg::new(seed);
+    for i in (1..v.len()).rev() {
+        let j = (rng.next() as usize) % (i + 1);
+        v.swap(i, j);
+    }
+    v
+}
+
+/// Ids with a controlled fraction invalid: `NONE`, past-the-end, and far.
+fn mixed_validity_ids(n: usize, invalid_per_hundred: u64, seed: u64) -> Vec<DeclId> {
+    let mut rng = Lcg::new(seed);
+    (0..n)
+        .map(|i| {
+            if rng.next() % 100 < invalid_per_hundred {
+                match rng.next() % 3 {
+                    0 => DeclId::NONE,
+                    1 => DeclId::new(n),
+                    _ => DeclId::new(usize::MAX - 7),
+                }
+            } else {
+                DeclId::new(i)
+            }
+        })
+        .collect()
+}
+
+/// B - random point lookup. Shuffled ids defeat prefetch and stride prediction.
+fn bench_m2a1_random_point(c: &mut Criterion) {
+    let mut group = c.benchmark_group("m2a1_random_point");
+    group
+        .sample_size(30)
+        .measurement_time(Duration::from_secs(3));
+
+    for &(nodes, edges) in &[(1_000usize, 500usize), (10_000, 5_000)] {
+        let (ir, _, _) = build_indexed(nodes, edges, 4);
+        let ids = shuffled_decl_ids(ir.decl_nodes.len(), 0xC0FFEE);
+        group.throughput(Throughput::Elements(ids.len() as u64));
+
+        for round in 0..3 {
+            group.bench_function(
+                BenchmarkId::new(format!("direct_guarded_r{round}"), nodes),
+                |b| {
+                    b.iter(|| {
+                        let mut acc = 0usize;
+                        let len = ir.decl_nodes.len();
+                        for &d in black_box(&ids) {
+                            if d.is_some() && d.0 < len {
+                                acc += ir.decl_nodes[d.0].name.raw();
+                            }
+                        }
+                        black_box(acc)
+                    });
+                },
+            );
+            group.bench_function(BenchmarkId::new(format!("accessor_r{round}"), nodes), |b| {
+                b.iter(|| {
+                    let mut acc = 0usize;
+                    for &d in black_box(&ids) {
+                        if let Some(n) = ir.decl_node(d) {
+                            acc += n.name.raw();
+                        }
+                    }
+                    black_box(acc)
+                });
+            });
+        }
+    }
+    group.finish();
+}
+
+/// C - dependent lookup chain. Each id is derived from the record just read, so
+/// loads cannot overlap and the measurement is true lookup latency.
+fn bench_m2a1_dependent_chain(c: &mut Criterion) {
+    let mut group = c.benchmark_group("m2a1_dependent_chain");
+    group
+        .sample_size(30)
+        .measurement_time(Duration::from_secs(3));
+
+    for &(nodes, edges) in &[(10_000usize, 5_000usize)] {
+        let (ir, _, _) = build_indexed(nodes, edges, 4);
+        let n = ir.decl_nodes.len();
+        let steps = 20_000usize;
+
+        for round in 0..3 {
+            group.bench_function(
+                BenchmarkId::new(format!("direct_guarded_r{round}"), nodes),
+                |b| {
+                    b.iter(|| {
+                        let mut cur = black_box(1usize);
+                        let mut acc = 0usize;
+                        for _ in 0..steps {
+                            if cur < n {
+                                let name = ir.decl_nodes[cur].name.raw();
+                                acc = acc.wrapping_add(name);
+                                cur = (name.wrapping_mul(2_654_435_761)) % n;
+                            } else {
+                                cur = 1;
+                            }
+                        }
+                        black_box(acc)
+                    });
+                },
+            );
+            group.bench_function(BenchmarkId::new(format!("accessor_r{round}"), nodes), |b| {
+                b.iter(|| {
+                    let mut cur = DeclId::new(black_box(1usize));
+                    let mut acc = 0usize;
+                    for _ in 0..steps {
+                        match ir.decl_node(cur) {
+                            Some(d) => {
+                                let name = d.name.raw();
+                                acc = acc.wrapping_add(name);
+                                cur = DeclId::new((name.wrapping_mul(2_654_435_761)) % n);
+                            }
+                            None => cur = DeclId::new(1),
+                        }
+                    }
+                    black_box(acc)
+                });
+            });
+        }
+    }
+    group.finish();
+}
+
+/// E - mixed validity. Invalid ids must stay O(1) and must not blow up branch
+/// prediction differently between the two forms.
+fn bench_m2a1_mixed_validity(c: &mut Criterion) {
+    let mut group = c.benchmark_group("m2a1_mixed_validity");
+    group
+        .sample_size(30)
+        .measurement_time(Duration::from_secs(3));
+
+    let (ir, _, _) = build_indexed(10_000, 5_000, 4);
+    let n = ir.decl_nodes.len();
+
+    for &pct in &[1u64, 10, 50] {
+        let ids = mixed_validity_ids(n, pct, 0xBADC0DE);
+        group.throughput(Throughput::Elements(ids.len() as u64));
+        for round in 0..2 {
+            group.bench_function(
+                BenchmarkId::new(format!("direct_guarded_r{round}"), pct),
+                |b| {
+                    b.iter(|| {
+                        let mut acc = 0usize;
+                        for &d in black_box(&ids) {
+                            if d.is_some() && d.0 < n {
+                                acc += ir.decl_nodes[d.0].name.raw();
+                            }
+                        }
+                        black_box(acc)
+                    });
+                },
+            );
+            group.bench_function(BenchmarkId::new(format!("accessor_r{round}"), pct), |b| {
+                b.iter(|| {
+                    let mut acc = 0usize;
+                    for &d in black_box(&ids) {
+                        if let Some(x) = ir.decl_node(d) {
+                            acc += x.name.raw();
+                        }
+                    }
+                    black_box(acc)
+                });
+            });
+        }
+    }
+    group.finish();
+}
+
+/// F - declaration to record, with contracts kept apart.
+///
+/// `as_node` is mapping-only and IS comparable to a direct map read.
+/// `node_for_decl` additionally resolves the record and verifies its back-link,
+/// so it is reported against `as_node + node`, not against the mapping alone.
+fn bench_m2a1_decl_to_record(c: &mut Criterion) {
+    let mut group = c.benchmark_group("m2a1_decl_to_record");
+    group
+        .sample_size(30)
+        .measurement_time(Duration::from_secs(3));
+
+    let (ir, _, _) = build_indexed(10_000, 5_000, 4);
+    let ids = shuffled_decl_ids(ir.decl_nodes.len(), 0x5EED);
+    group.throughput(Throughput::Elements(ids.len() as u64));
+
+    for round in 0..3 {
+        // -- mapping only: directly comparable pair --
+        group.bench_function(
+            BenchmarkId::new(format!("map_direct_r{round}"), 10_000),
+            |b| {
+                b.iter(|| {
+                    let mut hits = 0usize;
+                    for &d in black_box(&ids) {
+                        // Fair control: must EXTRACT the id, as `as_node` does.
+                        // Testing `is_some()` alone loads only the 8-byte
+                        // discriminant, while `as_node` loads the whole 16-byte
+                        // `Option<NodeId>`. Comparing those would repeat the M2a
+                        // mistake of charging an accessor for work its control
+                        // never performed.
+                        if d.0 < ir.decl_to_node.len()
+                            && let Some(n) = ir.decl_to_node[d.0]
+                        {
+                            hits += n.0 & 1;
+                        }
+                    }
+                    black_box(hits)
+                });
+            },
+        );
+        group.bench_function(
+            BenchmarkId::new(format!("map_as_node_r{round}"), 10_000),
+            |b| {
+                b.iter(|| {
+                    let mut hits = 0usize;
+                    for &d in black_box(&ids) {
+                        if let Some(n) = ir.as_node(d) {
+                            hits += n.0 & 1;
+                        }
+                    }
+                    black_box(hits)
+                });
+            },
+        );
+
+        // -- composite: fair pair, both resolve the record --
+        group.bench_function(
+            BenchmarkId::new(format!("composite_manual_r{round}"), 10_000),
+            |b| {
+                b.iter(|| {
+                    let mut hits = 0usize;
+                    for &d in black_box(&ids) {
+                        if let Some(nid) = ir.as_node(d)
+                            && let Some(r) = ir.node(nid)
+                            && r.decl == d
+                        {
+                            hits += 1;
+                        }
+                    }
+                    black_box(hits)
+                });
+            },
+        );
+        group.bench_function(
+            BenchmarkId::new(format!("composite_for_decl_r{round}"), 10_000),
+            |b| {
+                b.iter(|| {
+                    let mut hits = 0usize;
+                    for &d in black_box(&ids) {
+                        if ir.node_for_decl(d).is_some() {
+                            hits += 1;
+                        }
+                    }
+                    black_box(hits)
+                });
+            },
+        );
+    }
+    group.finish();
+}
+
+/// H - end-to-end: a read-only traversal of the whole IR, done both ways.
+/// Microbenchmarks below a nanosecond exaggerate ratios; this shows the effect
+/// at the scale a real consumer would see.
+fn bench_m2a1_end_to_end(c: &mut Criterion) {
+    let mut group = c.benchmark_group("m2a1_end_to_end");
+    group
+        .sample_size(20)
+        .measurement_time(Duration::from_secs(4));
+
+    let (ir, _, _) = build_indexed(10_000, 5_000, 4);
+
+    for round in 0..2 {
+        // Walk every edge, every arc, every reference, resolving each target.
+        group.bench_function(BenchmarkId::new(format!("direct_r{round}"), 10_000), |b| {
+            b.iter(|| {
+                let mut acc = 0usize;
+                for e in black_box(&ir).edges.iter() {
+                    for &aid in &e.arcs {
+                        let arc = &ir.arcs[aid.0];
+                        for r in &arc.refs {
+                            let t = r.target();
+                            if t.0 < ir.decl_nodes.len() {
+                                acc += ir.decl_nodes[t.0].name.raw();
+                            }
+                        }
+                    }
+                }
+                black_box(acc)
+            });
+        });
+        group.bench_function(
+            BenchmarkId::new(format!("accessor_r{round}"), 10_000),
+            |b| {
+                b.iter(|| {
+                    let mut acc = 0usize;
+                    for (_, e) in black_box(&ir).edge_records() {
+                        for &aid in &e.arcs {
+                            if let Some(arc) = ir.arc(aid) {
+                                for r in &arc.refs {
+                                    if let Some(d) = ir.decl_node(r.target()) {
+                                        acc += d.name.raw();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    black_box(acc)
+                });
+            },
+        );
     }
     group.finish();
 }
