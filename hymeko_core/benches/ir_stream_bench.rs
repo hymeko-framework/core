@@ -38,6 +38,14 @@ fn envelope(msg_type: MessageType) -> EnvelopeDraft {
     }
 }
 
+/// An empty section table: a section-bearing message always carries one.
+fn empty_table() -> Vec<u8> {
+    let mut p = Vec::new();
+    p.extend_from_slice(&0u32.to_le_bytes());
+    p.extend_from_slice(&0u32.to_le_bytes());
+    p
+}
+
 /// A payload holding `sections` equal-sized `f32` bodies totalling `body_bytes`.
 fn sectioned_payload(sections: usize, body_bytes: usize) -> Vec<u8> {
     let table_bytes = TABLE_PREFIX_BYTES + sections * ENTRY_BYTES;
@@ -241,6 +249,12 @@ fn bench_assembler_transaction(c: &mut Criterion) {
             BenchmarkId::from_parameter(format!("{chunks}x{kib}KiB")),
             &msgs,
             |b, msgs| {
+                // Construction and teardown stay INSIDE the timed region,
+                // exactly as in the Phase 10B1 baseline, so before/after is
+                // like-for-like. Hoisting them out excludes BOTH, which made the
+                // corrective look roughly twice as fast for a reason unrelated
+                // to message processing. The construction cost the corrective
+                // added is reported on its own in `ir_stream_assembler_new`.
                 b.iter(|| {
                     let mut a = TransactionAssembler::new(AssemblerLimits::DEFAULT);
                     let mut committed = 0usize;
@@ -310,12 +324,207 @@ fn bench_assembler_rejection(c: &mut Criterion) {
     group.finish();
 }
 
+/// The content-aware replay paths, added by the Phase 10B1 corrective.
+///
+/// Each must be O(1) and cheap: the whole point of a bounded window is that
+/// authenticating a replay costs a modulo and a comparison, not a scan. A
+/// conflicting replay must not cost more than an exact one, or a diverging
+/// producer becomes a denial-of-service lever.
+fn bench_replay_paths(c: &mut Criterion) {
+    let mut group = c.benchmark_group("ir_stream_replay");
+    let limits = DecodeLimits::DEFAULT;
+    group
+        .sample_size(100)
+        .measurement_time(Duration::from_secs(3));
+
+    let empty = empty_table();
+    let mk = |seq: u64, ty: MessageType, txn: u64, payload: &[u8]| {
+        let d = EnvelopeDraft {
+            stream_id: 1,
+            seq,
+            txn_id: txn,
+            target_version: SnapshotVersion::new(1, 1, 1, 0),
+            ..EnvelopeDraft::new(ty)
+        };
+        encode_message(&d, payload)
+    };
+
+    // A warmed assembler holding a window of accepted heartbeats.
+    let warm = |cap: usize| {
+        let mut a = TransactionAssembler::new(AssemblerLimits {
+            replay_capacity: cap,
+            ..AssemblerLimits::DEFAULT
+        });
+        let mut msgs = Vec::new();
+        for seq in 1..=64u64 {
+            let m = mk(seq, MessageType::Heartbeat, 0, &[]);
+            let v = validate_message(&m, &limits).expect("valid");
+            let _ = a.apply(&v);
+            msgs.push(m);
+        }
+        (a, msgs)
+    };
+
+    // Exact duplicate: inside the window, identical.
+    {
+        let (mut a, msgs) = warm(1024);
+        let target = msgs[32].clone();
+        group.bench_function("exact_duplicate", |b| {
+            b.iter(|| {
+                let v = validate_message(black_box(&target), &limits).expect("valid");
+                black_box(matches!(a.apply(&v), ApplyOutcome::ExactDuplicate))
+            });
+        });
+    }
+
+    // Conflicting duplicate: inside the window, different content.
+    {
+        let (mut a, _msgs) = warm(1024);
+        let conflicting = mk(32, MessageType::Abort, 0xDEAD, &[]);
+        group.bench_function("conflicting_duplicate", |b| {
+            b.iter(|| {
+                let v = validate_message(black_box(&conflicting), &limits).expect("valid");
+                black_box(matches!(
+                    a.apply(&v),
+                    ApplyOutcome::ConflictingReplay { .. }
+                ))
+            });
+        });
+    }
+
+    // Window miss: older than the retained capacity.
+    {
+        let (mut a, msgs) = warm(8);
+        let old = msgs[0].clone();
+        group.bench_function("replay_window_miss", |b| {
+            b.iter(|| {
+                let v = validate_message(black_box(&old), &limits).expect("valid");
+                black_box(matches!(
+                    a.apply(&v),
+                    ApplyOutcome::ReplayOutsideWindow { .. }
+                ))
+            });
+        });
+    }
+
+    // Superseded drain: a whole transaction consumed without staging.
+    {
+        let body = sectioned_payload(1, 256 * 1024);
+        let mut seq = 0u64;
+        let mut next = |ty: MessageType, payload: &[u8]| {
+            seq += 1;
+            let d = EnvelopeDraft {
+                stream_id: 1,
+                seq,
+                txn_id: 9,
+                target_version: SnapshotVersion::new(1, 1, 1, 0),
+                ..EnvelopeDraft::new(ty)
+            };
+            encode_message(&d, payload)
+        };
+        let drain: Vec<Vec<u8>> = vec![
+            next(MessageType::SnapshotBegin, &empty),
+            next(MessageType::SnapshotChunk, &body),
+            next(MessageType::Commit, &[]),
+        ];
+        let staged: usize = drain.iter().map(std::vec::Vec::len).sum();
+        group.throughput(Throughput::Bytes(staged as u64));
+        group.bench_function("superseded_drain", |b| {
+            b.iter(|| {
+                // Resuming past the target makes the whole transaction
+                // superseded, so it is drained rather than staged.
+                let mut a = TransactionAssembler::resuming_at(
+                    SnapshotVersion::new(9, 9, 9, 9),
+                    AssemblerLimits::DEFAULT,
+                );
+                let mut n = 0usize;
+                for m in &drain {
+                    let v = validate_message(black_box(m), &limits).expect("valid");
+                    if matches!(a.apply(&v), ApplyOutcome::Superseded) {
+                        n += 1;
+                    }
+                }
+                black_box(n)
+            });
+        });
+    }
+
+    group.finish();
+}
+
+/// Replay-window capacity must not affect steady-state cost.
+///
+/// Lookup is `seq % capacity` plus one comparison, so the only thing capacity
+/// should change is the allocation performed once at construction. If this
+/// group slopes with capacity, the lookup is not O(1).
+/// What an assembler costs to CREATE.
+///
+/// Reported separately because the corrective made it non-trivial: the replay
+/// window is allocated and zeroed at construction. This is a per-STREAM cost,
+/// paid once before any message, and it is measured here so it cannot hide
+/// inside a per-message number.
+fn bench_assembler_construction(c: &mut Criterion) {
+    let mut group = c.benchmark_group("ir_stream_assembler_new");
+    group
+        .sample_size(100)
+        .measurement_time(Duration::from_secs(3));
+    for &cap in &[0usize, 16, 256, 1024, 65536] {
+        group.bench_with_input(BenchmarkId::from_parameter(cap), &cap, |b, &cap| {
+            b.iter(|| {
+                black_box(TransactionAssembler::new(AssemblerLimits {
+                    replay_capacity: black_box(cap),
+                    ..AssemblerLimits::DEFAULT
+                }))
+            });
+        });
+    }
+    group.finish();
+}
+
+fn bench_replay_capacity_scaling(c: &mut Criterion) {
+    let mut group = c.benchmark_group("ir_stream_replay_capacity");
+    let limits = DecodeLimits::DEFAULT;
+    group
+        .sample_size(100)
+        .measurement_time(Duration::from_secs(3));
+
+    for &cap in &[16usize, 256, 4096, 65536] {
+        let mut a = TransactionAssembler::new(AssemblerLimits {
+            replay_capacity: cap,
+            ..AssemblerLimits::DEFAULT
+        });
+        let mut msgs = Vec::new();
+        for seq in 1..=8u64 {
+            let d = EnvelopeDraft {
+                stream_id: 1,
+                seq,
+                ..EnvelopeDraft::new(MessageType::Heartbeat)
+            };
+            let m = encode_message(&d, &[]);
+            let v = validate_message(&m, &limits).expect("valid");
+            let _ = a.apply(&v);
+            msgs.push(m);
+        }
+        let target = msgs[4].clone();
+        group.bench_with_input(BenchmarkId::from_parameter(cap), &target, |b, t| {
+            b.iter(|| {
+                let v = validate_message(black_box(t), &limits).expect("valid");
+                black_box(matches!(a.apply(&v), ApplyOutcome::ExactDuplicate))
+            });
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_validate_by_payload_size,
     bench_validate_by_section_count,
     bench_rejection_is_cheap,
     bench_assembler_transaction,
-    bench_assembler_rejection
+    bench_assembler_rejection,
+    bench_replay_paths,
+    bench_replay_capacity_scaling,
+    bench_assembler_construction
 );
 criterion_main!(benches);

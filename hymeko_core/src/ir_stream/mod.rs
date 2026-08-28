@@ -129,8 +129,8 @@ pub mod section;
 pub mod version;
 
 pub use assembler::{
-    ApplyOutcome, AssemblerLimits, CommittedTransaction, ResyncReason, StagedSection,
-    TransactionAssembler, TransactionKind,
+    ApplyOutcome, AssemblerLimits, AssemblerState, CommittedTransaction, MessageIdentity,
+    ResyncReason, StagedSection, TransactionAssembler, TransactionKind,
 };
 pub use codec::{ValidatedMessage, encode_message, validate_message};
 pub use envelope::{EnvelopeDraft, FLAG_LAST_CHUNK, MessageType, ValidatedEnvelope};

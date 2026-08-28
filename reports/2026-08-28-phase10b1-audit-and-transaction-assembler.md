@@ -363,3 +363,38 @@ From `docs/hypergraph-synchronization.md` §12:
 | C6, C13, C14 | proved | proved, now also by frozen vector |
 | C7 — crash leaves last committed version intact | untested | **partly** — `resuming_at` semantics tested; durability is the caller's |
 | C8–C12 | unchanged | require producer, view or GPU layers |
+
+---
+
+## 16. Correction (appended 2026-08-28, Phase 10B1 corrective)
+
+The original text above stands as written; this section records what a later
+audit found wrong with it.
+
+**§4's idempotence claim was too strong.** It stated that the assembler has "two
+independent mechanisms" for idempotence and that "both are tested; neither
+subsumes the other". Both mechanisms existed, but both were **content-blind**:
+
+* a sequence at or below the highest seen returned `Duplicate` regardless of
+  message type, transaction id, version tuple or payload;
+* a target version already dominated returned `Duplicate` regardless of whether
+  the transaction was the one that established it.
+
+Ten discriminating probes against the code as committed at `c7ce54b` returned
+`Duplicate` for all of: an identical retransmission, four distinct kinds of
+content conflict, and a *different* transaction claiming the same version. The
+report's §4 sentence "Both are tested" was true of the mechanisms and false of
+the distinction they were claimed to make.
+
+**§4's superseded handling was incomplete.** A `Begin` for a superseded target
+was dropped and forgotten, so its remaining chunks arrived as
+`UnexpectedMessage` and its commit produced a *spurious* `SequenceGap`. The
+original report did not mention that following messages become orphans.
+
+**§4's `saturating_add`** meant that once `u64::MAX` was accepted, all later
+traffic was classified `Duplicate` indefinitely.
+
+All three are corrected in
+`reports/2026-08-28-phase10b1-corrective-content-aware-replay.md`, which also
+records the pre-corrective probe transcript. The claim status table in §9 of this
+report is superseded by §15 of the corrective.

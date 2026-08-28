@@ -12,7 +12,12 @@ synchronization as hypothetical extensions.
 > staging. See `reports/2026-08-28-phase10a-ir-stream-wire-codec.md` and
 > `reports/2026-08-28-phase10b1-audit-and-transaction-assembler.md`.
 >
-> Claims **C1–C6, C13 and C14** of §12 are now proved by tests; C7 partly.
+> Claims **C1-C6, C13 and C14** of §12 are proved by tests; C7 partly. The
+> Phase 10B1 corrective (`reports/2026-08-28-phase10b1-corrective-content-aware-replay.md`)
+> made replay detection content-aware: a conflicting replay is no longer
+> reported as a duplicate, superseded transactions are drained rather than
+> orphaned, and sequence exhaustion is explicit. C1 and C2 now rest on canonical
+> message and transaction identities rather than on sequence numbers alone.
 > **Still unimplemented**: the producer side (coalescing, delta log, resync
 > emission), CPU snapshot publication (§7), orientation rebuilding (§8) and GPU
 > materialization and retirement (§9).
