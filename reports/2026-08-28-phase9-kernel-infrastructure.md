@@ -6,6 +6,14 @@
 Companion documents: `2026-08-28-graph-operation-baseline.md`,
 `docs/hypergraph-synchronization.md`.
 
+**Note on the synchronization companion.** That document was revised after this
+report was first written. A late requirement established that the source of
+truth is a HyMeKo IR stream over IPC, changing dynamically while inference runs.
+It is therefore no longer a taxonomy with two deferred branches: it audits the
+existing `ipc` feature, specifies a wire protocol and transaction lifecycle, and
+promotes **S2 (dynamic topology) from deferred to required and specified**.
+Still nothing implemented in Phase 9.
+
 ---
 
 ## 1. Summary
