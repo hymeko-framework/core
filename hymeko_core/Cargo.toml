@@ -60,3 +60,10 @@ harness = false
 [[bench]]
 name = "csr_bench"
 harness = false
+
+# APPROVED-CORE-EDIT: ir-stream-wire-codec (2026-08-28, Phase 10A brief) — bench
+# target for the IR-stream wire validator. Registration is required because
+# this crate sets `autobenches = false`. No dependency is added or changed.
+[[bench]]
+name = "ir_stream_bench"
+harness = false

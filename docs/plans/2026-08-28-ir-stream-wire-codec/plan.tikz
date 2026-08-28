@@ -1,0 +1,49 @@
+% Phase 10A -- IR-stream wire codec: module boundaries and the trust boundary.
+% Created-at 2026-08-28 04:05 CEST
+% Standalone-includable: \input{plan.tikz} inside a tikzpicture-capable document.
+
+\begin{tikzpicture}[
+  font=\small,
+  box/.style={draw, rounded corners=2pt, minimum height=8mm, align=center, inner sep=4pt},
+  core/.style={box, fill=blue!6},
+  new/.style={box, fill=green!8},
+  legacy/.style={box, fill=red!6, dashed},
+  ext/.style={box, fill=black!4},
+  ->/.default=stealth,
+  arr/.style={-stealth, thick},
+  note/.style={font=\scriptsize\itshape, align=left, text width=52mm}
+]
+
+% ---- untrusted side -------------------------------------------------------
+\node[ext] (wire) at (0,0) {untrusted bytes\\{\scriptsize any transport: iceoryx2, socket, file}};
+
+\draw[dashed, thick, red!60] (2.6,-3.6) -- (2.6,1.6)
+  node[above, font=\scriptsize\bfseries, red!60] {trust boundary};
+
+% ---- the codec ------------------------------------------------------------
+\node[new] (env) at (6.0,0.9) {\texttt{ir\_stream::envelope}\\{\scriptsize 144 B LE header, explicit reads}};
+\node[new] (sec) at (6.0,-0.6) {\texttt{ir\_stream::section}\\{\scriptsize table bounds, alignment, overlap}};
+\node[new] (lim) at (6.0,-2.1) {\texttt{ir\_stream::limits}\\{\scriptsize checked \emph{before} allocation}};
+\node[new] (cod) at (11.0,-0.6) {\texttt{ir\_stream::codec}\\{\scriptsize \texttt{validate\_message}}};
+
+\draw[arr] (wire) -- (env);
+\draw[arr] (env) -- (cod);
+\draw[arr] (sec) -- (cod);
+\draw[arr] (lim) -- (sec);
+
+% ---- trusted output -------------------------------------------------------
+\node[new] (vm) at (11.0,1.4) {\texttt{ValidatedMessage<'a>}\\{\scriptsize borrows input; no copy}};
+\draw[arr] (cod) -- (vm);
+
+\node[note] at (15.6,1.4) {Sections expose \texttt{\&[u8]} only. Typed access \emph{copies} --- no reference is ever formed into unaligned wire bytes.};
+
+% ---- what it does NOT touch ----------------------------------------------
+\node[core] (ir) at (11.0,-2.6) {\texttt{hymeko::ir}\\{\scriptsize semantics unchanged}};
+\node[core] (view) at (15.2,-2.6) {\texttt{HyperGraphView}\\{\scriptsize still immutable}};
+\draw[arr, dotted, gray] (vm) to[bend left=22] node[right, font=\scriptsize, align=left, pos=0.55] {\emph{later phase}\\\emph{(not 10A)}} (ir);
+
+% ---- legacy ---------------------------------------------------------------
+\node[legacy] (leg) at (6.0,-3.1) {\texttt{tensor::shared\_state} (quarantined)\\{\scriptsize deprecated, checked, not a wire format}};
+\node[note, text width=44mm] at (0.4,-3.1) {Option A: path kept so no downstream import breaks; arithmetic made checked; loudly deprecated.};
+
+\end{tikzpicture}

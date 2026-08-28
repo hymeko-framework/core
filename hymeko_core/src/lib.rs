@@ -34,6 +34,11 @@ use parser::ast::{EdgeDecl, HyperItem, NodeDecl};
 pub mod common;
 pub mod generators;
 pub mod ir;
+// APPROVED-CORE-EDIT: ir-stream-wire-codec (2026-08-28, Phase 10A brief).
+/// IPC wire codec for the HyMeKo IR stream. Transport-independent and
+/// unconditional: it needs only BLAKE3, which is already a dependency, so the
+/// hostile-input validator is always compiled and always tested.
+pub mod ir_stream;
 pub mod module_store;
 pub mod resolution;
 pub mod sym_ast;

@@ -1,8 +1,17 @@
 # Hypergraph synchronization — protocol and lifecycle design
 
-**Date:** 2026-08-28 · **Status:** design. **Nothing here is implemented.**
+**Date:** 2026-08-28 · **Status:** design.
 Supersedes the first draft of this note, which treated dynamic and distributed
 synchronization as hypothetical extensions.
+
+> **Implementation status.** Phase 10A implemented §5.1 (the envelope) and §5.3
+> (the section table) as `hymeko::ir_stream`, together with the resource limits
+> and the digest rule — see
+> `reports/2026-08-28-phase10a-ir-stream-wire-codec.md`. Claims **C6, C13 and
+> C14** of §12 are now proved by tests; C5 is half proved. **Everything else in
+> this document remains unimplemented**: the transaction lifecycle (§6), CPU
+> snapshot publication (§7), orientation rebuilding (§8) and GPU materialization
+> and retirement (§9) are all still design only.
 
 ---
 

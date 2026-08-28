@@ -1,0 +1,36 @@
+%% Phase 10A — IR-stream wire codec. Validation pipeline and failure exits.
+%% Created-at 2026-08-28 04:05 CEST
+
+flowchart TD
+    IN["&amp;[u8] from any transport"] --> L0{"len >= 144?"}
+    L0 -- no --> E1["WireError::TooShort"]
+    L0 -- yes --> M{"magic == HYMKS?"}
+    M -- no --> E2["WireError::BadMagic<br/>(checked before anything else)"]
+    M -- yes --> SV{"schema_version<br/>supported?"}
+    SV -- no --> E3["WireError::UnsupportedSchema"]
+    SV -- yes --> HB{"header_bytes >= 144<br/>and &lt;= limit?"}
+    HB -- no --> E4["WireError::ShortHeader"]
+    HB -- yes --> DEC["decode envelope fields<br/>explicit little-endian reads<br/>no transmute, no struct cast"]
+    DEC --> MT{"msg_type known?<br/>flags/reserved zero?"}
+    MT -- no --> E5["UnknownMessageType /<br/>ReservedNotZero"]
+    MT -- yes --> LIM{"payload_len &lt;= limits?<br/>total fits usize?"}
+    LIM -- no --> E6["PayloadTooLarge /<br/>LengthOverflow"]
+    LIM -- yes --> EXACT{"buffer len ==<br/>header + payload?"}
+    EXACT -- no --> E7["TrailingBytes /<br/>PayloadLenMismatch"]
+    EXACT -- yes --> H{"BLAKE3(payload)<br/>== payload_hash?"}
+    H -- no --> E8["HashMismatch"]
+    H -- yes --> SC{"section_count<br/>&lt;= max_section_count?"}
+    SC -- no --> E9["TooManySections<br/>(checked BEFORE any Vec alloc)"]
+    SC -- yes --> TBL["decode section entries<br/>Vec::with_capacity bounded by limit"]
+    TBL --> SVAL{"per entry: known-or-skippable kind,<br/>4-byte aligned, increasing,<br/>non-overlapping, within payload,<br/>count*elem_size == byte_len"}
+    SVAL -- no --> E10["UnknownMandatorySection /<br/>SectionMisaligned /<br/>SectionNotIncreasing /<br/>SectionOverlap /<br/>SectionOutOfBounds /<br/>SectionLengthMismatch"]
+    SVAL -- yes --> DUP{"duplicate singleton?"}
+    DUP -- yes --> E11["DuplicateSection"]
+    DUP -- no --> OK["ValidatedMessage&lt;'a&gt;<br/>borrows input; allocates only<br/>the bounded entry table"]
+
+    OK --> S["ValidatedSection&lt;'a&gt;<br/>exposes &amp;[u8] only;<br/>typed access COPIES<br/>(never &amp;[u32]/&amp;[f32] into wire bytes)"]
+
+    classDef err fill:#fdecea,stroke:#b3261e,color:#5f1512;
+    classDef ok fill:#e7f5ec,stroke:#1e7d34,color:#10321c;
+    class E1,E2,E3,E4,E5,E6,E7,E8,E9,E10,E11 err;
+    class OK,S ok;
