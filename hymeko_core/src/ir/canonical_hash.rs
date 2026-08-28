@@ -160,13 +160,39 @@ fn build_skeleton_forest(
 }
 
 /// Proper subtree hash computation with decl kinds supplied.
+///
+/// Iterative post-order fold. The traversal was recursive until 2026-08-28
+/// (M0.6); a chain of nested declarations then consumed one stack frame per
+/// level and aborted the process at ~215 levels in debug and ~458 in release
+/// (measured, M0.5 Part E). A stack overflow is an abort, not a catchable
+/// panic, so the depth ceiling could not be contained by the caller.
+///
+/// # Output contract
+///
+/// Bit-for-bit identical to the previous recursive form. Specifically:
+/// child hashes are collected in `children` order and then sorted
+/// lexicographically, so traversal order cannot influence the result; the
+/// per-node header and domain are unchanged; nodes not reachable from `roots`
+/// remain unhashed and fold to `HashId([0; 32])` exactly as before. Frozen
+/// known-answer vectors and a 96-fixture corpus digest guard this
+/// (`tests/unified_ir_m06/frozen_v1.rs`).
+///
+/// # Invariants
+///
+/// `children` is derived from strictly shortening path prefixes, so the
+/// relation is a forest and every node is entered at most once. `on_stack`
+/// nevertheless guards the traversal: a malformed `children` containing a
+/// cycle terminates deterministically — the back edge contributes the same
+/// zero hash an unreachable node would — instead of looping forever. The
+/// recursive form would have overflowed the stack on such an input.
 fn compute_subtree_hashes_with_kinds(
     cfg: CanonHashCfg,
-    nodes: &[DeclNode], // Changed from kinds to nodes for clarity
+    nodes: &[DeclNode],
     roots: &[DeclId],
     children: &[Vec<DeclId>],
 ) -> Vec<HashId> {
-    let mut memo: Vec<Option<HashId>> = vec![None; children.len()];
+    let n = children.len();
+    let mut memo: Vec<Option<HashId>> = vec![None; n];
 
     fn node_domain(kind: DeclKind) -> [u8; 8] {
         match kind {
@@ -176,41 +202,78 @@ fn compute_subtree_hashes_with_kinds(
         }
     }
 
-    fn rec(
-        cfg: CanonHashCfg,
-        v: DeclId,
-        nodes: &[DeclNode], // Match the outer type exactly
-        children: &[Vec<DeclId>],
-        memo: &mut [Option<HashId>],
-    ) -> HashId {
-        if let Some(h) = memo[v.0 as usize] {
-            return h;
-        }
-
-        let mut ch: Vec<[u8; 32]> = children[v.0 as usize]
-            .iter()
-            .map(|&c| rec(cfg, c, nodes, children, memo).0)
-            .collect();
-
-        ch.sort(); // lexicographic on [u8;32]
-
-        let mut h = blake3::Hasher::new();
-        // Extract the .kind field from the node struct here
-        write_header(&mut h, cfg, node_domain(nodes[v.0 as usize].kind));
-        for x in ch {
-            h.update(&x);
-        }
-        let out = HashId(*h.finalize().as_bytes());
-        memo[v.0 as usize] = Some(out);
-        out
+    /// `Enter` schedules a node's children; `Exit` folds their finished hashes.
+    enum Frame {
+        Enter(DeclId),
+        Exit(DeclId),
     }
 
-    // compute for all reachable nodes
+    // Depth now lives on the heap. Both are O(n) alongside the existing memo.
+    let mut stack: Vec<Frame> = Vec::new();
+    let mut on_stack: Vec<bool> = vec![false; n];
+
     for &r in roots {
-        let _ = rec(cfg, r, nodes, children, &mut memo);
+        let ri = r.0;
+        if ri >= n || memo[ri].is_some() {
+            continue;
+        }
+        stack.push(Frame::Enter(r));
+
+        while let Some(frame) = stack.pop() {
+            match frame {
+                Frame::Enter(v) => {
+                    let vi = v.0;
+                    // Checked: a malformed id is skipped rather than panicking.
+                    if vi >= n || memo[vi].is_some() || on_stack[vi] {
+                        continue;
+                    }
+                    on_stack[vi] = true;
+                    // Exit is pushed first so it pops after every descendant.
+                    stack.push(Frame::Exit(v));
+                    for &c in &children[vi] {
+                        let ci = c.0;
+                        if ci < n && memo[ci].is_none() && !on_stack[ci] {
+                            stack.push(Frame::Enter(c));
+                        }
+                    }
+                }
+                Frame::Exit(v) => {
+                    let vi = v.0;
+                    if vi >= n {
+                        continue;
+                    }
+                    on_stack[vi] = false;
+                    if memo[vi].is_some() {
+                        continue;
+                    }
+
+                    // Same collection and ordering as the recursive form: read
+                    // children in `children` order, then sort lexicographically.
+                    let mut ch: Vec<[u8; 32]> = children[vi]
+                        .iter()
+                        .map(|&c| {
+                            memo.get(c.0)
+                                .copied()
+                                .flatten()
+                                .unwrap_or(HashId([0; 32]))
+                                .0
+                        })
+                        .collect();
+
+                    ch.sort(); // lexicographic on [u8;32]
+
+                    let mut h = blake3::Hasher::new();
+                    write_header(&mut h, cfg, node_domain(nodes[vi].kind));
+                    for x in ch {
+                        h.update(&x);
+                    }
+                    memo[vi] = Some(HashId(*h.finalize().as_bytes()));
+                }
+            }
+        }
     }
 
-    // fill missing (shouldn't happen) with zero
+    // fill missing (unreachable from any root) with zero
     memo.into_iter()
         .map(|x| x.unwrap_or(HashId([0; 32])))
         .collect()

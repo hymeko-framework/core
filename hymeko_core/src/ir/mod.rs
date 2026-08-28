@@ -1,4 +1,5 @@
 pub mod canonical_hash;
+pub mod coherence;
 pub mod common;
 pub mod hash;
 pub mod hash_pass;

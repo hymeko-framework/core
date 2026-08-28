@@ -277,3 +277,23 @@ Consequences, carried into the architecture and migration documents:
 | **hot path never calls `canonical_program_hash`** | structural assertion, not timing: the 100 Hz commit path must not reach it. Enforce by construction (separate module boundary) rather than by a timing threshold that could pass on a fast host |
 
 The last row deserves its enforcement mechanism chosen deliberately. A timing-based gate ("commits stay under 10 ms") would pass on a small graph even if the hot path *did* call the canonical hash, and would then fail mysteriously in production at scale. A structural gate — the hot path cannot even name the function — fails at compile time and cannot be outrun by a fast machine.
+
+---
+
+## M0.6 addendum (2026-08-28)
+
+**The identity tests in §I.5 must not be written against `canonical_program_hash` v1.** M0.6 measured its coverage: v1 misses annotations, values, weights and `bases`, and `compute_merkle_hashes` misses `bases` and incidence targets. Neither is a full semantic identity, so a convergence test built on either would pass while the graphs genuinely differ.
+
+The `semantic_snapshot_hash` v2 tests therefore need a **field-coverage gate of their own**, run before any convergence assertion:
+
+| Test | Assertion |
+|---|---|
+| coverage matrix over v2 | **every** semantic field changes the digest — the M0.6 matrix, re-run against v2 with no ❌ remaining |
+| `bases` coverage | v2 distinguishes two graphs differing only in inheritance (**both current hashes fail this**) |
+| annotation / weight coverage | v2 distinguishes graphs differing only in annotations or weights (**v1 fails this**) |
+| IEEE completeness | `-0.0`≠`+0.0`, distinct NaN payloads distinct, `±Inf` distinct — via `to_bits()`, not normalisation |
+| ordering (U1) | slot and arc order change the digest |
+| multiplicity (U3) | duplicate incidences change the digest |
+| ID independence | dense and generational ID permutation does **not** change the digest |
+
+**A coherence gate is also now available.** `validate_hierarchy_index_coherence` returns bounded, deterministically ordered findings and is verified against nine deliberate corruptions. Model-based tests (§H) should assert it holds after **every** commit, which turns the §2.3 lockstep invariants from convention into a checked postcondition.

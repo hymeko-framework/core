@@ -260,3 +260,27 @@ Until all six hold, the bridge stays and is *documented* (M0.3), not deleted. **
 
 This is not a reversal of the §6.5 #18 discipline. That rule bars optimising against a *guessed* bottleneck; here the rate is a stated requirement, and the remaining measurement sizes the implementation rather than choosing it.
 - **No estimates in wall-clock days.** The earlier draft gave day figures; they rested partly on contaminated timings and on an unknown — how fast 127 sites in a repository this phase never built can be migrated. The stage *ordering* and *gates* are the plan; scheduling needs a quiet baseline and one measured pilot repository first.
+
+---
+
+## M0.6 status (2026-08-28)
+
+**M0.6 is complete.** `refactor(ir): make canonical traversal iterative`.
+
+- Recursive subtree fold → iterative post-order. Output **bit-identical**, guarded by 5 frozen vectors and a 96-fixture corpus digest. ~4% *faster*, not slower.
+- Depth 10 000 and 16 384 hash cleanly (previously fatal at 458). **U5 satisfied**, so its prerequisite on M2e is discharged.
+- `ir/coherence.rs` added (additive, read-only). Corpus: **96/96 clean, 0 diverged**.
+
+### M2e is no longer blocked by coherence — but is not unconditional
+
+The M2e text above predicted divergence and told step 2 to "fix any divergence found. **Expect some.**" **That prediction was wrong**: agreement holds across the entire corpus. Step 2 has nothing to repair, and the digest-migration risk step 1 was meant to expose does not materialise for current programs.
+
+What remains before M2e:
+
+1. **§1 approval** — it changes production hashing.
+2. **An `algo_version` decision.** Switching the skeleton source from paths to links is a v1-output change *in principle* even though no current fixture moves. It must be a deliberate version bump or a documented no-op, never a silent switch.
+3. The validator should be **deleted** when the index becomes derived, as originally specified — it is temporary by construction.
+
+### M2a may begin
+
+Nothing in M0.5 or M0.6 blocks the accessor layer. It is additive, core-local, and its call-site migration (M2b) is unaffected by the hashing work.

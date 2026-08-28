@@ -553,3 +553,41 @@ They decouple because a non-topology commit publishes a snapshot sharing its pre
 - **snapshot retention depth** — live snapshots under a slow reader (§F.7's leak trigger);
 - **declaration-tree depth distribution** — the input the Merkle fold's O(changed × depth) cost depends on (§F.6);
 - **incremental value-patch cost at 10⁵ declarations** — the number that decides whether the 10 ms budget holds.
+
+---
+
+## M0.6 addendum — measured hash coverage, and what it changes (2026-08-28)
+
+### The two existing hashes, and what neither covers
+
+| | `canonical_program_hash` v1 | `compute_merkle_hashes` |
+|---|---|---|
+| Hierarchy source | **`Index` path prefixes** | **intrusive `decl_children`** |
+| Versioned | `CanonHashCfg` | **none** |
+| Covers annotations / values / weights | **no** | yes |
+| Covers `bases` (inheritance) | **no** | **no** |
+| Covers incidence target | yes | **no — ordering defect** |
+| History-independent | **yes** (proved) | not established |
+
+Two findings bind the v2 design:
+
+1. **v1 is `V1-STRUCTURAL-ONLY`.** It covers kind, path, skeleton shape and ordered incidence topology; it does **not** cover annotations, values, weights or `bases`. It is frozen at `algo_version = 1` and **must not be used as the sole full-state convergence identity**. U6's second identity is `semantic_snapshot_hash` v2, which does not yet exist.
+2. **`bases` is invisible to both hashes.** No identity in the repository covers inheritance today.
+
+### `semantic_snapshot_hash` v2 — specification
+
+Requirements: history-independent; ID-independent; **complete** over every semantic field; deterministic for all IEEE bit patterns; explicit about ordering (U1) and multiplicity (U3); built on the canonical hierarchy (U2); `algo_version`-tagged; incrementally maintainable.
+
+Encoding: per-stage 8-byte **domain separation**; a 1-byte **field tag** before every field; `u64` **length framing** on every variable-length item; `f64` as **`to_bits().to_le_bytes()`** (never normalised — this is what keeps `-0.0` distinct and NaN payloads intact under U4); ordering, where required, by **`total_cmp`**.
+
+**Incrementality is not free.** M0.6 made the subtree fold iterative and total cost moved ~4%, which shows the fold was never the bottleneck. Four **whole-graph** stages are: path reconstruction (eliminated by U2), skeleton construction (needs dirty-subtree marking), **Prüfer encoding** (inherently global — must be *replaced*, not patched), and incidence sorting (needs an incrementally maintained ordered index).
+
+**Recommended: per-entity stable semantic digests plus order-independent keyed aggregation** — it drops the Prüfer stage entirely, which is what makes incrementality reachable, and costs O(changed × depth) with a measured depth of 5. **Falsifier:** if keyed aggregation cannot express U1's ordered slots, this fails and incrementally maintained authenticated ordered indexes become necessary. The mitigation is to encode slot index as a tagged field *inside* each incidence digest, so ordering never depends on aggregation order.
+
+### Coherence: measured clean
+
+`validate_hierarchy_index_coherence` (`ir/coherence.rs`, additive, read-only) reports **96 lowered / 96 clean / 0 diverged**. The intrusive hierarchy and the path `Index` already agree on the whole corpus, so the U2 authority flip would not move any current digest. It remains a v1-output change in principle and needs an `algo_version` decision rather than a silent switch.
+
+### Traversal
+
+The canonical subtree fold is **iterative** as of M0.6 — bit-identical output, no recursion proportional to depth, ~4% faster. Depth 16 384 verified clean; the remaining limit is memory, because **path storage is O(depth²)** — a further argument for U2, where parent links are O(1) per declaration.

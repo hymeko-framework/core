@@ -315,10 +315,26 @@ fn deep_chain_overflow_boundary_is_far_above_the_real_corpus() {
         eprintln!("[depth] probe failed even at depth {lo} — reporting, not gating");
         return;
     }
-    // Establish an upper bound that actually fails.
-    while run(hi) && hi < 1 << 20 {
+    // Establish an upper bound that actually fails, but NEVER climb past
+    // MAX_PROBE: since M0.6 made the traversal iterative the stack ceiling is
+    // gone, and the next limit is memory, not depth -- a chain of depth d
+    // stores O(d^2) SymIds across its paths, which reached 46 GB at d = 1e5
+    // and blew the 16 GB budget. Probing upward without a cap would hang the
+    // suite, so the test asserts a floor instead of hunting for a ceiling.
+    const MAX_PROBE: usize = 16_384;
+    while hi < MAX_PROBE && run(hi) {
         lo = hi;
         hi *= 2;
+    }
+    if lo >= MAX_PROBE || run(MAX_PROBE) {
+        eprintln!(
+            "[depth] iterative traversal survived depth {MAX_PROBE}; no stack \n             ceiling within the probed range (memory, not depth, is the limit)"
+        );
+        assert!(
+            run(10_000),
+            "M0.6 acceptance: depth 10000 must hash without aborting"
+        );
+        return;
     }
     while hi - lo > 8 {
         let mid = (lo + hi) / 2;
