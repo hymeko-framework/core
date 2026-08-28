@@ -591,3 +591,15 @@ Encoding: per-stage 8-byte **domain separation**; a 1-byte **field tag** before 
 ### Traversal
 
 The canonical subtree fold is **iterative** as of M0.6 — bit-identical output, no recursion proportional to depth, ~4% faster. Depth 16 384 verified clean; the remaining limit is memory, because **path storage is O(depth²)** — a further argument for U2, where parent links are O(1) per declaration.
+
+---
+
+## M2a addendum — the encapsulation boundary exists (2026-08-28)
+
+`hymeko_core/src/ir/access.rs` provides the storage-independent read surface. Its contracts assume **no** dense ids, ordinal stability, absence of tombstones, or parallel maps — a generational or tombstoned arena satisfies all of them by skipping vacant slots, without a call-site change. Implementations index ordinally *inside* `Ir`, which is the boundary's purpose.
+
+Iteration order is documented as deterministic for one snapshot and **not part of program semantics** — consistent with M0.5's finding that the canonical hash sorts before folding precisely because storage order is representational.
+
+**Absence is `Option`, not error.** `node_for_decl` and `edge_for_decl` additionally reject a record whose `decl` back-link names a *different* declaration, so a malformed mapping yields absence rather than a silent wrong answer. `arc_for_decl` cannot do this: `ArcRec` has no own-declaration back-pointer (`in_edge` names the owning edge), so it checks presence only — a property of the record layout, recorded rather than papered over. Structural diagnosis stays in `ir/coherence.rs` and is not re-implemented per lookup.
+
+**Not zero-cost, measured:** +20…49 % on scalar lookup against a hand-written guarded control (~0.17 ns/lookup absolute); iteration within noise; no allocation on any valid-lookup path; invalid lookup O(1).

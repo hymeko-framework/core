@@ -1,0 +1,51 @@
+%% Unified IR M2a — accessor boundary. Created-at: 2026-08-28 21:41 CEST
+%%
+%% The boundary M2b migrates onto: call sites stop naming storage.
+
+graph LR
+    subgraph BEFORE["before — call sites name storage"]
+        B1["ir.decl_nodes[d.0]"]
+        B2["ir.nodes[n.0]"]
+        B3["ir.decl_to_node[d.0]"]
+        B4["ir.decl_nodes.iter()"]
+        BS[("Vec storage<br/>dense ordinal ids")]
+        B1 --> BS
+        B2 --> BS
+        B3 --> BS
+        B4 --> BS
+    end
+
+    subgraph AFTER["after — call sites name meaning"]
+        A1["ir.decl_node(d)"]
+        A2["ir.node(n)"]
+        A3["ir.node_for_decl(d)"]
+        A4["ir.decls()"]
+        BOUND{{"ir/access.rs<br/>ENCAPSULATION BOUNDARY<br/>ordinal indexing lives here"}}
+        AS[("storage — free to change<br/>M2d / M1 / M3")]
+        A1 --> BOUND
+        A2 --> BOUND
+        A3 --> BOUND
+        A4 --> BOUND
+        BOUND --> AS
+    end
+
+    classDef bad fill:#fdeaea,stroke:#a33,color:#4a1414
+    classDef good fill:#e8f4ea,stroke:#2f6b3f,color:#12301c
+    classDef edge fill:#fff4e0,stroke:#b8791a,color:#4a3010
+    class B1,B2,B3,B4 bad
+    class A1,A2,A3,A4 good
+    class BOUND edge
+
+%% Totality: which reads panic today, and their total replacements.
+graph TD
+    P1["kind(d) / decl_kind(d)<br/>PANICS on NONE and out-of-range"] --> T1["kind_of(d) -> Option"]
+    P2["parent / first_child / next_sibling<br/>NONE-safe, PANICS out-of-range"] --> T2["parent_of / first_child_of /<br/>next_sibling_of -> Option"]
+    P3["decl_children(d)<br/>PANICS on dangling link<br/>LOOPS on sibling cycle"] --> T3["child_decls(d)<br/>bounded, terminates"]
+    N1["existing methods are NOT changed —<br/>callers depend on their signatures"]
+
+    classDef panic fill:#fdeaea,stroke:#a33,color:#4a1414
+    classDef total fill:#e8f4ea,stroke:#2f6b3f,color:#12301c
+    classDef note fill:#eef2fb,stroke:#3a5a9a,color:#16233f
+    class P1,P2,P3 panic
+    class T1,T2,T3 total
+    class N1 note

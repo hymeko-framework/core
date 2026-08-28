@@ -104,3 +104,36 @@ This is why `docs/unified-ir-migration.md` sequences **M0 → M2 → M1**, and w
 ## 5. Provenance
 
 Counts derive from `.rs` files that actually reference `DeclId|NodeId|EdgeId|HyperArcId|SymId`, excluding `target/` and the `phase3-backup-20260825/` mirror. Per-category numbers and their exact commands are in `docs/unified-ir-id-inventory.md`. Dependency edges were read from each `Cargo.toml`, not inferred from crate names.
+
+---
+
+## M2a addendum — the migration mapping table (2026-08-28)
+
+M2a added the storage-independent read surface M2b migrates onto. **Two of the requested capabilities already existed** and were not duplicated: `Ir::decl_node` already satisfies the entity-lookup contract, and `Ir::as_node`/`as_edge`/`as_arc` already satisfy declaration→record-id. The repository's term is `decl`, and the new surface keeps it.
+
+| Old direct pattern | New API |
+|---|---|
+| `ir.decl_nodes[d.0]` | `ir.decl_node(d)` *(pre-existing)* |
+| `ir.decl_nodes[d.0].kind` | `ir.kind_of(d)` |
+| `ir.decl_nodes[d.0].parent` | `ir.parent_of(d)` |
+| `ir.decl_nodes[d.0].first_child` / `.last_child` / `.next_sibling` | `ir.first_child_of(d)` / `last_child_of(d)` / `next_sibling_of(d)` |
+| `ir.nodes[n.0]` / `ir.edges[e.0]` / `ir.arcs[a.0]` | `ir.node(n)` / `ir.edge(e)` / `ir.arc(a)` |
+| `ir.decl_to_node[d.0]` (and `_edge` / `_arc`) | `ir.as_node(d)` / `as_edge(d)` / `as_arc(d)` *(pre-existing)* |
+| map lookup **then** record lookup | `ir.node_for_decl(d)` / `edge_for_decl(d)` / `arc_for_decl(d)` |
+| `ir.decl_nodes.iter()` / `.enumerate()` | `ir.decls()` — yields `(DeclId, &DeclNode)` |
+| `ir.nodes.iter()` / `edges` / `arcs` | `ir.node_records()` / `edge_records()` / `arc_records()` |
+| `ir.decl_nodes.len()` and siblings | `ir.decl_count()` / `node_count()` / `edge_count()` / `arc_count()` |
+| `d.0 < ir.decl_nodes.len()` | `ir.contains_decl(d)` |
+| `ir.decl_children(d)` | `ir.child_decls(d)` — same order, but total |
+
+### Sites that cannot migrate in M2b
+
+| Class | Reason |
+|---|---|
+| **Mutation** | M2a adds no mutable accessors, deliberately. Lowering writes, `push_anonymous_arc`, `preallocate_from_index`. |
+| **Construction / lowering** | Builds the arrays before ids are meaningful — includes `bridge::push_decl` in `transformation`, the second lockstep writer. |
+| **Bulk serialization** | Serde reads fields directly by derive. |
+| **Performance-critical internal algorithm** | `canonical_hash.rs`, `hash_pass.rs` — already inside the boundary; M2a measured the accessor cost at +20…49 % on scalar lookup, so these may keep indexing. |
+| **Malformed-state tests** | Construct incoherence on purpose. |
+
+**Nothing in the read paths of the 196-site inventory needs an API M2a did not provide.** M2b can proceed repository by repository without inventing further read APIs.

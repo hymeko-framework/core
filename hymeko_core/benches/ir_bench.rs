@@ -288,7 +288,12 @@ criterion_group!(
     bench_ir_lookup,
     bench_ir_clone,
     bench_ir_canonical_hash,
-    bench_ir_serde
+    bench_ir_serde,
+    bench_m2a_decl_lookup,
+    bench_m2a_record_lookup,
+    bench_m2a_map_lookup,
+    bench_m2a_iteration,
+    bench_m2a_hierarchy
 );
 criterion_main!(benches);
 
@@ -502,6 +507,243 @@ fn bench_ir_serde(c: &mut Criterion) {
                 black_box(v)
             });
         });
+    }
+    group.finish();
+}
+
+// ---------------------------------------------------------------------------
+// M2a Part E - accessor versus direct access.
+//
+// APPROVED-CORE-EDIT: unified-ir-m2a-accessor-api (2026-08-28).
+//
+// Variants are registered in ALTERNATING rounds (direct, accessor, direct,
+// accessor, ...) rather than as two blocks. Criterion runs registrations in
+// order, so blocked ordering would alias thermal drift and ambient load onto
+// the comparison - the same discipline the M0.5 protocol requires.
+// ---------------------------------------------------------------------------
+
+const M2A_ROUNDS: usize = 3;
+
+/// Declaration lookup: raw index versus the checked accessor.
+fn bench_m2a_decl_lookup(c: &mut Criterion) {
+    let mut group = c.benchmark_group("m2a_decl_lookup");
+    group
+        .sample_size(30)
+        .measurement_time(Duration::from_secs(3));
+
+    for &(nodes, edges) in &[(1_000usize, 500usize), (10_000, 5_000)] {
+        let (ir, _, _) = build_indexed(nodes, edges, 4);
+        let ids: Vec<DeclId> = (0..ir.decl_nodes.len()).map(DeclId::new).collect();
+        group.throughput(Throughput::Elements(ids.len() as u64));
+
+        for round in 0..M2A_ROUNDS {
+            group.bench_function(BenchmarkId::new(format!("direct_r{round}"), nodes), |b| {
+                b.iter(|| {
+                    let mut acc = 0usize;
+                    for &d in black_box(&ids) {
+                        acc += ir.decl_nodes[d.0].name.raw();
+                    }
+                    black_box(acc)
+                });
+            });
+            // Fair control: direct access doing the SAME work the accessor does
+            // - reject NONE, bounds-check, branch on absence. Without this the
+            // comparison charges the accessor for safety the direct path never
+            // provided, and reports a "regression" that is really a difference
+            // in contract.
+            group.bench_function(
+                BenchmarkId::new(format!("direct_guarded_r{round}"), nodes),
+                |b| {
+                    b.iter(|| {
+                        let mut acc = 0usize;
+                        let len = ir.decl_nodes.len();
+                        for &d in black_box(&ids) {
+                            if d.is_some() && d.0 < len {
+                                acc += ir.decl_nodes[d.0].name.raw();
+                            }
+                        }
+                        black_box(acc)
+                    });
+                },
+            );
+            group.bench_function(BenchmarkId::new(format!("accessor_r{round}"), nodes), |b| {
+                b.iter(|| {
+                    let mut acc = 0usize;
+                    for &d in black_box(&ids) {
+                        if let Some(n) = ir.decl_node(d) {
+                            acc += n.name.raw();
+                        }
+                    }
+                    black_box(acc)
+                });
+            });
+        }
+    }
+    group.finish();
+}
+
+/// Typed record lookup: raw index versus `Ir::node`.
+fn bench_m2a_record_lookup(c: &mut Criterion) {
+    let mut group = c.benchmark_group("m2a_record_lookup");
+    group
+        .sample_size(30)
+        .measurement_time(Duration::from_secs(3));
+
+    for &(nodes, edges) in &[(10_000usize, 5_000usize)] {
+        let (ir, _, _) = build_indexed(nodes, edges, 4);
+        let ids: Vec<NodeId> = (0..ir.nodes.len()).map(NodeId::new).collect();
+        group.throughput(Throughput::Elements(ids.len() as u64));
+
+        for round in 0..M2A_ROUNDS {
+            group.bench_function(BenchmarkId::new(format!("direct_r{round}"), nodes), |b| {
+                b.iter(|| {
+                    let mut acc = 0usize;
+                    for &n in black_box(&ids) {
+                        acc += ir.nodes[n.0].decl.0;
+                    }
+                    black_box(acc)
+                });
+            });
+            group.bench_function(BenchmarkId::new(format!("accessor_r{round}"), nodes), |b| {
+                b.iter(|| {
+                    let mut acc = 0usize;
+                    for &n in black_box(&ids) {
+                        if let Some(r) = ir.node(n) {
+                            acc += r.decl.0;
+                        }
+                    }
+                    black_box(acc)
+                });
+            });
+        }
+    }
+    group.finish();
+}
+
+/// Declaration to record id: raw map index versus the existing `as_node`, and
+/// versus the new `node_for_decl` which additionally verifies the back-link.
+fn bench_m2a_map_lookup(c: &mut Criterion) {
+    let mut group = c.benchmark_group("m2a_map_lookup");
+    group
+        .sample_size(30)
+        .measurement_time(Duration::from_secs(3));
+
+    for &(nodes, edges) in &[(10_000usize, 5_000usize)] {
+        let (ir, _, _) = build_indexed(nodes, edges, 4);
+        let ids: Vec<DeclId> = (0..ir.decl_nodes.len()).map(DeclId::new).collect();
+        group.throughput(Throughput::Elements(ids.len() as u64));
+
+        for round in 0..M2A_ROUNDS {
+            group.bench_function(BenchmarkId::new(format!("direct_r{round}"), nodes), |b| {
+                b.iter(|| {
+                    let mut hits = 0usize;
+                    for &d in black_box(&ids) {
+                        if ir.decl_to_node[d.0].is_some() {
+                            hits += 1;
+                        }
+                    }
+                    black_box(hits)
+                });
+            });
+            group.bench_function(BenchmarkId::new(format!("as_node_r{round}"), nodes), |b| {
+                b.iter(|| {
+                    let mut hits = 0usize;
+                    for &d in black_box(&ids) {
+                        if ir.as_node(d).is_some() {
+                            hits += 1;
+                        }
+                    }
+                    black_box(hits)
+                });
+            });
+            group.bench_function(
+                BenchmarkId::new(format!("for_decl_checked_r{round}"), nodes),
+                |b| {
+                    b.iter(|| {
+                        let mut hits = 0usize;
+                        for &d in black_box(&ids) {
+                            if ir.node_for_decl(d).is_some() {
+                                hits += 1;
+                            }
+                        }
+                        black_box(hits)
+                    });
+                },
+            );
+        }
+    }
+    group.finish();
+}
+
+/// Iteration: raw `Vec` iteration versus the typed-id iterator.
+fn bench_m2a_iteration(c: &mut Criterion) {
+    let mut group = c.benchmark_group("m2a_iteration");
+    group
+        .sample_size(30)
+        .measurement_time(Duration::from_secs(3));
+
+    for &(nodes, edges) in &[(1_000usize, 500usize), (10_000, 5_000)] {
+        let (ir, _, _) = build_indexed(nodes, edges, 4);
+        group.throughput(Throughput::Elements(ir.decl_nodes.len() as u64));
+
+        for round in 0..M2A_ROUNDS {
+            group.bench_function(BenchmarkId::new(format!("direct_r{round}"), nodes), |b| {
+                b.iter(|| {
+                    let mut acc = 0usize;
+                    for d in black_box(&ir).decl_nodes.iter() {
+                        acc += d.name.raw();
+                    }
+                    black_box(acc)
+                });
+            });
+            group.bench_function(BenchmarkId::new(format!("accessor_r{round}"), nodes), |b| {
+                b.iter(|| {
+                    let mut acc = 0usize;
+                    for (_, d) in black_box(&ir).decls() {
+                        acc += d.name.raw();
+                    }
+                    black_box(acc)
+                });
+            });
+        }
+    }
+    group.finish();
+}
+
+/// Hierarchy: raw field read versus the total accessor.
+fn bench_m2a_hierarchy(c: &mut Criterion) {
+    let mut group = c.benchmark_group("m2a_hierarchy");
+    group
+        .sample_size(30)
+        .measurement_time(Duration::from_secs(3));
+
+    for &(nodes, edges) in &[(10_000usize, 5_000usize)] {
+        let (ir, _, _) = build_indexed(nodes, edges, 4);
+        let ids: Vec<DeclId> = (0..ir.decl_nodes.len()).map(DeclId::new).collect();
+        group.throughput(Throughput::Elements(ids.len() as u64));
+
+        for round in 0..M2A_ROUNDS {
+            group.bench_function(BenchmarkId::new(format!("direct_r{round}"), nodes), |b| {
+                b.iter(|| {
+                    let mut acc = 0usize;
+                    for &d in black_box(&ids) {
+                        acc += ir.decl_nodes[d.0].parent.0 & 1;
+                    }
+                    black_box(acc)
+                });
+            });
+            group.bench_function(BenchmarkId::new(format!("accessor_r{round}"), nodes), |b| {
+                b.iter(|| {
+                    let mut acc = 0usize;
+                    for &d in black_box(&ids) {
+                        if let Some(p) = ir.parent_of(d) {
+                            acc += p.0 & 1;
+                        }
+                    }
+                    black_box(acc)
+                });
+            });
+        }
     }
     group.finish();
 }

@@ -284,3 +284,17 @@ What remains before M2e:
 ### M2a may begin
 
 Nothing in M0.5 or M0.6 blocks the accessor layer. It is additive, core-local, and its call-site migration (M2b) is unaffected by the hashing work.
+
+---
+
+## M2a status (2026-08-28)
+
+**M2a is complete.** `feat(ir): add storage-independent read accessors`.
+
+The stage description above anticipated an accessor set including `push_declaration`. **That part was not built and is not part of M2a**: `push_declaration` is a *mutating* API, and M2a's brief explicitly forbids mutable accessors. Consolidating the second lockstep writer in `bridge.rs` therefore moves to the first stage that may add mutation — M2d or M4. The read surface is complete without it.
+
+Two requested read methods were **not added** because equivalents already existed and were already safe (`decl_node`, `as_node`/`as_edge`/`as_arc`). Adding them under new names would have been cosmetic duplication.
+
+**Cost, measured rather than assumed:** scalar lookup through an accessor is **+20 % to +49 %** against a hand-written guarded control — about **0.17 ns per lookup** in absolute terms — while iteration is **within noise**. It is *not* zero-cost, and M2b should not claim it is. The absolute impact on real workloads is small: `canonical_program_hash` is 10.3 ms at 15 000 declarations and lookup is a minor fraction of it.
+
+**M2b may begin.** The mapping table in `docs/unified-ir-consumer-map.md` is complete for every read path in the 196-site inventory.

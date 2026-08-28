@@ -33,3 +33,7 @@ mod unified_ir_m05;
 // APPROVED-CORE-EDIT: unified-ir-m0-6-hash-and-traversal (2026-08-28).
 #[path = "unified_ir_m06/mod.rs"]
 mod unified_ir_m06;
+
+// APPROVED-CORE-EDIT: unified-ir-m2a-accessor-api (2026-08-28).
+#[path = "unified_ir_m2a/mod.rs"]
+mod unified_ir_m2a;

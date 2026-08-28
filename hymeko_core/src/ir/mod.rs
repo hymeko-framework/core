@@ -1,3 +1,4 @@
+pub mod access;
 pub mod canonical_hash;
 pub mod coherence;
 pub mod common;
