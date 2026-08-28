@@ -67,3 +67,9 @@ harness = false
 [[bench]]
 name = "ir_stream_bench"
 harness = false
+
+# APPROVED-CORE-EDIT: unified-ir-phase0-audit-only (2026-08-28, Phase 0 brief) —
+# bench target declaration only; required because `autobenches = false`.
+[[bench]]
+name = "ir_bench"
+harness = false

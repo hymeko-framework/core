@@ -1,0 +1,225 @@
+# Unified IR — migration (Phase 0, Part J)
+
+**Date:** 2026-08-28 · **plan only, no production edits** · target in `docs/unified-ir-architecture.md`, evidence in `reports/2026-08-28-unified-ir-phase0-audit.md`
+
+---
+
+## J.1 The constraint, and the move that dissolves it
+
+`hymeko_core` is a leaf; six crates across four repositories depend on it by `path`, one-way, at compile time. An ID or layout change in core is an instant compile break everywhere — **there is no intermediate state in which both old and new consumers build.** That is the flag day.
+
+Naively this forces one synchronised commit across four repositories, with a coordinated revert if anything fails. For 196 dense-index sites, 23 FFI sites and a published JSON DTO, that is not an acceptable risk.
+
+**The move: separate the two changes that were conflated.**
+
+> The 196 dense-index sites are hazardous because they *couple call sites to the representation*. But converting `ir.decl_nodes[d.0]` into `ir.decl_node(d)` is **behaviour-preserving under the current representation** — it compiles, runs, and produces identical results today.
+>
+> So: **encapsulate first, while nothing changes. Then change the representation behind the encapsulation, touching zero call sites.**
+
+This converts M1 — the widest, riskiest step, spanning four repositories — into a **core-local** change. There is no flag day because the representation change, when it finally happens, is invisible to consumers.
+
+The ordering consequence is decisive and does **not** depend on any timing (correcting the earlier draft, which justified ordering partly on contaminated numbers):
+
+```
+M0  repairs           core-local
+M2a add accessors     core-local, purely additive
+M2b migrate call sites  per-repository, independent, one at a time  ← the long tail
+M2c seal direct access  core-local; the point of no return
+M1  representation      CORE-LOCAL — because of M2b
+M3  generational keys   core-local
+M4  transactions        core-local + wire
+M5  bridge removal      transformation
+```
+
+---
+
+## J.2 Stages
+
+### M0 — repairs (core + transformation, independent)
+
+No representation change; each item is independently revertable.
+
+| Item | Where | Content |
+|---|---|---|
+| M0.1 | `transformation` | Make `IRDelta::Batch` atomic **or** correct its documentation. The type-level doc claims atomicity, the method-level doc denies it (audit §4.5). Interim recommendation: **fix the documentation now**, implement atomicity in M4 where validate-then-commit makes it free. Fixing it properly here would mean building a second transaction mechanism — exactly the duplication the Phase 8 rule forbids. |
+| M0.2 | `core` | Delete the false `#[repr(C)] // Stable layout for serde and FFI` comment (D3). |
+| M0.3 | `transformation` | Document the bridge's arena→editor losses: `bases`, `AnnoR`, `weights`, arc collapse, edge-target filtering (audit §4.2). Currently undocumented. |
+| M0.4 | `core` | **`Ir::validate()`** — the §E.5 invariants as a checkable predicate. **Write it now, while `Ir` is still immutable and therefore still correct.** It is the oracle every later stage is tested against, and it is the highest-value item in the plan. |
+| M0.5 | `core` | Add the **canonical-hash-invariance test** (audit §4.4): permute an editor IR's construction history, bridge both to `Ir`, assert equal `canonical_program_hash`. **This is a correctness test and needs no quiet host** — it can land immediately. If it fails, §4.4's hypothesis is refuted and M3's ordering assumptions need rework before, not after. |
+
+**Rollback:** each item is one commit. M0.4/M0.5 are additive and may stay even if the rest reverts.
+
+### M2a — accessors (core, purely additive)
+
+Add the complete accessor surface to `Ir`; change no field, remove nothing.
+
+```rust
+impl Ir {
+    fn decl_node(&self, d: DeclId) -> &DeclNode;
+    fn decl_node_mut(&mut self, d: DeclId) -> &mut DeclNode;
+    fn node_for_decl(&self, d: DeclId) -> Option<NodeId>;
+    fn arcs_of_edge(&self, e: EdgeId) -> impl Iterator<Item = HyperArcId> + '_;
+    fn push_declaration(&mut self, …) -> DeclId;   // the five-array lockstep, in ONE place
+}
+```
+
+`push_declaration` matters most: it removes the second hand-written lockstep writer in `bridge.rs` (audit §2.3). Two implementations of an unenforced invariant become one — a §6.1 consolidation, not a new abstraction.
+
+**Nothing breaks.** Consumers keep compiling unchanged.
+
+**Rollback:** delete the additions.
+
+### M2b — migrate call sites (per repository, independently landable)
+
+The long tail: 196 dense-index sites → accessors. Order by risk, lowest first.
+
+| Order | Repository | Sites | Note |
+|---|---|---|---|
+| 1 | `hymeko_core` | 52 | Same repo; validates the accessor surface before exporting the churn. |
+| 2 | `hymeko_hnn` | 6 | Small; exercises the view-construction path. |
+| 3 | `network`, `hotaru`, `graph` | 11 | Light coupling. |
+| 4 | **`transformation`** | **127** | Largest. **`bridge.rs` first** — it is the only *writer*, so it must adopt `push_declaration` before anything else changes. |
+| 5 | `hymeko_python`, `vscode-plugin` | surface | `raw()`-heavy already; mostly conformant. |
+
+Each row is a separate commit in a separate repository, each independently revertable, each verified by the existing test suite plus `Ir::validate()`. **At no point is any repository uncompilable.**
+
+**Rollback:** per repository, per commit. This is the whole reason for the split.
+
+### M2c — seal direct access (core; the point of no return)
+
+Only after M2b is complete everywhere:
+
+- `Ir`'s arena and map fields become non-`pub` (or `pub(crate)`).
+- **Remove `From<usize> for Id<T>` and `From<Id<T>> for usize`; remove `pub` from `Id`'s field** (defect D4).
+
+> This step exists to make the remaining work **fail loudly**. While D4 stands, a representation change still *compiles* at any missed site and then indexes the wrong element — a silent wrong answer (audit §5.1c). Removing D4 converts every missed site into a compile error.
+>
+> **Sealing is a safety precondition of M1, not cleanup.** M1 must not begin until M2c is green.
+
+**Rollback:** restore the impls. Cheap, and the failure mode is loud, so a missed site is found immediately rather than in production.
+
+### M2d — collapse the derived mappings (core-local)
+
+Now representation work begins, behind sealed accessors.
+
+- Remove `decl_to_node`/`_edge`/`_arc` as stored state; replace with the inline `payload: PayloadIdx` of architecture §E.3.
+- Reconcile `EdgeRec.arcs` ↔ `ArcRec.in_edge`: owned arc list authoritative, `in_edge` derived (§E.5).
+- Reclassify `decl_hash`/`arc_hash` as derived cache.
+
+**Gates:** `Ir::validate()`, full suite, and `ir_bench` — **on a quiet host** (audit §I.5). The plan *expects* construction to improve; a null result **falsifies the cost model** and the step is re-examined rather than waved through. The structural justification stands regardless: five lockstep arrays become two, and the elimination is by construction, not by validation.
+
+**Rollback:** the removed maps are derivable by construction; restoration is mechanical and `Ir::validate()` proves it correct.
+
+### M1 — ID representation (core-local, because of M2b)
+
+- Payload `usize` → `NonZeroU32`; `NONE` becomes the niche (D2, D6).
+- Type tag on `Serialize` (D1) — **wire-format change**, §J.4.
+- `u32` caps declarations at ≈4.29 × 10⁹: state it as an explicit contract, or use `NonZeroU64` and forgo the niche saving.
+
+**Rollback:** one commit, because M2b/M2c localised it. This is the stage the whole sequence exists to make safe.
+
+### M3 — generational keys and mutability (core-local)
+
+- Arenas → generational keys (§E.2). `Ord`-by-allocation (D5) is **removed**, not redefined.
+- **Prerequisite:** triage the 580-entry order column (`docs/unified-ir-id-inventory.md` §4) and fix any site relying on ID order semantically. Traversal order feeds `canonical_program_hash`; M0.5's test is the safety net.
+- Only now is `Ir` safely mutable. `Ir::validate()` becomes a post-mutation invariant in test builds.
+
+### M4 — transactions (core + wire)
+
+Architecture §F. Transaction-local IDs, validation overlay, infallible commit, atomic `Batch`, commit receipt. Attaches to the **existing** Phase 10B1 assembler — content-aware replay, bounded O(1) window, conflict detection — which must not be rebuilt.
+
+The operating envelope (100 Hz non-topology / 10 Hz topology, non-blocking readers) makes four further items **required M4 scope**:
+
+| M4.x | Item | Driver |
+|---|---|---|
+| M4.1 | **Merkle-fold state digest**, incrementally updatable, agreeing bit-for-bit with its full computation | 10 ms commit budget (§F.6) |
+| M4.2 | **Immutable snapshot publication** — atomic publish, refcount reclamation, bounded retention, `SubmissionEpoch` respected for GPU buffers | readers must not block (§F.7) |
+| M4.3 | **Structure/value split** in dense views, structure shared by `Arc` across value-only commits | 100 Hz without deep-copying incidence tables (§E.6) |
+| M4.4 | **Incremental non-topology refresh**; full rebuild only on topology, coalescing permitted | §H.4 |
+
+**Sequencing inside M4:** M4.1 first — it is the item most likely to invalidate the design. If the declaration tree proves deep enough that O(changed × depth) does not fit the budget, either the fold moves off the declaration hierarchy or a second cheap hot-path digest is introduced with the canonical hash reserved for publication boundaries. **Settle that before building M4.2–M4.4 on top of it.**
+
+Also includes the `resuming_at` signature change (§G.3) and the `SnapshotVersion` **annotation axis** (§H.3) — the latter now a correctness requirement, since annotation edits arrive at 100 Hz and without their own axis would over-invalidate compute views a hundred times a second. **Both are separate approvals**, recorded not made.
+
+### M5 — bridge removal (transformation)
+
+See §J.5 for the criteria.
+
+---
+
+## J.3 Compatibility adapters
+
+| Boundary | Adapter | Retired when |
+|---|---|---|
+| **Rust API** | M2a accessors; deprecated field access via `#[deprecated]` during M2b | M2c |
+| **`Id` representation** | The accessor layer *is* the adapter — no conversion shim needed, because no consumer sees the representation after M2c | never needed |
+| **Serialization (D1 type tag)** | Envelope **version negotiation**: writer emits tagged, reader accepts tagged *or* untagged for one release | one release after M1 |
+| **Persistence** (`ir_writer`, PGIP) | Format version field; reader supports N and N−1 | one release after M1 |
+| **JSON DTO** (`snapshot::NodeDto`, `target_id: usize`) | **Currently versionless.** Add a `schema_version` field **in M0** — before it needs to change | permanent (keep the field) |
+| **pyo3 ABI** (23 sites) | Keep IDs opaque in Python; expose `raw()`-style accessors, never arithmetic | permanent |
+
+**The JSON DTO is the one to fix early.** It is a published, versionless wire format consumed by a browser and by Python. Adding `schema_version` while the schema has not yet changed is free; adding it during a breaking change is not. **This is the only adapter that belongs in M0.**
+
+---
+
+## J.4 When public ID contracts may change
+
+| Contract | May change at | Requires |
+|---|---|---|
+| `Id<T>` in-memory layout | **M1** | M2c green (no consumer observes it) |
+| `Id<T>` serialized form | **M1** | Envelope version bump + one release of dual-read |
+| On-disk persisted IDs | **M1** | Format version + N−1 reader support |
+| JSON DTO `target_id` | **after** `schema_version` ships (M0) | Version negotiation; browser and Python updated |
+| pyo3 ABI | **M1**, with a version bump | Python package release note; IDs already opaque |
+| `resuming_at` signature | **M4** | Separate approval (§G.3) |
+| `SnapshotVersion` axes | **M4** | Separate approval; wire change (§H.3) |
+
+**Rule:** an ID contract may change only when *every* observer of it is either (a) sealed behind an accessor, or (b) able to negotiate a version. Nothing changes on the strength of "we updated all the callers we know about" — the JSON DTO and the pyo3 ABI have observers outside this workspace.
+
+---
+
+## J.5 Bridge-removal criteria
+
+`bridge.rs` exists to reconcile a mutable editor model with an immutable compiler model. **M3 removes that reason.** But removal is gated, not assumed — all of:
+
+1. **M3 complete** — `Ir` is mutable with stable keys.
+2. **M4 complete** — the native delta vocabulary (§F.4) covers every `IRDelta` the editor issues, *including* the three the editor cannot currently express: hierarchy (`SetParent`), per-reference vector weights (`SetWeights`), and inheritance (`SetBases`).
+3. **Presentation metadata has a home.** `position`, `Patch`, `patch_id` are classified presentation (audit §4.1) and must **not** enter the canonical IR or its digest — moving a box on a canvas must not invalidate a GPU buffer. They need an editor-side sidecar keyed by canonical ID *before* the bridge goes.
+4. **`level` and `attributes` are canonicalised.** Both classified canonical (§4.1): `level` is a G-SPHF semantic property, `attributes` maps onto `AnnoR`. Neither has an arena home today. Until they do, deleting the bridge *loses editor data*.
+5. **The arc-collapse defect cannot recur.** The editor must express N arcs per edge (audit §4.3), and a test must assert `arcs.len()` across a round trip — the assertion the current round-trip test omits.
+6. **Canonical-hash invariance holds** (M0.5).
+
+Until all six hold, the bridge stays and is *documented* (M0.3), not deleted. **Deleting it early would silently lose `level`, `attributes`, patches and layout** — trading a documented loss for an undocumented one.
+
+---
+
+## J.6 Rollback points and gates
+
+| After | Rollback | Gate to proceed |
+|---|---|---|
+| M0 | one commit each | suite green; M0.4 and M0.5 pass |
+| M2a | delete additions | suite green; no consumer touched |
+| M2b (per repo) | per-repo revert | that repo's suite green; `Ir::validate()` |
+| **M2c** | restore `From` impls | **all** repos green — the point of no return |
+| M2d | maps are derivable; restore mechanically | `validate()` + **quiet** `ir_bench` (§I.5) |
+| M1 | one commit (localised by M2b/M2c) | quiet bench; dual-read verified |
+| M3 | one commit | order column triaged; M0.5 passes |
+| M4 | feature-gated until green | 10B1 suite + new transaction suite |
+| M5 | restore the bridge | all six §J.5 criteria |
+
+**Two standing gates.** No stage that claims a performance result may cite a measurement taken while PID 4196 (or any unexplained load) is consuming CPU — audit §I.5 defines the quietness check and requires ambient load recorded with every run. And no stage may be reported complete without its report (§9 of `CLAUDE.md`).
+
+---
+
+## J.7 What this plan deliberately does not do
+
+- **No CRDT / multi-writer merge.** §G.1 is single-writer; §G.5 is recorded so the vocabulary does not foreclose it.
+- **No `SymId` change** in the entity-ID migration. Content-ordering is a separate, independently landable win (§E.4).
+
+**Two items left this list on 2026-08-28**, when the commit-rate targets were given. Both are now **required M4 scope**, not deferred:
+
+- **Incremental / Merkle state identity.** At 100 Hz sustained the commit budget is 10 ms and full-state identity alone was ≈9 ms **[contaminated]**, with the real canonical hash costing more. Architecture §F.6.
+- **Incremental non-topology view refresh.** Full rebuild is permitted only on the topology axis; weights, features and annotations must refresh incrementally. Architecture §H.4.
+
+This is not a reversal of the §6.5 #18 discipline. That rule bars optimising against a *guessed* bottleneck; here the rate is a stated requirement, and the remaining measurement sizes the implementation rather than choosing it.
+- **No estimates in wall-clock days.** The earlier draft gave day figures; they rested partly on contaminated timings and on an unknown — how fast 127 sites in a repository this phase never built can be migrated. The stage *ordering* and *gates* are the plan; scheduling needs a quiet baseline and one measured pilot repository first.

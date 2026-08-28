@@ -1,0 +1,290 @@
+% Unified IR — Phase 0 plan bundle
+% Compile: pdflatex plan.tex  (or lualatex plan.tex)
+%
+% plan.pdf is intentionally absent. The user granted Phase 0 an explicit
+% plan.pdf tooling waiver on 2026-08-28 and directed that no TeX, Tectonic,
+% Pandoc or other document toolchain be installed on this host. This bundle
+% (.tex + .tikz + .mmd) is the reproducible source and is the deliverable.
+% This is a recorded waiver, not an unmet §11 halt condition.
+
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=25mm]{geometry}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{amsmath}
+\usepackage{tikz}
+\usetikzlibrary{positioning,fit,backgrounds,arrows.meta,calc}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue!50!black,urlcolor=blue!50!black}
+
+\newcommand{\code}[1]{\texttt{#1}}
+
+\title{Unified IR --- Phase 0\\[2pt]
+       \large Cross-repository architecture, compatibility and performance audit,\\
+       and the migration plan it supports}
+\author{HyMeKo framework}
+\date{Created-at: \textbf{2026-08-28 17:35 CEST} \quad Revised: \textbf{2026-08-28 18:05 CEST}}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+Phase 0 is design and measurement only; no production source was modified.
+This is the plan bundle. Evidence lives in
+\code{reports/2026-08-28-unified-ir-phase0-audit.md}; the target architecture
+in \code{docs/unified-ir-architecture.md}; the migration in
+\code{docs/unified-ir-migration.md}. This document commits to the work rather
+than restating the findings.
+
+\medskip
+\noindent
+\textbf{One structural fact drives the plan.} \code{Ir} keeps five arrays that
+must grow in lockstep on every declaration insert, nothing in the type system
+couples them, every reader indexes densely --- and \code{bridge.rs} in a
+\emph{second repository} re-implements that lockstep by hand. Two writers of an
+unenforced invariant, in two repositories. This is safe only while the IR is
+immutable, which is exactly the property the target removes. The argument rests
+on counts and sizes, not on timings.
+\end{abstract}
+
+\section{Two corrected conclusions}
+
+An earlier draft overstated two results. Both corrections propagate through the
+architecture and migration documents.
+
+\begin{longtable}{@{}p{0.44\textwidth}p{0.50\textwidth}@{}}
+\toprule
+\textbf{Was} & \textbf{Is} \\
+\midrule
+\endhead
+``Full-state commit identity is affordable\ldots\ \emph{this retires a design
+question}'' & \textbf{Incremental state identity is not retired.} The evidence
+supports only \emph{not yet justified at the one scale measured, on a
+contaminated host}. Re-evaluated against commit-rate scenarios, per-keystroke
+and live-inference regimes \emph{require} it --- and live-inference-while-mutating
+is the stated final-system requirement. \\[4pt]
+``M2 before M1 \ldots\ taking the measured 61\%/construction-cost win first'' &
+The \textbf{structural} justification stands alone (redundant storage, five
+unenforced lockstep arrays, blast radius inside \code{core}). The
+\textbf{performance} justification is \textbf{provisional} until quiet
+remeasurement. The ordering does not depend on it --- and \S3 now derives the
+ordering from an argument that needs no measurement at all. \\
+\bottomrule
+\end{longtable}
+
+\section{Scope, and the measurement condition}
+
+\paragraph{Goal.} One canonical, mutable HyMeKo IR in \code{hymeko\_core}: the
+parser's output, the emitter's input, the query and graph/algebra source, the
+Python-owned model, the tensor source of truth, and the IR-stream transaction
+target --- with COO/CSR/incidence/Laplacians/P-graphs/GPU resources as derived,
+\emph{version-tagged} views rather than parallel truths.
+
+\paragraph{Out of scope for Phase 0.} Replacing IDs, modifying \code{Ir}
+storage, removing \code{HyMeKoEditorIR}, changing bridges, implementing
+transactions. Multi-writer CRDT semantics are out of scope for the whole
+migration as specified; the first target is single-writer, many-replica.
+
+\paragraph{Measurement condition (binding).} All Phase~0 timings were collected
+while an unrelated process (PID 4196, a \code{shuttle\_trainer} busy-wait) was
+consuming a core. \textbf{They are contaminated and diagnostic only}, retained
+in Appendix~I of the audit and never quoted as baselines. PID 4196 is
+\textbf{not} to be terminated without separate explicit authorisation, and has
+not been. No performance claim in this plan rests on those numbers.
+
+\section{Sequencing: why there is no flag day}
+
+\code{hymeko\_core} is a leaf; six crates in four repositories depend on it
+one-way at compile time. A naive ID change breaks all of them in the same
+instant --- 196 dense-index sites, 23 FFI sites and a published JSON DTO, in one
+synchronised commit.
+
+\medskip
+\noindent
+\textbf{The move: separate encapsulation from representation.} Converting
+\code{ir.decl\_nodes[d.0]} into \code{ir.decl\_node(d)} is
+\emph{behaviour-preserving under the current representation}. So encapsulate
+first, while nothing changes; then change the representation behind the
+encapsulation, touching zero call sites.
+
+\medskip
+\noindent
+This makes M1 --- the widest, riskiest stage --- \textbf{core-local}. The
+resulting order rests on that argument alone and requires no measurement:
+
+\begin{center}
+\begin{tabular}{@{}llp{5.6cm}@{}}
+\toprule
+\textbf{Stage} & \textbf{Reach} & \textbf{Content} \\
+\midrule
+M0  & core + transformation & repairs; \code{Ir::validate}; hash-invariance test; JSON \code{schema\_version} \\
+M2a & core & accessors, purely additive; \code{push\_declaration} removes the second lockstep writer \\
+M2b & \emph{per repository} & 196 call sites, one repository at a time \\
+M2c & core & seal: remove \code{From<usize>} + \code{pub .0} --- \textbf{point of no return} \\
+M2d & core & collapse derived mappings; five lockstep arrays $\to$ two \\
+M1  & \textbf{core} & \code{NonZeroU32} niche, type tag --- core-local \emph{because of} M2b \\
+M3  & core & generational keys, mutability \\
+M4  & core + wire & transactions \\
+M5  & transformation & bridge removal, on six criteria \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{M2c is a safety gate, not cleanup.} While defect D4 stands
+(\code{pub .0}, \code{From<usize>}), a representation change still
+\emph{compiles} at any missed site and then indexes the wrong element --- a
+silent wrong answer. Removing D4 converts every missed site into a compile
+error. \textbf{M1 must not begin until M2c is green.}
+
+\section{No wall-clock estimate is given}
+
+The earlier draft gave day figures per stage. They are withdrawn. They rested
+partly on contaminated timings and partly on an unknown the audit cannot close:
+how fast 127 call sites migrate in a repository Phase~0 was forbidden to build
+or test. The stage \emph{ordering} and the \emph{gates} are the plan. A schedule
+requires, first, a quiet baseline (audit \S I.5) and one measured pilot
+repository --- \code{hymeko\_hnn}, at six sites, is the natural pilot.
+
+Publishing a confident schedule on those inputs would be the same error as
+publishing the contaminated timings as baselines.
+
+\section{Affected files}
+
+\paragraph{Phase 0 (complete, no production source).}
+\begin{itemize}\itemsep2pt
+  \item \code{reports/2026-08-28-unified-ir-phase0-audit.md}
+  \item \code{docs/unified-ir-\{architecture,migration,consumer-map,id-inventory\}.md}
+  \item \code{docs/plans/2026-08-28-unified-ir-phase0/\{plan.tex,plan.tikz,plan.mmd\}}
+  \item \code{hymeko\_core/benches/ir\_bench.rs} --- measurement only
+  \item \code{hymeko\_core/Cargo.toml} --- one \code{[[bench]]} stanza
+        (\code{autobenches = false} makes it required)
+\end{itemize}
+
+\paragraph{Phase 1 onward (untouched).}
+\code{hymeko\_core/src/ir/ir.rs} (M0.4, M2a, M2d, M3);
+\code{common/ids.rs}, \code{ids\_impl.rs} (M0.2, M2c, M1);
+\code{ir/hash\_pass.rs} (M2d);
+\code{ir\_stream/assembler.rs} (M4);
+\code{transformation/\ldots/editor\_ir.rs} (M0.1, M4),
+\code{bridge.rs} (M0.3, M2b, M5);
+plus 127 call sites across \code{transformation} and smaller counts in
+\code{graph}, \code{hymeko\_python}, \code{vscode-plugin}, \code{network},
+\code{hotaru}, \code{hymeko\_hnn}.
+
+\section{CORE.YAML items touched}
+
+\textbf{Phase 0: none.} \code{Cargo.toml} gained one \code{[[bench]]} stanza
+under this phase's explicit authorisation (``benchmark target declarations only
+if required''). No dependency added; lockfile unchanged.
+
+\textbf{Phase 1 onward:} M1, M2c, M2d and M3 modify \code{hymeko\_core}
+production source and require separate \S1 approval. M4's \code{resuming\_at}
+signature change and the \code{SnapshotVersion} annotation axis are two further
+separate approvals. Listed here as plan, not as authorisation.
+
+\section{Test strategy}
+
+\begin{description}\itemsep3pt
+\item[Unit] \code{Ir::validate()} against hand-built IRs, one test per
+  invariant, each with a deliberately corrupted input that must be caught:
+  length drift on each lockstep array, \code{decl\_to\_node} disagreeing with
+  \code{NodeRec.decl}, \code{EdgeRec.arcs} disagreeing with
+  \code{ArcRec.in\_edge}, a \code{next\_sibling} cycle.
+\item[Regression (M0.1)] A batch whose third delta fails must leave the IR
+  bit-identical to its pre-batch state. \emph{Fails against today's
+  implementation} --- that is the point.
+\item[Regression (M1)] A serialized \code{NodeId} must not deserialize as an
+  \code{EdgeId}. Fails against today's untagged encoding.
+\item[Correctness (M0.5)] Canonical-hash invariance under permuted editor
+  construction history. \textbf{Needs no quiet host}; can land immediately. If
+  it fails, M3's ordering assumptions need rework \emph{before}, not after.
+\item[Round-trip (M5 gate)] \code{arcs.len()} asserted across
+  arena$\to$editor$\to$arena. The current test asserts nodes and edges and
+  omits precisely the quantity that collapses.
+\item[Property (\code{proptest})] Random delta sequences preserve every
+  \code{validate()} invariant; stage-then-abort is the identity on the base IR.
+\item[Integration] Parser $\to$ lowering $\to$ \code{Ir} $\to$
+  \code{emit\_hymeko} preserves \code{bases} and \code{AnnoR}. Absent today,
+  which is why the bridge's loss went unnoticed.
+\item[Performance] \code{ir\_bench.rs} on a \textbf{quiet} host, with ambient
+  load recorded, competing variants \textbf{alternated} not blocked.
+\end{description}
+
+\section{Performance budget --- deferred, deliberately}
+
+No budget is stated. Every candidate baseline is contaminated, and
+\code{CLAUDE.md} \S3 forbids treating single-shot or contaminated numbers as
+measurements. The budget is set from the first quiet run (audit \S I.5), which
+must also \emph{extend} coverage: lookup, clone, canonical hash, binary
+serialization, bridge crossings, \code{HyperGraphView::from\_ir} and COO/CSR ---
+none of which \code{ir\_bench.rs} measures today.
+
+Two size facts are \textbf{not} contaminated and stand as budget inputs:
+derived mappings cost 61.1\% of the record tables at 20\,001 declarations, and
+\code{size\_of(Option<NodeId>)} is 16 against \code{size\_of(NodeId)} of 8 ---
+a niche-carrying \code{Id} takes the three \code{decl\_to\_*} maps from
+960\,048\,B to 240\,012\,B.
+
+\section{Rollback}
+
+Each stage is independently revertable; that is why they are split rather than
+merged. M0 items are additive or one-line. M2a is deletable. M2b reverts per
+repository. M2c restores two \code{From} impls, and its failure mode is loud.
+M2d's removed maps are derivable by construction, with \code{Ir::validate()}
+proving the restoration. M1 is one commit \emph{because} M2b/M2c localised it.
+M5 restores the bridge.
+
+\section{Risk anticipation}
+
+\paragraph{Performance-contract preservation.} \code{ir\_bench.rs} did not exist
+before Phase~0; there was no baseline to preserve, which is why it was written
+first --- and why its output is quarantined as contaminated rather than adopted.
+The IR-stream side already carries contracts (bounded staged bytes, O(1) replay
+lookup, fixed-capacity window); M4 attaches to that machinery and must inherit
+them. \textbf{The Phase~8 rule applies verbatim: exactly one implementation of
+the state machine.} This is also why M0.1 fixes \code{Batch}'s documentation
+rather than building a second transaction mechanism four stages early.
+
+\paragraph{Worst-case input.} Production scale is taken as $10^5$ declarations.
+A \code{u32} payload caps declarations at $\approx 4.29\times10^9$ --- state it
+as an explicit contract, or use \code{NonZeroU64} and forgo the niche saving.
+Above $10^6$, or at per-keystroke/live-inference commit rates, full-state
+identity stops being sufficient (\S1); the Merkle-fold digest specified in the
+architecture keeps the incremental path reachable without rework.
+
+\paragraph{The risk that is not in \code{core}.} 127 of 196 dense-index sites
+are in \code{transformation}, which Phase~0 was forbidden to modify and has
+therefore \textbf{not built or tested}. \code{bridge.rs} is additionally a
+\emph{writer} of core's invariants. This is the largest unknown, and no work
+inside \code{core} reduces it --- only the M2b pilot will.
+
+\paragraph{Aspirational comments.} Before editing \code{ir.rs}, grep for
+comments asserting invariants the code does not enforce. The five-array lockstep
+is exactly such an unenforced convention, and \code{\#[repr(C)] // Stable layout
+for serde and FFI} is an outright false one.
+
+\section{Open approvals carried into Phase 1}
+
+\begin{enumerate}\itemsep2pt
+  \item M1, M2c, M2d, M3 modify \code{hymeko\_core} production source --- \S1 approval.
+  \item M1 changes a \textbf{wire format} (ID type tag); reconcile with the
+        Phase~10A envelope version story before it lands.
+  \item M4 changes the \code{resuming\_at} signature (audit \S G.3) and adds a
+        \code{SnapshotVersion} annotation axis (\S H.3) --- two separate approvals.
+  \item \code{plan.pdf}: \textbf{waived} for Phase~0 by explicit user decision.
+        Whether the waiver extends to later phases is open.
+\end{enumerate}
+
+\section{Figures}
+
+\input{plan.tikz}
+
+\noindent
+Sequence, no-flag-day and transaction-lifecycle views are in \code{plan.mmd}.
+
+\end{document}

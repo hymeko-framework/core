@@ -1,0 +1,128 @@
+%% Unified IR — Phase 0 plan diagrams (Mermaid)
+%% Created-at: 2026-08-28 17:35 CEST · Revised: 2026-08-28 18:05 CEST
+%%
+%% Revision note: the stage order changed. The earlier draft ordered
+%% M0 -> M2 -> M1 partly on contaminated timings. The order below rests on
+%% the encapsulate-then-change argument alone (docs/unified-ir-migration.md
+%% §J.1), which needs no measurement: M2b/M2c make M1 core-local, so there is
+%% no flag day.
+
+%% ---------------------------------------------------------------------------
+%% View 1 — migration sequence. The colour split is the whole point:
+%% green stages touch one repository, amber stages fan out, red is the gate
+%% that must be green before the representation may change.
+%% ---------------------------------------------------------------------------
+graph TD
+    subgraph REPAIR["M0 — repairs (no representation change)"]
+        M01["M0.1 Batch: fix the doc now,<br/>atomicity in M4 (validate-then-commit<br/>makes it free — no second mechanism)"]
+        M04["M0.4 Ir::validate — the oracle,<br/>written while Ir is still correct"]
+        M05["M0.5 canonical-hash invariance test<br/>(correctness — needs no quiet host)"]
+        M0J["M0.x schema_version on the JSON DTO<br/>free now, expensive later"]
+    end
+
+    M2A["M2a — add accessors<br/>purely additive · core-local<br/>push_declaration removes the<br/>SECOND lockstep writer in bridge.rs"]
+    M2B["M2b — migrate 196 call sites<br/>PER REPOSITORY, independently landable<br/>core 52 · hnn 6 · misc 11 · transformation 127"]
+    M2C["M2c — seal direct access<br/>remove From&lt;usize&gt; + pub .0 (D4)<br/>⛔ POINT OF NO RETURN"]
+    M2D["M2d — collapse derived mappings<br/>3 maps → inline PayloadIdx<br/>5 lockstep arrays → 2"]
+    M1["M1 — ID representation<br/>NonZeroU32 niche · type tag<br/>✅ CORE-LOCAL, because of M2b"]
+    M3["M3 — generational keys, mutability<br/>needs the 580-entry order column triaged"]
+    M4["M4 — transactions<br/>txn-local IDs · validation overlay<br/>infallible commit · atomic Batch"]
+    M5["M5 — bridge removal<br/>gated on SIX criteria (§J.5)"]
+
+    EXIST["ALREADY BUILT — do not rebuild<br/>Phase 10A wire codec<br/>Phase 10B1 assembler:<br/>content-aware replay, O(1) window,<br/>conflict detection"]
+
+    REPAIR --> M2A --> M2B --> M2C --> M2D --> M1 --> M3 --> M4 --> M5
+    M04 -.oracle for.-> M2D
+    M04 -.oracle for.-> M3
+    M05 -.safety net for.-> M3
+    M0J -.must ship before.-> M1
+    EXIST -.attaches to.-> M4
+
+    classDef local fill:#e8f4ea,stroke:#2f6b3f,color:#12301c
+    classDef fanout fill:#fff4e0,stroke:#b8791a,color:#4a3010
+    classDef gate fill:#fdeaea,stroke:#a33,color:#4a1414
+    classDef done fill:#eef2fb,stroke:#3a5a9a,color:#16233f
+    class M01,M04,M05,M0J,M2A,M2D,M1,M3 local
+    class M2B,M5 fanout
+    class M2C gate
+    class EXIST done
+
+%% ---------------------------------------------------------------------------
+%% View 2 — why there is no flag day.
+%%
+%% The naive path needs one synchronised commit across four repositories.
+%% The taken path splits ENCAPSULATION (behaviour-preserving, incremental)
+%% from REPRESENTATION (core-local once encapsulated).
+%% ---------------------------------------------------------------------------
+graph LR
+    subgraph NAIVE["✗ naive — flag day"]
+        N1["change Id in core"] --> N2["ALL 4 repos break<br/>at the same instant"]
+        N2 --> N3["one synchronised commit<br/>coordinated revert<br/>196 sites at once"]
+    end
+
+    subgraph TAKEN["✓ taken — no flag day"]
+        T1["M2a accessors<br/>additive, nothing breaks"]
+        T2["M2b call sites<br/>one repo at a time<br/>every repo always compiles"]
+        T3["M2c seal<br/>missed sites become<br/>COMPILE ERRORS, not<br/>silent wrong answers"]
+        T4["M1 representation<br/>zero call sites touched"]
+        T1 --> T2 --> T3 --> T4
+    end
+
+    classDef bad fill:#fdeaea,stroke:#a33,color:#4a1414
+    classDef good fill:#e8f4ea,stroke:#2f6b3f,color:#12301c
+    class N1,N2,N3 bad
+    class T1,T2,T3,T4 good
+
+%% ---------------------------------------------------------------------------
+%% View 3 — transaction lifecycle (M4).
+%%
+%% Validation is where every failure lives, so commit is infallible and atomic
+%% Batch falls out rather than being bolted on. The bindings map is what
+%% today's `apply` cannot produce (audit §4.6) — the reason deltas are not
+%% gossipable at all right now.
+%% ---------------------------------------------------------------------------
+stateDiagram-v2
+    [*] --> Idle
+
+    Idle --> Staging: Begin
+    Staging --> Staging: delta → overlay<br/>(base IR untouched)
+    Staging --> Validating: Commit
+    Staging --> Idle: Abort — overlay dropped
+
+    Validating --> Committing: all checks pass
+    Validating --> Rejected: any check fails
+    Rejected --> Idle: base IR never mutated
+
+    Committing --> Committed: infallible write
+    Committed --> Idle: receipt issued
+
+    Idle --> Idle: exact replay (txn_digest match)
+    Idle --> Conflict: same version, different txn_digest
+    Conflict --> Idle: reported, never silently merged
+
+    note right of Validating
+        Local refs resolve · committed refs
+        live (generation matches) · arc arity
+        preconditions · no dangling created ·
+        hierarchy acyclic · Ir::validate on
+        the POST-state.
+        Reuses M0.4 — one predicate, not two.
+    end note
+
+    note right of Committed
+        Receipt carries:
+          base/target version
+          txn_digest   (identifies the CHANGE)
+          state_digest (identifies the RESULT)
+          bindings LocalId → DeclKey  ← §4.6
+          cascaded removals
+          axes_touched → §H invalidation
+    end note
+
+    note right of Conflict
+        Needs BOTH version and digest.
+        resuming_at() restores only the
+        version today, so a resumed replica
+        cannot tell legitimate replay from
+        a fork. §G.3.
+    end note
