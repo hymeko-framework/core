@@ -138,12 +138,16 @@ where
     where
         E: RefValueExtractor<F, V>,
     {
-        let mut out = Vec::with_capacity(ir.arcs.len() * 2);
+        let mut out = Vec::with_capacity(ir.arc_count() * 2);
 
-        for (eid_usize, edge) in ir.edges.iter().enumerate() {
-            let eid = EdgeId::new(eid_usize);
+        // M2b: dense scan through the typed-id iterator, which yields the
+        // `EdgeId` directly instead of reconstructing it from an enumeration
+        // index. Measured identical to raw `Vec` iteration (M2a.1 SCAN gate).
+        for (eid, edge) in ir.edge_records() {
             for &aid in &edge.arcs {
-                let arc = &ir.arcs[aid.0];
+                // Point lookup. A dangling arc id is skipped rather than
+                // panicking; on well-formed input the set is unchanged.
+                let Some(arc) = ir.arc(aid) else { continue };
                 for r in &arc.refs {
                     let (target, _sgn) = match r {
                         SignedRefR::Plus(a) | SignedRefR::Minus(a) | SignedRefR::Neutral(a) => {
@@ -151,7 +155,14 @@ where
                         }
                     };
 
-                    if let Some(nid) = ir.decl_to_node[target.0] {
+                    // M2b: MAP-ONLY read. `as_node` reports the mapping and
+                    // nothing more — deliberately NOT `node_for_decl`, which
+                    // would additionally resolve the record and validate its
+                    // back-link. Substituting it here would change both the
+                    // work done and the meaning on malformed input, and is the
+                    // substitution the migration rules explicitly forbid.
+                    // It also removes a panic: the old form indexed directly.
+                    if let Some(nid) = ir.as_node(target) {
                         let sgn = Self::sign_of(r);
                         let v = ex.value_of(r);
                         out.push(TensorInc {
@@ -279,11 +290,12 @@ where
     where
         E: RefValueExtractor<F, V>,
     {
-        let num_nodes = ir.nodes.len();
-        let num_edges = ir.edges.len();
+        // M2b: live-entity counts and typed-id scans.
+        let num_nodes = ir.node_count();
+        let num_edges = ir.edge_count();
 
-        let node_decl: Vec<DeclId> = ir.nodes.iter().map(|n| n.decl).collect();
-        let edge_decl: Vec<DeclId> = ir.edges.iter().map(|e| e.decl).collect();
+        let node_decl: Vec<DeclId> = ir.node_records().map(|(_, n)| n.decl).collect();
+        let edge_decl: Vec<DeclId> = ir.edge_records().map(|(_, e)| e.decl).collect();
 
         let triples = Self::collect_triples(ir, ex);
 

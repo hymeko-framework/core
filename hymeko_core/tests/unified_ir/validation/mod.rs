@@ -2,3 +2,4 @@
 
 pub mod consumer_equivalence;
 pub mod corpus;
+pub mod derived_views;

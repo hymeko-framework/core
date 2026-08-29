@@ -297,3 +297,20 @@ The `semantic_snapshot_hash` v2 tests therefore need a **field-coverage gate of 
 | ID independence | dense and generational ID permutation does **not** change the digest |
 
 **A coherence gate is also now available.** `validate_hierarchy_index_coherence` returns bounded, deterministically ordered findings and is verified against nine deliberate corruptions. Model-based tests (§H) should assert it holds after **every** commit, which turns the §2.3 lockstep invariants from convention into a checked postcondition.
+
+---
+
+## M2b addendum (2026-08-29) — where these tests will live
+
+The V&V structure this plan's tests belong in now exists:
+
+```
+hymeko_core/tests/unified_ir/
+  support/ · verification/ · validation/
+```
+
+Everything specified in Parts G and H is **BLOCKED** in `docs/verification/unified-ir/traceability.csv` as `UIR-DYN-01`…`UIR-DYN-10`, against M3 (stable IDs) and M4 (transactions).
+
+**No placeholder tests were written.** A test that constructed the expected shape and asserted `true` would raise the test count and the coverage percentage while establishing nothing — and would then have to be *found and removed* when the real implementation arrived. The requirements are recorded; the tests are not faked.
+
+The reference-model constraint in §0 stands and is now enforceable: `support/` holds the shared builder and oracle, so a model that accidentally reused production machinery would be visible as an import from `hymeko::` rather than from `support::`.

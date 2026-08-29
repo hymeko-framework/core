@@ -317,3 +317,25 @@ The +20…49 % M2a reported was a **redundant sentinel guard M2a itself introduc
 4. **Do not** collapse repeated accessor lookups into a hidden dense iterator. The contracts are deliberately distinct.
 
 **M2b may begin on performance grounds.**
+
+---
+
+## M2b status — first stage complete (2026-08-29)
+
+**This repository's read-only consumers are migrated.** `test(ir): establish unified IR V&V baseline`, `refactor(ir): migrate core read consumers to accessors`, `refactor(hnn): migrate IR reads to canonical accessors`.
+
+| Consumer | Sites before | after |
+|---|---:|---:|
+| `util/pretty_print.rs` | 6 | 0 |
+| `writers/ir_writer.rs` | 3 | 0 |
+| `hymeko_hnn/.../hypergraphview.rs` | 7 | 0 |
+
+**Unexplained remaining: 0.** Retained direct access, each with a category: `ir/ir.rs` (storage implementation), `ir/lower.rs` (construction), `ir/canonical_hash.rs` and `ir/hash_pass.rs` (representation-owner algorithms), `ir/coherence.rs` (must read raw storage to *detect* incoherence), serde derives, and malformed-state tests.
+
+`generators.rs` appeared in the grep with 10 hits and is **not an IR consumer** — `self.edges` there is the generator's own `Vec<Vec<usize>>`. Counting it would have inflated the inventory.
+
+**Performance:** `HyperGraphView::from_ir` measured **+0.18 %** by alternating pre/post source on one quiet host, three rounds. Criterion's first reading (+21.3 % vs a stale stored baseline, taken while ambient load rose to 30 %) did not reproduce.
+
+**A durable V&V structure now exists** at `hymeko_core/tests/unified_ir/{support,verification,validation}` with requirements and traceability under `docs/verification/unified-ir/`. Phase-numbered test directories are gone; provenance moved into documentation.
+
+**Next M2b repository: `../network`.** Entry condition: this repository pushed and green; `network` clean and non-diverged; its dependency path resolving to the published core.
