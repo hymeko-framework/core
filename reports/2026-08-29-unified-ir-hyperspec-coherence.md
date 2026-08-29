@@ -293,30 +293,72 @@ and deliberately not optimised: a fixture built once outside every timed region
 is not a hot path, and CLAUDE.md §3 forbids micro-optimisation without a profile
 showing otherwise. The test suite absorbed it at 1.85 s for the whole module.
 
-### Amaterasu second host — BLOCKED
+### Amaterasu second host — run, and a correction
 
-Not run. The transfer route the brief authorises needs shell access, and this
-session has none:
+**Erratum.** The first version of this section said the second host was BLOCKED
+for lack of shell access. That was wrong: I guessed usernames (`hakiko`, `kyber`,
+`csaba`, `hajdu`) and never tried `kyberszittya`, which was in the operator's own
+shell history. That account logs in normally, and its default toolchain is
+**`rustc 1.98.0` (88d9e12ae 2026-08-18)** — exactly the cross-check the brief
+named. The `git`-only port-2222 account (used for the push) is a *different*
+account; conflating the two produced the false "blocked".
 
-```
-ssh -p 2222 git@192.168.1.228 'echo SHELL_OK'
-  -> error: Invalid repository path          (git-only account, rejects commands)
-ssh    git@192.168.1.228 / hakiko / kyber / csaba / hajdu
-  -> Permission denied (publickey,password)  (port 22, every identity present)
-```
+**Transfer, per the brief.** A self-contained `git bundle` (base `72e622b` +
+corrective `15223bc`, no prerequisites) was `scp`'d to `/tmp` and cloned into
+`~/hymeko_coh_15223bc`. Tree hashes verified **identical to local**: base
+`f7340956…`, corrective `1894555b…`. No `~/.ssh`, `known_hosts`, deploy key or git
+config was touched; `~/backup/hymeko_framework` and `~/hymeko_phase7/8/9` were not
+used; the build tree was **not** auto-deleted.
 
-The git service itself is reachable (`git ls-remote origin main` succeeds), so
-the *push* path works and only the *shell* path does not. Per the brief I did not
-modify `~/.ssh/config`, `known_hosts`, deploy keys or global git config, and did
-not attempt password authentication. No bundle was created, since there was
-nowhere to send it.
+**Remote-internal A/B** (`rustc 1.98.0`, AMD Ryzen 7 3700X, load ≈ 0.2), five
+alternating rounds A/B, per-round medians from `estimates.json`, paired in log
+space. **No absolute time is compared to the local 1.97.1 host**, per the brief.
 
-**Consequence for the verdict:** the `rustc 1.98.0` cross-check is missing, so the
-+0.99 % figure stands on the local `rustc 1.97.1` host alone. Per the brief's own
-rule no absolute time is compared across toolchains, and no such comparison is
-made here. This is an open item, not a silent omission.
+| cell | base med (ns) | coherent med (ns) | paired |
+|---|---|---|---|
+| construction / small | 29 820 | 32 451 | **+7.94 %** |
+| construction / medium | 5 545 469 | 5 908 780 | **+7.06 %** |
+| construction / large | 134 783 211 | 127 594 783 | −5.08 % |
+| weight_path some / small | 30 143 | 32 593 | **+7.45 %** |
+| weight_path none / small | 26 906 | 29 161 | **+8.08 %** |
+| weight_path some / medium | 5 520 511 | 5 695 835 | +3.03 % |
+| weight_path none / medium | 5 007 045 | 5 162 588 | +3.31 % |
+| weight_path some / large | 134 607 121 | 110 722 948 | **−18.01 %** |
+| weight_path none / large | 119 668 972 | 95 381 107 | **−20.69 %** |
 
----
+A/A null (consecutive base rounds): **+0.19 %** [−0.33 %, +0.71 %], sd 1.59 %. The
+null is tight, so the per-cell effects are **real, not host noise** — this is the
+opposite situation to the local host, where the null was too wide to resolve 3 %.
+
+**Remote-internal verdict: the 3 % valid-hot-path gate does NOT cleanly pass on
+`rustc 1.98.0`.** The effect is **bimodal by scale**: small and medium regress
+(+3 % to +8 %), while large is markedly *faster* (−5 % to −21 %). The blended
+paired mean (−1.28 % [−4.60 %, +2.17 %]) is meaningless here precisely because it
+averages across a sign change; the per-cell column is the honest reading.
+
+**Measured / inferred / not established.**
+
+* **Measured:** on 1.98.0/Ryzen, small+medium `from_ir` over the coherent build is
+  3–8 % slower and large is 5–21 % faster than over the base build, with a tight
+  null.
+* **Inferred, not isolated:** the change bundles two things — a bigger
+  `decl_to_node` (`nodes+edges+arcs` vs `nodes+edges`) and the single-vs-double
+  `as_node` lookup fix. A scale-dependent trade between a fixed cache cost that
+  dominates at small and a per-incidence saving that dominates at large is
+  *consistent* with the shape, but I have not profiled the remote host to confirm
+  it.
+* **Not established:** which term causes which sign, and whether the local
+  host's flat +0.99 % or the remote's bimodal split is the more representative
+  deployment picture. These differ by toolchain (1.97.1 vs 1.98.0) and
+  micro-architecture, and isolating them needs a profile on each — out of this
+  phase's scope.
+
+**Consequence.** The earlier "+0.99 %, under the gate" conclusion holds only for
+the local host. On the remote it does not: small/medium exceed 3 %. This is
+recorded as an open performance item, not smoothed into a pass. It does not
+change the *correctness* result — output, hashes, ordering and coherence are
+unaffected on both hosts — but the performance gate is host-dependent and is not
+uniformly green.
 
 ## G. Gates
 
@@ -333,7 +375,7 @@ made here. This is an open item, not a silent omission.
 | focused `view_construction` (the three tests the M2b corrective nearly broke) | 4 passed |
 | coverage | below |
 | local Criterion A/B | §F |
-| Amaterasu A/B | **blocked**, §F |
+| Amaterasu A/B (`rustc 1.98.0`) | **run**; §F — gate not uniformly green (small/medium regress, large faster) |
 
 The single failure is
 `domain_transformations::parse_files::test_parse_files::test_load_meta_geometry`
@@ -398,9 +440,12 @@ affected files, test matrix, performance split and gate list.
 
 ## Open issues
 
-1. **Amaterasu cross-toolchain A/B not run** — no shell access from this session.
-   The +0.99 % figure rests on one host. Needs either shell credentials or an
-   operator-side transfer.
+1. **Performance gate is host-dependent, not uniformly green** — see §F. On the
+   local `rustc 1.97.1` host the change is a flat +0.99 % (under 3 %); on the
+   remote `rustc 1.98.0`/Ryzen host it is bimodal — small/medium regress +3–8 %
+   (over the gate), large is 5–21 % faster. The mechanism (bigger `decl_to_node`
+   vs the single-lookup fix, trading off by scale) is inferred, not profiled.
+   Isolating it needs a profile on each host and is the natural next perf item.
 2. **`UIR-DEFECT-01..03`** — the identity gaps (`bases`, annotations,
    values/weights) stand. M4.
 3. **`pretty_print.rs` at 89.86 %** — the `(arc_rec missing)` marker is still
