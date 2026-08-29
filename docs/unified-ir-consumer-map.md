@@ -150,3 +150,33 @@ The M2a performance caveat is withdrawn: accessors are **zero-cost** for point l
 | declaration → record **with back-link guarantee** | `node_for_decl` / `edge_for_decl` / `arc_for_decl` | mapping-only, if the guarantee is wanted |
 
 Rule 3 is the one most likely to be got wrong mechanically: `node_for_decl` is **not** a drop-in for `decl_to_node[d.0]`. It resolves the record and verifies its `decl` back-link, so substituting it everywhere would add work and change behaviour on malformed input.
+
+---
+
+## M2b cross-repository status (2026-08-29) — sibling migration blocked
+
+`hymeko_core` and `hymeko_hnn` are migrated (16 consumer sites → 0). **No sibling repository was touched**, and the reason is a verified dependency pin, not a judgement call.
+
+| Repository | Core pin in its `Cargo.lock` | Pin date | Commits behind | `ir/access.rs` present |
+|---|---|---|---:|---|
+| `network` | `3bdebf89` | 2026-08-22 | 22 | **no** |
+| `graph` | `3bdebf89` | 2026-08-22 | 22 | **no** |
+| `transformation` | `71c1f997` | 2026-08-21 | 24 | **no** |
+
+The accessor layer first appeared at `e660b49` (M2a). No pin includes it, so the API these repositories would migrate *onto* does not exist in the core they compile against.
+
+### The §1 dependency-edge claim needs a correction
+
+This document's §1 described a compile-time `path` star from `hymeko_core`. That is true of `hymeko_hnn` and `hymeko_wgpu` inside the core workspace. **It is not true of the sibling repositories**: `network`, `graph` and `transformation` each declare
+
+```toml
+hymeko_core = { git = "ssh://git@amaterasu.local:2222/hymeko/core.git", branch = "main" }
+```
+
+and resolve it through their own lockfile. They track core's *published* history, not the local checkout, and only when their lock is bumped.
+
+**Consequence, and it cuts both ways.** The "no flag day" analysis in `docs/unified-ir-migration.md` §J.1 assumed an instantaneous compile break across four repositories. With lockfile-pinned git dependencies that break is **opt-in per repository** — which is safer than the analysis assumed, and is why publishing today's three commits cannot have affected any sibling build.
+
+It also means a sibling migration is a **two-step** change: bump the lock (22–24 core commits, its own verification), then migrate consumers. Merging the two would make neither verifiable.
+
+Full detail: `reports/2026-08-29-unified-ir-m2b-cross-repo.md`.
