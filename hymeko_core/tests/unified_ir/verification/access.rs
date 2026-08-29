@@ -10,7 +10,7 @@ use hymeko::common::ids::{DeclId, EdgeId, HyperArcId, NodeId};
 use hymeko::ir::coherence::{CoherenceLimits, validate_hierarchy_index_coherence};
 use hymeko::ir::ir::{DeclKind, Ir};
 
-use crate::unified_ir_m05::builder::{S, TestIr};
+use crate::unified_ir::support::builder::{S, TestIr};
 
 /// Root `m` with two child nodes, one edge, one arc, and a nested grandchild.
 fn fixture() -> TestIr {
@@ -21,6 +21,7 @@ fn fixture() -> TestIr {
     let deep = t.node(&["m", "x", "deep"], x);
     let e = t.edge(&["m", "e"], root);
     t.arc(e, &[(x, S::Plus), (y, S::Minus), (deep, S::Neutral)]);
+    t.attach_arc_decls();
     // wire the intrusive child list to match the paths
     let n = t.ir.decl_nodes.len();
     for i in 0..n {
@@ -355,102 +356,54 @@ fn last_child_of_agrees_with_the_final_child() {
 // Compatibility — accessors versus direct access and versus old helpers
 // ---------------------------------------------------------------------------
 
+/// `arc_for_decl` must NOT invent a back-link check.
+///
+/// Added after M2b fault injection: mutating `arc_for_decl` to filter on
+/// `in_edge == id` — conflating the map-only and checked-composite contracts —
+/// was caught by exactly one test, and that one was corpus-dependent. This is
+/// the focused guard.
+///
+/// `ArcRec` has no own-declaration back-pointer: `in_edge` names the *owning
+/// edge's* declaration. So `arc_for_decl` checks presence only, and must agree
+/// with `as_arc` for every declaration.
 #[test]
-fn accessors_agree_with_direct_field_access_on_the_whole_corpus() {
-    use std::path::{Path, PathBuf};
-    let root = Path::new("../data");
-    if !root.exists() {
-        eprintln!("[m2a] ../data absent — corpus comparison skipped");
-        return;
-    }
-    let mut files: Vec<PathBuf> = Vec::new();
-    let mut stack = vec![root.to_path_buf()];
-    while let Some(d) = stack.pop() {
-        let Ok(rd) = std::fs::read_dir(&d) else {
-            continue;
-        };
-        for e in rd.flatten() {
-            let p = e.path();
-            if p.is_dir() {
-                stack.push(p);
-            } else if p.extension().is_some_and(|x| x == "hymeko") {
-                files.push(p);
-            }
-        }
-    }
-    files.sort();
-
-    let mut checked = 0usize;
-    let mut coherent = 0usize;
-    for f in &files {
-        let Ok((store, compiled)) = crate::test_helpers::load_and_lower(f) else {
-            continue;
-        };
-        let ir = &compiled.ir;
-        checked += 1;
-
-        // Precondition for the comparison: the fixture is structurally sound.
-        if validate_hierarchy_index_coherence(
-            ir,
-            &compiled.idx,
-            &store.it,
-            CoherenceLimits::default(),
-        )
-        .is_ok()
-        {
-            coherent += 1;
-        }
-
-        for i in 0..ir.decl_nodes.len() {
-            let d = DeclId::new(i);
-
-            // direct index vs accessor
-            assert_eq!(ir.decl_node(d).map(|n| n.kind), Some(ir.decl_nodes[i].kind));
-            assert_eq!(ir.kind_of(d), Some(ir.decl_nodes[i].kind));
-            assert_eq!(ir.kind_of(d), Some(ir.kind(d)), "kind_of vs kind");
-
-            // hierarchy: old (total-valued) vs new (Option-valued)
-            let p = ir.parent(d);
-            assert_eq!(ir.parent_of(d), p.is_some().then_some(p));
-            let fc = ir.first_child(d);
-            assert_eq!(ir.first_child_of(d), fc.is_some().then_some(fc));
-            let ns = ir.next_sibling(d);
-            assert_eq!(ir.next_sibling_of(d), ns.is_some().then_some(ns));
-
-            // children: old vs new
-            let old: Vec<DeclId> = ir.decl_children(d).collect();
-            let new: Vec<DeclId> = ir.child_decls(d).collect();
-            assert_eq!(old, new);
-
-            // mapping: old id-only vs new id+record
-            assert_eq!(ir.node_for_decl(d).map(|(n, _)| n), ir.as_node(d));
-            assert_eq!(ir.edge_for_decl(d).map(|(e, _)| e), ir.as_edge(d));
-            assert_eq!(ir.arc_for_decl(d).map(|(a, _)| a), ir.as_arc(d));
-        }
-
-        for (i, rec) in ir.nodes.iter().enumerate() {
-            assert_eq!(ir.node(NodeId::new(i)).map(|r| r.decl), Some(rec.decl));
-        }
-        for (i, rec) in ir.edges.iter().enumerate() {
-            assert_eq!(ir.edge(EdgeId::new(i)).map(|r| r.decl), Some(rec.decl));
-        }
-        for (i, rec) in ir.arcs.iter().enumerate() {
-            assert_eq!(
-                ir.arc(HyperArcId::new(i)).map(|r| r.in_edge),
-                Some(rec.in_edge)
+fn arc_for_decl_checks_presence_only_and_agrees_with_as_arc() {
+    let t = fixture();
+    let mut arcs_seen = 0usize;
+    for (d, _) in t.ir.decls() {
+        assert_eq!(
+            t.ir.arc_for_decl(d).map(|(a, _)| a),
+            t.ir.as_arc(d),
+            "arc_for_decl must not filter beyond presence, at {d:?}"
+        );
+        if t.ir.as_arc(d).is_some() {
+            arcs_seen += 1;
+            let (_, rec) = t.ir.arc_for_decl(d).expect("mapping present");
+            assert_ne!(
+                rec.in_edge, d,
+                "fixture precondition: in_edge names the owning edge, not the arc \
+                 declaration — if these were equal the test could not distinguish \
+                 a presence check from a back-link check"
             );
         }
-
-        assert_eq!(ir.decl_count(), ir.decl_nodes.len());
-        assert_eq!(ir.node_count(), ir.nodes.len());
-        assert_eq!(ir.edge_count(), ir.edges.len());
-        assert_eq!(ir.arc_count(), ir.arcs.len());
     }
-
-    eprintln!("[m2a] corpus comparison: {checked} fixtures, {coherent} coherent");
-    assert!(checked > 0, "no fixture compared");
-    assert_eq!(
-        checked, coherent,
-        "some fixture was not coherent; the accessor comparison assumes sound input"
+    assert!(
+        arcs_seen > 0,
+        "fixture must contain at least one arc mapping"
     );
+}
+
+/// The mirror guard: `node_for_decl` and `edge_for_decl` DO validate the
+/// back-link, and must reject a foreign record even when the mapping resolves.
+#[test]
+fn node_and_edge_for_decl_validate_the_backlink_but_as_node_does_not() {
+    let mut t = fixture();
+    let d0 = DeclId::new(0);
+    let foreign = t.ir.as_node(DeclId::new(1)).expect("decl 1 is a node");
+    t.ir.decl_to_node[d0.0] = Some(foreign);
+
+    // map-only contract: reports the mapping verbatim
+    assert_eq!(t.ir.as_node(d0), Some(foreign));
+    // checked-composite contract: refuses it
+    assert!(t.ir.node_for_decl(d0).is_none());
 }

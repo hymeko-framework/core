@@ -179,3 +179,39 @@ impl TestIr {
         format!("<unindexed DeclId({})>", d.0)
     }
 }
+
+impl TestIr {
+    /// Give every `ArcRec` a matching `HyperArc` **declaration** and register it
+    /// in `decl_to_arc`.
+    ///
+    /// [`TestIr::arc`] creates records without declarations, mirroring what the
+    /// editor bridge does. Anything that resolves an arc through `as_arc` /
+    /// `arc_for_decl`, or that walks arcs via the merkle pass, needs the
+    /// declaration side to exist as well. M0.6 learned this the hard way: a
+    /// missing arc declaration made `compute_merkle_hashes` look as though it
+    /// ignored incidence signs, when in fact the fixture never reached them.
+    pub fn attach_arc_decls(&mut self) {
+        for ai in 0..self.ir.arcs.len() {
+            if self.ir.decl_to_arc.iter().flatten().any(|a| a.0 == ai) {
+                continue; // already declared
+            }
+            let in_edge = self.ir.arcs[ai].in_edge;
+            let name = self.it.intern(&format!("__arc{ai}"));
+            let did = DeclId::new(self.ir.decl_nodes.len());
+            self.ir.decl_nodes.push(DeclNode {
+                kind: DeclKind::HyperArc,
+                name,
+                parent: in_edge,
+                first_child: DeclId::NONE,
+                last_child: DeclId::NONE,
+                next_sibling: DeclId::NONE,
+                anno: AnnoR::default(),
+            });
+            self.ir.decl_hash.push(None);
+            self.ir.decl_to_node.push(None);
+            self.ir.decl_to_edge.push(None);
+            self.ir.decl_to_arc.push(None);
+            self.ir.decl_to_arc[did.0] = Some(HyperArcId::new(ai));
+        }
+    }
+}

@@ -14,7 +14,7 @@
 use hymeko::common::ids::{DeclId, EdgeId, HyperArcId, NodeId};
 use hymeko::ir::ir::Ir;
 
-use crate::unified_ir_m05::builder::{S, TestIr};
+use crate::unified_ir::support::builder::{S, TestIr};
 
 fn fixture() -> TestIr {
     let mut t = TestIr::new();

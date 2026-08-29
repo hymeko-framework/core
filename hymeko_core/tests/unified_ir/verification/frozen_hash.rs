@@ -21,7 +21,7 @@
 use hymeko::common::ids::DeclId;
 use hymeko::ir::canonical_hash::{CanonHashCfg, canonical_program_hash};
 
-use crate::unified_ir_m05::builder::{S, TestIr};
+use crate::unified_ir::support::builder::{S, TestIr};
 
 fn hex(h: &hymeko::ir::hash::HashId) -> String {
     h.0.iter().map(|b| format!("{b:02x}")).collect()
@@ -195,82 +195,5 @@ fn dense_permutation_does_not_change_v1() {
         v1(&vec_small_hierarchy()),
         v1(&vec_dense_permuted()),
         "dense-ID assignment must not affect v1"
-    );
-}
-
-/// Corpus-wide frozen digest: v1 over every lowerable fixture, folded in a
-/// deterministic order. This is the broadest protection for the Part E rewrite
-/// — it covers real declaration shapes the synthetic vectors do not reach.
-fn corpus_digest() -> (usize, String) {
-    use std::path::{Path, PathBuf};
-    let root = Path::new("../data");
-    let mut files: Vec<PathBuf> = Vec::new();
-    let mut stack = vec![root.to_path_buf()];
-    while let Some(d) = stack.pop() {
-        let Ok(rd) = std::fs::read_dir(&d) else {
-            continue;
-        };
-        for e in rd.flatten() {
-            let p = e.path();
-            if p.is_dir() {
-                stack.push(p);
-            } else if p.extension().is_some_and(|x| x == "hymeko") {
-                files.push(p);
-            }
-        }
-    }
-    files.sort();
-
-    let mut h = blake3::Hasher::new();
-    let mut n = 0usize;
-    for f in &files {
-        if let Ok((store, compiled)) = crate::test_helpers::load_and_lower(f) {
-            let d = canonical_program_hash(
-                CanonHashCfg::default(),
-                &compiled.idx,
-                &compiled.ir,
-                &store.it,
-            );
-            // Include the file name so a reordering or omission is detected.
-            h.update(
-                f.file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .as_bytes(),
-            );
-            h.update(&d.0);
-            n += 1;
-        }
-    }
-    (n, h.finalize().to_hex().to_string())
-}
-
-const KAT_CORPUS_COUNT: usize = 96;
-const KAT_CORPUS_DIGEST: &str = "525fa75cf87828c2c70e8ca3f3b13a8a5641133b55d5c4d956e12b5769ade379";
-
-#[test]
-fn print_corpus_digest_for_capture() {
-    let (n, d) = corpus_digest();
-    eprintln!("[frozen] corpus_count {n}");
-    eprintln!("[frozen] corpus_digest {d}");
-}
-
-/// The corpus gate. Protects v1 across the Part E rewrite over real programs.
-#[test]
-fn v1_corpus_digest_is_unchanged() {
-    if !std::path::Path::new("../data").exists() {
-        eprintln!("[frozen] ../data absent — corpus gate skipped");
-        return;
-    }
-    let (n, d) = corpus_digest();
-    assert_eq!(
-        n, KAT_CORPUS_COUNT,
-        "the number of lowerable fixtures changed ({n} vs {KAT_CORPUS_COUNT}); \
-         the corpus digest is only meaningful over a fixed set"
-    );
-    assert_eq!(
-        d, KAT_CORPUS_DIGEST,
-        "FROZEN v1 CORPUS DIGEST CHANGED. algo_version=1 output moved on real \
-         programs — the traversal rewrite is not output-preserving."
     );
 }

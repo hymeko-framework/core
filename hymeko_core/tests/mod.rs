@@ -27,13 +27,11 @@ mod hash;
 mod test_tensor_representations;
 
 // APPROVED-CORE-EDIT: unified-ir-m0-5-tests-and-benchmarks (2026-08-28).
-#[path = "unified_ir_m05/mod.rs"]
-mod unified_ir_m05;
 
 // APPROVED-CORE-EDIT: unified-ir-m0-6-hash-and-traversal (2026-08-28).
-#[path = "unified_ir_m06/mod.rs"]
-mod unified_ir_m06;
 
 // APPROVED-CORE-EDIT: unified-ir-m2a-accessor-api (2026-08-28).
-#[path = "unified_ir_m2a/mod.rs"]
-mod unified_ir_m2a;
+
+// APPROVED-CORE-EDIT: unified-ir-m2b-vv-core-consumers (2026-08-29).
+#[path = "unified_ir/mod.rs"]
+mod unified_ir;

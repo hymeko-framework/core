@@ -23,8 +23,8 @@ use hymeko::ir::hash::HashId;
 use hymeko::ir::hash_pass::compute_merkle_hashes;
 use hymeko::ir::ir::{AnnoR, SignedRefR, ValueR};
 
-use crate::unified_ir_m05::builder::{S, TestIr};
-use crate::unified_ir_m05::oracle::{Ordering, semantic_form};
+use crate::unified_ir::support::builder::{S, TestIr};
+use crate::unified_ir::support::oracle::{Ordering, semantic_form};
 
 /// All three identities of one IR.
 pub struct Probe {
@@ -113,37 +113,10 @@ fn link_children(t: &mut TestIr) {
     }
 }
 
-fn attach_arc_decls(t: &mut TestIr) {
-    // The merkle pass only reaches arc references through `as_arc(did)`, which
-    // reads `decl_to_arc`. The M0.5 builder creates `ArcRec`s without matching
-    // HyperArc *declarations*, so without this the merkle hash never sees a
-    // single incidence -- and the matrix would report a coverage gap that is
-    // really a fixture defect.
-    for ai in 0..t.ir.arcs.len() {
-        let in_edge = t.ir.arcs[ai].in_edge;
-        let name = t.it.intern(&format!("__arc{ai}"));
-        let did = DeclId::new(t.ir.decl_nodes.len());
-        t.ir.decl_nodes.push(hymeko::ir::ir::DeclNode {
-            kind: hymeko::ir::ir::DeclKind::HyperArc,
-            name,
-            parent: in_edge,
-            first_child: DeclId::NONE,
-            last_child: DeclId::NONE,
-            next_sibling: DeclId::NONE,
-            anno: AnnoR::default(),
-        });
-        t.ir.decl_hash.push(None);
-        t.ir.decl_to_node.push(None);
-        t.ir.decl_to_edge.push(None);
-        t.ir.decl_to_arc.push(None);
-        t.ir.decl_to_arc[did.0] = Some(hymeko::common::ids::HyperArcId::new(ai));
-    }
-}
-
 fn base_linked() -> TestIr {
     let mut t = base();
-    attach_arc_decls(&mut t);
-    attach_arc_decls(&mut t);
+    t.attach_arc_decls();
+    t.attach_arc_decls();
     link_children(&mut t);
     t
 }
@@ -185,7 +158,7 @@ fn hash_coverage_matrix() {
         let y = b.node(&["m", "y"], root);
         let e = b.edge(&["m", "e"], root);
         b.arc(e, &[(x, S::Plus), (y, S::Minus)]);
-        attach_arc_decls(&mut b);
+        b.attach_arc_decls();
         link_children(&mut b);
         let pb = probe(&mut b);
         let (v1, mk, _) = row("decl.name / path", &pa, &pb);
@@ -350,7 +323,7 @@ fn hash_coverage_matrix() {
             .find_map(|(pk, d)| (pk.0.len() == 2 && b.it.resolve(pk.0[1]) == "x").then_some(d))
             .expect("x present");
         b.ir.decl_nodes[x.0].parent = DeclId::NONE;
-        attach_arc_decls(&mut b);
+        b.attach_arc_decls();
         link_children(&mut b);
         let pb = probe(&mut b);
         row("decl.parent (intrusive only)", &pa, &pb);
@@ -369,7 +342,7 @@ fn hash_coverage_matrix() {
         let y = b.node(&["m", "y"], root);
         let e = b.edge(&["m", "e"], root);
         b.arc(e, &[(x, S::Plus), (y, S::Minus)]);
-        attach_arc_decls(&mut b);
+        b.attach_arc_decls();
         link_children(&mut b);
         let pb = probe(&mut b);
         // Not asserted equal: b has extra declarations, so it is a different
@@ -389,7 +362,7 @@ fn with_value(v: ValueR) -> TestIr {
     t.ir.decl_nodes[x.0].anno.value = Some(v);
     let e = t.edge(&["m", "e"], root);
     t.arc(e, &[(x, S::Plus)]);
-    attach_arc_decls(&mut t);
+    t.attach_arc_decls();
     link_children(&mut t);
     t
 }

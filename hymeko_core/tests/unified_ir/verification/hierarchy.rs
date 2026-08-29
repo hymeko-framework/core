@@ -25,39 +25,20 @@ use hymeko::common::ids::DeclId;
 use hymeko::ir::canonical_hash::{CanonHashCfg, canonical_program_hash};
 use hymeko::ir::ir::DeclKind;
 
-use super::builder::{S, TestIr};
+use crate::unified_ir::support::builder::{S, TestIr};
 
 /// Walk `data/` for fixtures. Returns paths relative to the crate.
-fn fixture_files(root: &Path) -> Vec<PathBuf> {
-    let mut out = Vec::new();
-    let mut stack = vec![root.to_path_buf()];
-    while let Some(d) = stack.pop() {
-        let Ok(rd) = std::fs::read_dir(&d) else {
-            continue;
-        };
-        for e in rd.flatten() {
-            let p = e.path();
-            if p.is_dir() {
-                stack.push(p);
-            } else if p.extension().is_some_and(|x| x == "hymeko") {
-                out.push(p);
-            }
-        }
-    }
-    out.sort();
-    out
+
+pub struct DepthStats {
+    pub decls: usize,
+    pub max_depth: usize,
+    pub median_depth: usize,
+    pub p95_depth: usize,
+    pub max_branching: usize,
+    pub deepest_path: String,
 }
 
-struct DepthStats {
-    decls: usize,
-    max_depth: usize,
-    median_depth: usize,
-    p95_depth: usize,
-    max_branching: usize,
-    deepest_path: String,
-}
-
-fn depth_stats(
+pub fn depth_stats(
     idx: &hymeko::resolution::resolve::Index,
     it: &hymeko::resolution::interner::Interner,
 ) -> DepthStats {
@@ -92,79 +73,6 @@ fn depth_stats(
 }
 
 /// The real-corpus audit. Reports; does not gate.
-#[test]
-fn real_corpus_declaration_depth_audit() {
-    let root = Path::new("../data");
-    if !root.exists() {
-        eprintln!("[depth] ../data not present — corpus audit skipped");
-        return;
-    }
-    let files = fixture_files(root);
-    eprintln!("[depth] corpus: {} .hymeko fixtures found", files.len());
-
-    let mut ok = 0usize;
-    let mut failed = 0usize;
-    let mut agg_max = 0usize;
-    let mut agg_decls = 0usize;
-    let mut worst: Option<(String, DepthStats)> = None;
-    let mut all_depths: Vec<usize> = Vec::new();
-
-    for f in &files {
-        match crate::test_helpers::load_and_lower(f) {
-            Ok((store, compiled)) => {
-                ok += 1;
-                let st = depth_stats(&compiled.idx, &store.it);
-                agg_decls += st.decls;
-                for (pk, _) in compiled.idx.iter() {
-                    all_depths.push(pk.0.len());
-                }
-                if st.max_depth > agg_max {
-                    agg_max = st.max_depth;
-                    worst = Some((f.display().to_string(), st));
-                }
-            }
-            Err(_) => failed += 1,
-        }
-    }
-
-    all_depths.sort_unstable();
-    let n = all_depths.len();
-    let median = if n == 0 { 0 } else { all_depths[n / 2] };
-    let p95 = if n == 0 {
-        0
-    } else {
-        all_depths[(n * 95) / 100]
-    };
-    let p99 = if n == 0 {
-        0
-    } else {
-        all_depths[(n * 99) / 100]
-    };
-
-    eprintln!(
-        "[depth] lowered ok={ok} failed={failed} total_decls={agg_decls} \
-         depth: median={median} p95={p95} p99={p99} max={agg_max}"
-    );
-    if let Some((file, st)) = worst {
-        eprintln!(
-            "[depth] deepest fixture: {file}\n\
-             [depth]   decls={} max_depth={} median={} p95={} max_branching={} \
-             deepest_path={}",
-            st.decls,
-            st.max_depth,
-            st.median_depth,
-            st.p95_depth,
-            st.max_branching,
-            st.deepest_path
-        );
-    }
-
-    // Not a gate on a specific number — a gate on having *measured* it.
-    assert!(
-        ok > 0,
-        "no fixture lowered; the corpus audit measured nothing"
-    );
-}
 
 /// Build a single chain of `depth` nested declarations, plus one edge whose arc
 /// references the deepest node. Returns the constructed IR.
@@ -211,7 +119,10 @@ fn synthetic_chain_depths_are_traversable_and_hashable() {
         let h = canonical_program_hash(CanonHashCfg::default(), &t.idx, &t.ir, &t.it);
 
         // Semantic oracle at the same depth.
-        let form = super::oracle::semantic_form(&t, super::oracle::Ordering::Ordered);
+        let form = crate::unified_ir::support::oracle::semantic_form(
+            &t,
+            crate::unified_ir::support::oracle::Ordering::Ordered,
+        );
 
         eprintln!(
             "[depth] synthetic chain depth={d} decls={} parent_walk_steps={steps} \

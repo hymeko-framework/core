@@ -14,30 +14,9 @@ use hymeko::common::ids::DeclId;
 use hymeko::ir::coherence::{CoherenceLimits, Finding, validate_hierarchy_index_coherence};
 use hymeko::ir::ir::DeclKind;
 
-use crate::unified_ir_m05::builder::{S, TestIr};
+use crate::unified_ir::support::builder::{S, TestIr};
 
-fn fixtures() -> Vec<PathBuf> {
-    let root = Path::new("../data");
-    let mut out = Vec::new();
-    let mut stack = vec![root.to_path_buf()];
-    while let Some(d) = stack.pop() {
-        let Ok(rd) = std::fs::read_dir(&d) else {
-            continue;
-        };
-        for e in rd.flatten() {
-            let p = e.path();
-            if p.is_dir() {
-                stack.push(p);
-            } else if p.extension().is_some_and(|x| x == "hymeko") {
-                out.push(p);
-            }
-        }
-    }
-    out.sort();
-    out
-}
-
-fn label(f: &Finding) -> &'static str {
+pub fn label(f: &Finding) -> &'static str {
     match f {
         Finding::IndexedDeclOutOfRange { .. } => "IndexedDeclOutOfRange",
         Finding::DeclHasMultiplePaths { .. } => "DeclHasMultiplePaths",
@@ -55,60 +34,6 @@ fn label(f: &Finding) -> &'static str {
 
 /// The corpus survey. Reports; does not gate on coherence, because divergence
 /// is an expected finding this phase is forbidden to repair.
-#[test]
-fn corpus_hierarchy_index_coherence_survey() {
-    let files = fixtures();
-    if files.is_empty() {
-        eprintln!("[coherence] no fixtures found — survey skipped");
-        return;
-    }
-
-    let mut lowered = 0usize;
-    let mut clean = 0usize;
-    let mut diverged = 0usize;
-    let mut counts: std::collections::BTreeMap<&'static str, usize> =
-        std::collections::BTreeMap::new();
-    let mut first_example: Option<(String, Finding)> = None;
-
-    for f in &files {
-        let Ok((store, compiled)) = crate::test_helpers::load_and_lower(f) else {
-            continue;
-        };
-        lowered += 1;
-        match validate_hierarchy_index_coherence(
-            &compiled.ir,
-            &compiled.idx,
-            &store.it,
-            CoherenceLimits::default(),
-        ) {
-            Ok(()) => clean += 1,
-            Err(report) => {
-                diverged += 1;
-                for fi in &report.findings {
-                    *counts.entry(label(fi)).or_insert(0) += 1;
-                }
-                if first_example.is_none()
-                    && let Some(fi) = report.findings.first()
-                {
-                    first_example = Some((f.display().to_string(), fi.clone()));
-                }
-            }
-        }
-    }
-
-    eprintln!("[coherence] lowered={lowered} clean={clean} diverged={diverged}");
-    for (k, v) in &counts {
-        eprintln!("[coherence]   {k:<30} {v}");
-    }
-    if let Some((file, fi)) = &first_example {
-        eprintln!("[coherence] first minimal example: {file}\n[coherence]   {fi:?}");
-    }
-
-    assert!(
-        lowered > 0,
-        "no fixture lowered; the survey measured nothing"
-    );
-}
 
 // ---------------------------------------------------------------------------
 // Deliberate corruptions — each must be caught.

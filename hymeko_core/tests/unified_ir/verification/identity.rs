@@ -13,8 +13,10 @@
 use hymeko::ir::canonical_hash::{CanonHashCfg, canonical_program_hash};
 use hymeko::ir::hash::HashId;
 
-use super::builder::{S, TestIr};
-use super::oracle::{Ordering, dense_id_form, intrusive_hierarchy_form, semantic_form};
+use crate::unified_ir::support::builder::{S, TestIr};
+use crate::unified_ir::support::oracle::{
+    Ordering, dense_id_form, intrusive_hierarchy_form, semantic_form,
+};
 
 fn hash(t: &TestIr) -> HashId {
     canonical_program_hash(CanonHashCfg::default(), &t.idx, &t.ir, &t.it)

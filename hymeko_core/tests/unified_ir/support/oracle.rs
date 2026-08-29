@@ -47,7 +47,7 @@ use std::collections::BTreeSet;
 use hymeko::common::ids::DeclId;
 use hymeko::ir::ir::{DeclKind, Ir, SignedRefR, ValueR};
 
-use super::builder::TestIr;
+use crate::unified_ir::support::builder::TestIr;
 
 /// How to treat positional ordering of arcs and of references within an arc.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
