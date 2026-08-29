@@ -314,3 +314,39 @@ Everything specified in Parts G and H is **BLOCKED** in `docs/verification/unifi
 **No placeholder tests were written.** A test that constructed the expected shape and asserted `true` would raise the test count and the coverage percentage while establishing nothing — and would then have to be *found and removed* when the real implementation arrived. The requirements are recorded; the tests are not faked.
 
 The reference-model constraint in §0 stands and is now enforceable: `support/` holds the shared builder and oracle, so a model that accidentally reused production machinery would be visible as an import from `hymeko::` rather than from `support::`.
+
+---
+
+## M2b-corrective addendum (2026-08-29) — strict consumers, total readers
+
+A policy this plan implied but never stated, made explicit after M2b shipped two consumers that silently accepted malformed input:
+
+> **The accessor layer is total and `Option`-valued. Turning absence into a visible failure is the consumer's job, not the reader's.**
+
+The two are not in tension — they are a division of labour. A read API that panicked would make diagnosis impossible; a consumer that shrugged makes corruption invisible. M2b got the first half right and the second half wrong: `IrWriter` returned `Ok(())` on a dangling link and emitted a truncated document, and `HyperGraphView` skipped a dangling arc with a bare `continue`, producing a view with fewer incidences than the IR describes.
+
+### Consumer classes
+
+| Class | Contract on malformed input | Example |
+|---|---|---|
+| **Total reader** | returns `Option`; never panics, never errors | `Ir::decl_node`, `Ir::as_node`, `Ir::child_decls` |
+| **Diagnostic consumer** | renders a visible marker and continues | `util::pretty_print` — `(arc_rec missing)` is diagnosis, which is the whole point of a debug printer |
+| **Strict consumer** | typed error | `IrWriter::write_all` → `io::ErrorKind::InvalidData`; `HyperGraphView::try_from_ir` → `ViewBuildError` |
+| **Compatibility shim** | documented fail-fast, delegating to the strict path | `HyperGraphView::from_ir` — `# Panics`, preserving the pre-M2b contract |
+
+**Silence is not a class.** Any consumer that neither reports nor renders is a defect, and `UIR-M2B-03` / `UIR-M2B-06` now say so.
+
+### What a malformed-input test must assert
+
+Not "it survived". Surviving and silently truncating are the same observable. Assert the **discriminating** property:
+
+- the exact error variant (`ViewBuildError::DanglingArc`, not merely `is_err()`);
+- the error kind (`io::ErrorKind::InvalidData`);
+- that the message names the offending id;
+- and, in the same module, that **valid** input is unchanged — otherwise strictness is bought with false positives.
+
+### One distinction the tests must preserve
+
+An **edge-to-edge reference is not malformed.** `HyperGraphView` is vertex-centric and has always skipped references to `Edge` declarations; that is the rewrite engine's legitimate output. Only a `Node` declaration with no record, or a reference to a declaration that does not exist, is an error.
+
+Getting this wrong in the corrective phase broke three pre-existing tests before it was caught — see `reports/2026-08-29-unified-ir-m2b-vv-corrective.md` §2.

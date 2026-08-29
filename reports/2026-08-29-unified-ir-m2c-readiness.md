@@ -165,3 +165,46 @@ The two "must fall" rows are the ones that make the change worth doing. If they 
 2. **Generation width and wraparound.** A `NonZeroU32` generation wraps after ~4.29 × 10⁹ reuses of one slot. Whether that is reachable, and what should happen if it is, is undecided.
 3. **`SymId` is deliberately excluded.** It is content-addressed and append-only, so it needs no generation (architecture §E.4). Sweeping it into the same change would add risk for no benefit.
 4. **Python invalidation semantics.** No rule exists today for how long a Python-held id stays valid. M2c makes ids opaque; it does not answer this, and it must be answered before mutation lands.
+
+---
+
+## Correction — 2026-08-29, M2b V&V corrective phase
+
+Two claims in §4 and §8 above were wrong. They are corrected here additively; the original text is left in place so the error and its correction both stay visible.
+
+### C1. The memory saving is 2×, not 4×, and the "~240 KB" figure was unfounded
+
+§8 stated that `decl_to_*` "must fall to ~240 KB at 20 001 declarations (4× from the niche)". **That is arithmetically wrong.**
+
+| Layout | `Option<Id>` | Three maps @ 20 001 decls |
+|---|---:|---:|
+| today (`Id(usize)`, no niche) | 16 B | `3 × 20 001 × 16` = **960 048 B** |
+| generational key (`{idx:u32, gen:NonZeroU32}`) | 8 B | `3 × 20 001 × 8` = **480 024 B** |
+
+That is a **2× reduction**, not 4×. The corrected M2d acceptance row is therefore:
+
+> `decl_to_*` maps **must fall to 480 024 B** at 20 001 declarations (2×), not ~240 KB.
+
+**Where the wrong number came from.** I conflated two independent optimisations. `docs/unified-ir-architecture.md` §E.3 proposes something different: *removing* the three maps entirely and replacing them with one inline `u32` payload discriminator on each declaration — `20 001 × 4` = **80 004 B**. That is a 12× reduction against today, and it comes from **eliminating the maps**, not from an ID niche. The two are additive and independent:
+
+| Change | Mechanism | Three-map cost @ 20 001 |
+|---|---|---:|
+| none (today) | — | 960 048 B |
+| generational key only | `Option<Id>` gains a niche | 480 024 B |
+| M2d/E.3 structural change only | maps replaced by an inline `u32` | 80 004 B |
+
+Attributing the structural saving to the ID representation overstated what M2c/M2d alone would deliver.
+
+### C2. "Bit-packing is measurably wrong" was not measured
+
+§4 said a packed `NonZeroU64` is "the same size and strictly more work to decode", and called the packing instinct "measurably wrong". Only the first half was measured. Corrected claim strengths:
+
+| Claim | Status |
+|---|---|
+| `NonZeroU64` and `{idx:u32, gen:NonZeroU32}` are both 8 bytes, both with an `Option` niche | **MEASURED** — `size_of` on rustc 1.97.1 |
+| Field access is more readable and gives a clearer FFI layout than shift-and-mask | **STRUCTURAL** — a property of the source, not a measurement |
+| The struct decodes faster at runtime | **UNMEASURED HYPOTHESIS** — no codegen inspection, no benchmark |
+
+A shift-and-mask on a value already in a register may well be free, and the compiler may lower both forms identically. **Calling one alternative slower without evidence is the error this project has already made twice** (M2a's "Option materialisation", M2b's stale-baseline "regression"). The A/B belongs to M2d, alongside the layout decision itself.
+
+The provisional recommendation in §4 is unchanged — generational slot arena — but it now rests on stale-ID detection, bounded memory under churn, and the niche, not on a decode-speed claim.

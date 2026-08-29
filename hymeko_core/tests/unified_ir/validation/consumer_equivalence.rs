@@ -18,7 +18,7 @@ use hymeko::ir::ir::Ir;
 use hymeko::resolution::interner::Interner;
 use hymeko::writers::ir_writer::IrWriter;
 
-use crate::unified_ir::support::corpus::fixture_files;
+use crate::unified_ir::support::corpus::require_fixtures;
 
 /// Reference implementation of `IrWriter::write_all`'s root selection, using
 /// direct storage access — the pre-M2b form.
@@ -50,11 +50,7 @@ fn render(ir: &Ir, it: &Interner) -> String {
 
 #[test]
 fn writer_root_selection_matches_the_direct_reference_on_the_corpus() {
-    let files = fixture_files();
-    if files.is_empty() {
-        eprintln!("[m2b] corpus absent — skipped");
-        return;
-    }
+    let files = require_fixtures();
     let mut checked = 0usize;
     for f in &files {
         let Ok((_store, compiled)) = crate::test_helpers::load_and_lower(f) else {
@@ -77,11 +73,7 @@ fn writer_output_is_byte_identical_across_the_corpus() {
     // The migrated writer must produce exactly the bytes it produced before.
     // Rendering twice also pins determinism: the accessor iterator's order is
     // documented as stable for one snapshot, and the writer depends on that.
-    let files = fixture_files();
-    if files.is_empty() {
-        eprintln!("[m2b] corpus absent — skipped");
-        return;
-    }
+    let files = require_fixtures();
     let mut checked = 0usize;
     let mut total_bytes = 0usize;
     for f in &files {
@@ -103,32 +95,95 @@ fn writer_output_is_byte_identical_across_the_corpus() {
     assert!(checked > 0, "no fixture rendered");
 }
 
-/// A declaration whose id is absent must end its subtree rather than abort the
-/// process. Pre-M2b this indexed directly and would have panicked.
-#[test]
-fn writer_survives_a_dangling_child_link() {
+// --- malformed input must be observable, not silently truncated -------------
+//
+// M2b shipped these paths returning `Ok(())` on a dangling link, which produced
+// a quietly truncated document. The accessor layer stays total and
+// `Option`-valued; making absence *visible* is the strict consumer's job.
+
+fn render_result(t: &crate::unified_ir::support::builder::TestIr) -> std::io::Result<String> {
+    let mut buf: Vec<u8> = Vec::new();
+    IrWriter::new(&t.ir, &t.it).write_all(&mut buf)?;
+    Ok(String::from_utf8(buf).expect("emitter output is UTF-8"))
+}
+
+fn two_node_fixture() -> crate::unified_ir::support::builder::TestIr {
     let mut t = crate::unified_ir::support::builder::TestIr::new();
     let root = t.node(&["m"], DeclId::NONE);
-    let x = t.node(&["m", "x"], root);
-    // Point the root's first child at a declaration that does not exist.
-    t.ir.decl_nodes[root.0].first_child = DeclId::new(9_999);
-    let _ = x;
+    let a = t.node(&["m", "a"], root);
+    let b = t.node(&["m", "b"], root);
+    t.ir.decl_nodes[root.0].first_child = a;
+    t.ir.decl_nodes[a.0].next_sibling = b;
+    t.ir.decl_nodes[root.0].last_child = b;
+    t
+}
 
-    let out = render(&t.ir, &t.it);
+#[test]
+fn writer_reports_a_dangling_child_link() {
+    let mut t = two_node_fixture();
+    let root = DeclId::new(0);
+    t.ir.decl_nodes[root.0].first_child = DeclId::new(9_999);
+
+    let err = render_result(&t).expect_err("a dangling child must be reported");
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
     assert!(
-        out.contains('m'),
-        "the writer should still emit the reachable part: {out:?}"
+        err.to_string().contains("9999"),
+        "the error should name the missing declaration: {err}"
+    );
+}
+
+#[test]
+fn writer_reports_a_dangling_sibling_link() {
+    let mut t = two_node_fixture();
+    let a = DeclId::new(1);
+    t.ir.decl_nodes[a.0].next_sibling = DeclId::new(9_999);
+
+    let err = render_result(&t).expect_err("a dangling sibling must be reported");
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+}
+
+#[test]
+fn writer_reports_a_sibling_cycle_instead_of_looping() {
+    let mut t = two_node_fixture();
+    let a = DeclId::new(1);
+    // a -> a: a chain that never terminates.
+    t.ir.decl_nodes[a.0].next_sibling = a;
+
+    let err = render_result(&t).expect_err("a sibling cycle must be reported");
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+    assert!(
+        err.to_string().contains("cyclic"),
+        "the error should say the chain is cyclic: {err}"
+    );
+}
+
+#[test]
+fn writer_reports_a_dangling_root_declaration() {
+    // A root whose own id is absent. Reachable only by corrupting the arena
+    // after the fact, which is exactly what a truncation bug would look like.
+    let mut t = two_node_fixture();
+    t.ir.decl_nodes.truncate(1); // roots list still references 1 and 2
+    t.ir.decl_nodes[0].first_child = DeclId::new(1);
+
+    let err = render_result(&t).expect_err("a dangling root child must be reported");
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+}
+
+#[test]
+fn writer_accepts_a_well_formed_ir_unchanged() {
+    // The strictness must not cost a valid document.
+    let t = two_node_fixture();
+    let out = render_result(&t).expect("a well-formed Ir must render");
+    assert!(
+        out.contains('m') && out.contains('a') && out.contains('b'),
+        "{out:?}"
     );
 }
 
 /// The counts the pretty-printer reports must equal the direct lengths.
 #[test]
 fn count_accessors_match_direct_lengths_on_the_corpus() {
-    let files = fixture_files();
-    if files.is_empty() {
-        eprintln!("[m2b] corpus absent — skipped");
-        return;
-    }
+    let files = require_fixtures();
     let mut checked = 0usize;
     for f in &files {
         let Ok((_store, compiled)) = crate::test_helpers::load_and_lower(f) else {
@@ -149,11 +204,7 @@ fn count_accessors_match_direct_lengths_on_the_corpus() {
 /// map-then-index form for every edge declaration in the corpus.
 #[test]
 fn edge_for_decl_matches_map_then_index_on_the_corpus() {
-    let files = fixture_files();
-    if files.is_empty() {
-        eprintln!("[m2b] corpus absent — skipped");
-        return;
-    }
+    let files = require_fixtures();
     let mut edges = 0usize;
     for f in &files {
         let Ok((_store, compiled)) = crate::test_helpers::load_and_lower(f) else {
@@ -203,11 +254,7 @@ fn edge_for_decl_matches_map_then_index_on_the_corpus() {
 /// arc now renders a marker instead of aborting).
 #[test]
 fn pretty_printer_runs_over_the_corpus_without_panicking() {
-    let files = fixture_files();
-    if files.is_empty() {
-        eprintln!("[m2b] corpus absent — skipped");
-        return;
-    }
+    let files = require_fixtures();
     let mut printed = 0usize;
     for f in &files {
         let Ok((store, compiled)) = crate::test_helpers::load_and_lower(f) else {

@@ -1,6 +1,7 @@
 use crate::traversal::graphview::GraphView;
+use hymeko::common::ids::HyperArcId;
 use hymeko::common::ids::{DeclId, EdgeId, NodeId};
-use hymeko::ir::ir::{Ir, SignedRefR};
+use hymeko::ir::ir::{DeclKind, Ir, SignedRefR};
 use hymeko::tensor::aggregation::{AggCfg, agg_sign};
 use hymeko::tensor::common::Real;
 use hymeko::tensor::representations::tensor_coo::TensorInc;
@@ -43,6 +44,53 @@ impl<'a> Iterator for BergeIter<'a> {
         }
     }
 }
+
+/// Why a [`HyperGraphView`] could not be built from an `Ir`.
+///
+/// Every variant means the `Ir` is structurally malformed — it names something
+/// that is not there, or contradicts itself. None of them is reachable from a
+/// well-formed `Ir`, so a caller that has validated its input (see
+/// `hymeko::ir::coherence`) can treat these as impossible.
+///
+/// Carries ids only, never caller-supplied text, so a malformed `Ir` cannot
+/// make the error echo a large payload.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ViewBuildError {
+    /// An edge lists an arc that does not exist.
+    DanglingArc { edge: EdgeId, arc: HyperArcId },
+    /// A reference names a declaration that does not exist.
+    DanglingTarget { arc: HyperArcId, target: DeclId },
+    /// A reference names a `Node` declaration that has no node record.
+    ///
+    /// Distinct from a reference to an *Edge* declaration, which is a
+    /// legitimate edge-to-edge reference this vertex-centric view has always
+    /// skipped and which is **not** an error.
+    MissingNodeMapping { target: DeclId },
+}
+
+impl core::fmt::Display for ViewBuildError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::DanglingArc { edge, arc } => write!(
+                f,
+                "edge {} lists arc {}, which does not exist",
+                edge.0, arc.0
+            ),
+            Self::DanglingTarget { arc, target } => write!(
+                f,
+                "arc {} references declaration {}, which does not exist",
+                arc.0, target.0
+            ),
+            Self::MissingNodeMapping { target } => write!(
+                f,
+                "declaration {} is a Node but has no node record",
+                target.0
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ViewBuildError {}
 
 pub struct HyperGraphView<V: IncVal<F>, EW: EdgeWeight<V, F>, F: Real>
 where
@@ -134,7 +182,7 @@ where
         &self.flat_edge_nodes[s..e]
     }
 
-    fn collect_triples<E>(ir: &Ir, ex: &E) -> Vec<TensorInc<F, V>>
+    fn try_collect_triples<E>(ir: &Ir, ex: &E) -> Result<Vec<TensorInc<F, V>>, ViewBuildError>
     where
         E: RefValueExtractor<F, V>,
     {
@@ -145,9 +193,20 @@ where
         // index. Measured identical to raw `Vec` iteration (M2a.1 SCAN gate).
         for (eid, edge) in ir.edge_records() {
             for &aid in &edge.arcs {
-                // Point lookup. A dangling arc id is skipped rather than
-                // panicking; on well-formed input the set is unchanged.
-                let Some(arc) = ir.arc(aid) else { continue };
+                // M2b-corrective: an arc an edge claims to own but which does
+                // not exist is malformed input, not something to skip. Skipping
+                // silently produced a view with fewer incidences than the IR
+                // describes, and nothing downstream could tell.
+                // `let / else`, not `ok_or`: `ok_or` takes its argument by value and
+                // would therefore build the error struct on every successful
+                // iteration too. Error construction belongs on the malformed
+                // path only.
+                let Some(arc) = ir.arc(aid) else {
+                    return Err(ViewBuildError::DanglingArc {
+                        edge: eid,
+                        arc: aid,
+                    });
+                };
                 for r in &arc.refs {
                     let (target, _sgn) = match r {
                         SignedRefR::Plus(a) | SignedRefR::Minus(a) | SignedRefR::Neutral(a) => {
@@ -161,22 +220,60 @@ where
                     // back-link. Substituting it here would change both the
                     // work done and the meaning on malformed input, and is the
                     // substitution the migration rules explicitly forbid.
-                    // It also removes a panic: the old form indexed directly.
-                    if let Some(nid) = ir.as_node(target) {
-                        let sgn = Self::sign_of(r);
-                        let v = ex.value_of(r);
-                        out.push(TensorInc {
-                            e: eid,
-                            n: nid,
-                            s: sgn,
-                            w: v,
-                            _pd: PhantomData,
-                        });
-                    }
+                    //
+                    // M2b-corrective: absence here has three causes and only two
+                    // are errors.
+                    //
+                    //   Edge / HyperArc declaration -> legitimate. This view is
+                    //     vertex-centric and has always skipped edge-to-edge
+                    //     references.
+                    //   Node declaration, no record -> MissingNodeMapping.
+                    //   Not in the declaration table at all -> DanglingTarget,
+                    //     but ONLY when that table can answer the question.
+                    //
+                    // The last qualification is not a convenience. This consumer
+                    // resolves references through `decl_to_node`; it has never
+                    // read `decl_nodes`. An `Ir` whose declaration table is
+                    // empty therefore cannot serve as an existence oracle here,
+                    // and treating every reference in one as dangling would
+                    // invent a requirement `from_ir` never had.
+                    //
+                    // `hymeko_hnn::workloads::HyperSpec::ir()` builds exactly
+                    // such a partial `Ir`: nodes, edges, arcs and `decl_to_node`
+                    // are populated, `decl_nodes` is left empty. That is a
+                    // pre-existing defect in a synthetic fixture — the coherence
+                    // validator would reject it — and it is recorded, not
+                    // repaired here.
+                    //
+                    // One lookup, not two. Classification runs only when the
+                    // mapping is absent; the successful path does exactly the
+                    // work it did before this phase.
+                    let Some(nid) = ir.as_node(target) else {
+                        match ir.kind_of(target) {
+                            Some(DeclKind::Node) => {
+                                return Err(ViewBuildError::MissingNodeMapping { target });
+                            }
+                            Some(_) => continue, // edge-to-edge reference: skip, as always
+                            None if ir.decl_count() > 0 => {
+                                return Err(ViewBuildError::DanglingTarget { arc: aid, target });
+                            }
+                            None => continue, // no declaration table to consult
+                        }
+                    };
+
+                    let sgn = Self::sign_of(r);
+                    let v = ex.value_of(r);
+                    out.push(TensorInc {
+                        e: eid,
+                        n: nid,
+                        s: sgn,
+                        w: v,
+                        _pd: PhantomData,
+                    });
                 }
             }
         }
-        out
+        Ok(out)
     }
 
     fn sort_reduce_pairs(mut triples: Vec<TensorInc<F, V>>, cfg: &AggCfg) -> Vec<TensorInc<F, V>> {
@@ -286,7 +383,39 @@ where
     }
 
     /// Build incidence tables from IR (single source of truth).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the `Ir` is structurally malformed — a dangling arc, a
+    /// reference to a declaration that does not exist, or a `Node` declaration
+    /// with no node record. This preserves the pre-M2b fail-fast contract for
+    /// existing callers.
+    ///
+    /// **New code should call [`HyperGraphView::try_from_ir`]**, which reports
+    /// the same conditions as a typed [`ViewBuildError`] instead. This wrapper
+    /// exists for source compatibility and delegates to it.
     pub fn from_ir<E>(ir: &Ir, cfg: &AggCfg, ex: &E) -> Self
+    where
+        E: RefValueExtractor<F, V>,
+    {
+        match Self::try_from_ir(ir, cfg, ex) {
+            Ok(v) => v,
+            Err(e) => panic!("HyperGraphView::from_ir on a malformed Ir: {e}"),
+        }
+    }
+
+    /// Build incidence tables from IR, reporting malformed input.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ViewBuildError`] when the `Ir` names something that does not
+    /// exist or contradicts itself. A well-formed `Ir` never produces one, and
+    /// the result is bit-identical to [`HyperGraphView::from_ir`] — the checked
+    /// path adds validation, not different arithmetic or ordering.
+    ///
+    /// A reference to an *Edge* declaration is **not** an error: this view is
+    /// vertex-centric and has always skipped edge-to-edge references.
+    pub fn try_from_ir<E>(ir: &Ir, cfg: &AggCfg, ex: &E) -> Result<Self, ViewBuildError>
     where
         E: RefValueExtractor<F, V>,
     {
@@ -297,7 +426,7 @@ where
         let node_decl: Vec<DeclId> = ir.node_records().map(|(_, n)| n.decl).collect();
         let edge_decl: Vec<DeclId> = ir.edge_records().map(|(_, e)| e.decl).collect();
 
-        let triples = Self::collect_triples(ir, ex);
+        let triples = Self::try_collect_triples(ir, ex)?;
 
         // sort by (eid,nid)
         let pairs = Self::sort_reduce_pairs(triples, cfg);
@@ -311,7 +440,7 @@ where
         let (flat_node_edges, flat_node_sign, flat_node_w, node_offsets) =
             Self::build_csr_node_to_edges(&pairs, num_nodes);
 
-        Self {
+        Ok(Self {
             node_decl,
             edge_decl,
             flat_node_edges,
@@ -324,7 +453,7 @@ where
             edge_offsets,
             edge_weight: vec![EW::one(); num_edges],
             _phantom: PhantomData,
-        }
+        })
     }
 }
 

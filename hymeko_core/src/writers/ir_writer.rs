@@ -14,6 +14,21 @@ impl<'a> IrWriter<'a> {
         Self { ir, interner }
     }
 
+    /// Write every root declaration and its subtree.
+    ///
+    /// # Errors
+    ///
+    /// Propagates any write error from `w`, and additionally returns
+    /// [`io::ErrorKind::InvalidData`] when the `Ir` is structurally malformed
+    /// in a way that prevents faithful serialisation:
+    ///
+    /// * a declaration named by a hierarchy link does not exist;
+    /// * a sibling chain is cyclic.
+    ///
+    /// This is deliberate. The accessor layer is total and `Option`-valued so
+    /// that *reads* never abort; a serialiser is a strict consumer, and silently
+    /// emitting a truncated document would leave nothing downstream able to
+    /// detect it. For a valid `Ir` the output is unchanged, byte for byte.
     pub fn write_all<W: Write>(&self, w: &mut W) -> io::Result<()> {
         // M2b: dense scan through the typed-id iterator. Yields the `DeclId`
         // directly, so the id no longer has to be reconstructed from an
@@ -41,12 +56,21 @@ impl<'a> IrWriter<'a> {
     }
 
     fn write_decl<W: Write>(&self, w: &mut W, did: DeclId, depth: usize) -> io::Result<()> {
-        // M2b: point lookup through the accessor, extracted once for cache
-        // efficiency as before. A dangling child link now ends this subtree
-        // instead of panicking — a writer should not abort the process on
-        // malformed input it is being asked to serialise.
+        // Point lookup through the accessor, extracted once for cache
+        // efficiency as before.
+        //
+        // M2b-corrective: an absent declaration is an **error**, not a quiet
+        // stop. The accessor layer is deliberately total and `Option`-valued;
+        // turning absence into a visible failure is the *consumer's* job, and a
+        // serialiser handed a declaration that does not exist has been asked to
+        // write something that is not there. Returning `Ok(())` produced
+        // silently truncated output, which is worse than either a panic or an
+        // error because nothing downstream can tell it happened.
         let Some(node) = self.ir.decl_node(did) else {
-            return Ok(());
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("declaration {} does not exist in this Ir", did.raw()),
+            ));
         };
         let name = self.interner.resolve(node.name);
 
@@ -73,14 +97,41 @@ impl<'a> IrWriter<'a> {
     }
     #[inline(always)]
     fn write_children<W: Write>(&self, w: &mut W, parent: DeclId, depth: usize) -> io::Result<()> {
-        // M2b: `child_decls` is the total form. `decl_children` resolves each
-        // step through `next_sibling`, which indexes directly and therefore
-        // panics on a dangling link and loops forever on a sibling cycle. On
-        // well-formed input the two yield the same sequence — asserted over all
-        // 96 fixtures — so this is a strict robustness gain, not a behaviour
-        // change for any valid IR.
-        for child in self.ir.child_decls(parent) {
+        // M2b-corrective: walk the sibling chain explicitly rather than through
+        // `child_decls`.
+        //
+        // `child_decls` is the *total* iterator: it stops on a dangling link and
+        // is bounded against a cycle, which is right for a read API but wrong
+        // here — stopping and finishing normally are indistinguishable to the
+        // caller, so malformed input produced quietly truncated output.
+        //
+        // This is not a second coherence validator. It checks exactly the two
+        // links it is about to follow, which is the minimum a serialiser must
+        // do to report what it could not write. Structural diagnosis of *why*
+        // an `Ir` is malformed remains `ir::coherence`'s job.
+        let mut cur = self.ir.first_child_of(parent);
+        // A chain longer than the declaration count has revisited a node.
+        let mut budget = self.ir.decl_count();
+
+        while let Some(child) = cur {
+            if budget == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "sibling chain under declaration {} exceeds {} links; it is cyclic",
+                        parent.raw(),
+                        self.ir.decl_count()
+                    ),
+                ));
+            }
+            budget -= 1;
+
+            // A dangling child is reported by `write_decl`, which already has
+            // to resolve the declaration. Pre-checking here would name the
+            // parent in the message but would make that check unreachable —
+            // dead code that coverage correctly refused to call covered.
             self.write_decl(w, child, depth)?;
+            cur = self.ir.next_sibling_of(child);
         }
         Ok(())
     }

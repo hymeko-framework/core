@@ -121,3 +121,58 @@ M2b's fault injection makes that concrete. Four defects were planted in `ir/acce
 Coverage was identical before and after each mutation, and located none of them. The third was weak enough to justify a focused guard, which was added and the mutation re-run (now 2 tests, one corpus-independent).
 
 **Requirements coverage is the primary measure here. Line coverage is a secondary check for *unreached* code — a different and lesser question.**
+
+---
+
+## Correction — 2026-08-29 (M2b V&V corrective)
+
+Appended, not edited in place, so the earlier error stays visible. Full account in
+`reports/2026-08-29-unified-ir-m2b-vv-corrective.md`.
+
+### The requirements-coverage rates above are retracted
+
+**96.9 %** and **70.5 %** are withdrawn. Their denominator was `VERIFIED + PARTIAL` over a row set
+that mixed normative requirements with characterizations of gaps, and their numerator counted the
+`bases` identity gap as satisfied. `traceability.csv` now carries a `kind` column, and the rates are:
+
+| Measure | Value |
+|---|---|
+| Traceability / evidence coverage — rows citing at least one running test | **41 / 63 = 65.1 %** |
+| Implemented normative satisfaction — normative PASS / normative rows whose subject exists | **31 / 31 = 100 %** |
+| End-state normative satisfaction — normative PASS / all normative rows | **31 / 49 = 63.3 %** |
+| Known defects | **4** |
+
+Row kinds: 49 NORMATIVE_REQUIREMENT, 5 DESIGN_CONSTRAINT, 5 CHARACTERIZATION, 4 KNOWN_DEFECT.
+Only normative rows enter the satisfaction denominator.
+
+### Stale test reference above
+
+The "Unreached touched line" section cites `writer_survives_a_dangling_child_link` as the covered
+counterpart in `IrWriter`. That test no longer exists: surviving a dangling link *was* the defect.
+It is replaced by five strict tests — `writer_reports_a_dangling_child_link`,
+`writer_reports_a_dangling_sibling_link`, `writer_reports_a_sibling_cycle_instead_of_looping`,
+`writer_reports_a_dangling_root_declaration`, and `writer_accepts_a_well_formed_ir_unchanged`.
+The `pretty_print` line remains unreached for the reason given, and stays in the denominator.
+
+### Line coverage after the corrective
+
+Same tool, same command, same denominator. Artifact: `reports/coverage/after-corrective.lcov`.
+
+| Scope | baseline | M2b | corrective |
+|---|---|---|---|
+| workspace production lines | 83.10 % | 84.56 % | **84.72 %** |
+| workspace production fns | 80.64 % | 82.16 % | **82.28 %** |
+| `hymeko_core/src/ir/` | 90.84 % | 90.84 % | **90.84 %** |
+| `writers/ir_writer.rs` | 0.00 % | 97.50 % | **100.00 %** |
+| `traversal/hypergraphview.rs` | 90.00 % | 90.00 % | **94.85 %** |
+| `util/pretty_print.rs` | 0.00 % | 89.86 % | 89.86 % |
+| `ir/access.rs` | 94.64 % | 94.64 % | 94.64 % |
+
+Touched-line coverage is 100 %. The nine lines still uncovered in `hypergraphview.rs` — `node_edges`,
+`edge_nodes`, and the `par_sort_unstable_by_key` branch above the 8192-element threshold — are
+pre-existing and untouched by this phase.
+
+The closing statement of the section above still holds, and is now literally true of the numbers:
+**requirements coverage is the primary measure; line coverage is a secondary check for unreached
+code.** Coverage is also what exposed two real gaps this phase — a dead error branch in `IrWriter`
+and three unexercised `Display` arms — so it did diagnostic work here, but it ranked nothing.

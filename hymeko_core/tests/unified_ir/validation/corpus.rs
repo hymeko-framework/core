@@ -23,16 +23,11 @@ use hymeko::common::ids::{DeclId, EdgeId, HyperArcId, NodeId};
 use hymeko::ir::canonical_hash::{CanonHashCfg, canonical_program_hash};
 use hymeko::ir::coherence::{CoherenceLimits, Finding, validate_hierarchy_index_coherence};
 
-use crate::unified_ir::support::corpus::fixture_files;
+use crate::unified_ir::support::corpus::require_fixtures;
 
 #[test]
 fn real_corpus_declaration_depth_audit() {
-    // corpus root is resolved by the shared walker
-    if fixture_files().is_empty() {
-        eprintln!("[depth] ../data not present — corpus audit skipped");
-        return;
-    }
-    let files = fixture_files();
+    let files = require_fixtures();
     eprintln!("[depth] corpus: {} .hymeko fixtures found", files.len());
 
     let mut ok = 0usize;
@@ -100,11 +95,7 @@ fn real_corpus_declaration_depth_audit() {
 }
 #[test]
 fn corpus_hierarchy_index_coherence_survey() {
-    let files = fixture_files();
-    if files.is_empty() {
-        eprintln!("[coherence] no fixtures found — survey skipped");
-        return;
-    }
+    let files = require_fixtures();
 
     let mut lowered = 0usize;
     let mut clean = 0usize;
@@ -156,9 +147,7 @@ fn corpus_hierarchy_index_coherence_survey() {
 /// deterministic order. This is the broadest protection for the Part E rewrite
 /// — it covers real declaration shapes the synthetic vectors do not reach.
 fn corpus_digest() -> (usize, String) {
-    // walker provided by support::corpus
-    // corpus root is resolved by the shared walker
-    let files = fixture_files();
+    let files = require_fixtures();
 
     let mut h = blake3::Hasher::new();
     let mut n = 0usize;
@@ -197,10 +186,6 @@ fn print_corpus_digest_for_capture() {
 /// The corpus gate. Protects v1 across the Part E rewrite over real programs.
 #[test]
 fn v1_corpus_digest_is_unchanged() {
-    if !std::path::Path::new("../data").exists() {
-        eprintln!("[frozen] ../data absent — corpus gate skipped");
-        return;
-    }
     let (n, d) = corpus_digest();
     assert_eq!(
         n, KAT_CORPUS_COUNT,
@@ -216,12 +201,7 @@ fn v1_corpus_digest_is_unchanged() {
 #[test]
 fn accessors_agree_with_direct_field_access_on_the_whole_corpus() {
     // walker provided by support::corpus
-    // corpus root is resolved by the shared walker
-    if fixture_files().is_empty() {
-        eprintln!("[m2a] ../data absent — corpus comparison skipped");
-        return;
-    }
-    let files = fixture_files();
+    let files = require_fixtures();
 
     let mut checked = 0usize;
     let mut coherent = 0usize;

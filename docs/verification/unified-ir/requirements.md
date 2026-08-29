@@ -63,3 +63,62 @@ Two ratios, reported separately because collapsing them would be misleading:
 - **End-state coverage** — VERIFIED ÷ all requirements, including PLANNED and BLOCKED.
 
 The second is deliberately low and should stay low until M3/M4. A rising end-state number without new implementation would mean requirements were dropped, not met.
+
+---
+
+## Taxonomy correction — 2026-08-29 (M2b V&V corrective)
+
+The earlier status vocabulary conflated three different things under `VERIFIED`, and the resulting satisfaction rates were wrong. Corrected additively; the original section is left above so the error stays visible.
+
+### Row kinds
+
+Every traceability row now declares what it *is*, because a rate that mixes them is not a rate of anything:
+
+| Kind | Meaning | Counts toward satisfaction? |
+|---|---|---|
+| **NORMATIVE_REQUIREMENT** | the system *shall* do this | **yes** |
+| **DESIGN_CONSTRAINT** | an architectural rule the implementation must respect | no — tracked separately |
+| **CHARACTERIZATION** | records what the code *currently does*; not a demand | **no** |
+| **KNOWN_DEFECT** | a recorded defect | **no** — counted as defects |
+
+### Statuses
+
+`PASS` · `FAIL` · `PARTIAL` · `NOT_IMPLEMENTED` · `BLOCKED`
+
+`NOT_IMPLEMENTED` means the requirement's subject does not exist yet. `BLOCKED` means it cannot even be expressed with what exists — `UIR-DYN-04` (stale-ID aliasing) is BLOCKED rather than NOT_IMPLEMENTED because dense ordinal IDs *cannot* express it.
+
+### What was wrong
+
+`UIR-HASH-03` read *"bases is covered by no current identity system"* with status `VERIFIED`. That is a **characterization of a gap**, and marking it VERIFIED put a defect in the numerator of the satisfaction rate. A reader scanning for green rows would have concluded inheritance was protected.
+
+It is now split:
+
+| Row | Kind | Status |
+|---|---|---|
+| `UIR-IDENT-01` — *semantic snapshot identity covers inheritance (bases)* | NORMATIVE_REQUIREMENT | **NOT_IMPLEMENTED** |
+| `UIR-DEFECT-01` — *no current identity system covers bases* | KNOWN_DEFECT | **FAIL** |
+
+The same test (`hash_coverage_matrix`) remains the evidence for both. It always was evidence of a *gap*; only the label was wrong.
+
+`UIR-IDENT-02` was added for the same reason, covering annotations, values and weights.
+
+### Silent-skip requirements rewritten
+
+`UIR-M2B-03` and `UIR-M2B-06` previously asserted that malformed input was *survived*. Surviving and silently truncating are the same observable, so those rows certified the defect. They now require:
+
+> malformed input causes no UB, is never silently accepted, produces a **typed error** on the strict API, and **documented fail-fast** on the compatibility API.
+
+### Corrected rates
+
+Four numbers, reported separately because any single blended figure misleads:
+
+| Measure | Definition | Value |
+|---|---|---|
+| **Traceability / evidence coverage** | rows citing at least one running test ÷ all rows | **41 / 63 = 65.1 %** |
+| **Implemented normative satisfaction** | normative PASS ÷ normative rows whose subject exists (PASS + FAIL + PARTIAL) | **31 / 31 = 100 %** |
+| **End-state normative satisfaction** | normative PASS ÷ all normative rows | **31 / 49 = 63.3 %** |
+| **Known defects** | rows of kind KNOWN_DEFECT | **4** |
+
+**Retraction.** The previously reported **96.9 %** ("implemented") and **70.5 %** ("end-state") are withdrawn. They used a denominator of `VERIFIED + PARTIAL` over a set that mixed requirements with characterizations, and their numerator included the `bases` gap as satisfied.
+
+**Read the 100 % correctly.** It says every normative requirement *whose subject exists today* is met. It does **not** say the system is complete — 18 normative requirements are NOT_IMPLEMENTED or BLOCKED, and 4 known defects stand. The defect count is where the bad news lives, which is precisely why it is reported as its own number rather than folded into a percentage.
