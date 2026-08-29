@@ -15,10 +15,13 @@ impl<'a> IrWriter<'a> {
     }
 
     pub fn write_all<W: Write>(&self, w: &mut W) -> io::Result<()> {
-        // Iterate only the roots (items without a parent) directly from the unified nodes
-        for (i, node) in self.ir.decl_nodes.iter().enumerate() {
+        // M2b: dense scan through the typed-id iterator. Yields the `DeclId`
+        // directly, so the id no longer has to be reconstructed from an
+        // enumeration index — which is exactly the coupling to ordinal storage
+        // the accessor layer exists to remove.
+        for (did, node) in self.ir.decls() {
             if node.parent.is_none() {
-                self.write_decl(w, DeclId::new(i), 0)?;
+                self.write_decl(w, did, 0)?;
             }
         }
         Ok(())
@@ -38,8 +41,13 @@ impl<'a> IrWriter<'a> {
     }
 
     fn write_decl<W: Write>(&self, w: &mut W, did: DeclId, depth: usize) -> io::Result<()> {
-        // Extract the unified node exactly once for cache efficiency
-        let node = &self.ir.decl_nodes[did.0 as usize];
+        // M2b: point lookup through the accessor, extracted once for cache
+        // efficiency as before. A dangling child link now ends this subtree
+        // instead of panicking — a writer should not abort the process on
+        // malformed input it is being asked to serialise.
+        let Some(node) = self.ir.decl_node(did) else {
+            return Ok(());
+        };
         let name = self.interner.resolve(node.name);
 
         self.write_indent(w, depth)?;
@@ -65,7 +73,13 @@ impl<'a> IrWriter<'a> {
     }
     #[inline(always)]
     fn write_children<W: Write>(&self, w: &mut W, parent: DeclId, depth: usize) -> io::Result<()> {
-        for child in self.ir.decl_children(parent) {
+        // M2b: `child_decls` is the total form. `decl_children` resolves each
+        // step through `next_sibling`, which indexes directly and therefore
+        // panics on a dangling link and loops forever on a sibling cycle. On
+        // well-formed input the two yield the same sequence — asserted over all
+        // 96 fixtures — so this is a strict robustness gain, not a behaviour
+        // change for any valid IR.
+        for child in self.ir.child_decls(parent) {
             self.write_decl(w, child, depth)?;
         }
         Ok(())

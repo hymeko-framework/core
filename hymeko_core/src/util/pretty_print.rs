@@ -132,16 +132,23 @@ fn fmt_edge_arcs(
     did_to_path: &[Option<PathKey>],
     edge_did: DeclId,
 ) -> String {
-    let ei = edge_did.0 as usize;
-    let Some(eid) = ir.decl_to_edge.get(ei).and_then(|x| *x) else {
+    // M2b: this resolves the record, so it is the checked-composite contract,
+    // not a map-only read. `edge_for_decl` additionally refuses a record whose
+    // back-link names a different declaration -- for a pretty-printer that is
+    // strictly better than rendering some other edge under this name.
+    let Some((_eid, edge)) = ir.edge_for_decl(edge_did) else {
         return " (edge_rec missing)".to_string();
     };
-
-    let edge = &ir.edges[eid.0 as usize];
     let mut out = String::new();
 
     for (ai, arc_id) in edge.arcs.iter().enumerate() {
-        let arc = &ir.arcs[arc_id.0 as usize];
+        // M2b: point lookup through the accessor. A dangling arc id renders a
+        // marker instead of panicking — a debug printer must survive the
+        // malformed input it exists to help diagnose.
+        let Some(arc) = ir.arc(*arc_id) else {
+            out.push_str(&format!("\n\t\t- arc#{ai}: (arc_rec missing)"));
+            continue;
+        };
         out.push_str(&format!("\n\t\t- arc#{ai}: "));
 
         for (ri, r) in arc.refs.iter().enumerate() {
@@ -178,9 +185,9 @@ pub fn pretty_print_compiled(it: &Interner, compiled: &CompiledProgram) {
     }
 
     println!("\nIndex size: {}", compiled.idx.by_path.len());
-    println!("IR decls:   {}", compiled.ir.decl_nodes.len());
-    println!("IR edges:   {}", compiled.ir.edges.len());
-    println!("IR arcs:    {}", compiled.ir.arcs.len());
+    println!("IR decls:   {}", compiled.ir.decl_count());
+    println!("IR edges:   {}", compiled.ir.edge_count());
+    println!("IR arcs:    {}", compiled.ir.arc_count());
 
     // Top-N decl list (rendezetten path szerint)
     let mut keys: Vec<_> = compiled.idx.by_path.keys().cloned().collect();
@@ -197,6 +204,6 @@ pub fn pretty_print_compiled(it: &Interner, compiled: &CompiledProgram) {
     }
 
     // print
-    let did_to_path = build_declid_to_path(&compiled.idx, compiled.ir.decl_nodes.len());
+    let did_to_path = build_declid_to_path(&compiled.idx, compiled.ir.decl_count());
     print_trie(&it, &compiled.ir, &did_to_path, &trie, 0);
 }
