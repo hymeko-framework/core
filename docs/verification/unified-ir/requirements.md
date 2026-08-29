@@ -122,3 +122,68 @@ Four numbers, reported separately because any single blended figure misleads:
 **Retraction.** The previously reported **96.9 %** ("implemented") and **70.5 %** ("end-state") are withdrawn. They used a denominator of `VERIFIED + PARTIAL` over a set that mixed requirements with characterizations, and their numerator included the `bases` gap as satisfied.
 
 **Read the 100 % correctly.** It says every normative requirement *whose subject exists today* is met. It does **not** say the system is complete — 18 normative requirements are NOT_IMPLEMENTED or BLOCKED, and 4 known defects stand. The defect count is where the bad news lives, which is precisely why it is reported as its own number rather than folded into a percentage.
+
+---
+
+## Fixture-coherence correction — 2026-08-29 (`unified-ir-hyperspec-coherence`)
+
+Appended, not edited in place. Full account in
+`reports/2026-08-29-unified-ir-hyperspec-coherence.md`.
+
+### `UIR-M2B-06` was PASS in name only
+
+The row reads *"malformed IR in derived-view construction … is never silently
+accepted"*. The M2b corrective made that true for a dangling arc, a dangling
+target and a missing node record — but it kept an escape:
+
+```rust
+None if ir.decl_count() > 0 => return Err(DanglingTarget { .. }),
+None => continue,   // no declaration table to consult
+```
+
+An unknown target in an `Ir` with an empty declaration table was still **skipped
+silently**. So for the one input shape that actually reached the branch, the
+requirement was false. **Retrospective status for that interval: PARTIAL**, not
+PASS. The row is PASS again only from the commit that removed the escape.
+
+The escape existed to accommodate one producer — `HyperSpec`, an incoherent
+synthetic fixture (`UIR-DEFECT-04`). Weakening the consumer to fit a broken
+producer is the wrong direction; the fix is on the producer.
+
+### `UIR-DEFECT-04` is closed, not deleted
+
+| Field | Value |
+|---|---|
+| Status | **FIXED** (was FAIL) |
+| Evidence | `validation::workload_coherence::*` — four coherence regressions |
+| Fix | `HyperSpec::program_with_weights` builds `decl_nodes`, all three id maps, record back-links, and the arc-to-edge child chain |
+
+The row stays in the table so the defect's history remains resolvable. `FIXED` is
+added to the status vocabulary for `KNOWN_DEFECT` rows; it means the defect is
+closed with a named regression test, as distinct from a requirement's `PASS`.
+
+### New rows
+
+| Row | Kind | Status |
+|---|---|---|
+| `UIR-WL-01` — a synthetic fixture used as evidence for a production path is itself a coherent `Ir` | NORMATIVE_REQUIREMENT | PASS |
+| `UIR-WL-02` — the weighted and unweighted variants differ only in `RefAtomR.weights` | NORMATIVE_REQUIREMENT | PASS |
+| `UIR-WL-03` — workload declaration identity is a function of the index, never of the seed | DESIGN_CONSTRAINT | PASS |
+
+`UIR-WL-01` is the general form of what `UIR-DEFECT-04` was a single instance of:
+a fixture that production could never produce is not evidence about production.
+
+### Recomputed rates
+
+| Measure | M2b corrective | now |
+|---|---|---|
+| Traceability / evidence coverage | 41 / 63 = 65.1 % | **45 / 66 = 68.2 %** |
+| Implemented normative satisfaction | 31 / 31 = 100 % | **33 / 33 = 100 %** |
+| End-state normative satisfaction | 31 / 49 = 63.3 % | **33 / 51 = 64.7 %** |
+| Open known defects | 4 | **3** |
+| Fixed defects | 0 | **1** |
+
+Row kinds: 51 NORMATIVE_REQUIREMENT, 6 DESIGN_CONSTRAINT, 5 CHARACTERIZATION,
+4 KNOWN_DEFECT (3 open, 1 fixed). Only normative rows enter the satisfaction
+denominator; a fixed defect leaves the open count and does not enter the
+numerator of any satisfaction rate.

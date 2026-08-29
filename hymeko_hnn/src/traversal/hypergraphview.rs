@@ -213,7 +213,6 @@ where
                             (a.target, Self::sign_of(r))
                         }
                     };
-
                     // M2b: MAP-ONLY read. `as_node` reports the mapping and
                     // nothing more — deliberately NOT `node_for_decl`, which
                     // would additionally resolve the record and validate its
@@ -221,29 +220,23 @@ where
                     // work done and the meaning on malformed input, and is the
                     // substitution the migration rules explicitly forbid.
                     //
-                    // M2b-corrective: absence here has three causes and only two
-                    // are errors.
+                    // Absence has three causes and only one is legitimate:
                     //
                     //   Edge / HyperArc declaration -> legitimate. This view is
                     //     vertex-centric and has always skipped edge-to-edge
                     //     references.
                     //   Node declaration, no record -> MissingNodeMapping.
-                    //   Not in the declaration table at all -> DanglingTarget,
-                    //     but ONLY when that table can answer the question.
+                    //   Not in the declaration table -> DanglingTarget.
                     //
-                    // The last qualification is not a convenience. This consumer
-                    // resolves references through `decl_to_node`; it has never
-                    // read `decl_nodes`. An `Ir` whose declaration table is
-                    // empty therefore cannot serve as an existence oracle here,
-                    // and treating every reference in one as dangling would
-                    // invent a requirement `from_ir` never had.
-                    //
-                    // `hymeko_hnn::workloads::HyperSpec::ir()` builds exactly
-                    // such a partial `Ir`: nodes, edges, arcs and `decl_to_node`
-                    // are populated, `decl_nodes` is left empty. That is a
-                    // pre-existing defect in a synthetic fixture — the coherence
-                    // validator would reject it — and it is recorded, not
-                    // repaired here.
+                    // The last case used to be excused whenever `decl_count()`
+                    // was zero, on the argument that an `Ir` with no declaration
+                    // table cannot serve as an existence oracle. The only
+                    // producer of such an `Ir` was a synthetic fixture that
+                    // should never have been incoherent; it is now built
+                    // through `HyperSpec::program_with_weights`, which fills
+                    // every table. Keeping the escape would have left
+                    // `UIR-M2B-06` — malformed IR is never silently accepted —
+                    // false for the one input shape that reached it.
                     //
                     // One lookup, not two. Classification runs only when the
                     // mapping is absent; the successful path does exactly the
@@ -254,10 +247,9 @@ where
                                 return Err(ViewBuildError::MissingNodeMapping { target });
                             }
                             Some(_) => continue, // edge-to-edge reference: skip, as always
-                            None if ir.decl_count() > 0 => {
+                            None => {
                                 return Err(ViewBuildError::DanglingTarget { arc: aid, target });
                             }
-                            None => continue, // no declaration table to consult
                         }
                     };
 

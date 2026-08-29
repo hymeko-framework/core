@@ -719,6 +719,79 @@ fn bench_clique_gcn_forward(c: &mut Criterion) {
     group.finish();
 }
 
+// ---------------------------------------------------------------------------
+// Fixture construction vs. view construction, separated.
+//
+// Making `HyperSpec` produce a *coherent* declaration program (unified-ir-
+// hyperspec-coherence) added real work to the fixture: one `DeclNode` per node,
+// edge and arc, an interned name for each, a path `Index` over the named ones,
+// and the arc-to-edge child links. None of that is on `try_from_ir`'s path, but
+// all of it lands in a naive "build an IR and view it" measurement.
+//
+// So the two costs are reported apart, and the sum is reported too, because a
+// caller that builds one view per IR pays the sum while a caller that keeps a
+// resident IR pays only the view. Folding the fixture's cost into the view's
+// regression number would attribute the wrong term.
+// ---------------------------------------------------------------------------
+
+fn bench_workload_ir_construction(c: &mut Criterion) {
+    let mut group = c.benchmark_group("workload_ir_construction");
+
+    for (label, spec) in scales() {
+        let resident = spec.ir();
+        let total: usize = resident.arcs.iter().map(|a| a.refs.len()).sum();
+        let cfg = AggCfg {
+            weight: WeightAgg::Sum,
+            sign: SignAgg::PreferNonNeutral,
+            clamp01: false,
+        };
+        let ex = ScalarWeightExtractor;
+
+        group.throughput(Throughput::Elements(total as u64));
+        tune(&mut group, label);
+
+        // 1. Fixture construction alone.
+        group.bench_function(BenchmarkId::new("spec_ir", label), |b| {
+            b.iter(|| black_box(black_box(&spec).ir()));
+        });
+
+        // 2. Checked view construction over a resident IR.
+        group.bench_function(BenchmarkId::new("try_from_ir_resident", label), |b| {
+            b.iter(|| {
+                black_box(
+                    View::try_from_ir(black_box(&resident), black_box(&cfg), black_box(&ex))
+                        .expect("workload IRs are coherent"),
+                )
+            });
+        });
+
+        // 3. Combined one-shot: build the IR and immediately view it.
+        group.bench_function(BenchmarkId::new("combined_one_shot", label), |b| {
+            b.iter(|| {
+                let ir = black_box(&spec).ir();
+                black_box(
+                    View::try_from_ir(black_box(&ir), black_box(&cfg), black_box(&ex))
+                        .expect("workload IRs are coherent"),
+                )
+            });
+        });
+
+        // 4. Compatibility view over the same resident IR — the difference
+        //    against cell 2 is the `Result` wrapper and nothing else.
+        group.bench_function(BenchmarkId::new("from_ir_resident", label), |b| {
+            b.iter(|| {
+                black_box(View::from_ir(
+                    black_box(&resident),
+                    black_box(&cfg),
+                    black_box(&ex),
+                ))
+            });
+        });
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_gather,
@@ -732,6 +805,7 @@ criterion_group!(
     bench_view_construction,
     bench_view_from_ir,
     bench_from_ir_weight_extraction,
+    bench_workload_ir_construction,
     bench_expansions,
     bench_clique_expansion_growth,
     bench_explicit_clique_and_degrees,

@@ -176,3 +176,34 @@ The closing statement of the section above still holds, and is now literally tru
 **requirements coverage is the primary measure; line coverage is a secondary check for unreached
 code.** Coverage is also what exposed two real gaps this phase — a dead error branch in `IrWriter`
 and three unexercised `Display` arms — so it did diagnostic work here, but it ranked nothing.
+
+---
+
+## Correction — 2026-08-29 (`unified-ir-hyperspec-coherence`)
+
+Same tool, same command, same denominator. Artifact:
+`reports/coverage/after-hyperspec-coherence.lcov`.
+
+| Scope | baseline | M2b | corrective | coherence |
+|---|---|---|---|---|
+| workspace production lines | 83.10 % | 84.56 % | 84.72 % | **84.83 %** |
+| workspace production fns | 80.64 % | 82.16 % | 82.28 % | **82.49 %** |
+| `writers/ir_writer.rs` | 0.00 % | 97.50 % | 100.00 % | 100.00 % |
+| `traversal/hypergraphview.rs` | 90.00 % | 90.00 % | 94.85 % | **95.83 %** |
+| `src/workloads.rs` | 94.10 % | 94.10 % | 94.10 % | **96.11 %** |
+| `ir/access.rs` | 94.64 % | 94.64 % | 94.64 % | 94.64 % |
+
+Every line of the new fixture builder and every arm of the stricter target
+classification is covered. `hypergraphview.rs` gained the
+`par_sort_unstable_by_key` branch, which is above the 8192-element threshold and
+was unreachable while the workload fixture was excluded from the test suite; the
+eight lines still uncovered there are `node_edges` / `edge_nodes`, unchanged and
+pre-existing. In `workloads.rs` the uncovered lines are the `SignPattern`
+alternating arm and `HyperSpec::large()`, both pre-existing and both bench-only.
+
+### Requirements coverage
+
+Superseded again — see the *Fixture-coherence correction* section of
+`requirements.md`. Evidence coverage **45 / 66 = 68.2 %**; implemented normative
+satisfaction **33 / 33 = 100 %**; end-state **33 / 51 = 64.7 %**; **3** open known
+defects and **1** fixed.

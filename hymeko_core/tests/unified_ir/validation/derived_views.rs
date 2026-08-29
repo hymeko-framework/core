@@ -319,19 +319,23 @@ fn view_build_error_display_names_the_offending_ids() {
     }
 }
 
-/// An `Ir` with no declaration table at all must build, not fail.
+/// An `Ir` with no declaration table must be **rejected**, not quietly accepted.
 ///
-/// `hymeko_hnn::workloads::HyperSpec::ir()` produces exactly this shape:
-/// `nodes`, `edges`, `arcs` and `decl_to_node` populated, `decl_nodes` empty.
-/// It is a pre-existing defect in a synthetic fixture (`UIR-DEFECT-04`), but the
-/// checked API must not invent a requirement `from_ir` never had — this
-/// consumer resolves references through `decl_to_node` and has never read
-/// `decl_nodes`.
+/// This test is the inverse of the M2b-corrective
+/// `try_from_ir_accepts_an_ir_with_no_declaration_table`, and it is kept in that
+/// inverted form rather than deleted so the reversal stays legible.
 ///
-/// Getting this wrong broke three pre-existing `test_view_construction` tests
-/// during the corrective phase before it was caught.
+/// The original argued that a consumer which resolves references through
+/// `decl_to_node`, and has never read `decl_nodes`, must not invent an
+/// existence requirement `from_ir` never had. That reasoning was sound about
+/// the *consumer* and wrong about the *system*: it left `UIR-M2B-06` —
+/// malformed IR is never silently accepted — false for the one input shape that
+/// reached the escape. The only producer of that shape was
+/// `hymeko_hnn::workloads::HyperSpec`, an incoherent synthetic fixture
+/// (`UIR-DEFECT-04`). The fixture is fixed at the producer, so the escape has no
+/// legitimate caller left and the strict API now rejects every unknown target.
 #[test]
-fn try_from_ir_accepts_an_ir_with_no_declaration_table() {
+fn try_from_ir_rejects_an_ir_with_no_declaration_table() {
     use hymeko::ir::ir::{ArcRec, EdgeRec, Ir, NodeRec};
 
     let mut ir = Ir::default();
@@ -353,10 +357,8 @@ fn try_from_ir_accepts_an_ir_with_no_declaration_table() {
                 anno: Default::default(),
                 weights: None,
             }),
-            // A third reference whose target is in neither `decl_to_node` nor
-            // the declaration table. With no declaration table there is no
-            // oracle that could call it dangling, so it is skipped — the
-            // behaviour `from_ir` has always had.
+            // The reference that used to be skipped: in neither `decl_to_node`
+            // nor the declaration table.
             SignedRefR::Neutral(hymeko::ir::ir::RefAtomR {
                 target: DeclId::new(7),
                 anno: Default::default(),
@@ -370,12 +372,60 @@ fn try_from_ir_accepts_an_ir_with_no_declaration_table() {
 
     assert_eq!(ir.decl_count(), 0, "fixture precondition: no declarations");
 
-    let view = View::try_from_ir(&ir, &cfg(), &ScalarWeightExtractor)
-        .expect("a declaration-less Ir must still build; from_ir never read decl_nodes");
-    assert_eq!(view.num_edges(), 1);
+    // The first two references resolve and are *not* errors: `as_node` is a
+    // MAP-ONLY read, and a mapping that exists is an answer. Only the third
+    // target is unknown, and one unknown target is enough to reject the whole
+    // build — previously it was dropped and the view came back two-thirds
+    // complete with nothing to say so.
+    let Err(err) = View::try_from_ir(&ir, &cfg(), &ScalarWeightExtractor) else {
+        panic!("an Ir with an unresolvable target must be rejected");
+    };
     assert_eq!(
-        view.edge_span(EdgeId::new(0)).1,
-        2,
-        "both mapped incidences kept; the unmapped reference skipped, not an error"
+        err,
+        ViewBuildError::DanglingTarget {
+            arc: hymeko::common::ids::HyperArcId::new(0),
+            target: DeclId::new(7),
+        }
+    );
+}
+
+/// The escape in its purest form: every reference unknown, `decl_count() == 0`.
+///
+/// Kept separate from the test above because the old behaviour here was worse
+/// than partial loss — skipping the only reference produced a structurally
+/// valid view with **zero** incidences and an `Ok` verdict. A consumer had no
+/// way to distinguish that from a hypergraph whose edge is genuinely empty.
+#[test]
+fn try_from_ir_rejects_a_dangling_target_when_the_declaration_table_is_empty() {
+    use hymeko::ir::ir::{ArcRec, EdgeRec, Ir, NodeRec};
+
+    let mut ir = Ir::default();
+    ir.nodes.push(NodeRec::new(DeclId::new(0), Vec::new()));
+    ir.decl_to_node = vec![Some(NodeId::new(0))];
+    ir.arcs.push(ArcRec {
+        anno: Default::default(),
+        in_edge: DeclId::new(1),
+        refs: vec![SignedRefR::Neutral(hymeko::ir::ir::RefAtomR {
+            // In neither `decl_to_node` nor `decl_nodes`.
+            target: DeclId::new(9),
+            anno: Default::default(),
+            weights: None,
+        })],
+    });
+    let mut e = EdgeRec::new(DeclId::new(1), Vec::new());
+    e.arcs.push(hymeko::common::ids::HyperArcId::new(0));
+    ir.edges.push(e);
+
+    assert_eq!(ir.decl_count(), 0, "fixture precondition: no declarations");
+
+    let Err(err) = View::try_from_ir(&ir, &cfg(), &ScalarWeightExtractor) else {
+        panic!("an unknown target must be rejected regardless of decl_count");
+    };
+    assert_eq!(
+        err,
+        ViewBuildError::DanglingTarget {
+            arc: hymeko::common::ids::HyperArcId::new(0),
+            target: DeclId::new(9),
+        }
     );
 }

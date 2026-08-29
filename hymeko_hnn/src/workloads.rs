@@ -24,8 +24,11 @@
 use core::marker::PhantomData;
 
 use hymeko::common::ids::{DeclId, EdgeId, HyperArcId, NodeId};
+use hymeko::common::pathkey::PathKey;
 use hymeko::generators::HypergraphDesign;
-use hymeko::ir::ir::{AnnoR, ArcRec, EdgeRec, Ir, NodeRec, RefAtomR, SignedRefR, ValueR};
+use hymeko::ir::ir::{AnnoR, ArcRec, DeclKind, EdgeRec, Ir, NodeRec, RefAtomR, SignedRefR, ValueR};
+use hymeko::resolution::interner::Interner;
+use hymeko::resolution::resolve::Index;
 use hymeko::tensor::common::Real;
 use hymeko::tensor::representations::tensor_csr::TensorCsr;
 use hymeko::tensor::tensor_val::EdgeWScalar;
@@ -507,6 +510,41 @@ impl<F: Real> HyperGraphView<F, EdgeWScalar<F>, F> {
 // IR workloads (production construction path)
 // ===========================================================================
 
+/// A synthetic workload as a **complete, coherent** declaration program.
+///
+/// The three pieces travel together because none of them is meaningful alone:
+/// `ir.decl_nodes[d].name` is a [`SymId`] that only the `interner` can resolve,
+/// and `hymeko::ir::coherence::validate_hierarchy_index_coherence` compares the
+/// intrusive hierarchy against the path `index`. Returning only the `Ir` — which
+/// is what [`HyperSpec::ir`] does for callers that need nothing else — discards
+/// exactly the tables that make the `Ir` checkable.
+///
+/// # Invariants
+///
+/// Every value produced by [`HyperSpec::program`] satisfies all of these, and
+/// `workload_coherence` in `hymeko_core/tests/unified_ir` asserts them:
+///
+/// 1. the five declaration-parallel arrays (`decl_nodes`, `decl_hash`,
+///    `decl_to_node`, `decl_to_edge`, `decl_to_arc`) have equal length;
+/// 2. `decl_nodes` holds one declaration per node, per edge **and** per arc;
+/// 3. `NodeRec::decl` / `EdgeRec::decl` point back at the declaration that maps
+///    to them, and `decl_to_node` / `decl_to_edge` / `decl_to_arc` each map only
+///    declarations of the matching `DeclKind`;
+/// 4. every arc declaration is parented to its edge declaration and appears in
+///    that edge's intrusive child chain, with `last_child` reachable;
+/// 5. `parent` links are acyclic and agree with path-prefix parenthood;
+/// 6. every `SignedRefR` target is a `Node` declaration that resolves through
+///    `decl_to_node`;
+/// 7. every `EdgeRec::arcs` entry indexes an existing `ArcRec`;
+/// 8. `index` holds exactly one path per named (`Node`/`Edge`) declaration;
+///    arc declarations are anonymous, which is what production lowering also
+///    produces and what the coherence validator explicitly permits.
+pub struct HyperSpecProgram {
+    pub ir: Ir,
+    pub index: Index,
+    pub interner: Interner,
+}
+
 impl HyperSpec {
     /// Build a synthetic [`Ir`] whose lowering reproduces this spec.
     ///
@@ -517,18 +555,24 @@ impl HyperSpec {
     /// the node-first CSR. Benchmarking construction without this would measure
     /// the wrong function.
     ///
-    /// Declaration ids are laid out as `0..nodes` for nodes and
-    /// `nodes..nodes + edges` for edges, with one arc per hyperedge carrying
-    /// that edge's member references. Each reference gets an explicit numeric
-    /// weight so `ScalarWeightExtractor` exercises its real parsing path rather
-    /// than the `None => one()` shortcut.
+    /// Declaration ids are laid out as `0..nodes` for nodes,
+    /// `nodes..nodes + edges` for edges, and `nodes + edges..` for the one
+    /// anonymous arc declaration per hyperedge — the same order production
+    /// lowering produces, which preallocates every *named* declaration and then
+    /// pushes arc declarations in encounter order. Each reference gets an
+    /// explicit numeric weight so `ScalarWeightExtractor` exercises its real
+    /// parsing path rather than the `None => one()` shortcut.
+    ///
+    /// Discards the `Index` and `Interner`; use [`HyperSpec::program`] when the
+    /// declaration program has to be validated or hashed.
     ///
     /// # Postconditions
-    /// `ir.nodes.len() == self.nodes`, `ir.edges.len() == self.edges`, and
-    /// every `SignedRefR` targets a `DeclId` that maps to a `NodeId`.
+    /// `ir.nodes.len() == self.nodes`, `ir.edges.len() == self.edges`, every
+    /// `SignedRefR` targets a `DeclId` that maps to a `NodeId`, and the result
+    /// satisfies every invariant listed on [`HyperSpecProgram`].
     #[must_use]
     pub fn ir(&self) -> Ir {
-        self.ir_with_weights(true)
+        self.program_with_weights(true).ir
     }
 
     /// Same as [`HyperSpec::ir`], but with every reference's `weights` set to
@@ -541,29 +585,125 @@ impl HyperSpec {
     /// from every other cost in the construction path, which is otherwise
     /// impossible to attribute without a profiler.
     ///
-    /// Both IRs have identical structure, so any timing difference between them
-    /// is attributable to the weight-extraction path alone.
+    /// Both IRs are **structurally identical** — same declarations, same ids,
+    /// same hierarchy, same reference targets and signs, and the weight RNG is
+    /// advanced in both so the two share one stream. Any timing difference is
+    /// attributable to the weight-extraction path alone.
     #[must_use]
     pub fn ir_unweighted(&self) -> Ir {
-        self.ir_with_weights(false)
+        self.program_with_weights(false).ir
     }
 
-    fn ir_with_weights(&self, weighted: bool) -> Ir {
+    /// The full declaration program: `Ir` plus the `Index` and `Interner` that
+    /// make it checkable and hashable.
+    ///
+    /// # Postconditions
+    /// Satisfies every invariant listed on [`HyperSpecProgram`].
+    #[must_use]
+    pub fn program(&self) -> HyperSpecProgram {
+        self.program_with_weights(true)
+    }
+
+    /// Unweighted counterpart of [`HyperSpec::program`].
+    ///
+    /// # Postconditions
+    /// Structurally identical to [`HyperSpec::program`] — see
+    /// [`HyperSpec::ir_unweighted`].
+    #[must_use]
+    pub fn program_unweighted(&self) -> HyperSpecProgram {
+        self.program_with_weights(false)
+    }
+
+    /// Deterministic declaration name for node `i`.
+    ///
+    /// Workload identity is a documented function of the index, never of the
+    /// seed: the seed shapes *topology and weights*, and letting it reach the
+    /// names as well would make two structurally identical workloads hash
+    /// differently for no semantic reason.
+    fn node_name(i: usize) -> String {
+        format!("n{i}")
+    }
+
+    /// Deterministic declaration name for edge `j`. See [`HyperSpec::node_name`].
+    fn edge_name(j: usize) -> String {
+        format!("e{j}")
+    }
+
+    /// Deterministic declaration name for arc `k`.
+    ///
+    /// Arc declarations are anonymous in the `Index` — production lowering emits
+    /// them through `Ir::push_anonymous_arc` and never gives them a path — but
+    /// they still carry a name symbol. `__arc{k}` matches the convention the
+    /// unified-IR test builder already uses, so the two fixture families print
+    /// the same way.
+    fn arc_name(k: usize) -> String {
+        format!("__arc{k}")
+    }
+
+    /// The single place every table of a synthetic workload is built.
+    ///
+    /// Deliberately one function rather than a per-table set: the five
+    /// declaration-parallel arrays, the three id maps, the three record tables
+    /// and the intrusive hierarchy are one invariant, not eight, and splitting
+    /// them is how the previous version came to populate `decl_to_node` while
+    /// leaving `decl_nodes` empty.
+    ///
+    /// Reuses the two mechanisms production lowering uses to keep the parallel
+    /// arrays in step — [`Ir::preallocate_from_index`] for the named
+    /// declarations and [`Ir::push_anonymous_arc`] for each arc — rather than
+    /// resizing five vectors by hand. What is *not* reused is
+    /// `hymeko::ir::lower`, which needs a parsed `parser::ast::Description`;
+    /// synthesising one for a 200 000-node workload would mean generating and
+    /// re-parsing source text, and would couple this fixture to the parser's
+    /// version drift.
+    fn program_with_weights(&self, weighted: bool) -> HyperSpecProgram {
         let design = self.design();
         let num_nodes = design.n_vertices;
+        let num_edges = design.edges.len();
         let mut rng = Lcg::new(self.seed ^ 0x1234_5678);
 
-        let nodes: Vec<NodeRec> = (0..num_nodes)
-            .map(|i| NodeRec::new(DeclId::new(i), Vec::new()))
-            .collect();
+        let mut ir = Ir::default();
+        let mut interner = Interner::new();
+        let mut index = Index::new();
 
-        let mut decl_to_node: Vec<Option<NodeId>> =
-            (0..num_nodes).map(|i| Some(NodeId::new(i))).collect();
-        decl_to_node.resize(num_nodes + design.edges.len(), None);
+        // Sizes decl_nodes, decl_hash, decl_to_node, decl_to_edge and
+        // decl_to_arc together. Arc declarations are pushed afterwards, exactly
+        // as `lower::lower_arc` does.
+        ir.preallocate_from_index(num_nodes + num_edges);
 
-        let mut arcs: Vec<ArcRec> = Vec::with_capacity(design.edges.len());
-        let mut edges: Vec<EdgeRec> = Vec::with_capacity(design.edges.len());
+        // --- node declarations ---------------------------------------------
+        ir.nodes.reserve(num_nodes);
+        for i in 0..num_nodes {
+            let did = DeclId::new(i);
+            let name = interner.intern(&Self::node_name(i));
+            let decl = &mut ir.decl_nodes[i];
+            decl.kind = DeclKind::Node;
+            decl.name = name;
+            decl.parent = DeclId::NONE;
 
+            index.by_path.insert(PathKey(vec![name]), did);
+            ir.decl_to_node[i] = Some(NodeId::new(ir.nodes.len()));
+            ir.nodes.push(NodeRec::new(did, Vec::new()));
+        }
+
+        // --- edge declarations ---------------------------------------------
+        ir.edges.reserve(num_edges);
+        for j in 0..num_edges {
+            let slot = num_nodes + j;
+            let did = DeclId::new(slot);
+            let name = interner.intern(&Self::edge_name(j));
+            let decl = &mut ir.decl_nodes[slot];
+            decl.kind = DeclKind::Edge;
+            decl.name = name;
+            decl.parent = DeclId::NONE;
+
+            index.by_path.insert(PathKey(vec![name]), did);
+            ir.decl_to_edge[slot] = Some(EdgeId::new(ir.edges.len()));
+            ir.edges.push(EdgeRec::new(did, Vec::new()));
+        }
+
+        // --- arcs, their declarations, and the edge child chain -------------
+        ir.arcs.reserve(num_edges);
         for (e, members) in design.edges.iter().enumerate() {
             let edge_decl = DeclId::new(num_nodes + e);
 
@@ -571,6 +711,9 @@ impl HyperSpec {
                 .iter()
                 .enumerate()
                 .map(|(position, &v)| {
+                    // Drawn unconditionally so the weighted and unweighted
+                    // variants consume the same RNG stream and stay
+                    // structurally identical.
                     let w = rng.weight_f32() as f64;
                     let atom = RefAtomR {
                         target: DeclId::new(v),
@@ -589,24 +732,45 @@ impl HyperSpec {
                 })
                 .collect();
 
-            let arc_id = HyperArcId::new(arcs.len());
-            arcs.push(ArcRec {
+            let aid = HyperArcId::new(ir.arcs.len());
+            ir.arcs.push(ArcRec {
                 anno: AnnoR::default(),
                 in_edge: edge_decl,
                 refs,
             });
 
-            let mut rec = EdgeRec::new(edge_decl, Vec::new());
-            rec.arcs.push(arc_id);
-            edges.push(rec);
+            // Appends the declaration and extends all five parallel arrays.
+            let arc_decl = ir.push_anonymous_arc();
+            let arc_name = interner.intern(&Self::arc_name(e));
+            let decl = &mut ir.decl_nodes[arc_decl.raw()];
+            decl.name = arc_name;
+            decl.parent = edge_decl;
+            ir.decl_to_arc[arc_decl.raw()] = Some(aid);
+
+            // One arc per hyperedge, so the edge's child chain is the
+            // degenerate single-child case of `lower::link_decl_child`:
+            // first == last, no sibling. Written out rather than reimplementing
+            // the append walk, and guarded so that adding a second arc per edge
+            // fails loudly here instead of silently producing a broken chain.
+            debug_assert!(
+                ir.decl_nodes[edge_decl.raw()].first_child.is_none(),
+                "workload edges carry exactly one arc; the append case is not implemented"
+            );
+            let edge_node = &mut ir.decl_nodes[edge_decl.raw()];
+            edge_node.first_child = arc_decl;
+            edge_node.last_child = arc_decl;
+
+            ir.edges[e].arcs.push(aid);
         }
 
-        Ir {
-            nodes,
-            edges,
-            arcs,
-            decl_to_node,
-            ..Default::default()
+        // Not one of the declaration-parallel arrays — it is indexed by
+        // `HyperArcId` — but the merkle pass expects one slot per `ArcRec`.
+        ir.arc_hash.resize(ir.arcs.len(), None);
+
+        HyperSpecProgram {
+            ir,
+            index,
+            interner,
         }
     }
 }
