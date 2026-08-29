@@ -1,6 +1,6 @@
 # Unified IR — HyperSpec / V&V coherence corrective
 
-**Written:** 2026-08-29 18:05 CEDT · **Authorisation:** `APPROVED-CORE-EDIT: unified-ir-hyperspec-coherence`
+**Written:** 2026-08-29 17:21:31 CEST · **Authorisation:** `APPROVED-CORE-EDIT: unified-ir-hyperspec-coherence`
 **Base:** `72e622b3f6a62b571d7dd6ae8f4b501b5d685c6d` · **Scope:** this repository only
 
 The M2b corrective made `HyperGraphView::try_from_ir` reject malformed input, then
@@ -414,3 +414,43 @@ affected files, test matrix, performance split and gate list.
 ## Not started, per the brief
 
 Network dependency / lockfile bump.
+
+---
+
+## Provenance correction — 2026-08-29 (erratum, docs only)
+
+This section is additive. The error it records is left visible above rather than
+silently overwritten, per the same discipline the V&V corrections in this report
+apply to their own subject.
+
+### The metadata timestamp was wrong
+
+| | value |
+|---|---|
+| As originally written | `2026-08-29 18:05 CEDT` |
+| Git-verified commit time (`15223bc`, committer date) | **`2026-08-29 17:21:31 +02:00`** |
+| Correct timezone label | **CEST** (Central European Summer Time; "CEDT" is not a valid abbreviation) |
+
+The `Written:` line above has been corrected to the git-verified time. `18:05`
+was a hand-entered guess, later than the actual commit and in a non-existent
+timezone. CLAUDE.md requires stamps to come from the clock, not from memory; this
+one did not, and the git object is the authority.
+
+### No plan bundle preceded this substantive phase
+
+This was a substantive implementation phase — a `hymeko_hnn` source change plus a
+new core-side test module — and CLAUDE.md §2 requires a written plan bundle
+(`plan.tex` / `plan.pdf` / `plan.tikz` / `plan.mmd`, minus the documented
+`plan.pdf` TeX-waiver) **before** code is touched. None was produced. The work
+was driven directly from the task brief.
+
+This is recorded, not repaired. A plan written now would be back-dated, which §2
+explicitly calls out as a red flag and forbids: the plan exists to surface risk
+*before* the change, and a plan authored after the fact surfaces nothing. So no
+retro-active "prior plan" is added.
+
+**Binding consequence:** the next substantive phase in this repository starts only
+with a plan bundle that exists on disk *before* the first source edit. That gate
+applies to the network consumer-migration phase (M2b-network) when it begins; the
+dependency-only lockfile bump that follows is not itself a substantive source
+change and is governed by its own report.
