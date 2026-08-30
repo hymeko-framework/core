@@ -63,6 +63,17 @@ pub type SymId = Id<SymTag>;
 /// let d = DeclId::new(7);
 /// let _r: usize = d.into(); // error[E0277]: From<Id> not implemented
 /// ```
+/// Cross-domain construction through the (removed) `From` is rejected — an
+/// `EdgeId` cannot be minted from a `NodeId`'s raw index implicitly:
+/// ```compile_fail
+/// use hymeko::common::ids::{EdgeId, NodeId};
+/// let n = NodeId::new(3);
+/// let _e = EdgeId::from(n.raw()); // error[E0277]: From<usize> not implemented
+/// ```
+/// (The explicit, greppable `EdgeId::new(n.raw())` *does* compile — that is the
+/// sanctioned intentional raw/wire reconstruction, and it is deliberately loud:
+/// you must name both `raw()` and the target domain. A raw index is not a
+/// validated handle; validation happens on lookup against the owning `Ir`.)
 /// The explicit seam is the compiling twin — construction, extraction, and
 /// domain-typed raw reconstruction all work:
 /// ```
@@ -71,7 +82,16 @@ pub type SymId = Id<SymTag>;
 /// assert_eq!(d.raw(), 7);
 /// let _e = EdgeId::new(d.raw()); // explicit, greppable raw reconstruction
 /// ```
-#[repr(C)] // Stable layout for serde and FFI
+// `#[repr(transparent)]`, not `#[repr(C)]`: an `Id<T>` is exactly a `usize` in
+// memory (the `PhantomData<T>` is zero-sized), so it has the same in-process ABI
+// as `usize`. The former `repr(C)` comment claimed a "stable layout for serde and
+// FFI" — that was misleading: serde serializes the *value* (a bare integer, via
+// the impls in `ids_impl.rs`), not the struct layout, and `usize` is **not** a
+// stable cross-target wire format (its width is 32/64-bit host-dependent). A
+// serialized ID is a raw index for the *current in-process schema*, reconstructed
+// only through the explicit [`Id::new`] seam and validated only on lookup against
+// the owning `Ir`.
+#[repr(transparent)]
 pub struct Id<T>(pub(crate) usize, PhantomData<T>);
 
 impl<T> Id<T> {

@@ -138,3 +138,44 @@ No second canonical model, no second product CLI, no new façade crate, no
 test-only IR/transaction/delta framework. `hymeko_core::ir::Ir` remains the sole
 canonical model; every CPU/HNN/CSR/WGPU object in PoW-0 is a disposable derived
 view of it.
+
+## Correction — 2026-08-30 (M2c seal landed): dependency order & CBOR framing
+
+Additive correction after `APPROVED-CORE-EDIT: seal-canonical-entity-ids` landed
+(`refactor(ir): seal canonical entity id representation`). Supersedes the ordering
+implied in "first recommended token" above.
+
+1. **Dynamic-PoW dependency order (authoritative):**
+   1. **seal entity IDs** — *DONE* (M2c);
+   2. generational arenas;
+   3. transactions;
+   4. versioned snapshots;
+   5. lossless CBOR;
+   6. `ir_stream` canonical apply;
+   7. versioned derived-view refresh;
+   8. single-CLI integration.
+2. **`canonical-cbor-codec` is independently useful but is NOT the first
+   dependency** of the dynamic PoW. The first dependency was sealing (done); the
+   next is **`canonical-generational-arenas`**. (The earlier "first recommended
+   token = CBOR" line reflected standalone value, not dynamic-PoW dependency
+   order.)
+3. **The ~20× figure is JSON text vs packed-record storage, not a measured CBOR
+   speedup.** No CBOR encode/decode has been measured (the codec does not exist).
+4. **First CBOR round-trip oracle** (when the codec is built) must be the
+   *semantic* identity
+   `semantic_fingerprint(decode(encode(ir))) == semantic_fingerprint(ir)` —
+   **not** `parse(emit_hymeko(ir))`, because core's `IrWriter` is skeleton-only
+   (annotations/values/bases/incidences not emitted), so a text round-trip is not
+   yet a valid equality.
+5. **emit_hymeko audit (read-only, transformation repo):** `hymeko_emitter::
+   emit_hymeko` is a **complete** textual emitter — it emits decls, signed/weighted
+   incidences, values, bases and tags, and its structural round-trip is tested
+   (transformation `migration_oracles::hymeko_source_is_the_resident_serialization`).
+   It is the candidate **canonical HyMeKo writer**; core's `IrWriter` is the
+   skeleton-only subset. Do **not** create a second full textual emitter — promote
+   or reuse the transformation one. (Gap to close before promotion: confirm it
+   emits every canonical field the hash covers; it is in a consumer crate, so
+   moving the canonical writer to core is itself a later scoped change.)
+6. **`root_path` is environment / provenance metadata, not canonical semantic
+   state.** It must not enter canonical identity; a "workspace-relative root path"
+   is a portability convenience for snapshots, never part of the canonical hash.

@@ -4,6 +4,23 @@ mod tests {
     use hymeko::common::ids::{DeclId, EdgeId, NodeId, SymId};
 
     #[test]
+    fn test_sealing_is_size_neutral() {
+        use std::mem::size_of;
+        // `#[repr(transparent)]` over a single `usize` field: every domain id is
+        // exactly a `usize` in memory, unchanged by sealing. This is the Phase-F
+        // size invariant — a generational representation (a later phase) is what
+        // may change these, not this sealing-only phase.
+        assert_eq!(size_of::<DeclId>(), size_of::<usize>(), "DeclId is a usize");
+        assert_eq!(size_of::<NodeId>(), size_of::<usize>(), "NodeId is a usize");
+        assert_eq!(size_of::<EdgeId>(), size_of::<usize>(), "EdgeId is a usize");
+        assert_eq!(size_of::<SymId>(), size_of::<usize>(), "SymId is a usize");
+        // No niche today (usize::MAX is the live NONE sentinel), so Option doubles.
+        // Recorded, not asserted as a target: reducing this is the generational
+        // phase's job, not this one.
+        assert_eq!(size_of::<Option<DeclId>>(), 2 * size_of::<usize>());
+    }
+
+    #[test]
     fn test_none_sentinel() {
         let d = DeclId::NONE;
         assert!(d.is_none());
