@@ -47,3 +47,28 @@ Consolidation is a `clap`-style subcommand dispatch in `hymeko_core/src/main.rs`
 (a core edit, requires its own `APPROVED-CORE-EDIT`), with the graph P-graph
 engine linked **as a library** — never a second binary. `parser`'s stub `main`
 is deleted. No new binary is added; the count of product CLIs goes 2 → 1.
+
+## Correction — 2026-08-30 (PoW-0 Phase F): the "link graph into core's binary" plan is INVALID
+
+The Target-shape section above proposed keeping the **core** package's binary and
+linking the graph P-graph engine into it. A dependency-graph audit shows that is a
+**Cargo cycle** and cannot be built:
+
+- `hymeko_pgraph` (graph) **depends on** `hymeko_core` (`graph/hymeko_pgraph/Cargo.toml:
+  hymeko_core = { workspace = true }`, resolved to the core git dep).
+- `hymeko_core` (core) does **not** depend on graph.
+- Direction is one-way **graph → core**. Putting the `hymeko` façade in the *core*
+  package and linking graph would add **core → graph**, closing the cycle
+  **core → graph → core**, which Cargo rejects.
+
+**Corrected plan (smallest viable, no new crate):** the single `hymeko` façade must
+live in a package that is **downstream of both** core and graph. The existing
+**`hymeko_pgraph` package (graph repo)** already depends on core and already ships a
+subcommand CLI (`pgraph read|transform|solve|generate`); promote *it* into the thin
+`hymeko` façade (rename the `pgraph` bin to `hymeko`, fold `hymeko_pgraph_dump` in as
+`hymeko pgraph dump`). Afterwards remove the **core** `hymeko_core` product binary
+and the **parser** `Hello, world!` stub, leaving exactly one product binary. This
+inverts the earlier ownership choice: the façade goes to the outermost existing
+package, never to core. No new façade crate is created; computation stays in the
+libraries; the CLI is argument-parsing + presentation only. (This is a later,
+separately-approved change; `UIR-CLI-04` stays PARTIAL.)

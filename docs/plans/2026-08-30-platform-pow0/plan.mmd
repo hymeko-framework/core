@@ -1,0 +1,10 @@
+flowchart LR
+  S[HyMeKo source golden] --> P[RealParser + ModuleStore lower]
+  P --> IR[canonical Ir 19/9/5/5/14]
+  IR --> C[coherence + frozen canon hash]
+  C --> V[HyperGraphView try_from_ir]
+  V --> CSR[star_expansion_csr]
+  CSR --> CPU[spmm serial == rayon fd 8/32/128]
+  CSR --> GPU[WGPU resident spmm+relu one submit]
+  CPU --> EQ[readback == CPU within 1e-5]
+  GPU --> EQ

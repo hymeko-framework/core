@@ -1,0 +1,33 @@
+pow0_service_network
+{}
+datacenter
+{
+    // --- switches / routers ---
+    sw_core{}
+    sw_edge{}
+    // --- hosts ---
+    host_a{}
+    host_b{}
+    host_c{}
+    // --- services ---
+    svc_web{}
+    svc_db{}
+    svc_cache{}
+
+    // VLAN / failure-domain: a genuinely multiway hyperedge over the core
+    // switch and the three hosts it powers. The switch is produced (+), the
+    // hosts consumed (-), weights are link capacities.
+    @vlan_core { ( + sw_core[1.0], - host_a[0.5], - host_b[0.5], - host_c[0.25] ); }
+
+    // Second failure domain on the edge switch, overlapping host_c (shared
+    // vertex -> non-trivial clique/star structure).
+    @vlan_edge { ( + sw_edge[1.0], - host_c[0.75], - host_a[0.25] ); }
+
+    // Service dependency: web depends on db and cache; neutral incidence marks
+    // an advisory (non-flow) link.
+    @dep_web { ( + svc_web[1.0], - svc_db[0.9], ~ svc_cache[0.1] ); }
+
+    // Service placement: db runs on host_b, cache on host_a.
+    @place_db { ( + svc_db[1.0], - host_b[1.0] ); }
+    @place_cache { ( + svc_cache[1.0], - host_a[1.0] ); }
+}

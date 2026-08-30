@@ -1,0 +1,34 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=25mm]{geometry}
+\usepackage{amsmath,booktabs,longtable,hyperref}
+\usepackage{tikz}\usetikzlibrary{arrows.meta,positioning,fit}
+\title{PoW-0: source-to-CPU/GPU vertical slice (tests only; no core edit)}
+\author{No APPROVED-CORE-EDIT token used}
+\date{Created-at: 2026-08-30 08:59 CEST}
+\begin{document}\maketitle
+\section*{Scope}
+An executable integration proof (as tests) that the existing public path composes:
+HyMeKo source $\to$ RealParser $\to$ ModuleStore/lowering $\to$ canonical \texttt{Ir}
+$\to$ coherence $\to$ \texttt{HyperGraphView} $\to$ star-expansion CSR $\to$ CPU
+serial/Rayon SpMM $\to$ WGPU resident SpMM+activation $\to$ readback $\to$
+equivalence. Composes existing APIs only; no new IR/view/CSR/ID/transaction/
+snapshot/workload/CLI/GPU abstraction. \texttt{plan.pdf} waived (no TeX; explicit
+grant). PoW-0 is the \emph{static} spine; it does not prove mutation/transactions/
+CBOR/distribution (PoW-1, blocked on core approvals).
+\section{ETA} $\approx$3--4 h: discovery, golden fixture + de-risk, 11-test suite,
+negatives, CLI cycle audit, PoW-1 design, V\&V + report, gates + push.
+\section{Affected files (allowlisted)}
+\texttt{hymeko\_wgpu/tests/pow0\_vertical\_slice.rs} (new);
+\texttt{hymeko\_wgpu/tests/data/pow0\_service\_network.hymeko} (golden, NOT under
+\texttt{data/**}); \texttt{docs/platform-proof-of-work.md}; PoW V\&V rows;
+\texttt{docs/unified-ir-single-cli.md} (cycle correction); report; figure; this bundle.
+\section{Test strategy} CPU/source/view/CSR tests never skip; GPU tests use the
+existing \texttt{backend\_or\_skip}. Independent CSR oracle from the star
+definition (not the builder). Frozen canonical hash. Negatives reuse existing
+named tests via traceability rather than duplicate.
+\section{CORE.YAML} None. No \texttt{src}/\texttt{Cargo.toml}/dep/\texttt{data}
+change; no product binary added.
+\section{Rollback} All additive; \texttt{git revert} the one commit.
+\section{Risk} GPU tests skip on a headless host (documented); the golden is tiny
+by design (auditable) so timings are small --- performance uses existing large cells.
+\end{document}
