@@ -24,7 +24,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use hymeko::common::ids::{EdgeId, NodeId};
 use hymeko::ir::coherence::{CoherenceLimits, validate_hierarchy_index_coherence};
 use hymeko::module_store::module_store::{CompiledProgram, ModuleStore};
 use hymeko::module_store::source_provider::StdFsProvider;
@@ -211,14 +210,18 @@ fn pow0_view_orientations_agree_and_rebuild_is_equivalent() {
     // Both incidence orientations must contain the same (node, edge) multiset.
     let mut edge_major: Vec<(usize, usize)> = Vec::new();
     for e in 0..view.num_edges() {
-        for &n in view.edge_nodes(EdgeId::new(e)) {
-            edge_major.push((n.raw(), e));
+        for &n in
+            view.edge_nodes(hymeko_hnn::traversal::dense_index::DenseEdgeIndex::from_u32(e as u32))
+        {
+            edge_major.push((n.as_usize(), e));
         }
     }
     let mut node_major: Vec<(usize, usize)> = Vec::new();
     for n in 0..view.num_nodes() {
-        for &e in view.node_edges(NodeId::new(n)) {
-            node_major.push((n, e.raw()));
+        for &e in
+            view.node_edges(hymeko_hnn::traversal::dense_index::DenseNodeIndex::from_u32(n as u32))
+        {
+            node_major.push((n, e.as_usize()));
         }
     }
     edge_major.sort_unstable();
@@ -298,9 +301,10 @@ fn pow0_star_csr_matches_the_signed_bipartite_definition() {
     let mut expected: Vec<(usize, usize)> = Vec::new();
     for e in 0..view.num_edges() {
         let e_v = n + e;
-        let (s, eend) = view.edge_span(EdgeId::new(e));
+        let (s, eend) =
+            view.edge_span(hymeko_hnn::traversal::dense_index::DenseEdgeIndex::from_u32(e as u32));
         for p in s..eend {
-            let n_v = view.flat_edge_nodes[p].raw();
+            let n_v = view.flat_edge_nodes[p].as_usize();
             match view.flat_edge_sign[p] {
                 1 => expected.push((n_v, e_v)),
                 -1 => expected.push((e_v, n_v)),

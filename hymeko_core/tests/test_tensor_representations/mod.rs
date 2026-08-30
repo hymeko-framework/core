@@ -4,6 +4,7 @@ mod test_compute_vocabulary;
 mod test_conv_forward;
 mod test_csr_builder;
 mod test_csr_kernels;
+mod test_dense_view_boundary;
 mod test_message_passing_components;
 mod test_message_passing_parallel;
 mod test_view_construction;

@@ -9,7 +9,7 @@
 //! `reference_hgnn_forward` / `reference_signed_hgnn_forward` below are
 //! verbatim transcriptions of the **pre-optimisation** algorithms. They
 //! reconstruct the layer parameters exactly the way `from_view` does — using
-//! the same public `compute_degree` / `inv_sqrt_degree` helpers — so no
+//! the same public `compute_degree_by_index` / `inv_sqrt_degree` helpers — so no
 //! accessor had to be added to the production types just to test them.
 //!
 //! These oracles are the only thing that can catch a silent numerical drift in
@@ -21,7 +21,7 @@
 #[cfg(test)]
 mod test_conv_forward {
     use crate::test_helpers::{log_test_footer, log_test_header};
-    use hymeko::tensor::conv::traits::{DegreeMode, compute_degree, inv_sqrt_degree};
+    use hymeko::tensor::conv::traits::{DegreeMode, compute_degree_by_index, inv_sqrt_degree};
     use hymeko::tensor::tensor_val::{EdgeWScalar, IncVal};
     use hymeko_hnn::tensor::conv::hgnn::HgnnLayer;
     use hymeko_hnn::tensor::conv::signed_hgnn::SignedHgnnLayer;
@@ -103,24 +103,22 @@ mod test_conv_forward {
         let m = hg.num_edges();
 
         // Parameters exactly as HgnnLayer::from_view builds them.
-        let dv = compute_degree(
+        let dv = compute_degree_by_index(
             &hg.edge_offsets,
-            &hg.node_offsets,
             &hg.flat_edge_nodes,
-            &hg.flat_edge_sign,
             &hg.flat_edge_w,
             n,
             m,
+            |d| d.as_usize(),
             DegreeMode::VertexSum,
         );
-        let de = compute_degree(
+        let de = compute_degree_by_index(
             &hg.edge_offsets,
-            &hg.node_offsets,
             &hg.flat_edge_nodes,
-            &hg.flat_edge_sign,
             &hg.flat_edge_w,
             n,
             m,
+            |d| d.as_usize(),
             DegreeMode::EdgeSum,
         );
         let inv_sqrt_dv = inv_sqrt_degree(&dv);
@@ -155,7 +153,7 @@ mod test_conv_forward {
                 let eend = hg.edge_offsets[e + 1];
                 let mut acc = 0.0f32;
                 for p in s..eend {
-                    let v = hg.flat_edge_nodes[p].raw();
+                    let v = hg.flat_edge_nodes[p].as_usize();
                     acc += hg.flat_edge_w[p].degree_mass() * z_col[v];
                 }
                 x_edges[e] = acc;
@@ -170,7 +168,7 @@ mod test_conv_forward {
                 let s = hg.edge_offsets[e];
                 let eend = hg.edge_offsets[e + 1];
                 for p in s..eend {
-                    let v = hg.flat_edge_nodes[p].raw();
+                    let v = hg.flat_edge_nodes[p].as_usize();
                     y_col[v] += hg.flat_edge_w[p].degree_mass() * x_edges[e];
                 }
             }
@@ -203,7 +201,7 @@ mod test_conv_forward {
         let mut de_minus = vec![0.0f32; m];
         for e in 0..m {
             for p in hg.edge_offsets[e]..hg.edge_offsets[e + 1] {
-                let v = hg.flat_edge_nodes[p].raw();
+                let v = hg.flat_edge_nodes[p].as_usize();
                 let w = hg.flat_edge_w[p].degree_mass();
                 match hg.flat_edge_sign[p] {
                     1 => {
@@ -264,7 +262,7 @@ mod test_conv_forward {
             let mut xe_minus = vec![0.0f32; m];
             for e in 0..m {
                 for p in hg.edge_offsets[e]..hg.edge_offsets[e + 1] {
-                    let v = hg.flat_edge_nodes[p].raw();
+                    let v = hg.flat_edge_nodes[p].as_usize();
                     let w = hg.flat_edge_w[p].degree_mass();
                     match hg.flat_edge_sign[p] {
                         1 => xe_plus[e] += w * zp_col[v],
@@ -285,7 +283,7 @@ mod test_conv_forward {
             let mut y = vec![0.0f32; n];
             for e in 0..m {
                 for p in hg.edge_offsets[e]..hg.edge_offsets[e + 1] {
-                    let v = hg.flat_edge_nodes[p].raw();
+                    let v = hg.flat_edge_nodes[p].as_usize();
                     let w = hg.flat_edge_w[p].degree_mass();
                     match hg.flat_edge_sign[p] {
                         1 => y[v] += w * xe_plus[e],

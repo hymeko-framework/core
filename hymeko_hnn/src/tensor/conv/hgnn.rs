@@ -28,7 +28,7 @@
 use rayon::prelude::*;
 
 use hymeko::tensor::common::Real;
-use hymeko::tensor::conv::traits::{DegreeMode, compute_degree, inv_sqrt_degree};
+use hymeko::tensor::conv::traits::{DegreeMode, compute_degree_by_index, inv_sqrt_degree};
 use hymeko::tensor::tensor_val::{EdgeWeight, IncVal};
 
 use crate::tensor::common::{PAR_BLOCKED_WORK_THRESHOLD, PAR_INCIDENCE_THRESHOLD, feature_tile};
@@ -58,24 +58,22 @@ impl<F: Real> HgnnLayer<F> {
         let nn = hg.num_nodes();
         let ne = hg.num_edges();
 
-        let dv = compute_degree(
+        let dv = compute_degree_by_index(
             &hg.edge_offsets,
-            &hg.node_offsets,
             &hg.flat_edge_nodes,
-            &hg.flat_edge_sign,
             &hg.flat_edge_w,
             nn,
             ne,
+            |d| d.as_usize(),
             DegreeMode::VertexSum,
         );
-        let de = compute_degree(
+        let de = compute_degree_by_index(
             &hg.edge_offsets,
-            &hg.node_offsets,
             &hg.flat_edge_nodes,
-            &hg.flat_edge_sign,
             &hg.flat_edge_w,
             nn,
             ne,
+            |d| d.as_usize(),
             DegreeMode::EdgeSum,
         );
 
@@ -212,7 +210,7 @@ impl<F: Real> HgnnLayer<F> {
             let s = hg.edge_offsets[e];
             let eend = hg.edge_offsets[e + 1];
             for p in s..eend {
-                let v = hg.flat_edge_nodes[p].raw();
+                let v = hg.flat_edge_nodes[p].as_usize();
                 let w = hg.flat_edge_w[p].degree_mass();
                 let z_row = &z[v * d_out + f0..v * d_out + f0 + width];
                 for (acc, &zz) in xe_row.iter_mut().zip(z_row.iter()) {
@@ -276,7 +274,7 @@ impl<F: Real> HgnnLayer<F> {
             let s = hg.node_offsets[v];
             let nend = hg.node_offsets[v + 1];
             for p in s..nend {
-                let e = hg.flat_node_edges[p].raw();
+                let e = hg.flat_node_edges[p].as_usize();
                 let w = hg.flat_node_w[p].degree_mass();
                 let xe_row = &scratch[e * width..(e + 1) * width];
                 for (acc, &xe) in dst.iter_mut().zip(xe_row.iter()) {

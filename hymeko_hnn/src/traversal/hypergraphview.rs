@@ -1,3 +1,4 @@
+use crate::traversal::dense_index::{DenseEdgeIndex, DenseNodeIndex};
 use crate::traversal::graphview::GraphView;
 use hymeko::common::ids::HyperArcId;
 use hymeko::common::ids::{DeclId, EdgeId, NodeId};
@@ -17,18 +18,22 @@ use std::marker::PhantomData;
 /// for essentially this construction; our code uses `Berge*` identifiers
 /// for historical reasons, with [`LeviState`] / [`LeviView`] re-exports
 /// for readers who prefer the Levi-graph terminology.
+/// Traversal state is **view-local**: it carries dense view coordinates
+/// ([`DenseNodeIndex`]/[`DenseEdgeIndex`]), not canonical `NodeId`/`EdgeId`. Map
+/// a state back to a canonical entity with the view's `dense_*` methods when
+/// provenance is needed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BergeState {
-    Node(NodeId),
-    Edge(EdgeId),
+    Node(DenseNodeIndex),
+    Edge(DenseEdgeIndex),
 }
 
 /// Alias for [`BergeState`] using the Levi-graph naming convention.
 pub type LeviState = BergeState;
 
 pub enum BergeIter<'a> {
-    Node(std::slice::Iter<'a, EdgeId>),
-    Edge(std::slice::Iter<'a, NodeId>),
+    Node(std::slice::Iter<'a, DenseEdgeIndex>),
+    Edge(std::slice::Iter<'a, DenseNodeIndex>),
 }
 
 /// Alias for [`BergeIter`] using the Levi-graph naming convention.
@@ -66,6 +71,11 @@ pub enum ViewBuildError {
     /// legitimate edge-to-edge reference this vertex-centric view has always
     /// skipped and which is **not** an error.
     MissingNodeMapping { target: DeclId },
+    /// The `Ir` has more nodes than a `u32` dense view coordinate can address.
+    /// Carries the bounded numeric count only.
+    NodeCountOverflow { count: usize },
+    /// The `Ir` has more edges than a `u32` dense view coordinate can address.
+    EdgeCountOverflow { count: usize },
 }
 
 impl core::fmt::Display for ViewBuildError {
@@ -88,6 +98,14 @@ impl core::fmt::Display for ViewBuildError {
                 "declaration {} is a Node but has no node record",
                 target.raw()
             ),
+            Self::NodeCountOverflow { count } => write!(
+                f,
+                "node count {count} exceeds the u32 dense view-index domain"
+            ),
+            Self::EdgeCountOverflow { count } => write!(
+                f,
+                "edge count {count} exceeds the u32 dense view-index domain"
+            ),
         }
     }
 }
@@ -102,14 +120,14 @@ where
 {
     pub node_decl: Vec<DeclId>, // NodeId -> DeclId
     pub edge_decl: Vec<DeclId>, // EdgeId -> DeclId
-    /// Flat array of all incident edges.
-    pub flat_node_edges: Vec<EdgeId>,
+    /// Flat array of all incident edges, as **dense view coordinates**.
+    pub flat_node_edges: Vec<DenseEdgeIndex>,
     /// Parallel array: sign/weight info per node-edge incidence (aligned with flat_node_edges)
     pub flat_node_sign: Vec<i8>,
     /// Offsets into flat_node_edges for each NodeId.
     pub node_offsets: Vec<usize>,
-    /// Flat array of all incident nodes.
-    pub flat_edge_nodes: Vec<NodeId>,
+    /// Flat array of all incident nodes, as **dense view coordinates**.
+    pub flat_edge_nodes: Vec<DenseNodeIndex>,
     /// Parallel array: sign per edge-node incidence (aligned with flat_edge_nodes)
     pub flat_edge_sign: Vec<i8>,
     /// Offsets into flat_edge_nodes for each EdgeId.
@@ -154,34 +172,85 @@ where
         self.edge_offsets.len().saturating_sub(1)
     }
 
-    /// Returns the [start, end) range for a node's incident edges.
+    /// Every dense node coordinate in the view, `0..num_nodes`.
+    #[inline]
+    pub fn node_indices(&self) -> impl Iterator<Item = DenseNodeIndex> {
+        (0..self.num_nodes() as u32).map(DenseNodeIndex::from_u32)
+    }
+
+    /// Every dense edge coordinate in the view, `0..num_edges`.
+    #[inline]
+    pub fn edge_indices(&self) -> impl Iterator<Item = DenseEdgeIndex> {
+        (0..self.num_edges() as u32).map(DenseEdgeIndex::from_u32)
+    }
+
+    /// Returns the `[start, end)` range for a node's incident edges, by **dense
+    /// coordinate**. This is a view-local array offset — not a canonical id.
     #[inline(always)]
-    pub fn node_span(&self, nid: NodeId) -> (usize, usize) {
-        let s = self.node_offsets[nid.raw()];
-        let e = self.node_offsets[nid.raw() + 1];
+    pub fn node_span(&self, nid: DenseNodeIndex) -> (usize, usize) {
+        let s = self.node_offsets[nid.as_usize()];
+        let e = self.node_offsets[nid.as_usize() + 1];
         (s, e)
     }
 
-    /// Returns the [start, end) range for an edge's incident nodes.
+    /// Returns the `[start, end)` range for an edge's incident nodes, by **dense
+    /// coordinate**.
     #[inline(always)]
-    pub fn edge_span(&self, eid: EdgeId) -> (usize, usize) {
-        let s = self.edge_offsets[eid.raw()];
-        let e = self.edge_offsets[eid.raw() + 1];
+    pub fn edge_span(&self, eid: DenseEdgeIndex) -> (usize, usize) {
+        let s = self.edge_offsets[eid.as_usize()];
+        let e = self.edge_offsets[eid.as_usize() + 1];
         (s, e)
     }
 
-    /// Borrow the slice of incident edges for a given node.
+    /// Borrow the dense incident-edge coordinates for a dense node coordinate.
     #[inline(always)]
-    pub fn node_edges(&self, nid: NodeId) -> &[EdgeId] {
+    pub fn node_edges(&self, nid: DenseNodeIndex) -> &[DenseEdgeIndex] {
         let (s, e) = self.node_span(nid);
         &self.flat_node_edges[s..e]
     }
 
-    /// Borrow the slice of incident nodes for a given edge.
+    /// Borrow the dense incident-node coordinates for a dense edge coordinate.
     #[inline(always)]
-    pub fn edge_nodes(&self, eid: EdgeId) -> &[NodeId] {
+    pub fn edge_nodes(&self, eid: DenseEdgeIndex) -> &[DenseNodeIndex] {
         let (s, e) = self.edge_span(eid);
         &self.flat_edge_nodes[s..e]
+    }
+
+    // ── dense → canonical provenance ────────────────────────────────────────
+    //
+    // This view enumerates every node/edge of the `Ir` in canonical id order, so
+    // a dense coordinate `i` corresponds to canonical `NodeId::new(i)` /
+    // `EdgeId::new(i)`. That 1:1 relationship is a property of *this* full view;
+    // it is stated explicitly here so no numerical code re-derives it by treating
+    // a canonical `raw()` as an array offset. A dense coordinate must never be
+    // persisted or used to address the canonical `Ir` directly — map it first.
+
+    /// The canonical `NodeId` a dense node coordinate came from.
+    #[inline]
+    #[must_use]
+    pub fn dense_node_id(&self, nid: DenseNodeIndex) -> NodeId {
+        NodeId::new(nid.as_usize())
+    }
+
+    /// The canonical `EdgeId` a dense edge coordinate came from.
+    #[inline]
+    #[must_use]
+    pub fn dense_edge_id(&self, eid: DenseEdgeIndex) -> EdgeId {
+        EdgeId::new(eid.as_usize())
+    }
+
+    /// The declaration a dense node coordinate came from.
+    #[inline]
+    #[must_use]
+    pub fn dense_node_decl(&self, nid: DenseNodeIndex) -> DeclId {
+        self.node_decl[nid.as_usize()]
+    }
+
+    /// The declaration a dense edge coordinate came from.
+    #[inline]
+    #[must_use]
+    pub fn dense_edge_decl(&self, eid: DenseEdgeIndex) -> DeclId {
+        self.edge_decl[eid.as_usize()]
     }
 
     fn try_collect_triples<E>(ir: &Ir, ex: &E) -> Result<Vec<TensorInc<F, V>>, ViewBuildError>
@@ -300,15 +369,23 @@ where
     fn build_csr_edge_to_nodes(
         pairs: &[TensorInc<F, V>],
         num_edges: usize,
-    ) -> (Vec<NodeId>, Vec<i8>, Vec<V>, Vec<usize>) {
-        // CSR: Edge -> Nodes
+    ) -> (Vec<DenseNodeIndex>, Vec<i8>, Vec<V>, Vec<usize>) {
+        // CSR: Edge -> Nodes. This is the representation-owner boundary where the
+        // canonical node order *defines* the dense coordinate: `entry.n` is a
+        // canonical `NodeId` and its `raw()` is the dense node index (the view is
+        // 1:1 with the `Ir` node table). `try_from_ir` has already checked the
+        // node count fits `u32`, so the narrowing cannot truncate.
         let mut flat_nodes = Vec::with_capacity(pairs.len());
         let mut flat_sign = Vec::with_capacity(pairs.len());
         let mut flat_w = Vec::with_capacity(pairs.len());
         let mut offsets = vec![0usize; num_edges + 1];
 
         for entry in pairs {
-            flat_nodes.push(entry.n);
+            debug_assert!(
+                entry.n.raw() <= u32::MAX as usize,
+                "node count checked in try_from_ir"
+            );
+            flat_nodes.push(DenseNodeIndex::from_u32(entry.n.raw() as u32));
             flat_sign.push(entry.s);
             flat_w.push(entry.w.clone());
             offsets[entry.e.raw() + 1] += 1;
@@ -345,7 +422,7 @@ where
     fn build_csr_node_to_edges(
         pairs: &[TensorInc<F, V>],
         num_nodes: usize,
-    ) -> (Vec<EdgeId>, Vec<i8>, Vec<V>, Vec<usize>)
+    ) -> (Vec<DenseEdgeIndex>, Vec<i8>, Vec<V>, Vec<usize>)
     where
         V: IncVal<F>,
     {
@@ -359,7 +436,9 @@ where
             offsets[i + 1] += offsets[i];
         }
 
-        let mut flat_edges = vec![EdgeId::new(0); nnz];
+        // Representation-owner boundary: `entry.e` (canonical `EdgeId`) defines the
+        // dense edge coordinate; the edge count is checked to fit `u32` upfront.
+        let mut flat_edges = vec![DenseEdgeIndex::from_u32(0); nnz];
         let mut flat_sign = vec![0i8; nnz];
         let mut flat_w = vec![V::zero(); nnz];
 
@@ -367,7 +446,11 @@ where
         let mut cursor = offsets.clone();
         for entry in pairs {
             let slot = cursor[entry.n.raw()];
-            flat_edges[slot] = entry.e;
+            debug_assert!(
+                entry.e.raw() <= u32::MAX as usize,
+                "edge count checked in try_from_ir"
+            );
+            flat_edges[slot] = DenseEdgeIndex::from_u32(entry.e.raw() as u32);
             flat_sign[slot] = entry.s;
             flat_w[slot] = entry.w.clone();
             cursor[entry.n.raw()] = slot + 1;
@@ -416,6 +499,15 @@ where
         // M2b: live-entity counts and typed-id scans.
         let num_nodes = ir.node_count();
         let num_edges = ir.edge_count();
+
+        // M2c.1: dense view coordinates are u32. Reject a graph too large to
+        // address densely *before* allocating any incidence array.
+        if u32::try_from(num_nodes).is_err() {
+            return Err(ViewBuildError::NodeCountOverflow { count: num_nodes });
+        }
+        if u32::try_from(num_edges).is_err() {
+            return Err(ViewBuildError::EdgeCountOverflow { count: num_edges });
+        }
 
         let node_decl: Vec<DeclId> = ir.node_records().map(|(_, n)| n.decl).collect();
         let edge_decl: Vec<DeclId> = ir.edge_records().map(|(_, e)| e.decl).collect();
@@ -487,13 +579,13 @@ where
     fn neighbors<'b>(&'b self, s: BergeState) -> Self::NeighIter<'b> {
         match s {
             BergeState::Node(nid) => {
-                let start = self.hg.node_offsets[nid.raw()];
-                let end = self.hg.node_offsets[nid.raw() + 1];
+                let start = self.hg.node_offsets[nid.as_usize()];
+                let end = self.hg.node_offsets[nid.as_usize() + 1];
                 BergeIter::Node(self.hg.flat_node_edges[start..end].iter())
             }
             BergeState::Edge(eid) => {
-                let start = self.hg.edge_offsets[eid.raw()];
-                let end = self.hg.edge_offsets[eid.raw() + 1];
+                let start = self.hg.edge_offsets[eid.as_usize()];
+                let end = self.hg.edge_offsets[eid.as_usize() + 1];
                 BergeIter::Edge(self.hg.flat_edge_nodes[start..end].iter())
             }
         }

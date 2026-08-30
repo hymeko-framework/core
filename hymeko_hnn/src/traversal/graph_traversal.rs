@@ -21,13 +21,13 @@ impl VisitedSet {
     fn mark_and_check(&mut self, s: BergeState) -> bool {
         match s {
             BergeState::Node(n) => {
-                let v = self.nodes[n.raw()];
-                self.nodes[n.raw()] = true;
+                let v = self.nodes[n.as_usize()];
+                self.nodes[n.as_usize()] = true;
                 v // returns true if it WAS already visited
             }
             BergeState::Edge(e) => {
-                let v = self.edges[e.raw()];
-                self.edges[e.raw()] = true;
+                let v = self.edges[e.as_usize()];
+                self.edges[e.as_usize()] = true;
                 v
             }
         }

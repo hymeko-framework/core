@@ -86,7 +86,7 @@ mod test_message_passing_parallel {
             let eend = hg.edge_offsets[e + 1];
             let xe = x_edges[e];
             for p in s..eend {
-                let v = hg.flat_edge_nodes[p].raw();
+                let v = hg.flat_edge_nodes[p].as_usize();
                 let b = inc_scalar_signed(hg, p, e, use_abs);
                 y[v] += b * xe;
             }
@@ -100,7 +100,7 @@ mod test_message_passing_parallel {
             let s = hg.edge_offsets[e];
             let eend = hg.edge_offsets[e + 1];
             for p in s..eend {
-                let v = hg.flat_edge_nodes[p].raw();
+                let v = hg.flat_edge_nodes[p].as_usize();
                 let b = inc_scalar_signed(hg, p, e, use_abs);
                 diag[v] += b * b;
             }
@@ -115,7 +115,7 @@ mod test_message_passing_parallel {
             let eend = hg.edge_offsets[e + 1];
             let mut acc = 0.0f32;
             for p in s..eend {
-                let v = hg.flat_edge_nodes[p].raw();
+                let v = hg.flat_edge_nodes[p].as_usize();
                 acc += inc_scalar_signed(hg, p, e, use_abs) * x_nodes[v];
             }
             out[e] = acc;

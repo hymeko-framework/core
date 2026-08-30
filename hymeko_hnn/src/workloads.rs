@@ -444,7 +444,8 @@ impl<F: Real> HyperGraphView<F, EdgeWScalar<F>, F> {
         // --- edge-first CSR: members are already sorted per edge, and edges
         // --- are emitted in order, so this is (edge, node)-ordered by
         // --- construction. No sort needed.
-        let mut flat_edge_nodes: Vec<NodeId> = Vec::with_capacity(nnz);
+        let mut flat_edge_nodes: Vec<crate::traversal::dense_index::DenseNodeIndex> =
+            Vec::with_capacity(nnz);
         let mut flat_edge_sign: Vec<i8> = Vec::with_capacity(nnz);
         let mut flat_edge_w: Vec<F> = Vec::with_capacity(nnz);
         let mut edge_offsets: Vec<usize> = Vec::with_capacity(num_edges + 1);
@@ -453,7 +454,9 @@ impl<F: Real> HyperGraphView<F, EdgeWScalar<F>, F> {
         for (e, members) in design.edges.iter().enumerate() {
             for (position, &v) in members.iter().enumerate() {
                 debug_assert!(v < num_nodes, "member index out of range");
-                flat_edge_nodes.push(NodeId::new(v));
+                flat_edge_nodes.push(crate::traversal::dense_index::DenseNodeIndex::from_u32(
+                    v as u32,
+                ));
                 flat_edge_sign.push(signs.sign_of(position, v, e));
                 flat_edge_w.push(F::from_other(rng.weight_f32()));
             }
@@ -466,23 +469,25 @@ impl<F: Real> HyperGraphView<F, EdgeWScalar<F>, F> {
         // --- edge order too.
         let mut node_counts = vec![0usize; num_nodes + 1];
         for n in &flat_edge_nodes {
-            node_counts[n.raw() + 1] += 1;
+            node_counts[n.as_usize() + 1] += 1;
         }
         for i in 0..num_nodes {
             node_counts[i + 1] += node_counts[i];
         }
         let node_offsets = node_counts.clone();
 
-        let mut flat_node_edges: Vec<EdgeId> = vec![EdgeId::new(0); nnz];
+        let mut flat_node_edges: Vec<crate::traversal::dense_index::DenseEdgeIndex> =
+            vec![crate::traversal::dense_index::DenseEdgeIndex::from_u32(0); nnz];
         let mut flat_node_sign: Vec<i8> = vec![0; nnz];
         let mut flat_node_w: Vec<F> = vec![F::zero(); nnz];
         let mut cursor = node_counts;
 
         for e in 0..num_edges {
             for p in edge_offsets[e]..edge_offsets[e + 1] {
-                let v = flat_edge_nodes[p].raw();
+                let v = flat_edge_nodes[p].as_usize();
                 let slot = cursor[v];
-                flat_node_edges[slot] = EdgeId::new(e);
+                flat_node_edges[slot] =
+                    crate::traversal::dense_index::DenseEdgeIndex::from_u32(e as u32);
                 flat_node_sign[slot] = flat_edge_sign[p];
                 flat_node_w[slot] = flat_edge_w[p];
                 cursor[v] = slot + 1;

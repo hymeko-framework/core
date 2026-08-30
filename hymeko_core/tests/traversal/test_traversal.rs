@@ -66,35 +66,72 @@ mod test_traversal {
         let hg = HyperGraphView::<f32, EdgeWScalar<f32>, f32>::from_ir(&ir, &AGG_CFG, &ex);
 
         // 1) incidenciák ellenőrzése (set-alapon)
-        let (a_start, a_end) = hg.node_span(nid_a);
+        let (a_start, a_end) = hg.node_span(
+            hymeko_hnn::traversal::dense_index::DenseNodeIndex::from_u32(nid_a.raw() as u32),
+        );
         let a_edges = &hg.flat_node_edges[a_start..a_end];
-        assert!(a_edges.contains(&eid_e), "A should be incident to E");
+        assert!(
+            a_edges.contains(
+                &hymeko_hnn::traversal::dense_index::DenseEdgeIndex::from_u32(eid_e.raw() as u32)
+            ),
+            "A should be incident to E"
+        );
 
-        let (b_start, b_end) = hg.node_span(nid_b);
+        let (b_start, b_end) = hg.node_span(
+            hymeko_hnn::traversal::dense_index::DenseNodeIndex::from_u32(nid_b.raw() as u32),
+        );
         let b_edges = &hg.flat_node_edges[b_start..b_end];
-        assert!(b_edges.contains(&eid_e), "B should be incident to E");
+        assert!(
+            b_edges.contains(
+                &hymeko_hnn::traversal::dense_index::DenseEdgeIndex::from_u32(eid_e.raw() as u32)
+            ),
+            "B should be incident to E"
+        );
 
-        let (e_start, e_end) = hg.edge_span(eid_e);
+        let (e_start, e_end) = hg.edge_span(
+            hymeko_hnn::traversal::dense_index::DenseEdgeIndex::from_u32(eid_e.raw() as u32),
+        );
         let e_nodes = &hg.flat_edge_nodes[e_start..e_end];
-        assert!(e_nodes.contains(&nid_a), "E should connect to A");
-        assert!(e_nodes.contains(&nid_b), "E should connect to B");
+        assert!(
+            e_nodes.contains(
+                &hymeko_hnn::traversal::dense_index::DenseNodeIndex::from_u32(nid_a.raw() as u32)
+            ),
+            "E should connect to A"
+        );
+        assert!(
+            e_nodes.contains(
+                &hymeko_hnn::traversal::dense_index::DenseNodeIndex::from_u32(nid_b.raw() as u32)
+            ),
+            "E should connect to B"
+        );
 
         // 2) Berge-DFS: A-ból indulva elérjük (Edge E)-t és B-t
         let bv = BergeView { hg: &hg };
-        let got = dfs_preorder(&bv, BergeState::Node(nid_a));
+        let got = dfs_preorder(
+            &bv,
+            BergeState::Node(
+                hymeko_hnn::traversal::dense_index::DenseNodeIndex::from_u32(nid_a.raw() as u32),
+            ),
+        );
 
         let got_set: HashSet<BergeState> = got.into_iter().collect();
 
         assert!(
-            got_set.contains(&BergeState::Node(nid_a)),
+            got_set.contains(&BergeState::Node(
+                hymeko_hnn::traversal::dense_index::DenseNodeIndex::from_u32(nid_a.raw() as u32)
+            )),
             "DFS should include start node A"
         );
         assert!(
-            got_set.contains(&BergeState::Edge(eid_e)),
+            got_set.contains(&BergeState::Edge(
+                hymeko_hnn::traversal::dense_index::DenseEdgeIndex::from_u32(eid_e.raw() as u32)
+            )),
             "DFS should include edge E"
         );
         assert!(
-            got_set.contains(&BergeState::Node(nid_b)),
+            got_set.contains(&BergeState::Node(
+                hymeko_hnn::traversal::dense_index::DenseNodeIndex::from_u32(nid_b.raw() as u32)
+            )),
             "DFS should reach node B"
         );
         info!(

@@ -1,6 +1,5 @@
 use crate::tensor::common_traversal::inc_to_real;
 use crate::traversal::hypergraphview::HyperGraphView;
-use hymeko::common::ids::EdgeId;
 use hymeko::tensor::common::Real;
 use hymeko::tensor::representations::tensor_csr::{TensorCsr, build_row_ptr};
 use hymeko::tensor::tensor_val::{EdgeWeight, IncVal};
@@ -32,11 +31,13 @@ where
     let mut counts = vec![0; dim];
 
     for e in 0..hg.num_edges() {
-        let (s, eend) = hg.edge_span(EdgeId::new(e));
+        let (s, eend) = hg.edge_span(crate::traversal::dense_index::DenseEdgeIndex::from_u32(
+            e as u32,
+        ));
         let e_v = hg.num_nodes() + e;
 
         for p in s..eend {
-            let n_v = hg.flat_edge_nodes[p].raw();
+            let n_v = hg.flat_edge_nodes[p].as_usize();
             match hg.flat_edge_sign[p] {
                 1 => counts[n_v] += 1,
                 -1 => counts[e_v] += 1,
@@ -66,11 +67,13 @@ where
     let mut offset = row_ptr;
 
     for e in 0..hg.num_edges() {
-        let (s, eend) = hg.edge_span(EdgeId::new(e));
+        let (s, eend) = hg.edge_span(crate::traversal::dense_index::DenseEdgeIndex::from_u32(
+            e as u32,
+        ));
         let e_v = hg.num_nodes() + e;
 
         for p in s..eend {
-            let n_v = hg.flat_edge_nodes[p].raw();
+            let n_v = hg.flat_edge_nodes[p].as_usize();
             let w = inc_to_real(hg, p, e);
 
             let mut insert = |row: usize, col: usize, val: F| {
@@ -119,12 +122,14 @@ where
     let mut counts = vec![0; num_nodes];
 
     for e in 0..hg.num_edges() {
-        let (s, eend) = hg.edge_span(EdgeId::new(e));
+        let (s, eend) = hg.edge_span(crate::traversal::dense_index::DenseEdgeIndex::from_u32(
+            e as u32,
+        ));
         let nodes_in_edge = eend - s;
 
         for i in 0..nodes_in_edge {
             let u_idx = s + i;
-            let u = hg.flat_edge_nodes[u_idx].raw();
+            let u = hg.flat_edge_nodes[u_idx].as_usize();
             let su = hg.flat_edge_sign[u_idx];
 
             for j in (i + 1)..nodes_in_edge {
@@ -132,11 +137,11 @@ where
                 let sv = hg.flat_edge_sign[v_idx];
 
                 match (su, sv) {
-                    (1, -1) => counts[u] += 1,                               // u -> v
-                    (-1, 1) => counts[hg.flat_edge_nodes[v_idx].raw()] += 1, // v -> u
+                    (1, -1) => counts[u] += 1,                                    // u -> v
+                    (-1, 1) => counts[hg.flat_edge_nodes[v_idx].as_usize()] += 1, // v -> u
                     _ => {
                         counts[u] += 1;
-                        counts[hg.flat_edge_nodes[v_idx].raw()] += 1;
+                        counts[hg.flat_edge_nodes[v_idx].as_usize()] += 1;
                     }
                 }
             }
@@ -161,14 +166,16 @@ where
     let mut offset = row_ptr;
 
     for e in 0..hg.num_edges() {
-        let (s, eend) = hg.edge_span(EdgeId::new(e));
+        let (s, eend) = hg.edge_span(crate::traversal::dense_index::DenseEdgeIndex::from_u32(
+            e as u32,
+        ));
         let nodes_in_edge = eend - s;
 
         // Gather local nodes to avoid repetitive memory lookups
         let mut local_nodes = Vec::with_capacity(nodes_in_edge);
         for p in s..eend {
             local_nodes.push((
-                hg.flat_edge_nodes[p].raw(),
+                hg.flat_edge_nodes[p].as_usize(),
                 hg.flat_edge_sign[p],
                 inc_to_real(hg, p, e),
             ));

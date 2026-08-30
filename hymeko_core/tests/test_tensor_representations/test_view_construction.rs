@@ -80,10 +80,10 @@ mod test_view_construction {
                 let slice = &hg.flat_node_edges[s..e];
                 for w in slice.windows(2) {
                     assert!(
-                        w[0].raw() < w[1].raw(),
+                        w[0].as_usize() < w[1].as_usize(),
                         "[{label}] node {v}: edge ids not strictly increasing ({} then {})",
-                        w[0].raw(),
-                        w[1].raw()
+                        w[0].as_usize(),
+                        w[1].as_usize()
                     );
                 }
             }
@@ -117,7 +117,7 @@ mod test_view_construction {
                 for p in hg.edge_offsets[e]..hg.edge_offsets[e + 1] {
                     from_edges.push((
                         e,
-                        hg.flat_edge_nodes[p].raw(),
+                        hg.flat_edge_nodes[p].as_usize(),
                         hg.flat_edge_sign[p],
                         hg.flat_edge_w[p].to_bits(),
                     ));
@@ -129,7 +129,7 @@ mod test_view_construction {
             for v in 0..hg.num_nodes() {
                 for p in hg.node_offsets[v]..hg.node_offsets[v + 1] {
                     from_nodes.push((
-                        hg.flat_node_edges[p].raw(),
+                        hg.flat_node_edges[p].as_usize(),
                         v,
                         hg.flat_node_sign[p],
                         hg.flat_node_w[p].to_bits(),

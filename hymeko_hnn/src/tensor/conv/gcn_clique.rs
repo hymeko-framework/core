@@ -9,7 +9,9 @@ use hymeko::tensor::representations::tensor_csr::TensorCsr;
 
 use crate::tensor::message_passing::{CliqueStepCfg, build_explicit_a};
 use crate::traversal::hypergraphview::HyperGraphView;
-use hymeko::tensor::conv::traits::{DegreeMode, HypergraphConv, compute_degree, inv_sqrt_degree};
+use hymeko::tensor::conv::traits::{
+    DegreeMode, HypergraphConv, compute_degree_by_index, inv_sqrt_degree,
+};
 use hymeko::tensor::conv::weight_init::weight_init::{WeightInit, Xavier};
 use hymeko::tensor::tensor_val::{EdgeWeight, IncVal};
 
@@ -52,14 +54,13 @@ impl<F: Real> GcnCliqueLayer<F> {
         // Convert COO → dense then build normalized CSR
         // For production: use COO→CSR directly + diagonal scaling
         let n = hg.num_nodes();
-        let deg = compute_degree(
+        let deg = compute_degree_by_index(
             &hg.edge_offsets,
-            &hg.node_offsets,
             &hg.flat_edge_nodes,
-            &hg.flat_edge_sign,
             &hg.flat_edge_w,
             n,
             hg.num_edges(),
+            |d| d.as_usize(),
             DegreeMode::VertexSquaredSum,
         );
         let inv_sqrt_d = inv_sqrt_degree(&deg);

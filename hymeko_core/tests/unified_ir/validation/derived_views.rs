@@ -64,9 +64,10 @@ fn reference_incidences(ir: &Ir) -> BTreeSet<(usize, usize, i8)> {
 fn view_incidences(v: &View) -> BTreeSet<(usize, usize, i8)> {
     let mut out = BTreeSet::new();
     for e in 0..v.num_edges() {
-        let (lo, hi) = v.edge_span(EdgeId::new(e));
+        let (lo, hi) =
+            v.edge_span(hymeko_hnn::traversal::dense_index::DenseEdgeIndex::from_u32(e as u32));
         for k in lo..hi {
-            out.insert((e, v.flat_edge_nodes[k].raw(), v.flat_edge_sign[k]));
+            out.insert((e, v.flat_edge_nodes[k].as_usize(), v.flat_edge_sign[k]));
         }
     }
     out

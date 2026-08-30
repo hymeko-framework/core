@@ -17,7 +17,6 @@ use std::time::Duration;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
-use hymeko::common::ids::NodeId;
 use hymeko::tensor::aggregation::{AggCfg, SignAgg, WeightAgg};
 use hymeko::tensor::tensor_val::{EdgeWScalar, ScalarWeightExtractor};
 use hymeko_hnn::tensor::conv::gcn_clique::GcnCliqueLayer;
@@ -637,7 +636,8 @@ fn bench_traversal(c: &mut Criterion) {
     for (label, spec) in scales() {
         let hg = spec.build();
         let view = BergeView { hg: &hg };
-        let start = BergeState::Node(NodeId::new(0));
+        let start =
+            BergeState::Node(hymeko_hnn::traversal::dense_index::DenseNodeIndex::from_u32(0));
 
         let reached = bfs(&view, start).len();
         eprintln!("[traversal {label}] reachable states from node 0: {reached}");

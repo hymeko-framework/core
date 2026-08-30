@@ -1,5 +1,4 @@
 use crate::traversal::hypergraphview::HyperGraphView;
-use hymeko::common::ids::EdgeId;
 use hymeko::tensor::common::Real;
 use hymeko::tensor::representations::tensor_coo::TensorCoo;
 use hymeko::tensor::tensor_val::{EdgeWeight, IncVal};
@@ -41,10 +40,12 @@ where
     let mut deg_e = vec![F::zero(); m];
 
     for e in 0..m {
-        let (s, eend) = hg.edge_span(EdgeId::new(e));
+        let (s, eend) = hg.edge_span(crate::traversal::dense_index::DenseEdgeIndex::from_u32(
+            e as u32,
+        ));
         let mut de = F::zero();
         for p in s..eend {
-            let v = hg.flat_edge_nodes[p].raw();
+            let v = hg.flat_edge_nodes[p].as_usize();
             let mut b = hg.flat_edge_w[p].degree_mass();
             if use_abs {
                 b = b.abs();

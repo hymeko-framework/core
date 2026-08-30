@@ -1,0 +1,70 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=25mm]{geometry}
+\usepackage{amsmath,booktabs,longtable,hyperref}
+\usepackage{tikz}\usetikzlibrary{arrows.meta,positioning,fit}
+\title{M2c.1: separate canonical entity IDs from dense HNN view indices}
+\author{APPROVED-CORE-EDIT: dense-view-index-compute-degree}
+\date{Created-at: 2026-08-30 20:24 CEST}
+\begin{document}\maketitle
+\section*{Scope}
+Split two conflated concepts: canonical entity identity (\texttt{NodeId}/\texttt{EdgeId},
+owned by \texttt{hymeko\_core::ir::Ir}, later stable/generational) and dense
+derived-view coordinate (view-local, contiguous, numerical hot loops), by
+introducing \texttt{DenseNodeIndex(u32)}/\texttt{DenseEdgeIndex(u32)} in
+\texttt{hymeko\_hnn} and storing them in \texttt{HyperGraphView}'s incidence arrays.
+Not a second IR/ID framework: dense indices are CSR-like coordinates --- no
+generations, identity, transactions, serialization or ownership. \texttt{plan.pdf}
+waived. Base HEAD \texttt{fbba816}.
+\section{ETA} $\approx$3--4 h: dense types + core seam, view rep + builder + API,
+compiler-driven migration ($\sim$20 sites), tests + fault injection, memory/perf,
+docs, gates, push.
+\section{Authorised core surface (the ONLY hymeko\_core/src change)}
+\texttt{hymeko\_core/src/tensor/conv/traits.rs}: factor \texttt{compute\_degree}
+into a generic \texttt{compute\_degree\_by\_index<I,P>} (I = stored index type, P
+= monomorphised projection to \texttt{usize}); the public
+\texttt{compute\_degree(\&[NodeId])} wrapper delegates with \texttt{|n| n.raw()};
+HNN calls the generic with \texttt{\&[DenseNodeIndex]} + \texttt{|d| d.as\_usize()}
+--- no temporary \texttt{Vec}, no \texttt{Box<dyn>}, same accumulation order. No
+other \texttt{hymeko\_core/src} file; NOT \texttt{common/ids.rs},
+\texttt{ids\_impl.rs}, \texttt{Id::new}/\texttt{raw}, storage, deps, parser, arenas,
+transactions, snapshots, CBOR, ir\_stream, CLI.
+\section{Dense index design (Phase B)}
+\texttt{\#[repr(transparent)] DenseNodeIndex(u32)} and \texttt{DenseEdgeIndex(u32)}
+in \texttt{hymeko\_hnn/src/traversal/dense\_index.rs}: exactly 4 bytes; checked
+\texttt{new\_checked(usize)->Result} (via \texttt{u32::try\_from}); inline
+alloc-free \texttt{as\_usize}/\texttt{as\_u32}/\texttt{from\_u32}; distinct node/edge
+types; no serde/NONE/generation/registry/dynamic-dispatch. \texttt{Option<Dense*>}
+size measured (8 B, plain u32; NonZeroU32 niche not needed --- no NONE in the hot
+arrays). Documented: a dense index is meaningful only inside its producing view;
+never persisted/transmitted/used to address the canonical IR.
+\section{View representation (Phase C/D)}
+\texttt{flat\_edge\_nodes: Vec<NodeId>} $\to$ \texttt{Vec<DenseNodeIndex>};
+\texttt{flat\_node\_edges: Vec<EdgeId>} $\to$ \texttt{Vec<DenseEdgeIndex>}. Keep
+\texttt{node\_decl}/\texttt{edge\_decl: Vec<DeclId>} (dense$\to$DeclId provenance).
+Builder: check node/edge counts fit \texttt{u32}; add
+\texttt{ViewBuildError::\{NodeCountOverflow,EdgeCountOverflow\}\{count\}} (bounded
+numeric, no source text); no sentinel survives; both orientations same multiset;
+ordering/dup/sign/weight unchanged. Public hot API becomes dense
+(\texttt{node\_span/edge\_span/node\_edges/edge\_nodes} by dense index; returning
+dense slices); \texttt{BergeState} carries dense coordinates. Mapping methods
+\texttt{dense\_node\_to\_\{node\_id,decl\}}, \texttt{dense\_edge\_to\_\{edge\_id,decl\}}
+(this view is 1:1 with the IR node/edge tables --- documented). No reverse hash map
+(no current consumer needs canonical$\to$dense).
+\section{Migration (Phase F)} Compiler-driven: every HNN
+\texttt{flat\_*[p].raw()} array-index $\to$ \texttt{.as\_usize()} ($\sim$20 sites);
+\texttt{workloads.rs} view-array construction emits dense; \texttt{.raw()} retained
+only for IR-construction (workloads building an \texttt{Ir}) and any diagnostics.
+No mechanical rename --- each site classified.
+\section{Test/perf (G/H)} type/size, view-construction (empty/singleton/dup/
+multiway/mixed-sign/large-parallel-sort/both-orientations/rebuild), canonical
+mapping (non-contiguous raw at the helper boundary), traversal, numerical
+(gather/scatter/MP/degree/star+clique CSR/HGNN/Signed-HGNN/Mesh, serial==Rayon),
+GPU PoW-0 (hash unchanged), 4 fault-injection mutants each caught. Memory: 4 B/entry
+dense; net derived-view memory decreases on the large workload; no per-incidence
+alloc; hot paths within 3\%. Reuse existing fixtures/workloads.
+\section{CORE.YAML} \texttt{tensor/conv/traits.rs} is \texttt{lockdown: full};
+edited under the token. \texttt{hymeko\_hnn} is \texttt{lockdown: none}.
+\section{Rollback} One \texttt{git revert}; the core seam is additive (wrapper
+preserved). \section{Risk} A missed dense/canonical confusion fails the build or a
+mutant test; memory/ordering guarded by tests.
+\end{document}

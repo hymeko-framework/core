@@ -1,0 +1,11 @@
+\begin{tikzpicture}[>=Stealth,node distance=6mm and 12mm,
+  b/.style={draw,rounded corners,align=center,font=\scriptsize,minimum height=6mm}]
+  \node[b,fill=blue!8](ir){canonical Ir\NodeId/EdgeId (8B)};
+  \node[b,fill=green!8,right=of ir](view){HyperGraphView\flat: DenseNodeIndex(4B)\+ node\_decl provenance};
+  \node[b,fill=orange!10,right=of view](csr){CSR / kernels\array[dense.as\_usize()]};
+  \node[b,fill=red!8,below=of view](seam){core seam\compute\_degree\_by\_index<I,P>};
+  \draw[->](ir)--node[above,font=\tiny]{try\_from\_ir\checked u32}(view);
+  \draw[->](view)--(csr); \draw[->](view)--(seam); \draw[->](seam)--(csr);
+  \node[b,fill=blue!8,below=of ir](map){dense$\to$NodeId/DeclId\(1:1, documented)};
+  \draw[->](view)--(map);
+\end{tikzpicture}
