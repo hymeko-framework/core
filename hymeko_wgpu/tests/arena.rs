@@ -16,7 +16,7 @@
 
 use hymeko::tensor::compute::{ComputeError, TensorShape};
 use hymeko::tensor::representations::tensor_csr::TensorCsr;
-use hymeko_hnn::workloads::SparseSpec;
+use hymeko_wgpu::testing::SparseSpec;
 use hymeko_wgpu::testing::backend_or_skip;
 use hymeko_wgpu::{ActivationKind, ReusePolicy, SubmissionEpoch, TensorArenaConfig};
 

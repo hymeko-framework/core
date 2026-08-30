@@ -22,7 +22,6 @@ pub mod test_helpers;
 mod aggregations;
 mod basic;
 mod computations;
-mod domain_transformations;
 mod hash;
 mod test_tensor_representations;
 

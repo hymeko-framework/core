@@ -25,7 +25,9 @@ use std::time::Duration;
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
 use hymeko::tensor::representations::tensor_csr::TensorCsr;
-use hymeko_hnn::workloads::{DegreeShape, SparseSpec};
+#[path = "sparse_fixture.rs"]
+mod sparse_fixture;
+use sparse_fixture::{DegreeShape, SparseSpec};
 
 /// The three measured scales, with a label used in benchmark ids.
 fn scales() -> [(&'static str, SparseSpec); 3] {

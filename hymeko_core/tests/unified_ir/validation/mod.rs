@@ -2,6 +2,4 @@
 
 pub mod consumer_equivalence;
 pub mod corpus;
-pub mod derived_views;
 pub mod product_cli;
-pub mod workload_coherence;

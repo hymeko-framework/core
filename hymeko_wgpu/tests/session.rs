@@ -9,7 +9,7 @@
 //! test that cannot fail.
 
 use hymeko::tensor::compute::TensorShape;
-use hymeko_hnn::workloads::SparseSpec;
+use hymeko_wgpu::testing::SparseSpec;
 use hymeko_wgpu::testing::backend_or_skip;
 use hymeko_wgpu::{ActivationKind, TensorArenaConfig};
 

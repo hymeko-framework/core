@@ -1131,7 +1131,6 @@ dependencies = [
  "blake3",
  "criterion",
  "env_logger",
- "hymeko_hnn",
  "iceoryx2",
  "log",
  "nalgebra",
@@ -1145,24 +1144,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "hymeko_hnn"
-version = "0.1.0"
-dependencies = [
- "criterion",
- "hymeko_core",
- "parser",
- "rayon",
- "rustc-hash 2.1.3",
-]
-
-[[package]]
 name = "hymeko_wgpu"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
  "criterion",
  "hymeko_core",
- "hymeko_hnn",
  "wgpu",
 ]
 

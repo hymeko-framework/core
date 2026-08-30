@@ -29,7 +29,7 @@ use std::time::Duration;
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
 use hymeko::tensor::representations::tensor_csr::TensorCsr;
-use hymeko_hnn::workloads::SparseSpec;
+use hymeko_wgpu::testing::SparseSpec;
 use hymeko_wgpu::{ComputeError, WgpuBackend, WorkgroupShape};
 
 /// Feature dimensions swept at every scale.

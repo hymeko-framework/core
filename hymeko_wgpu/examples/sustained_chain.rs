@@ -29,7 +29,7 @@
 
 use std::time::{Duration, Instant};
 
-use hymeko_hnn::workloads::SparseSpec;
+use hymeko_wgpu::testing::SparseSpec;
 use hymeko_wgpu::testing::{Fixture, encode_chain};
 use hymeko_wgpu::{ActivationKind, TensorArenaConfig, WgpuBackend};
 

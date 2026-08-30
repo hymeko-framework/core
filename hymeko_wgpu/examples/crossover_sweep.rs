@@ -37,7 +37,7 @@ use std::time::{Duration, Instant};
 
 use hymeko::tensor::compute::TensorShape;
 use hymeko::tensor::representations::tensor_csr::TensorCsr;
-use hymeko_hnn::workloads::{DegreeShape, SparseSpec};
+use hymeko_wgpu::testing::{DegreeShape, SparseSpec};
 use hymeko_wgpu::{TensorArenaConfig, WgpuBackend};
 
 /// Row counts spanning the whole regime of interest, logarithmically spaced.

@@ -19,8 +19,8 @@
 
 use hymeko::tensor::compute::{ComputeError, SparseCsrShape, TensorShape};
 use hymeko::tensor::representations::tensor_csr::TensorCsr;
-use hymeko_hnn::workloads::{DegreeShape, SparseSpec};
 use hymeko_wgpu::testing::backend_or_skip;
+use hymeko_wgpu::testing::{DegreeShape, SparseSpec};
 use hymeko_wgpu::{GpuTensor, WgpuBackend, WorkgroupShape};
 
 const POISON: f32 = -12345.5;

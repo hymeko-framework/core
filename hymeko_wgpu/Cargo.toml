@@ -12,7 +12,7 @@ crate-type = ["rlib"]
 [dependencies]
 # Backend-independent vocabulary only (TensorShape, SparseCsrShape,
 # BackendKind, ComputeError). This crate deliberately does NOT depend on
-# hymeko_hnn: the GPU backend needs shapes and errors, not hypergraph views.
+# SparseSpec fixture lives in src/testing.rs (was hymeko_hnn dev-dep; relocated 2026-08-31).
 hymeko_core = { path = "../hymeko_core" }
 
 # Minimal feature set for the target platforms: DX12 and Vulkan on Windows,
@@ -34,13 +34,11 @@ features = ["derive"]
 # The skeleton tests build bind group layouts and compute passes directly,
 # so they name wgpu types. The library re-exports the vocabulary, not wgpu.
 #
-# hymeko_hnn is a DEV-dependency only. The library must never depend on it --
 # that was the whole reason the shared vocabulary went into hymeko_core -- but
 # the tests and benchmarks need `workloads::SparseSpec`, the existing
 # deterministic generator. Re-implementing it here would duplicate tested code
 # (CLAUDE.md Sec. 6.1) and a dev-dependency does not appear in any consumer's
 # dependency graph.
-hymeko_hnn = { path = "../hymeko_hnn" }
 wgpu = { version = "30.0.1", default-features = false, features = ["dx12", "vulkan", "wgsl", "std"] }
 bytemuck = "1"
 criterion = { version = "0.8.2", default-features = false }

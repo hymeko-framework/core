@@ -66,10 +66,10 @@
 //! the brief forbids growing this phase into a kernel framework, and a merge
 //! kernel with no measured consumer would be precisely that.
 
+use crate::testing::SparseSpec;
 use crate::testing::backend_or_skip;
 use crate::{ActivationKind, ArenaTensor, TensorArenaConfig, TrackedSession, WgpuBackend};
 use hymeko::tensor::representations::tensor_csr::TensorCsr;
-use hymeko_hnn::workloads::SparseSpec;
 
 const POISON: f32 = -98765.5;
 const MERGE_SHADER: &str = include_str!("../tests/shaders/merge_add.wgsl");

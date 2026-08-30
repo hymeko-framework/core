@@ -28,11 +28,11 @@
 use std::time::Instant;
 
 use hymeko::tensor::compute::TensorShape;
-use hymeko_hnn::workloads::{DegreeShape, SparseSpec};
 use hymeko_wgpu::profiling::{
     GpuTimer, ReadbackPlan, ReadbackTiming, TimestampSupport, encode_spmm_profiled, timed_readback,
 };
 use hymeko_wgpu::testing::Fixture;
+use hymeko_wgpu::testing::{DegreeShape, SparseSpec};
 use hymeko_wgpu::{StagingStorage, TensorArenaConfig, WgpuBackend};
 
 const SEED: u64 = 0x005E_EDC0_FFEE_u64;

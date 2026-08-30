@@ -1,10 +1,10 @@
 # hymeko/core — standalone workspace: the HyMeKo semantic core.
 #   hymeko_core : IR, encoding (writers), tensor primitives
-#   hymeko_hnn  : hypergraph representation (traversal) + tensor-transformation operators
+#   hymeko_hnn  : RELOCATED 2026-08-31 to hymeko/nagare as hymeko_nagare::hnn
 # `parser` is an external repo (hymeko/parser), pulled as a git dependency.
 [workspace]
 resolver = "2"
-members = ["hymeko_core", "hymeko_hnn", "hymeko_wgpu"]
+members = ["hymeko_core", "hymeko_wgpu"]
 
 [workspace.dependencies]
 serde = "1.0.228"
