@@ -132,6 +132,75 @@ for name in core tensor; do
   fi
 done
 
+# --- exactly one package named hymeko_graph ------------------------------------------------------
+# The durable property the 2026-08-30 consolidation exists to establish. Counted over the CANONICAL
+# TIP of every repository, not the working tree: a duplicate that survives on the default branch is
+# a duplicate a fresh clone gets.
+echo "== single-owner: hymeko_graph =="
+declare -a HG_OWNERS=()
+for row in "${REPOS[@]}"; do
+  IFS=$'\t' read -r name path branch override <<<"$row"
+  dir="$ROOT/$path"
+  [[ -d "$dir/.git" ]] || continue
+  while read -r m; do
+    [[ -z "$m" ]] && continue
+    if git -C "$dir" show "origin/$branch:$m" 2>/dev/null | grep -qE '^name = "hymeko_graph"'; then
+      HG_OWNERS+=("$name/${m%/Cargo.toml}")
+    fi
+  done < <(git -C "$dir" ls-tree -r --name-only "origin/$branch" 2>/dev/null | grep 'Cargo.toml$' | grep -v '^docs/')
+done
+if [[ ${#HG_OWNERS[@]} -eq 1 ]]; then
+  if [[ "${HG_OWNERS[0]}" == "graph/hymeko_graph" ]]; then
+    ok "exactly one hymeko_graph package, and it is graph/hymeko_graph"
+  else
+    bad "exactly one hymeko_graph package but it is ${HG_OWNERS[0]}, not graph/hymeko_graph"
+  fi
+elif [[ ${#HG_OWNERS[@]} -eq 0 ]]; then
+  bad "NO package named hymeko_graph found on any canonical tip -- the census is vacuous or the owner vanished"
+else
+  bad "${#HG_OWNERS[@]} packages named hymeko_graph: ${HG_OWNERS[*]} (canonical is graph/hymeko_graph)"
+fi
+
+# A RENAMED duplicate is invisible to a package-name census -- the first version of this check
+# passed a fixture package called `hymeko_graph_compat`, which is exactly the compatibility copy
+# `graph/CLAUDE.md` forbids. Two cheaper-than-perfect detectors close it:
+#   1. `[lib] name = "hymeko_graph"` under any package name -- the linkage name is what a consumer
+#      actually writes in `use`, so a rename that keeps it is a duplicate in every sense that
+#      matters.
+#   2. the owner's module fingerprint: a crate outside graph carrying signed_tuples.rs AND spine.rs
+#      AND topk_cycles.rs is the graph owner under another badge.
+for row in "${REPOS[@]}"; do
+  IFS=$'\t' read -r name path branch override <<<"$row"
+  dir="$ROOT/$path"
+  [[ -d "$dir/.git" ]] || continue
+  [[ "$name" == "graph" ]] && continue
+  while read -r m; do
+    [[ -z "$m" ]] && continue
+    if git -C "$dir" show "origin/$branch:$m" 2>/dev/null | grep -qE '^name = "hymeko_graph"$' ; then
+      pkg=$(git -C "$dir" show "origin/$branch:$m" 2>/dev/null | grep -m1 -E '^name = ' | sed 's/name = //;s/"//g')
+      [[ "$pkg" == "hymeko_graph" ]] || bad "$name: package '$pkg' links as hymeko_graph -- a renamed duplicate"
+    fi
+  done < <(git -C "$dir" ls-tree -r --name-only "origin/$branch" 2>/dev/null | grep 'Cargo.toml$' | grep -v '^docs/')
+  fp=$(git -C "$dir" ls-tree -r --name-only "origin/$branch" 2>/dev/null | grep -v '^docs/' \
+       | grep -cE '/(signed_tuples|spine|topk_cycles)\.rs$')
+  [[ "${fp:-0}" -ge 3 ]] && bad "$name: carries the graph owner's module fingerprint (signed_tuples + spine + topk_cycles) outside graph"
+done
+
+# No consumer may still resolve the retired copy by path.
+for row in "${REPOS[@]}"; do
+  IFS=$'\t' read -r name path branch override <<<"$row"
+  dir="$ROOT/$path"
+  [[ -d "$dir/.git" ]] || continue
+  # `docs/` is excluded deliberately: graph commits the two-implementation parity harness there as
+  # SOURCE, not as a workspace member. It is documentation of how the comparison was run, it is
+  # never built by the workspace, and counting it as a live dependency is a false positive the
+  # first version of this check produced.
+  hits=$(git -C "$dir" grep -lE 'path *= *"[^"]*tensor/hymeko_graph"' "origin/$branch" -- '*Cargo.toml' 2>/dev/null | grep -v ':docs/' || true)
+  if [[ -n "$hits" ]]; then
+    bad "$name@$branch still declares a path dependency on tensor/hymeko_graph: $(tr '\n' ' ' <<<"$hits")"
+  fi
+done
+
 echo "──────────────────────────────────────"
 if [[ "$CHECKS" -eq 0 ]]; then
   die "no check executed; a doctor that checks nothing must never report health"

@@ -99,6 +99,20 @@ repositories:
 conflicts:
   - id: hymeko_graph-exists-twice
     severity: HIGH
+    status: >
+      PARTIALLY RESOLVED 2026-08-30. `hymeko/graph` is now the canonical owner: it carries
+      CLAUDE.md + CORE.YAML declaring it so, has absorbed signed_tuples, hyper_operator and the
+      spine GradRequest/FirBackward extension, and is fully green (fmt/check/clippy -D warnings/
+      tests/doctests/benches all 0). `nagare` resolves the crate from graph and passes
+      scripts/check.sh 12/12. Parity between the two implementations was certified at 10369
+      bit-identical observations before anything moved.
+
+      DELETION OF tensor/hymeko_graph IS BLOCKED, not forgotten. Two other Nagare branches still
+      declare it as a live path dependency -- `feat/auto-holonomy-arc` and
+      `feat/experiments-examples-integration`, both in worktrees carrying uncommitted user work
+      that must not be reshaped. The fix is one line per manifest; it needs those branches' owner.
+      Until then the workspace legitimately holds two packages named hymeko_graph and the doctor
+      says so rather than pretending otherwise.
     detail: >
       A crate named `hymeko_graph` exists in BOTH `graph/hymeko_graph` and `tensor/hymeko_graph`.
       They share 40 paths; 16 are byte-identical and 24 have DIVERGED. `nagare` links the tensor
