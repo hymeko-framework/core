@@ -103,13 +103,13 @@ fn link_children(t: &mut TestIr) {
             continue;
         }
         let child = DeclId::new(i);
-        let last = t.ir.decl_nodes[p.0].last_child;
+        let last = t.ir.decl_nodes[p.raw()].last_child;
         if last.is_none() {
-            t.ir.decl_nodes[p.0].first_child = child;
+            t.ir.decl_nodes[p.raw()].first_child = child;
         } else {
-            t.ir.decl_nodes[last.0].next_sibling = child;
+            t.ir.decl_nodes[last.raw()].next_sibling = child;
         }
-        t.ir.decl_nodes[p.0].last_child = child;
+        t.ir.decl_nodes[p.raw()].last_child = child;
     }
 }
 
@@ -141,7 +141,7 @@ fn hash_coverage_matrix() {
             .iter()
             .find_map(|(pk, d)| (pk.0.len() == 2 && b.it.resolve(pk.0[1]) == "y").then_some(d))
             .expect("y present");
-        b.ir.decl_nodes[y.0].kind = hymeko::ir::ir::DeclKind::Edge;
+        b.ir.decl_nodes[y.raw()].kind = hymeko::ir::ir::DeclKind::Edge;
         let pb = probe(&mut b);
         let (v1, mk, _) = row("decl.kind", &pa, &pb);
         assert!(v1, "v1 must cover declaration kind");
@@ -193,7 +193,7 @@ fn hash_coverage_matrix() {
             .iter()
             .find_map(|(pk, d)| (pk.0.len() == 2 && b.it.resolve(pk.0[1]) == "x").then_some(d))
             .expect("x present");
-        b.ir.decl_nodes[x.0].anno.value = Some(ValueR::Num(1.5));
+        b.ir.decl_nodes[x.raw()].anno.value = Some(ValueR::Num(1.5));
         let pb = probe(&mut b);
         row("anno.value", &pa, &pb);
     }
@@ -322,7 +322,7 @@ fn hash_coverage_matrix() {
             .iter()
             .find_map(|(pk, d)| (pk.0.len() == 2 && b.it.resolve(pk.0[1]) == "x").then_some(d))
             .expect("x present");
-        b.ir.decl_nodes[x.0].parent = DeclId::NONE;
+        b.ir.decl_nodes[x.raw()].parent = DeclId::NONE;
         b.attach_arc_decls();
         link_children(&mut b);
         let pb = probe(&mut b);
@@ -359,7 +359,7 @@ fn with_value(v: ValueR) -> TestIr {
     let mut t = TestIr::new();
     let root = t.node(&["m"], DeclId::NONE);
     let x = t.node(&["m", "x"], root);
-    t.ir.decl_nodes[x.0].anno.value = Some(v);
+    t.ir.decl_nodes[x.raw()].anno.value = Some(v);
     let e = t.edge(&["m", "e"], root);
     t.arc(e, &[(x, S::Plus)]);
     t.attach_arc_decls();

@@ -61,7 +61,7 @@ mod test_message_passing_components {
             let eend = hg.edge_offsets[e + 1];
             let mut acc = 0.0f32;
             for p in s..eend {
-                let v = hg.flat_edge_nodes[p].0;
+                let v = hg.flat_edge_nodes[p].raw();
                 let b = inc_scalar_signed(&hg, p, e, use_abs);
                 acc += b * x[v];
             }
@@ -118,7 +118,7 @@ mod test_message_passing_components {
             let eend = hg.edge_offsets[e + 1];
             let xe = x_edges[e];
             for p in s..eend {
-                let v = hg.flat_edge_nodes[p].0;
+                let v = hg.flat_edge_nodes[p].raw();
                 let b = inc_scalar_signed(&hg, p, e, use_abs);
                 y_ref[v] += b * xe;
             }
@@ -165,7 +165,7 @@ mod test_message_passing_components {
             let s = hg.edge_offsets[e];
             let eend = hg.edge_offsets[e + 1];
             for p in s..eend {
-                let v = hg.flat_edge_nodes[p].0;
+                let v = hg.flat_edge_nodes[p].raw();
                 let b = inc_scalar_signed(&hg, p, e, use_abs);
                 ref_diag[v] += b * b;
             }

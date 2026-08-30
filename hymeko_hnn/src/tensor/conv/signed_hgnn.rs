@@ -69,7 +69,7 @@ impl<F: Real> SignedHgnnLayer<F> {
             let s = hg.edge_offsets[e];
             let eend = hg.edge_offsets[e + 1];
             for p in s..eend {
-                let v = hg.flat_edge_nodes[p].0;
+                let v = hg.flat_edge_nodes[p].raw();
                 let w = hg.flat_edge_w[p].degree_mass();
                 match hg.flat_edge_sign[p] {
                     1 => {
@@ -240,7 +240,7 @@ impl<F: Real> SignedHgnnLayer<F> {
             let s = hg.edge_offsets[e];
             let eend = hg.edge_offsets[e + 1];
             for p in s..eend {
-                let v = hg.flat_edge_nodes[p].0;
+                let v = hg.flat_edge_nodes[p].raw();
                 let w = hg.flat_edge_w[p].degree_mass();
                 let base = v * d_out + f0;
                 match hg.flat_edge_sign[p] {
@@ -332,7 +332,7 @@ impl<F: Real> SignedHgnnLayer<F> {
             let s = hg.node_offsets[v];
             let nend = hg.node_offsets[v + 1];
             for p in s..nend {
-                let e = hg.flat_node_edges[p].0;
+                let e = hg.flat_node_edges[p].raw();
                 let w = hg.flat_node_w[p].degree_mass();
                 let base = e * width;
                 match hg.flat_node_sign[p] {

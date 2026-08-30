@@ -62,18 +62,11 @@ impl<'de, T> Deserialize<'de> for Id<T> {
     }
 }
 
-// --- Conversion from usize (for `DeclId(42)` backward compat) ---
-
-impl<T> From<usize> for Id<T> {
-    #[inline(always)]
-    fn from(raw: usize) -> Self {
-        Self::new(raw)
-    }
-}
-
-impl<T> From<Id<T>> for usize {
-    #[inline(always)]
-    fn from(id: Id<T>) -> usize {
-        id.0
-    }
-}
+// --- No implicit `usize <-> Id` conversion (M2c sealing) ---
+//
+// `From<usize> for Id<T>` and `From<Id<T>> for usize` were removed under
+// `APPROVED-CORE-EDIT: seal-canonical-entity-ids`. Implicit conversion hid
+// representation-dependent construction and allowed an integer to slide into any
+// ID domain via `.into()`. The explicit seam is `Id::new` / `Id::raw` (see
+// `ids.rs`); serde still (de)serializes the bare index, so the wire schema is
+// unchanged.

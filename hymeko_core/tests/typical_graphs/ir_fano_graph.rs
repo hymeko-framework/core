@@ -81,10 +81,10 @@ mod ir_fano_graph {
             let edge_did = did_of_path(&idx, &[fano_sid, e_sid]);
 
             // IR: DeclId -> EdgeId -> EdgeRec
-            let edge_id = ir.decl_to_edge[edge_did.0]
+            let edge_id = ir.decl_to_edge[edge_did.raw()]
                 .unwrap_or_else(|| panic!("Edge DeclId {:?} not mapped to EdgeId in IR", edge_did));
 
-            let edge = &ir.edges[edge_id.0];
+            let edge = &ir.edges[edge_id.raw()];
 
             if log_enabled!(Level::Debug) {
                 debug!(
@@ -104,7 +104,7 @@ mod ir_fano_graph {
                         "  Arc {i}: DeclId: {:?}, Parent Edge DeclId: {:?}",
                         arc_did, edge_did
                     );
-                    let arc = &ir.arcs[arc_ref.0];
+                    let arc = &ir.arcs[arc_ref.raw()];
                     for (j, r) in arc.refs.iter().enumerate() {
                         let target_did = ref_target(r);
                         let target_name = inv
@@ -121,7 +121,7 @@ mod ir_fano_graph {
 
             assert_eq!(edge.arcs.len(), 1, "{ename}: expected exactly 1 arc");
 
-            let arc = &ir.arcs[edge.arcs[0].0];
+            let arc = &ir.arcs[edge.arcs[0].raw()];
 
             // targetok (DeclId) -> "fano.nK"
             let mut got = arc

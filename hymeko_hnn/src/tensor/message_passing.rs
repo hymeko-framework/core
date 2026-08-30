@@ -164,7 +164,7 @@ where
 
     let mut acc = F::zero();
     for p in s..eend {
-        let v = hg.flat_edge_nodes[p].0;
+        let v = hg.flat_edge_nodes[p].raw();
         let b = inc_scalar_signed(hg, p, e, use_abs);
         acc += b * x_nodes[v];
     }
@@ -241,7 +241,7 @@ pub fn scatter_nodes_from_edges_edge_major<V, EW, F>(
         let xe = x_edges[e];
 
         for p in s..eend {
-            let v = hg.flat_edge_nodes[p].0;
+            let v = hg.flat_edge_nodes[p].raw();
             let b = inc_scalar_signed(hg, p, e, use_abs);
             y_nodes_out[v] += b * xe;
         }
@@ -318,7 +318,7 @@ where
 
     let mut acc = F::zero();
     for p in s..nend {
-        let e = hg.flat_node_edges[p].0;
+        let e = hg.flat_node_edges[p].raw();
         let b = inc_scalar_signed_node(hg, p, e, use_abs);
         acc += b * x_edges[e];
     }
@@ -436,7 +436,7 @@ fn accumulate_square_edge_major<V, EW, F>(
         let s = hg.edge_offsets[e];
         let eend = hg.edge_offsets[e + 1];
         for p in s..eend {
-            let v = hg.flat_edge_nodes[p].0;
+            let v = hg.flat_edge_nodes[p].raw();
             let b = inc_scalar_signed(hg, p, e, use_abs);
             out[v] += b * b;
         }
@@ -456,7 +456,7 @@ where
 
     let mut acc = F::zero();
     for p in s..nend {
-        let e = hg.flat_node_edges[p].0;
+        let e = hg.flat_node_edges[p].raw();
         let b = inc_scalar_signed_node(hg, p, e, use_abs);
         acc += b * b;
     }
@@ -605,7 +605,7 @@ where
         nodes.clear();
         nodes.reserve(eend - s);
         for p in s..eend {
-            let v = hg.flat_edge_nodes[p].0;
+            let v = hg.flat_edge_nodes[p].raw();
             let mut b: F = inc_to_real(hg, p, e);
             b *= signed_incidence::<F>(hg.flat_edge_sign[p]);
             if cfg.use_abs {

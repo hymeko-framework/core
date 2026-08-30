@@ -107,7 +107,7 @@ fn synthetic_chain_depths_are_traversable_and_hashable() {
         let mut steps = 0usize;
         let mut cur = deepest;
         while cur.is_some() {
-            cur = t.ir.decl_nodes[cur.0].parent;
+            cur = t.ir.decl_nodes[cur.raw()].parent;
             steps += 1;
             assert!(
                 steps <= d + 2,
@@ -158,7 +158,7 @@ fn synthetic_wide_hierarchy_is_traversable_and_hashable() {
         h.0[0],
         h.0[1]
     );
-    assert_eq!(t.ir.decl_nodes[root.0].kind, DeclKind::Node);
+    assert_eq!(t.ir.decl_nodes[root.raw()].kind, DeclKind::Node);
 }
 
 /// High-cardinality hyperedge: one arc with many references.

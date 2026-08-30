@@ -88,12 +88,12 @@ where
 ///
 /// Indexes `flat_node_w` / `flat_node_sign`, i.e. the `(node, edge)`-ordered
 /// arrays reached through `node_offsets`. `e` must be the edge stored at that
-/// position — `hg.flat_node_edges[p].0` — because the per-edge weight is still
+/// position — `hg.flat_node_edges[p].raw()` — because the per-edge weight is still
 /// looked up globally.
 ///
 /// # Preconditions
 /// `hg.node_offsets[v] <= p < hg.node_offsets[v + 1]` for the node `v` being
-/// visited, and `e == hg.flat_node_edges[p].0`.
+/// visited, and `e == hg.flat_node_edges[p].raw()`.
 ///
 /// # Postconditions
 /// Returns exactly the value [`inc_scalar_signed`] returns for the same
@@ -112,7 +112,8 @@ where
     F: Real,
 {
     debug_assert_eq!(
-        hg.flat_node_edges[p].0, e,
+        hg.flat_node_edges[p].raw(),
+        e,
         "node-first position {p} does not belong to edge {e}"
     );
     project_incidence(

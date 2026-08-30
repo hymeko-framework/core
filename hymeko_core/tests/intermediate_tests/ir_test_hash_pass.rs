@@ -59,9 +59,9 @@ mod test_hash_pass {
 
         // Extract the populated hashes
         // Assuming HashId(pub [u8; 32])
-        let hash_leaf1 = ir.decl_hash[did_leaf1.0 as usize].expect("Leaf1 missing hash");
-        let hash_leaf2 = ir.decl_hash[did_leaf2.0 as usize].expect("Leaf2 missing hash");
-        let hash_root1 = ir.decl_hash[did_root1.0 as usize].expect("Root1 missing hash");
+        let hash_leaf1 = ir.decl_hash[did_leaf1.raw() as usize].expect("Leaf1 missing hash");
+        let hash_leaf2 = ir.decl_hash[did_leaf2.raw() as usize].expect("Leaf2 missing hash");
+        let hash_root1 = ir.decl_hash[did_root1.raw() as usize].expect("Root1 missing hash");
 
         // 1. Proof of Content Addressability:
         // Structurally identical nodes must compute the exact same HashId

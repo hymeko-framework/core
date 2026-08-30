@@ -90,7 +90,7 @@ impl TestIr {
         let d = self.decl(path, DeclKind::Node, parent_hint);
         let nid = NodeId::new(self.ir.nodes.len());
         self.ir.nodes.push(NodeRec::new(d, Vec::new()));
-        self.ir.decl_to_node[d.0] = Some(nid);
+        self.ir.decl_to_node[d.raw()] = Some(nid);
         d
     }
 
@@ -98,7 +98,7 @@ impl TestIr {
         let d = self.decl(path, DeclKind::Edge, parent_hint);
         let eid = EdgeId::new(self.ir.edges.len());
         self.ir.edges.push(EdgeRec::new(d, Vec::new()));
-        self.ir.decl_to_edge[d.0] = Some(eid);
+        self.ir.decl_to_edge[d.raw()] = Some(eid);
         d
     }
 
@@ -115,7 +115,7 @@ impl TestIr {
         edge_decl: DeclId,
         refs: &[(DeclId, S, Option<Vec<ValueR>>)],
     ) -> HyperArcId {
-        let eid = self.ir.decl_to_edge[edge_decl.0].expect("edge_decl is not an edge");
+        let eid = self.ir.decl_to_edge[edge_decl.raw()].expect("edge_decl is not an edge");
         let aid = HyperArcId::new(self.ir.arcs.len());
         let built: Vec<SignedRefR> = refs
             .iter()
@@ -133,14 +133,14 @@ impl TestIr {
             refs: built,
         });
         self.ir.arc_hash.push(None);
-        self.ir.edges[eid.0].arcs.push(aid);
+        self.ir.edges[eid.raw()].arcs.push(aid);
         aid
     }
 
     /// Attach annotation tags to a declaration.
     pub fn tag(&mut self, d: DeclId, tags: &[&str]) {
         let syms: Vec<SymId> = tags.iter().map(|t| self.it.intern(t)).collect();
-        self.ir.decl_nodes[d.0].anno.tags = syms;
+        self.ir.decl_nodes[d.raw()].anno.tags = syms;
     }
 
     /// Attach inheritance bases to a node or edge.
@@ -155,10 +155,10 @@ impl TestIr {
                 })
             })
             .collect();
-        if let Some(nid) = self.ir.decl_to_node[d.0] {
-            self.ir.nodes[nid.0].bases = built;
-        } else if let Some(eid) = self.ir.decl_to_edge[d.0] {
-            self.ir.edges[eid.0].bases = built;
+        if let Some(nid) = self.ir.decl_to_node[d.raw()] {
+            self.ir.nodes[nid.raw()].bases = built;
+        } else if let Some(eid) = self.ir.decl_to_edge[d.raw()] {
+            self.ir.edges[eid.raw()].bases = built;
         } else {
             panic!("bases target is neither node nor edge");
         }
@@ -176,7 +176,7 @@ impl TestIr {
                     .join(".");
             }
         }
-        format!("<unindexed DeclId({})>", d.0)
+        format!("<unindexed DeclId({})>", d.raw())
     }
 }
 
@@ -192,7 +192,7 @@ impl TestIr {
     /// ignored incidence signs, when in fact the fixture never reached them.
     pub fn attach_arc_decls(&mut self) {
         for ai in 0..self.ir.arcs.len() {
-            if self.ir.decl_to_arc.iter().flatten().any(|a| a.0 == ai) {
+            if self.ir.decl_to_arc.iter().flatten().any(|a| a.raw() == ai) {
                 continue; // already declared
             }
             let in_edge = self.ir.arcs[ai].in_edge;
@@ -211,7 +211,7 @@ impl TestIr {
             self.ir.decl_to_node.push(None);
             self.ir.decl_to_edge.push(None);
             self.ir.decl_to_arc.push(None);
-            self.ir.decl_to_arc[did.0] = Some(HyperArcId::new(ai));
+            self.ir.decl_to_arc[did.raw()] = Some(HyperArcId::new(ai));
         }
     }
 }

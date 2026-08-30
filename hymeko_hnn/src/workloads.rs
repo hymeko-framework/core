@@ -466,7 +466,7 @@ impl<F: Real> HyperGraphView<F, EdgeWScalar<F>, F> {
         // --- edge order too.
         let mut node_counts = vec![0usize; num_nodes + 1];
         for n in &flat_edge_nodes {
-            node_counts[n.0 + 1] += 1;
+            node_counts[n.raw() + 1] += 1;
         }
         for i in 0..num_nodes {
             node_counts[i + 1] += node_counts[i];
@@ -480,7 +480,7 @@ impl<F: Real> HyperGraphView<F, EdgeWScalar<F>, F> {
 
         for e in 0..num_edges {
             for p in edge_offsets[e]..edge_offsets[e + 1] {
-                let v = flat_edge_nodes[p].0;
+                let v = flat_edge_nodes[p].raw();
                 let slot = cursor[v];
                 flat_node_edges[slot] = EdgeId::new(e);
                 flat_node_sign[slot] = flat_edge_sign[p];

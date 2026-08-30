@@ -60,7 +60,7 @@ impl<F: Real> MeshConvLayer<F> {
             // Aggregate node features into edge
             let mut agg = vec![F::zero(); self.d_node];
             for p in s..eend {
-                let v = hg.flat_edge_nodes[p].0;
+                let v = hg.flat_edge_nodes[p].raw();
                 let w = hg.flat_edge_w[p].degree_mass();
                 for d in 0..self.d_node {
                     agg[d] += w * h_nodes[v * self.d_node + d];
@@ -84,7 +84,7 @@ impl<F: Real> MeshConvLayer<F> {
             let ne = hg.node_offsets[i + 1];
 
             for p in ns..ne {
-                let eid = hg.flat_node_edges[p].0;
+                let eid = hg.flat_node_edges[p].raw();
                 let w = hg.flat_node_w[p].degree_mass();
                 for d in 0..self.d_edge {
                     agg[d] += w * h_edges[eid * self.d_edge + d];

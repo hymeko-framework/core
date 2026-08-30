@@ -97,13 +97,13 @@ mod basic_transformation_tests {
         assert_eq!(interner.resolve(SymId::new(SID_B)), SYM_B);
         assert_eq!(interner.resolve(SymId::new(SID_C)), SYM_C);
 
-        assert_eq!(sid_root.0, SID_ROOT);
-        assert_eq!(sid_a.0, SID_A);
-        assert_eq!(sid_b.0, SID_B);
-        assert_eq!(sid_c.0, SID_C);
+        assert_eq!(sid_root.raw(), SID_ROOT);
+        assert_eq!(sid_a.raw(), SID_A);
+        assert_eq!(sid_b.raw(), SID_B);
+        assert_eq!(sid_c.raw(), SID_C);
 
         let sid_d = interner.intern(SYM_D);
-        assert_eq!(sid_d.0, SID_D, "D SymId should match expectation");
+        assert_eq!(sid_d.raw(), SID_D, "D SymId should match expectation");
 
         let did_d = *idx.by_path.get(&PathKey(vec![sid_d])).expect("missing D");
         let did_root = *idx
@@ -124,11 +124,11 @@ mod basic_transformation_tests {
             .expect("missing D.Root.C");
 
         // Assert Index paths match expected DeclIds
-        assert_eq!(did_d.0, 0, "D DeclId should be 0");
-        assert_eq!(did_root.0, 1, "D.Root DeclId should be 1");
-        assert_eq!(did_a.0, 2, "D.Root.A DeclId should be 2");
-        assert_eq!(did_b.0, 3, "D.Root.B DeclId should be 3");
-        assert_eq!(did_c.0, 4, "D.Root.C DeclId should be 4");
+        assert_eq!(did_d.raw(), 0, "D DeclId should be 0");
+        assert_eq!(did_root.raw(), 1, "D.Root DeclId should be 1");
+        assert_eq!(did_a.raw(), 2, "D.Root.A DeclId should be 2");
+        assert_eq!(did_b.raw(), 3, "D.Root.B DeclId should be 3");
+        assert_eq!(did_c.raw(), 4, "D.Root.C DeclId should be 4");
         assert_eq!(
             idx.by_path.len(),
             SIMPLE_INDEX_LEN,
@@ -136,7 +136,7 @@ mod basic_transformation_tests {
         );
 
         // Root must be a node in IR
-        let _root_nid = ir.decl_to_node[did_root.0].expect("Root not lowered as node");
+        let _root_nid = ir.decl_to_node[did_root.raw()].expect("Root not lowered as node");
 
         // first_child points to A, and A->B->C via next_sibling
         assert_eq!(
@@ -155,7 +155,7 @@ mod basic_transformation_tests {
         let children: Vec<_> = ir.children(did_root).collect();
         info!(
             "Root children sequence = {:?}",
-            children.iter().map(|d| d.0).collect::<Vec<_>>()
+            children.iter().map(|d| d.raw()).collect::<Vec<_>>()
         );
         finish(
             "node_child_chain_order_is_body_order",
@@ -187,13 +187,13 @@ mod basic_transformation_tests {
         assert_eq!(interner.resolve(SymId::new(SID_B)), SYM_B);
         assert_eq!(interner.resolve(SymId::new(SID_C)), SYM_C);
 
-        assert_eq!(sid_root.0, SID_ROOT);
-        assert_eq!(sid_a.0, SID_A);
-        assert_eq!(sid_b.0, SID_B);
-        assert_eq!(sid_c.0, SID_C);
+        assert_eq!(sid_root.raw(), SID_ROOT);
+        assert_eq!(sid_a.raw(), SID_A);
+        assert_eq!(sid_b.raw(), SID_B);
+        assert_eq!(sid_c.raw(), SID_C);
 
         let sid_d = interner.intern(SYM_D);
-        assert_eq!(sid_d.0, SID_D, "D SymId should match expectation");
+        assert_eq!(sid_d.raw(), SID_D, "D SymId should match expectation");
 
         let did_d = *idx.by_path.get(&PathKey(vec![sid_d])).expect("missing D");
         let did_root = *idx
@@ -225,14 +225,14 @@ mod basic_transformation_tests {
             .get(&PathKey(vec![sid_d, sid_root, sid_c]))
             .expect("missing D.Root.C");
 
-        assert_eq!(did_d.0, 0, "D DeclId should be 0");
-        assert_eq!(did_root.0, 1, "D.Root DeclId should be 1");
-        assert_eq!(did_root_a.0, 2, "D.Root.A DeclId should be 2");
-        assert_eq!(did_root_a_a.0, 3, "D.Root.A.A DeclId should be 3");
-        assert_eq!(did_root_a_b.0, 4, "D.Root.A.B DeclId should be 4");
-        assert_eq!(did_root_a_c.0, 5, "D.Root.A.C DeclId should be 5");
-        assert_eq!(did_root_b.0, 6, "D.Root.B DeclId should be 6");
-        assert_eq!(did_root_c.0, 7, "D.Root.C DeclId should be 7");
+        assert_eq!(did_d.raw(), 0, "D DeclId should be 0");
+        assert_eq!(did_root.raw(), 1, "D.Root DeclId should be 1");
+        assert_eq!(did_root_a.raw(), 2, "D.Root.A DeclId should be 2");
+        assert_eq!(did_root_a_a.raw(), 3, "D.Root.A.A DeclId should be 3");
+        assert_eq!(did_root_a_b.raw(), 4, "D.Root.A.B DeclId should be 4");
+        assert_eq!(did_root_a_c.raw(), 5, "D.Root.A.C DeclId should be 5");
+        assert_eq!(did_root_b.raw(), 6, "D.Root.B DeclId should be 6");
+        assert_eq!(did_root_c.raw(), 7, "D.Root.C DeclId should be 7");
         assert_eq!(
             idx.by_path.len(),
             DUP_INDEX_LEN,
@@ -240,7 +240,7 @@ mod basic_transformation_tests {
         );
 
         // Root must be a node in IR
-        let _root_nid = ir.decl_to_node[did_root.0].expect("Root not lowered as node");
+        let _root_nid = ir.decl_to_node[did_root.raw()].expect("Root not lowered as node");
 
         // first_child points to Root.A, and Root.A->Root.B->Root.C via next_sibling
         assert_eq!(
@@ -249,9 +249,9 @@ mod basic_transformation_tests {
             "Root.first_child should be Root.A"
         );
 
-        let root_a_nid = ir.decl_to_node[did_root_a.0].expect("Root.A not lowered as node");
-        let _root_b_nid = ir.decl_to_node[did_root_b.0].expect("Root.B not lowered as node");
-        let _root_c_nid = ir.decl_to_node[did_root_c.0].expect("Root.C not lowered as node");
+        let root_a_nid = ir.decl_to_node[did_root_a.raw()].expect("Root.A not lowered as node");
+        let _root_b_nid = ir.decl_to_node[did_root_b.raw()].expect("Root.B not lowered as node");
+        let _root_c_nid = ir.decl_to_node[did_root_c.raw()].expect("Root.C not lowered as node");
 
         assert_eq!(
             ir.next_sibling(did_root_a),
@@ -270,16 +270,19 @@ mod basic_transformation_tests {
         );
 
         // Root.A must also have children: Root.A.A->Root.A.B->Root.A.C
-        let _root_a_rec = &ir.nodes[root_a_nid.0];
+        let _root_a_rec = &ir.nodes[root_a_nid.raw()];
         assert_eq!(
             ir.first_child(did_root_a),
             did_root_a_a,
             "Root.A.first_child should be Root.A.A"
         );
 
-        let root_a_a_nid = ir.decl_to_node[did_root_a_a.0].expect("Root.A.A not lowered as node");
-        let root_a_b_nid = ir.decl_to_node[did_root_a_b.0].expect("Root.A.B not lowered as node");
-        let root_a_c_nid = ir.decl_to_node[did_root_a_c.0].expect("Root.A.C not lowered as node");
+        let root_a_a_nid =
+            ir.decl_to_node[did_root_a_a.raw()].expect("Root.A.A not lowered as node");
+        let root_a_b_nid =
+            ir.decl_to_node[did_root_a_b.raw()].expect("Root.A.B not lowered as node");
+        let root_a_c_nid =
+            ir.decl_to_node[did_root_a_c.raw()].expect("Root.A.C not lowered as node");
         assert_ne!(root_a_a_nid, root_a_b_nid);
         assert_ne!(root_a_b_nid, root_a_c_nid);
 
@@ -305,8 +308,8 @@ mod basic_transformation_tests {
         assert_eq!(kids_a, vec![did_root_a_a, did_root_a_b, did_root_a_c]);
         info!(
             "Root kids {:?}, nested Root.A kids {:?}",
-            kids_root.iter().map(|d| d.0).collect::<Vec<_>>(),
-            kids_a.iter().map(|d| d.0).collect::<Vec<_>>()
+            kids_root.iter().map(|d| d.raw()).collect::<Vec<_>>(),
+            kids_a.iter().map(|d| d.raw()).collect::<Vec<_>>()
         );
         finish(
             "node_child_chain_order_is_body_order_same_names",
@@ -354,24 +357,25 @@ mod basic_transformation_tests {
 
         let arc_decl = kids[0];
         assert_eq!(
-            ir.decl_nodes[arc_decl.0].kind,
+            ir.decl_nodes[arc_decl.raw()].kind,
             DeclKind::HyperArc,
             "child should be Arc"
         );
 
         // 2) Downcast: Arc decl -> ArcId -> ArcRec
         let arc_id =
-            ir.decl_to_arc[arc_decl.0].expect("arc decl should map to ArcId via decl_to_arc");
-        let arc = &ir.arcs[arc_id.0];
+            ir.decl_to_arc[arc_decl.raw()].expect("arc decl should map to ArcId via decl_to_arc");
+        let arc = &ir.arcs[arc_id.raw()];
 
         // Arc decl konzisztencia (ArcRec-ben nincs `decl`, ezért mappinget tesztelünk)
         assert_eq!(
-            ir.decl_nodes[arc_decl.0].kind,
+            ir.decl_nodes[arc_decl.raw()].kind,
             DeclKind::HyperArc,
             "child decl should be Arc"
         );
         assert_eq!(
-            ir.decl_nodes[arc_decl.0].parent, did_edge,
+            ir.decl_nodes[arc_decl.raw()].parent,
+            did_edge,
             "Arc decl parent should be the edge"
         );
 
@@ -398,7 +402,7 @@ mod basic_transformation_tests {
         );
         info!(
             "Arc decl {:?} resolved to refs {:?}",
-            arc_decl.0,
+            arc_decl.raw(),
             arc.refs.len()
         );
         finish(

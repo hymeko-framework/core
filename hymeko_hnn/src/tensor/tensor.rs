@@ -44,7 +44,7 @@ where
         let (s, eend) = hg.edge_span(EdgeId::new(e));
         let mut de = F::zero();
         for p in s..eend {
-            let v = hg.flat_edge_nodes[p].0;
+            let v = hg.flat_edge_nodes[p].raw();
             let mut b = hg.flat_edge_w[p].degree_mass();
             if use_abs {
                 b = b.abs();

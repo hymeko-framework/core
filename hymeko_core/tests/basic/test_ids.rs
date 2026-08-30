@@ -8,14 +8,14 @@ mod tests {
         let d = DeclId::NONE;
         assert!(d.is_none());
         assert!(!d.is_some());
-        assert_eq!(d.0, usize::MAX);
+        assert_eq!(d.raw(), usize::MAX);
     }
 
     #[test]
     fn test_new_and_raw() {
         let d = DeclId::new(42);
         assert_eq!(d.raw(), 42);
-        assert_eq!(d.0, 42);
+        assert_eq!(d.raw(), 42);
         assert!(d.is_some());
         assert!(!d.is_none());
     }
@@ -36,15 +36,15 @@ mod tests {
     fn test_vec_indexing() {
         let data = vec!["zero", "one", "two", "three"];
         let id = NodeId::new(2);
-        assert_eq!(data[id.0], "two");
+        assert_eq!(data[id.raw()], "two");
     }
 
     #[test]
     fn test_vec_index_mut() {
         let mut data = vec![0, 0, 0];
         let id = EdgeId::new(1);
-        data[id.0] = 42;
-        assert_eq!(data[id.0], 42);
+        data[id.raw()] = 42;
+        assert_eq!(data[id.raw()], 42);
     }
 
     #[test]
@@ -57,11 +57,17 @@ mod tests {
     }
 
     #[test]
-    fn test_from_usize() {
-        let id: DeclId = 7.into();
-        assert_eq!(id.0, 7);
-        let raw: usize = id.into();
-        assert_eq!(raw, 7);
+    fn test_explicit_construction_seam() {
+        // M2c sealing: implicit `usize <-> Id` conversion was removed. The only
+        // construction/extraction is the explicit `new` / `raw` seam. (The
+        // compile-fail of `7.into()` / `id.into()` / `id.0` is asserted by the
+        // `compile_fail` doctests on `Id` in `common/ids.rs`.)
+        let id = DeclId::new(7);
+        assert_eq!(id.raw(), 7);
+        // Explicit raw reconstruction across a wire/FFI boundary stays available
+        // and is domain-typed.
+        let same: DeclId = DeclId::new(id.raw());
+        assert_eq!(id, same);
     }
 
     #[test]

@@ -84,7 +84,7 @@ mod test_parse_files {
                 .ir
                 .as_node(decl)
                 .expect("decl should lower to node");
-            compiled.ir.nodes[nid.0].bases.iter().any(|r| match r {
+            compiled.ir.nodes[nid.raw()].bases.iter().any(|r| match r {
                 hymeko::ir::ir::SignedRefR::Plus(atom)
                 | hymeko::ir::ir::SignedRefR::Minus(atom)
                 | hymeko::ir::ir::SignedRefR::Neutral(atom) => atom.target == expected,
@@ -128,7 +128,7 @@ mod test_parse_files {
                 .as_node(decl)
                 .expect("decl should lower to node");
             assert!(
-                compiled.ir.nodes[nid.0].bases.is_empty(),
+                compiled.ir.nodes[nid.raw()].bases.is_empty(),
                 "passive sensor `{}` unexpectedly gained inheritance",
                 name
             );

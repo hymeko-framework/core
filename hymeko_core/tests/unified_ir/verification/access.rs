@@ -30,13 +30,13 @@ fn fixture() -> TestIr {
             continue;
         }
         let child = DeclId::new(i);
-        let last = t.ir.decl_nodes[p.0].last_child;
+        let last = t.ir.decl_nodes[p.raw()].last_child;
         if last.is_none() {
-            t.ir.decl_nodes[p.0].first_child = child;
+            t.ir.decl_nodes[p.raw()].first_child = child;
         } else {
-            t.ir.decl_nodes[last.0].next_sibling = child;
+            t.ir.decl_nodes[last.raw()].next_sibling = child;
         }
-        t.ir.decl_nodes[p.0].last_child = child;
+        t.ir.decl_nodes[p.raw()].last_child = child;
     }
     t
 }
@@ -173,7 +173,7 @@ fn mapping_pointing_at_a_foreign_record_returns_none_rather_than_the_wrong_recor
     let mut t = fixture();
     let d0 = DeclId::new(0);
     let foreign = t.ir.as_node(DeclId::new(1)).expect("decl 1 is a node");
-    t.ir.decl_to_node[d0.0] = Some(foreign);
+    t.ir.decl_to_node[d0.raw()] = Some(foreign);
 
     assert_eq!(
         t.ir.as_node(d0),
@@ -190,7 +190,7 @@ fn mapping_pointing_at_a_foreign_record_returns_none_rather_than_the_wrong_recor
 fn mapping_pointing_out_of_range_returns_none_and_does_not_panic() {
     let mut t = fixture();
     let d0 = DeclId::new(0);
-    t.ir.decl_to_node[d0.0] = Some(NodeId::new(HUGE));
+    t.ir.decl_to_node[d0.raw()] = Some(NodeId::new(HUGE));
     assert!(t.ir.node_for_decl(d0).is_none());
     assert!(t.ir.node(NodeId::new(HUGE)).is_none());
 }
@@ -337,8 +337,8 @@ fn child_iteration_terminates_on_a_sibling_cycle() {
     // iterator is bounded by the declaration count.
     let mut t = fixture();
     let root = DeclId::new(0);
-    let first = t.ir.decl_nodes[root.0].first_child;
-    t.ir.decl_nodes[first.0].next_sibling = first;
+    let first = t.ir.decl_nodes[root.raw()].first_child;
+    t.ir.decl_nodes[first.raw()].next_sibling = first;
     let n = t.ir.decl_count();
     assert!(t.ir.child_decls(root).count() <= n, "walk was not bounded");
 }
@@ -400,7 +400,7 @@ fn node_and_edge_for_decl_validate_the_backlink_but_as_node_does_not() {
     let mut t = fixture();
     let d0 = DeclId::new(0);
     let foreign = t.ir.as_node(DeclId::new(1)).expect("decl 1 is a node");
-    t.ir.decl_to_node[d0.0] = Some(foreign);
+    t.ir.decl_to_node[d0.raw()] = Some(foreign);
 
     // map-only contract: reports the mapping verbatim
     assert_eq!(t.ir.as_node(d0), Some(foreign));

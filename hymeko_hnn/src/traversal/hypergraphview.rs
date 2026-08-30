@@ -74,17 +74,19 @@ impl core::fmt::Display for ViewBuildError {
             Self::DanglingArc { edge, arc } => write!(
                 f,
                 "edge {} lists arc {}, which does not exist",
-                edge.0, arc.0
+                edge.raw(),
+                arc.raw()
             ),
             Self::DanglingTarget { arc, target } => write!(
                 f,
                 "arc {} references declaration {}, which does not exist",
-                arc.0, target.0
+                arc.raw(),
+                target.raw()
             ),
             Self::MissingNodeMapping { target } => write!(
                 f,
                 "declaration {} is a Node but has no node record",
-                target.0
+                target.raw()
             ),
         }
     }
@@ -155,16 +157,16 @@ where
     /// Returns the [start, end) range for a node's incident edges.
     #[inline(always)]
     pub fn node_span(&self, nid: NodeId) -> (usize, usize) {
-        let s = self.node_offsets[nid.0];
-        let e = self.node_offsets[nid.0 + 1];
+        let s = self.node_offsets[nid.raw()];
+        let e = self.node_offsets[nid.raw() + 1];
         (s, e)
     }
 
     /// Returns the [start, end) range for an edge's incident nodes.
     #[inline(always)]
     pub fn edge_span(&self, eid: EdgeId) -> (usize, usize) {
-        let s = self.edge_offsets[eid.0];
-        let e = self.edge_offsets[eid.0 + 1];
+        let s = self.edge_offsets[eid.raw()];
+        let e = self.edge_offsets[eid.raw() + 1];
         (s, e)
     }
 
@@ -270,17 +272,17 @@ where
 
     fn sort_reduce_pairs(mut triples: Vec<TensorInc<F, V>>, cfg: &AggCfg) -> Vec<TensorInc<F, V>> {
         if triples.len() >= Self::PAR_SORT_THRESHOLD {
-            triples.par_sort_unstable_by_key(|x| (x.e.0, x.n.0));
+            triples.par_sort_unstable_by_key(|x| (x.e.raw(), x.n.raw()));
         } else {
-            triples.sort_unstable_by_key(|x| (x.e.0, x.n.0));
+            triples.sort_unstable_by_key(|x| (x.e.raw(), x.n.raw()));
         }
 
         // reduce/dedup
         let mut out: Vec<TensorInc<F, V>> = Vec::with_capacity(triples.len());
         for inc in triples {
             if let Some(last) = out.last_mut()
-                && last.e.0 == inc.e.0
-                && last.n.0 == inc.n.0
+                && last.e.raw() == inc.e.raw()
+                && last.n.raw() == inc.n.raw()
             {
                 let new_w = V::agg(cfg, &last.w, &inc.w);
                 let wa = last.w.as_scalar();
@@ -309,7 +311,7 @@ where
             flat_nodes.push(entry.n);
             flat_sign.push(entry.s);
             flat_w.push(entry.w.clone());
-            offsets[entry.e.0 + 1] += 1;
+            offsets[entry.e.raw() + 1] += 1;
         }
         for i in 0..num_edges {
             offsets[i + 1] += offsets[i];
@@ -325,8 +327,8 @@ where
     /// what [`Self::sort_reduce_pairs`] returns.
     ///
     /// # Postconditions
-    /// Returns the same arrays the previous `sort_unstable_by_key(|x| (x.n.0,
-    /// x.e.0))` implementation returned, element for element.
+    /// Returns the same arrays the previous `sort_unstable_by_key(|x| (x.n.raw(),
+    /// x.e.raw()))` implementation returned, element for element.
     ///
     /// Why that holds: counting sort is **stable**, so scattering `pairs` into
     /// per-node buckets in input order leaves each node's slice in increasing
@@ -351,7 +353,7 @@ where
 
         let mut offsets = vec![0usize; num_nodes + 1];
         for entry in pairs {
-            offsets[entry.n.0 + 1] += 1;
+            offsets[entry.n.raw() + 1] += 1;
         }
         for i in 0..num_nodes {
             offsets[i + 1] += offsets[i];
@@ -364,11 +366,11 @@ where
         // Running write cursor per node; starts at each bucket's base.
         let mut cursor = offsets.clone();
         for entry in pairs {
-            let slot = cursor[entry.n.0];
+            let slot = cursor[entry.n.raw()];
             flat_edges[slot] = entry.e;
             flat_sign[slot] = entry.s;
             flat_w[slot] = entry.w.clone();
-            cursor[entry.n.0] = slot + 1;
+            cursor[entry.n.raw()] = slot + 1;
         }
 
         (flat_edges, flat_sign, flat_w, offsets)
@@ -485,13 +487,13 @@ where
     fn neighbors<'b>(&'b self, s: BergeState) -> Self::NeighIter<'b> {
         match s {
             BergeState::Node(nid) => {
-                let start = self.hg.node_offsets[nid.0];
-                let end = self.hg.node_offsets[nid.0 + 1];
+                let start = self.hg.node_offsets[nid.raw()];
+                let end = self.hg.node_offsets[nid.raw() + 1];
                 BergeIter::Node(self.hg.flat_node_edges[start..end].iter())
             }
             BergeState::Edge(eid) => {
-                let start = self.hg.edge_offsets[eid.0];
-                let end = self.hg.edge_offsets[eid.0 + 1];
+                let start = self.hg.edge_offsets[eid.raw()];
+                let end = self.hg.edge_offsets[eid.raw() + 1];
                 BergeIter::Edge(self.hg.flat_edge_nodes[start..end].iter())
             }
         }

@@ -63,13 +63,13 @@ fn push_decl(ir: &mut Ir, root: DeclId, kind: DeclKind, name: usize) -> DeclId {
     ir.decl_to_arc.push(None);
 
     // Maintain the intrusive sibling list.
-    let prev = ir.decl_nodes[root.0].last_child;
+    let prev = ir.decl_nodes[root.raw()].last_child;
     if prev.is_none() {
-        ir.decl_nodes[root.0].first_child = id;
+        ir.decl_nodes[root.raw()].first_child = id;
     } else {
-        ir.decl_nodes[prev.0].next_sibling = id;
+        ir.decl_nodes[prev.raw()].next_sibling = id;
     }
-    ir.decl_nodes[root.0].last_child = id;
+    ir.decl_nodes[root.raw()].last_child = id;
     id
 }
 
@@ -104,14 +104,14 @@ fn build_ir(nodes: usize, edges: usize, arity: usize) -> Ir {
     for &d in &node_decls {
         let nid = NodeId::new(ir.nodes.len());
         ir.nodes.push(NodeRec::new(d, Vec::new()));
-        ir.decl_to_node[d.0] = Some(nid);
+        ir.decl_to_node[d.raw()] = Some(nid);
     }
 
     for e in 0..edges {
         let ed = push_decl(&mut ir, root, DeclKind::Edge, nodes + e + 1);
         let eid = EdgeId::new(ir.edges.len());
         ir.edges.push(EdgeRec::new(ed, Vec::new()));
-        ir.decl_to_edge[ed.0] = Some(eid);
+        ir.decl_to_edge[ed.raw()] = Some(eid);
 
         let ad = push_decl(&mut ir, root, DeclKind::HyperArc, nodes + edges + e + 1);
         let aid = HyperArcId::new(ir.arcs.len());
@@ -136,8 +136,8 @@ fn build_ir(nodes: usize, edges: usize, arity: usize) -> Ir {
             refs,
         });
         ir.arc_hash.push(None);
-        ir.decl_to_arc[ad.0] = Some(aid);
-        ir.edges[eid.0].arcs.push(aid);
+        ir.decl_to_arc[ad.raw()] = Some(aid);
+        ir.edges[eid.raw()].arcs.push(aid);
     }
 
     ir
@@ -358,7 +358,7 @@ fn build_indexed(nodes: usize, edges: usize, arity: usize) -> (Ir, Index, Intern
             let d = push(&mut ir, &mut idx, root_sym, s, DeclKind::Node);
             let nid = NodeId::new(ir.nodes.len());
             ir.nodes.push(NodeRec::new(d, Vec::new()));
-            ir.decl_to_node[d.0] = Some(nid);
+            ir.decl_to_node[d.raw()] = Some(nid);
             d
         })
         .collect();
@@ -368,7 +368,7 @@ fn build_indexed(nodes: usize, edges: usize, arity: usize) -> (Ir, Index, Intern
         let ed = push(&mut ir, &mut idx, root_sym, s, DeclKind::Edge);
         let eid = EdgeId::new(ir.edges.len());
         ir.edges.push(EdgeRec::new(ed, Vec::new()));
-        ir.decl_to_edge[ed.0] = Some(eid);
+        ir.decl_to_edge[ed.raw()] = Some(eid);
 
         let aid = HyperArcId::new(ir.arcs.len());
         let refs: Vec<SignedRefR> = (0..arity)
@@ -392,7 +392,7 @@ fn build_indexed(nodes: usize, edges: usize, arity: usize) -> (Ir, Index, Intern
             refs,
         });
         ir.arc_hash.push(None);
-        ir.edges[eid.0].arcs.push(aid);
+        ir.edges[eid.raw()].arcs.push(aid);
     }
 
     (ir, idx, it)
@@ -415,7 +415,7 @@ fn bench_ir_lookup(c: &mut Criterion) {
             b.iter(|| {
                 let mut acc = 0usize;
                 for &d in black_box(&ids) {
-                    acc += ir.decl_nodes[d.0].name.raw();
+                    acc += ir.decl_nodes[d.raw()].name.raw();
                 }
                 black_box(acc)
             });
@@ -424,7 +424,7 @@ fn bench_ir_lookup(c: &mut Criterion) {
             b.iter(|| {
                 let mut hits = 0usize;
                 for &d in black_box(&ids) {
-                    if ir.decl_to_node[d.0].is_some() {
+                    if ir.decl_to_node[d.raw()].is_some() {
                         hits += 1;
                     }
                 }
@@ -546,7 +546,7 @@ fn bench_m2a_decl_lookup(c: &mut Criterion) {
                 b.iter(|| {
                     let mut acc = 0usize;
                     for &d in black_box(&ids) {
-                        acc += ir.decl_nodes[d.0].name.raw();
+                        acc += ir.decl_nodes[d.raw()].name.raw();
                     }
                     black_box(acc)
                 });
@@ -563,8 +563,8 @@ fn bench_m2a_decl_lookup(c: &mut Criterion) {
                         let mut acc = 0usize;
                         let len = ir.decl_nodes.len();
                         for &d in black_box(&ids) {
-                            if d.is_some() && d.0 < len {
-                                acc += ir.decl_nodes[d.0].name.raw();
+                            if d.is_some() && d.raw() < len {
+                                acc += ir.decl_nodes[d.raw()].name.raw();
                             }
                         }
                         black_box(acc)
@@ -604,7 +604,7 @@ fn bench_m2a_record_lookup(c: &mut Criterion) {
                 b.iter(|| {
                     let mut acc = 0usize;
                     for &n in black_box(&ids) {
-                        acc += ir.nodes[n.0].decl.0;
+                        acc += ir.nodes[n.raw()].decl.raw();
                     }
                     black_box(acc)
                 });
@@ -614,7 +614,7 @@ fn bench_m2a_record_lookup(c: &mut Criterion) {
                     let mut acc = 0usize;
                     for &n in black_box(&ids) {
                         if let Some(r) = ir.node(n) {
-                            acc += r.decl.0;
+                            acc += r.decl.raw();
                         }
                     }
                     black_box(acc)
@@ -643,7 +643,7 @@ fn bench_m2a_map_lookup(c: &mut Criterion) {
                 b.iter(|| {
                     let mut hits = 0usize;
                     for &d in black_box(&ids) {
-                        if ir.decl_to_node[d.0].is_some() {
+                        if ir.decl_to_node[d.raw()].is_some() {
                             hits += 1;
                         }
                     }
@@ -732,7 +732,7 @@ fn bench_m2a_hierarchy(c: &mut Criterion) {
                 b.iter(|| {
                     let mut acc = 0usize;
                     for &d in black_box(&ids) {
-                        acc += ir.decl_nodes[d.0].parent.0 & 1;
+                        acc += ir.decl_nodes[d.raw()].parent.raw() & 1;
                     }
                     black_box(acc)
                 });
@@ -742,7 +742,7 @@ fn bench_m2a_hierarchy(c: &mut Criterion) {
                     let mut acc = 0usize;
                     for &d in black_box(&ids) {
                         if let Some(p) = ir.parent_of(d) {
-                            acc += p.0 & 1;
+                            acc += p.raw() & 1;
                         }
                     }
                     black_box(acc)
@@ -830,8 +830,8 @@ fn bench_m2a1_random_point(c: &mut Criterion) {
                         let mut acc = 0usize;
                         let len = ir.decl_nodes.len();
                         for &d in black_box(&ids) {
-                            if d.is_some() && d.0 < len {
-                                acc += ir.decl_nodes[d.0].name.raw();
+                            if d.is_some() && d.raw() < len {
+                                acc += ir.decl_nodes[d.raw()].name.raw();
                             }
                         }
                         black_box(acc)
@@ -930,8 +930,8 @@ fn bench_m2a1_mixed_validity(c: &mut Criterion) {
                     b.iter(|| {
                         let mut acc = 0usize;
                         for &d in black_box(&ids) {
-                            if d.is_some() && d.0 < n {
-                                acc += ir.decl_nodes[d.0].name.raw();
+                            if d.is_some() && d.raw() < n {
+                                acc += ir.decl_nodes[d.raw()].name.raw();
                             }
                         }
                         black_box(acc)
@@ -983,10 +983,10 @@ fn bench_m2a1_decl_to_record(c: &mut Criterion) {
                         // `Option<NodeId>`. Comparing those would repeat the M2a
                         // mistake of charging an accessor for work its control
                         // never performed.
-                        if d.0 < ir.decl_to_node.len()
-                            && let Some(n) = ir.decl_to_node[d.0]
+                        if d.raw() < ir.decl_to_node.len()
+                            && let Some(n) = ir.decl_to_node[d.raw()]
                         {
-                            hits += n.0 & 1;
+                            hits += n.raw() & 1;
                         }
                     }
                     black_box(hits)
@@ -1000,7 +1000,7 @@ fn bench_m2a1_decl_to_record(c: &mut Criterion) {
                     let mut hits = 0usize;
                     for &d in black_box(&ids) {
                         if let Some(n) = ir.as_node(d) {
-                            hits += n.0 & 1;
+                            hits += n.raw() & 1;
                         }
                     }
                     black_box(hits)
@@ -1062,11 +1062,11 @@ fn bench_m2a1_end_to_end(c: &mut Criterion) {
                 let mut acc = 0usize;
                 for e in black_box(&ir).edges.iter() {
                     for &aid in &e.arcs {
-                        let arc = &ir.arcs[aid.0];
+                        let arc = &ir.arcs[aid.raw()];
                         for r in &arc.refs {
                             let t = r.target();
-                            if t.0 < ir.decl_nodes.len() {
-                                acc += ir.decl_nodes[t.0].name.raw();
+                            if t.raw() < ir.decl_nodes.len() {
+                                acc += ir.decl_nodes[t.raw()].name.raw();
                             }
                         }
                     }

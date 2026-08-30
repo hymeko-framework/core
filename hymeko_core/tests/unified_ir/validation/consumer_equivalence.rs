@@ -112,9 +112,9 @@ fn two_node_fixture() -> crate::unified_ir::support::builder::TestIr {
     let root = t.node(&["m"], DeclId::NONE);
     let a = t.node(&["m", "a"], root);
     let b = t.node(&["m", "b"], root);
-    t.ir.decl_nodes[root.0].first_child = a;
-    t.ir.decl_nodes[a.0].next_sibling = b;
-    t.ir.decl_nodes[root.0].last_child = b;
+    t.ir.decl_nodes[root.raw()].first_child = a;
+    t.ir.decl_nodes[a.raw()].next_sibling = b;
+    t.ir.decl_nodes[root.raw()].last_child = b;
     t
 }
 
@@ -122,7 +122,7 @@ fn two_node_fixture() -> crate::unified_ir::support::builder::TestIr {
 fn writer_reports_a_dangling_child_link() {
     let mut t = two_node_fixture();
     let root = DeclId::new(0);
-    t.ir.decl_nodes[root.0].first_child = DeclId::new(9_999);
+    t.ir.decl_nodes[root.raw()].first_child = DeclId::new(9_999);
 
     let err = render_result(&t).expect_err("a dangling child must be reported");
     assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
@@ -136,7 +136,7 @@ fn writer_reports_a_dangling_child_link() {
 fn writer_reports_a_dangling_sibling_link() {
     let mut t = two_node_fixture();
     let a = DeclId::new(1);
-    t.ir.decl_nodes[a.0].next_sibling = DeclId::new(9_999);
+    t.ir.decl_nodes[a.raw()].next_sibling = DeclId::new(9_999);
 
     let err = render_result(&t).expect_err("a dangling sibling must be reported");
     assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
@@ -147,7 +147,7 @@ fn writer_reports_a_sibling_cycle_instead_of_looping() {
     let mut t = two_node_fixture();
     let a = DeclId::new(1);
     // a -> a: a chain that never terminates.
-    t.ir.decl_nodes[a.0].next_sibling = a;
+    t.ir.decl_nodes[a.raw()].next_sibling = a;
 
     let err = render_result(&t).expect_err("a sibling cycle must be reported");
     assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
@@ -218,7 +218,7 @@ fn edge_for_decl_matches_map_then_index_on_the_corpus() {
                 .decl_to_edge
                 .get(i)
                 .and_then(|x| *x)
-                .map(|eid| (eid, &ir.edges[eid.0]));
+                .map(|eid| (eid, &ir.edges[eid.raw()]));
             let migrated = ir.edge_for_decl(d);
             match (reference, migrated) {
                 (Some((rid, rrec)), Some((mid, mrec))) => {
@@ -298,8 +298,8 @@ fn tagged_child_fixture() -> crate::unified_ir::support::builder::TestIr {
     let root = t.node(&["m"], DeclId::NONE);
     let x = t.node(&["m", "x"], root);
     t.tag(x, &["temperature"]);
-    t.ir.decl_nodes[root.0].first_child = x;
-    t.ir.decl_nodes[root.0].last_child = x;
+    t.ir.decl_nodes[root.raw()].first_child = x;
+    t.ir.decl_nodes[root.raw()].last_child = x;
     t
 }
 

@@ -41,7 +41,7 @@ mod test_import_graphs {
             .by_path
             .get(&PathKey(vec![sid_elements]))
             .expect("elements missing");
-        assert_eq!(ir.decl_nodes[did_elements.0].kind, DeclKind::Node);
+        assert_eq!(ir.decl_nodes[did_elements.raw()].kind, DeclKind::Node);
 
         let did_operand = *idx
             .by_path
@@ -51,17 +51,17 @@ mod test_import_graphs {
             .by_path
             .get(&PathKey(vec![sid_elements, sid_operand2]))
             .expect("operand2 missing");
-        assert_eq!(ir.decl_nodes[did_operand.0].kind, DeclKind::Node);
-        assert_eq!(ir.decl_nodes[did_operand2.0].kind, DeclKind::Node);
+        assert_eq!(ir.decl_nodes[did_operand.raw()].kind, DeclKind::Node);
+        assert_eq!(ir.decl_nodes[did_operand2.raw()].kind, DeclKind::Node);
 
         let did_operator = *idx
             .by_path
             .get(&PathKey(vec![sid_elements, sid_operator]))
             .expect("operator edge missing");
-        assert_eq!(ir.decl_nodes[did_operator.0].kind, DeclKind::Edge);
+        assert_eq!(ir.decl_nodes[did_operator.raw()].kind, DeclKind::Edge);
 
-        let edge_id = ir.decl_to_edge[did_operator.0].expect("operator not lowered as edge");
-        let edge_rec = &ir.edges[edge_id.0];
+        let edge_id = ir.decl_to_edge[did_operator.raw()].expect("operator not lowered as edge");
+        let edge_rec = &ir.edges[edge_id.raw()];
         assert_eq!(
             edge_rec.arcs.len(),
             1,
@@ -69,7 +69,7 @@ mod test_import_graphs {
         );
 
         let arc_id = edge_rec.arcs[0];
-        let arc = &ir.arcs[arc_id.0];
+        let arc = &ir.arcs[arc_id.raw()];
         assert_eq!(arc.refs.len(), 2, "operator arc should connect two refs");
 
         match (&arc.refs[0], &arc.refs[1]) {
@@ -183,7 +183,7 @@ mod test_import_graphs {
             .get(&PathKey(vec![ns, elements, operand]))
             .expect("missing basic_library.elements.operand in global index");
 
-        let kind = compiled.ir.decl_nodes[did.0].kind;
+        let kind = compiled.ir.decl_nodes[did.raw()].kind;
         assert!(matches!(
             kind,
             DeclKind::Node | DeclKind::Edge | DeclKind::HyperArc
@@ -209,7 +209,12 @@ mod test_import_graphs {
             "expected at least one arc ref to target basic_library.elements.operand"
         );
         assert!(
-            compiled.ir.decl_hash.get(did.0).and_then(|x| *x).is_some(),
+            compiled
+                .ir
+                .decl_hash
+                .get(did.raw())
+                .and_then(|x| *x)
+                .is_some(),
             "expected decl hash for operand to be computed"
         );
         info!(

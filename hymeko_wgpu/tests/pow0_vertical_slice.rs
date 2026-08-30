@@ -212,13 +212,13 @@ fn pow0_view_orientations_agree_and_rebuild_is_equivalent() {
     let mut edge_major: Vec<(usize, usize)> = Vec::new();
     for e in 0..view.num_edges() {
         for &n in view.edge_nodes(EdgeId::new(e)) {
-            edge_major.push((n.0, e));
+            edge_major.push((n.raw(), e));
         }
     }
     let mut node_major: Vec<(usize, usize)> = Vec::new();
     for n in 0..view.num_nodes() {
         for &e in view.node_edges(NodeId::new(n)) {
-            node_major.push((n, e.0));
+            node_major.push((n, e.raw()));
         }
     }
     edge_major.sort_unstable();
@@ -300,7 +300,7 @@ fn pow0_star_csr_matches_the_signed_bipartite_definition() {
         let e_v = n + e;
         let (s, eend) = view.edge_span(EdgeId::new(e));
         for p in s..eend {
-            let n_v = view.flat_edge_nodes[p].0;
+            let n_v = view.flat_edge_nodes[p].raw();
             match view.flat_edge_sign[p] {
                 1 => expected.push((n_v, e_v)),
                 -1 => expected.push((e_v, n_v)),

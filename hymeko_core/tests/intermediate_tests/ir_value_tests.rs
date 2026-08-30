@@ -73,17 +73,22 @@ mod ir_value_tests {
 
         // tags + value
         let sid_int = interner.intern(TAG_INT);
-        assert!(ir.decl_nodes[did_val0.0].anno.tags.contains(&sid_int));
+        assert!(ir.decl_nodes[did_val0.raw()].anno.tags.contains(&sid_int));
         assert_eq!(
-            ir.decl_nodes[did_val0.0].anno.value,
+            ir.decl_nodes[did_val0.raw()].anno.value,
             Some(ValueR::Num(56.0))
         );
 
         let sid_string = interner.intern(TAG_STRING);
         let sid_vakond = interner.intern(STR_VAKOND);
-        assert!(ir.decl_nodes[did_val1.0].anno.tags.contains(&sid_string));
+        assert!(
+            ir.decl_nodes[did_val1.raw()]
+                .anno
+                .tags
+                .contains(&sid_string)
+        );
         assert_eq!(
-            ir.decl_nodes[did_val1.0].anno.value,
+            ir.decl_nodes[did_val1.raw()].anno.value,
             Some(ValueR::Str(sid_vakond))
         );
 
@@ -94,12 +99,12 @@ mod ir_value_tests {
             .get(&PathKey(vec![sid_context, sid_val_neg]))
             .expect("val_neg missing");
         assert_eq!(
-            ir.decl_nodes[did_val_neg.0].anno.value,
+            ir.decl_nodes[did_val_neg.raw()].anno.value,
             Some(ValueR::Num(-42.0))
         );
 
         // vector list
-        match ir.decl_nodes[did_vector.0]
+        match ir.decl_nodes[did_vector.raw()]
             .anno
             .value
             .as_ref()
@@ -127,8 +132,13 @@ mod ir_value_tests {
             .by_path
             .get(&PathKey(vec![sid_context, sid_val_undef]))
             .expect("val_undef missing");
-        assert!(ir.decl_nodes[did_val_undef.0].anno.tags.contains(&sid_real));
-        assert!(ir.decl_nodes[did_val_undef.0].anno.value.is_none());
+        assert!(
+            ir.decl_nodes[did_val_undef.raw()]
+                .anno
+                .tags
+                .contains(&sid_real)
+        );
+        assert!(ir.decl_nodes[did_val_undef.raw()].anno.value.is_none());
 
         // sanity: context itself exists
         let _ = did_context;

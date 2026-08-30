@@ -57,9 +57,9 @@ mod test_traversal {
             .expect("D.Root.E missing");
 
         // --- Decl -> NodeId / EdgeId
-        let nid_a = ir.decl_to_node[did_a.0 as usize].expect("A not lowered as node");
-        let nid_b = ir.decl_to_node[did_b.0 as usize].expect("B not lowered as node");
-        let eid_e = ir.decl_to_edge[did_e.0 as usize].expect("E not lowered as edge");
+        let nid_a = ir.decl_to_node[did_a.raw() as usize].expect("A not lowered as node");
+        let nid_b = ir.decl_to_node[did_b.raw() as usize].expect("B not lowered as node");
+        let eid_e = ir.decl_to_edge[did_e.raw() as usize].expect("E not lowered as edge");
 
         // --- HyperGraphView felépítése
         let ex = ScalarWeightExtractor::default();

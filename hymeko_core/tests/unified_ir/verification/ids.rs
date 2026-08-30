@@ -148,7 +148,7 @@ fn backlink_validation_survives_the_optimisation() {
     let mut t = fixture();
     let d0 = DeclId::new(0);
     let foreign = t.ir.as_node(DeclId::new(1)).expect("decl 1 is a node");
-    t.ir.decl_to_node[d0.0] = Some(foreign);
+    t.ir.decl_to_node[d0.raw()] = Some(foreign);
     assert_eq!(t.ir.as_node(d0), Some(foreign), "raw mapping unchanged");
     assert!(
         t.ir.node_for_decl(d0).is_none(),
@@ -156,7 +156,7 @@ fn backlink_validation_survives_the_optimisation() {
     );
 
     // A mapping pointing far out of range must also be refused, not panic.
-    t.ir.decl_to_node[d0.0] = Some(NodeId::new(usize::MAX - 3));
+    t.ir.decl_to_node[d0.raw()] = Some(NodeId::new(usize::MAX - 3));
     assert!(t.ir.node_for_decl(d0).is_none());
 }
 
@@ -187,13 +187,13 @@ fn guard_free_agrees_with_an_explicitly_guarded_reference_implementation() {
         if id.is_none() {
             return None;
         }
-        t.ir.decl_nodes.get(id.0)
+        t.ir.decl_nodes.get(id.raw())
     };
     let guarded_map = |id: DeclId| -> Option<NodeId> {
         if id.is_none() {
             return None;
         }
-        t.ir.decl_to_node.get(id.0).copied().flatten()
+        t.ir.decl_to_node.get(id.raw()).copied().flatten()
     };
 
     let probes: Vec<usize> = (0..n)

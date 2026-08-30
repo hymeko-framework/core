@@ -212,7 +212,7 @@ impl<F: Real> HgnnLayer<F> {
             let s = hg.edge_offsets[e];
             let eend = hg.edge_offsets[e + 1];
             for p in s..eend {
-                let v = hg.flat_edge_nodes[p].0;
+                let v = hg.flat_edge_nodes[p].raw();
                 let w = hg.flat_edge_w[p].degree_mass();
                 let z_row = &z[v * d_out + f0..v * d_out + f0 + width];
                 for (acc, &zz) in xe_row.iter_mut().zip(z_row.iter()) {
@@ -276,7 +276,7 @@ impl<F: Real> HgnnLayer<F> {
             let s = hg.node_offsets[v];
             let nend = hg.node_offsets[v + 1];
             for p in s..nend {
-                let e = hg.flat_node_edges[p].0;
+                let e = hg.flat_node_edges[p].raw();
                 let w = hg.flat_node_w[p].degree_mass();
                 let xe_row = &scratch[e * width..(e + 1) * width];
                 for (acc, &xe) in dst.iter_mut().zip(xe_row.iter()) {

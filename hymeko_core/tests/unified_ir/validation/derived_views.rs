@@ -41,18 +41,18 @@ fn reference_incidences(ir: &Ir) -> BTreeSet<(usize, usize, i8)> {
     let mut out = BTreeSet::new();
     for (eid_usize, edge) in ir.edges.iter().enumerate() {
         for &aid in &edge.arcs {
-            let arc = &ir.arcs[aid.0];
+            let arc = &ir.arcs[aid.raw()];
             for r in &arc.refs {
                 let target: DeclId = match r {
                     SignedRefR::Plus(a) | SignedRefR::Minus(a) | SignedRefR::Neutral(a) => a.target,
                 };
-                if let Some(nid) = ir.decl_to_node[target.0] {
+                if let Some(nid) = ir.decl_to_node[target.raw()] {
                     let sgn = match r {
                         SignedRefR::Plus(_) => 1i8,
                         SignedRefR::Minus(_) => -1i8,
                         SignedRefR::Neutral(_) => 0i8,
                     };
-                    out.insert((eid_usize, nid.0, sgn));
+                    out.insert((eid_usize, nid.raw(), sgn));
                 }
             }
         }
@@ -66,7 +66,7 @@ fn view_incidences(v: &View) -> BTreeSet<(usize, usize, i8)> {
     for e in 0..v.num_edges() {
         let (lo, hi) = v.edge_span(EdgeId::new(e));
         for k in lo..hi {
-            out.insert((e, v.flat_edge_nodes[k].0, v.flat_edge_sign[k]));
+            out.insert((e, v.flat_edge_nodes[k].raw(), v.flat_edge_sign[k]));
         }
     }
     out
@@ -171,7 +171,7 @@ fn malformable() -> (TestIr, hymeko::common::ids::EdgeId) {
 #[test]
 fn try_from_ir_reports_a_dangling_arc() {
     let (mut t, eid) = malformable();
-    t.ir.edges[eid.0]
+    t.ir.edges[eid.raw()]
         .arcs
         .push(hymeko::common::ids::HyperArcId::new(9_999));
 
@@ -209,7 +209,7 @@ fn try_from_ir_reports_a_node_declaration_with_no_record() {
     // `m.x` stays a Node declaration but loses its node mapping.
     let x = DeclId::new(1);
     assert_eq!(t.ir.kind_of(x), Some(hymeko::ir::ir::DeclKind::Node));
-    t.ir.decl_to_node[x.0] = None;
+    t.ir.decl_to_node[x.raw()] = None;
 
     let Err(err) = View::try_from_ir(&t.ir, &cfg(), &ScalarWeightExtractor) else {
         panic!("a Node without a record must be reported");
@@ -243,7 +243,7 @@ fn try_from_ir_accepts_an_edge_to_edge_reference() {
 #[should_panic(expected = "malformed Ir")]
 fn from_ir_still_fails_fast_on_malformed_input() {
     let (mut t, eid) = malformable();
-    t.ir.edges[eid.0]
+    t.ir.edges[eid.raw()]
         .arcs
         .push(hymeko::common::ids::HyperArcId::new(9_999));
     let _ = View::from_ir(&t.ir, &cfg(), &ScalarWeightExtractor);

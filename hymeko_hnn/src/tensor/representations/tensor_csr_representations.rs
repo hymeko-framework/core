@@ -36,7 +36,7 @@ where
         let e_v = hg.num_nodes() + e;
 
         for p in s..eend {
-            let n_v = hg.flat_edge_nodes[p].0 as usize;
+            let n_v = hg.flat_edge_nodes[p].raw();
             match hg.flat_edge_sign[p] {
                 1 => counts[n_v] += 1,
                 -1 => counts[e_v] += 1,
@@ -70,7 +70,7 @@ where
         let e_v = hg.num_nodes() + e;
 
         for p in s..eend {
-            let n_v = hg.flat_edge_nodes[p].0 as usize;
+            let n_v = hg.flat_edge_nodes[p].raw();
             let w = inc_to_real(hg, p, e);
 
             let mut insert = |row: usize, col: usize, val: F| {
@@ -124,7 +124,7 @@ where
 
         for i in 0..nodes_in_edge {
             let u_idx = s + i;
-            let u = hg.flat_edge_nodes[u_idx].0;
+            let u = hg.flat_edge_nodes[u_idx].raw();
             let su = hg.flat_edge_sign[u_idx];
 
             for j in (i + 1)..nodes_in_edge {
@@ -132,11 +132,11 @@ where
                 let sv = hg.flat_edge_sign[v_idx];
 
                 match (su, sv) {
-                    (1, -1) => counts[u] += 1,                           // u -> v
-                    (-1, 1) => counts[hg.flat_edge_nodes[v_idx].0] += 1, // v -> u
+                    (1, -1) => counts[u] += 1,                               // u -> v
+                    (-1, 1) => counts[hg.flat_edge_nodes[v_idx].raw()] += 1, // v -> u
                     _ => {
                         counts[u] += 1;
-                        counts[hg.flat_edge_nodes[v_idx].0] += 1;
+                        counts[hg.flat_edge_nodes[v_idx].raw()] += 1;
                     }
                 }
             }
@@ -168,7 +168,7 @@ where
         let mut local_nodes = Vec::with_capacity(nodes_in_edge);
         for p in s..eend {
             local_nodes.push((
-                hg.flat_edge_nodes[p].0,
+                hg.flat_edge_nodes[p].raw(),
                 hg.flat_edge_sign[p],
                 inc_to_real(hg, p, e),
             ));

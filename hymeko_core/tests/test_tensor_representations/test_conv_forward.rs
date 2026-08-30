@@ -155,7 +155,7 @@ mod test_conv_forward {
                 let eend = hg.edge_offsets[e + 1];
                 let mut acc = 0.0f32;
                 for p in s..eend {
-                    let v = hg.flat_edge_nodes[p].0;
+                    let v = hg.flat_edge_nodes[p].raw();
                     acc += hg.flat_edge_w[p].degree_mass() * z_col[v];
                 }
                 x_edges[e] = acc;
@@ -170,7 +170,7 @@ mod test_conv_forward {
                 let s = hg.edge_offsets[e];
                 let eend = hg.edge_offsets[e + 1];
                 for p in s..eend {
-                    let v = hg.flat_edge_nodes[p].0;
+                    let v = hg.flat_edge_nodes[p].raw();
                     y_col[v] += hg.flat_edge_w[p].degree_mass() * x_edges[e];
                 }
             }
@@ -203,7 +203,7 @@ mod test_conv_forward {
         let mut de_minus = vec![0.0f32; m];
         for e in 0..m {
             for p in hg.edge_offsets[e]..hg.edge_offsets[e + 1] {
-                let v = hg.flat_edge_nodes[p].0;
+                let v = hg.flat_edge_nodes[p].raw();
                 let w = hg.flat_edge_w[p].degree_mass();
                 match hg.flat_edge_sign[p] {
                     1 => {
@@ -264,7 +264,7 @@ mod test_conv_forward {
             let mut xe_minus = vec![0.0f32; m];
             for e in 0..m {
                 for p in hg.edge_offsets[e]..hg.edge_offsets[e + 1] {
-                    let v = hg.flat_edge_nodes[p].0;
+                    let v = hg.flat_edge_nodes[p].raw();
                     let w = hg.flat_edge_w[p].degree_mass();
                     match hg.flat_edge_sign[p] {
                         1 => xe_plus[e] += w * zp_col[v],
@@ -285,7 +285,7 @@ mod test_conv_forward {
             let mut y = vec![0.0f32; n];
             for e in 0..m {
                 for p in hg.edge_offsets[e]..hg.edge_offsets[e + 1] {
-                    let v = hg.flat_edge_nodes[p].0;
+                    let v = hg.flat_edge_nodes[p].raw();
                     let w = hg.flat_edge_w[p].degree_mass();
                     match hg.flat_edge_sign[p] {
                         1 => y[v] += w * xe_plus[e],

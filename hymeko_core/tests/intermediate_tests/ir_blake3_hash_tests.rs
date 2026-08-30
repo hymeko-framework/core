@@ -71,7 +71,7 @@ mod ir_blake3_hash_tests {
             .get(&PathKey(vec![sid_root]))
             .expect("missing Root decl");
 
-        let actual = ir.decl_hash[did_root.0 as usize].expect("Root hash not computed");
+        let actual = ir.decl_hash[did_root.raw() as usize].expect("Root hash not computed");
 
         // Manually reproduce the hashing preimage for this simple node.
         let mut hasher = Hasher::new();
@@ -110,7 +110,7 @@ mod ir_blake3_hash_tests {
             .get(&PathKey(vec![sid_context]))
             .expect("context missing");
 
-        ir.decl_hash[did_context.0 as usize].expect("context hash missing")
+        ir.decl_hash[did_context.raw() as usize].expect("context hash missing")
     }
 
     #[test]
@@ -163,8 +163,8 @@ mod ir_blake3_hash_tests {
                 .by_path
                 .get(&PathKey(path_syms.clone()))
                 .unwrap_or_else(|| panic!("missing path {key}"));
-            let hash =
-                ir.decl_hash[did.0 as usize].unwrap_or_else(|| panic!("missing hash for {key}"));
+            let hash = ir.decl_hash[did.raw() as usize]
+                .unwrap_or_else(|| panic!("missing hash for {key}"));
             out.insert(key, hash);
         }
         out

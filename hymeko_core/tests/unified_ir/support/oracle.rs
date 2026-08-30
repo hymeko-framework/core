@@ -90,7 +90,7 @@ fn value_str(v: &ValueR, t: &TestIr) -> String {
 }
 
 fn anno_str(d: DeclId, t: &TestIr) -> String {
-    let a = &t.ir.decl_nodes[d.0].anno;
+    let a = &t.ir.decl_nodes[d.raw()].anno;
     // Tags are sorted: a declaration's tag set is a set, not a sequence.
     let mut tags: Vec<&str> = a.tags.iter().map(|&s| t.it.resolve(s)).collect();
     tags.sort_unstable();
@@ -119,10 +119,10 @@ fn ref_str(r: &SignedRefR, t: &TestIr) -> String {
 
 fn bases_str(d: DeclId, t: &TestIr) -> String {
     let ir: &Ir = &t.ir;
-    let bases = if let Some(nid) = ir.decl_to_node[d.0] {
-        &ir.nodes[nid.0].bases
-    } else if let Some(eid) = ir.decl_to_edge[d.0] {
-        &ir.edges[eid.0].bases
+    let bases = if let Some(nid) = ir.decl_to_node[d.raw()] {
+        &ir.nodes[nid.raw()].bases
+    } else if let Some(eid) = ir.decl_to_edge[d.raw()] {
+        &ir.edges[eid.raw()].bases
     } else {
         return String::from("-");
     };
@@ -146,7 +146,7 @@ pub fn semantic_form(t: &TestIr, ord: Ordering) -> String {
                 .join(".");
         decls.insert(format!(
             "  {} {} anno[{}] bases[{}]",
-            kind_str(t.ir.decl_nodes[did.0].kind),
+            kind_str(t.ir.decl_nodes[did.raw()].kind),
             path,
             anno_str(did, t),
             bases_str(did, t)
@@ -191,7 +191,7 @@ pub fn semantic_form(t: &TestIr, ord: Ordering) -> String {
             .arcs
             .iter()
             .map(|&aid| {
-                let arc = &t.ir.arcs[aid.0];
+                let arc = &t.ir.arcs[aid.raw()];
                 let mut refs: Vec<String> = arc.refs.iter().map(|r| ref_str(r, t)).collect();
                 if ord == Ordering::Multiset {
                     refs.sort();
@@ -247,7 +247,7 @@ pub fn dense_id_form(t: &TestIr) -> String {
                     .map(|&s| t.it.resolve(s))
                     .collect::<Vec<_>>()
                     .join(".");
-            format!("{p}=#{}", did.0)
+            format!("{p}=#{}", did.raw())
         })
         .collect();
     v.sort();

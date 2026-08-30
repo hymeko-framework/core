@@ -143,7 +143,7 @@ mod test_annotations {
 
         // 2) NodeRec lekérés
         let n10_id = ir.as_node(node10).expect("node10 should be a node");
-        let n10 = &ir.nodes[n10_id.0];
+        let n10 = &ir.nodes[n10_id.raw()];
 
         assert_eq!(n10.bases.len(), 1);
 
@@ -236,10 +236,10 @@ mod test_annotations {
         // --- optional: check e0 arc weights still parse/lower ---
         let e0 = find_decl(ir, it, EDGE_E0_NAME, DeclKind::Edge);
         let eid = ir.as_edge(e0).expect("e0 should be an edge");
-        let e0rec = &ir.edges[eid.0];
+        let e0rec = &ir.edges[eid.raw()];
 
         assert_eq!(e0rec.arcs.len(), 1);
-        let arc = &ir.arcs[e0rec.arcs[0].0];
+        let arc = &ir.arcs[e0rec.arcs[0].raw()];
 
         assert_eq!(arc.refs.len(), 2);
 

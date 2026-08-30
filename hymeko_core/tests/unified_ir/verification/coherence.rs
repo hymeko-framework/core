@@ -54,13 +54,13 @@ fn good() -> TestIr {
             continue;
         }
         let child = DeclId::new(i);
-        let last = t.ir.decl_nodes[p.0].last_child;
+        let last = t.ir.decl_nodes[p.raw()].last_child;
         if last.is_none() {
-            t.ir.decl_nodes[p.0].first_child = child;
+            t.ir.decl_nodes[p.raw()].first_child = child;
         } else {
-            t.ir.decl_nodes[last.0].next_sibling = child;
+            t.ir.decl_nodes[last.raw()].next_sibling = child;
         }
-        t.ir.decl_nodes[p.0].last_child = child;
+        t.ir.decl_nodes[p.raw()].last_child = child;
     }
     t
 }
@@ -87,7 +87,7 @@ fn a_coherent_ir_passes() {
 fn corrupted_parent_is_detected() {
     let mut t = good();
     let x = DeclId::new(1);
-    t.ir.decl_nodes[x.0].parent = DeclId::NONE; // path still says m.x
+    t.ir.decl_nodes[x.raw()].parent = DeclId::NONE; // path still says m.x
     assert!(has(&t, "ParentMismatch"), "{:?}", findings(&t));
 }
 
@@ -110,7 +110,7 @@ fn sibling_cycle_is_detected_and_terminates() {
     let a = t.ir.decl_nodes[0].first_child;
     assert!(a.is_some());
     // make the first child point at itself
-    t.ir.decl_nodes[a.0].next_sibling = a;
+    t.ir.decl_nodes[a.raw()].next_sibling = a;
     let f = findings(&t);
     assert!(
         f.iter().any(|x| label(x) == "SiblingChainBroken"),
@@ -122,7 +122,7 @@ fn sibling_cycle_is_detected_and_terminates() {
 fn missing_child_backlink_is_detected() {
     let mut t = good();
     let a = t.ir.decl_nodes[0].first_child;
-    t.ir.decl_nodes[a.0].parent = DeclId::new(3);
+    t.ir.decl_nodes[a.raw()].parent = DeclId::new(3);
     assert!(has(&t, "ChildBacklinkMismatch"), "{:?}", findings(&t));
 }
 
