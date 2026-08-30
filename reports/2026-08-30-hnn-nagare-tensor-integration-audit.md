@@ -104,9 +104,16 @@ hymeko_core  ── (leaf)
 hymeko_graph ── (leaf: rayon,dashmap)      hymeko_pgraph → core, graph
 hymeko_tensor/clifford/spline ── (leaves)  hymeko_numeric_vv → spline
 hymeko_hnn   → hymeko_core                 (does NOT depend on graph/tensor)
-Nagare(monorepo) → monorepo/hymeko_graph, monorepo/hymeko_clifford   [STALE forks]
-Nagare(github)   → vendor/hymeko_graph, vendor/hymeko_clifford        [STALE vendored]
+Nagare CANONICAL (hymeko/nagare @ feat/graph-canonical-dependency)
+             → canonical hymeko_graph (../graph) + hymeko_{clifford,tensor,spline,vision} (../tensor)
+               [de-vendored 2026-08-16; NOT dependent on core/hnn — parallel consumer; §12]
+Nagare(monorepo, predecessor) → monorepo/hymeko_graph, monorepo/hymeko_clifford   [STALE forks]
+Nagare(github, mirror/predecessor) → vendor/hymeko_graph, vendor/hymeko_clifford  [STALE vendored]
 ```
+
+The **canonical** Nagare already matches the target Nagare edges below (graph→Nagare,
+tensor→Nagare, no core/hnn→Nagare); the two forbidden vendored-framework edges survive
+only in the predecessor instances (I2 targets those).
 
 **Target (acyclic):**
 
@@ -144,7 +151,14 @@ Proven by evidence, not chosen by convenience:
 | provenance | committed history | **none** | committed history |
 | distinctive weakness | monorepo-graph is a **stale fork** of canonical; empty `backend/`; Adam-only | zero-commit snapshot | ~15 k LOC dead vendored graph |
 
-**Decision: the production Nagare owner is the monorepo `hymeko_nagare` (A).** It is a
+> **⚠ SUPERSEDED BY §12 (2026-08-30).** The decision below ranks the three *on-disk*
+> instances and correctly rejects B and C. But the true production owner is the
+> **canonical `hymeko/nagare` (Gitea) branch `feat/graph-canonical-dependency`** — a
+> mature, already-de-vendored line the initial pass missed by judging `hymeko/nagare` by
+> its empty `main`. Read §12 for the corrected determination; the monorepo (A) is a
+> predecessor, not the owner.
+
+**Decision (among the on-disk instances): the strongest is the monorepo `hymeko_nagare` (A).** It is a
 strict superset of B (B is a fmt-only extraction snapshot with no git history — delete
 or convert to a thin facade), and unlike C it does not vendor a 15 k-LOC dead graph
 copy. The **genuinely Nagare-owned asset across all instances is the hand-written
@@ -359,3 +373,25 @@ re-inventory this ~40-op framework** (HSiKAN, KAN, rotor, SLAM, vision) — a fu
 contract-level audit of the canonical `hymeko/nagare` line is the natural next step if
 you want it; this correction records the ownership fact and the already-done phases so
 the plan is not built on a stale snapshot. **No Nagare source was touched.**
+
+---
+
+## 13. Spec coverage map (this deliverable ↔ the formal task)
+
+| Spec item | Where satisfied |
+|---|---|
+| Entry conditions (corrective done, tree clean, HEAD==origin/main, IFAC untouched) | verified before audit; corrective `e2952c7`; audit commits are docs-only |
+| Verify remote SHAs, don't trust | §0 (found graph/tensor local stale; audited at canonical worktrees) |
+| Prove the production Nagare instance | §4 (on-disk ranking) **+ §12 (corrected owner = `hymeko/nagare` canonical branch)** |
+| Canonical ownership rules (graph/tensor/core/hnn/Nagare) | §1 + `docs/hymeko-kernel-ownership.md` |
+| **Part A** — semantic inventory of every named site | §1/§2 (all 13 named items: hnn gather/scatter/clique-diag/implicit-clique; graph `SignedHyperIncidence` 4 ops; hnn Berge BFS/DFS; graph CSR/scratch; hnn dense_transform(_dual); Nagare linear fwd/bwd; graph `fir_cycle_scatter_mean`; Nagare scatter_mean fwd/bwd; Nagare signed_scatter; tensor linalg/renyi/stream; spline+Nagare Chebyshev; clifford+Nagare rotor; LCG/activation/loss/workspace) |
+| Categories A–F, by contract not name | §2 matrix (9 comparison axes applied) |
+| Known distinction (graph uniform-arity vs hnn ragged; scatter_mean ≠ signed scatter; shared abstraction only after differential test) | §2 item 4 (now the triad, §12) + ownership note A |
+| **Part B** — minimal common kernel layer (dense transform / gather-scatter / traversal / Nagare rewire) | `docs/hymeko-kernel-migration.md` **Part B** (B.1–B.4, preferred-form design) |
+| **Part C** — execution order I0–I8, per-phase commit + rollback | migration doc phase table + I1–I8 |
+| **Part D** — mandatory test list | §7 test matrix (all listed cases incl. f32/f64, serial/Rayon parity, FD, adjoint, star-vs-clique, PoW-0, the 7 source-first workloads, ≥4 mutants + hash restore) |
+| **Part E** — Criterion A/B, all axes + thresholds + A/A null | §7 benchmark matrix |
+| **Part F** — target acyclic dependency DAG + forbidden edges | §3 (current vs target; canonical Nagare matches target, §12) |
+| **Part G** — deliverables | this report + `docs/hymeko-kernel-ownership.md` + `docs/hymeko-kernel-migration.md`; DAG §3; ownership matrix §2; exact duplicate counts §2; Nagare responsibility map §4/§12; minimal public APIs §6; per-phase approval tokens (migration ledger); test+bench matrix §7; deletable LOC exact vs semantic §2 + migration summary |
+| Additive correction of the prior duplication audit | §9 + appended addendum in `docs/unified-ir-duplication-and-profile-audit.md` |
+| HARD STOP after audit; no source/manifest/lockfile; no dep added; no Nagare source moved | honored — all commits docs-only; §10 |

@@ -61,6 +61,77 @@ raise under `APPROVED-GRAPH-EDIT: topk-config-struct` when the graph repo is wor
 
 ---
 
+## Part B — target architecture (the minimal common kernel layer)
+
+Design rules (all four kernels below obey them): **borrowed slice/view inputs**;
+**compile-time generic adapters** (monomorphized, no `Box<dyn Trait>` in a hot loop, no
+runtime string/enum dispatch inside the inner loop); **caller-owned `*_into` outputs**;
+a **separate reusable scratch/workspace object** where reuse pays; **no new crate** if a
+canonical crate can host the op; **no second CSR / Tensor / Graph / Runtime / Backend
+framework**. The IR stays a hypergraph (invariant 8): every shared kernel adapts *over*
+the ragged hypergraph incidence, never by folding it into a dyadic graph.
+
+### B.1 Shared dense row transform (`Z = X·Θ`)
+
+- **Owner:** no canonical owner exists today (audit §8 gap). Near-term target: **one
+  private helper inside `hymeko_hnn`** that absorbs the 4 internal copies (`hgnn`,
+  `signed_hgnn`, `gcn_clique`, `mesh_nn`). Promote to a canonical
+  `hymeko_tensor::linalg::linear_forward_into` **only** when a second cross-repo consumer
+  justifies it (approval-gated; do not create speculatively).
+- **Form:** `dense_row_transform_into(x: &[F], theta: &[F], n, d_in, d_out, bias:
+  Option<&[F]>, z_out: &mut [F])` — generic `F`, caller-owned output, **biasless =
+  `None`** / **biased = `Some(&b)`** (covers hnn's `X·Θ` and Nagare's `X·W+b`). Optional
+  `dense_row_transform_dual_into(x, theta_plus, theta_minus, z_plus, z_minus)` — one pass
+  over `X` (the Signed-HGNN dual form). **FP accumulation order is preserved** (i→k→j,
+  bit-identical to today — the gate). Rayon threshold on `n·d_in·d_out`.
+- **Backward:** Nagare's `linear_backward` **stays Nagare-specific** — single consumer;
+  do not lift it to the canonical/hnn layer.
+
+### B.2 Shared segmented gather/scatter primitive
+
+- **Substrate:** `hymeko_core` already owns the CSR + degree seam. The shared primitive
+  is a **segmented reduction over a borrowed incidence view**, not a new framework.
+- **Form:** a borrowed view `SegmentedIncidence<'a, I> { offsets: &'a [usize], indices:
+  &'a [I], sign: &'a [i8], weight: &'a [V] }` + `segment_reduce_into<F, P: Fn(Inc)->F>
+  (seg, x, out: &mut [F], proj: P)`. **Ragged and uniform** incidence are two
+  constructors of the *same* borrowed view (uniform = arity-strided offsets) — the
+  ragged/uniform adapter, not two kernels. Sign/weight projection is the monomorphized
+  closure `P` (no `Box<dyn>`, no in-loop enum). Forward + optional **adjoint** (the
+  transpose reduction).
+- **Strategy variants preserved:** the HNN **edge-major small-input** path and
+  **node-major parallel** path stay as *measured* Strategy variants (dispatch on
+  `flat.len() >= PAR_INCIDENCE_THRESHOLD`) — they must **not** be dissolved into one
+  general abstraction (they carry the measured 14%/29% small-cell wins). The triad
+  (graph `hyper_operator`, hnn `message_passing`, Nagare `hg_message`) adapt over this
+  view **only after** the I1 differential test proves agreement on the shared sub-domain.
+
+### B.3 Shared traversal
+
+- **Form:** one `BorrowedAdjacency` trait (`fn neighbors(&self, v, &mut Scratch) -> impl
+  Iterator`) with a **reusable caller-owned `TraversalScratch`** (visited bitset +
+  frontier). The BFS/DFS body is written **once** over the trait; a **graph `Csr`
+  adapter** and an **HNN `BergeState`/Levi adapter** implement it. **One production test**
+  for the algorithm.
+- **Contract note:** hnn's Levi traversal (bipartite `Node|Edge`, allocating `Vec`) and
+  graph's u32-CSR (scratch-reused, callback, depth-bounded) differ (audit item 13, cat
+  D). The trait unifies the *adjacency*, not the *contract*: keep the two thin algorithm
+  wrappers if their depth-bound/output contracts genuinely differ; share the neighbour
+  iteration and scratch. No behavioural merge.
+
+### B.4 Nagare rewire
+
+- Depend on canonical `hymeko_graph` / `hymeko_tensor` / `hymeko_spline` /
+  `hymeko_clifford`; remove vendored/copied production sources; runtime stays a **thin
+  composition** (orchestrates canonical kernels + Nagare's closed-form backwards).
+- **Status:** the canonical `hymeko/nagare` branch `feat/graph-canonical-dependency` has
+  **already done this** (de-vendored 2026-08-16; `Phase 4` consumes canonical
+  `hymeko_graph`). Remaining: confirm the FIR differential oracle (§5), reconcile the
+  incidence triad (B.2), and finish the Phase-7 traversal consolidation (B.3), then merge
+  to `main`. The github mirror and monorepo predecessors still carry the vendored copies
+  (I2 targets those).
+
+---
+
 ## I1 — Freeze differential oracles (do this before any deletion)
 
 Capture the current behaviour of every kernel that will be delegated or deleted, as a
