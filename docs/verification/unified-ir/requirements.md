@@ -187,3 +187,49 @@ Row kinds: 51 NORMATIVE_REQUIREMENT, 6 DESIGN_CONSTRAINT, 5 CHARACTERIZATION,
 4 KNOWN_DEFECT (3 open, 1 fixed). Only normative rows enter the satisfaction
 denominator; a fixed defect leaves the open count and does not enter the
 numerator of any satisfaction rate.
+
+## Platform-conformance addendum — 2026-08-30 (`unified-ir-platform-conformance`)
+
+**Authorisation:** none required — tests + docs + `benches/ir_bench.rs` only; no
+production `hymeko_core/src` change. Adds three requirement families that the
+M2b matrix did not cover. Machine-readable rows in `traceability.csv`.
+
+### CLI (`UIR-CLI-01..04`)
+
+The product `hymeko` CLI (package `hymeko_core`, `src/main.rs`) had **no**
+conformance test. Three now run against the pre-built `CARGO_BIN_EXE_hymeko_core`
+(no recursive Cargo): success (exit 0, prints), usage error (exit 2), missing file
+(exit 1) — all **PASS**. `UIR-CLI-04` records the single-CLI *invariant* as
+**PARTIAL**: `hymeko` is minimal and has no subcommands, while `pgraph` and
+`hymeko_pgraph_dump` (graph repo) are parallel product/debug CLIs and
+`parser/src/main.rs` is a `Hello, world!` stub. Consolidation is a later
+production change; see `docs/unified-ir-single-cli.md`.
+
+### CBOR readiness (`UIR-CBOR-01..05`)
+
+Audited read-only. **No CBOR codec exists**: `CborPayload` is
+`#[derive(Serialize, Deserialize)]` scaffolding, constructed nowhere, with no
+encoder (`UIR-CBOR-01`) and no bounded decoder (`UIR-CBOR-02`), so no semantic
+round-trip (`UIR-CBOR-03`) — all **NOT_IMPLEMENTED**. `ciborium 0.2.2` is present
+only *transitively via Criterion* (dev), not a production dependency.
+`UIR-CBOR-04/05` (**PASS** characterizations) record that the payload duplicates
+derived/cache state (`index`, `canon_hash`) and a string-table copy alongside the
+canonical `ir`, and that `root_path: PathBuf` is environment metadata, not portable
+canonical data. The proposed `APPROVED-CORE-EDIT: canonical-cbor-codec` scope is in
+`reports/2026-08-30-unified-ir-platform-conformance.md`.
+
+### Source emission completeness (`UIR-EMIT-01..02`)
+
+`IrWriter` is a **skeleton-only** serialiser: it emits names + hierarchy but not
+annotations, values, bases, or hyperarc incidences (arcs stub to
+`/* Arc references pending */`). `UIR-EMIT-01` is **PARTIAL** (a new test proves
+annotations are dropped); `UIR-EMIT-02` (lossless emit→reparse round-trip) is
+**NOT_IMPLEMENTED**, blocked by the incomplete emission. This is distinct from the
+`transformation` crate's `emit_hymeko`, which is complete and whose round-trip is
+tested there.
+
+### Recomputed rates (matrix-wide, `traceability.csv`)
+
+47 PASS · 3 PARTIAL · 3 FAIL (known defects) · 13 NOT_IMPLEMENTED · 10 BLOCKED.
+The 13 NOT_IMPLEMENTED and 10 BLOCKED are honest future contracts (CBOR codec,
+stable IDs, mutation/transaction/replay), never faked to PASS.

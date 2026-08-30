@@ -605,3 +605,81 @@ Iteration order is documented as deterministic for one snapshot and **not part o
 **Zero-cost, measured (corrected by M2a.1, 2026-08-29):** scalar lookup is within noise of a hand-written guarded control on random-point *and* dependent-chain latency; iteration identical to raw `Vec` iteration; mapping within 3 %. No allocation on any valid-lookup path; invalid lookup O(1).
 
 The M2a report initially recorded +20…49 % and attributed it to `Option<&T>` materialisation. That was wrong twice over: `Option<&T>` is niche-optimised (8 bytes), and the real cause was a redundant `is_none()` guard M2a itself introduced — `NONE` is `usize::MAX`, which `Vec::get` already rejects. Removing it cost 4 fewer instructions per lookup and closed the gap entirely (−32.7 %, p = 0.00). See `reports/2026-08-29-unified-ir-m2a1.md`.
+
+## Platform-conformance addendum — 2026-08-30 (serialization roles, CBOR readiness, CLI)
+
+Audit + gate only (`reports/2026-08-30-unified-ir-platform-conformance.md`); no
+production source changed. This fixes the serialization-role vocabulary the Parts
+above assumed but did not tabulate, and records the measured status of each.
+
+### Serialization roles (binding)
+
+| role | artifact | owner | status @ `cebc254` |
+|---|---|---|---|
+| source of truth | `hymeko_core::ir::Ir` (arena) | core | canonical, in-memory |
+| resident human format | HyMeKo source text | core `parser` / `writers::ir_writer` | **PARTIAL** — `IrWriter` is skeleton-only (names + hierarchy; no annotations/values/bases/incidences; arcs stub). `UIR-EMIT-01/02` |
+| compact lossless binary | CBOR `writers::cbor_writer::CborPayload` | core | **NOT IMPLEMENTED** — serde-derive schema only; no encoder, no bounded decoder; constructed nowhere; `ciborium` is transitive-via-Criterion, not a production dep. `UIR-CBOR-01..03` |
+| transport framing | `ir_stream` (envelope/section/assembler/version/limits) | core | **implemented** — bounded, validated, no-transmute, `SnapshotVersion` authority, carries **no entity IDs**. `UIR-M2C-02` |
+| UI/debug view | JSON `SnapshotDto` (in the `transformation` repo's `hymeko_formats`) | consumer | derived lossy view only; never canonical |
+
+**Correction to any prior implication:** `CborPayload` is **not** a working codec.
+It is a schema declaration. Do not describe it as a lossless binary snapshot until
+both an encoder and a bounded, hash-verifying decoder exist and the semantic
+round-trip `cbor_decode(cbor_encode(x)) ≡ parse(emit_hymeko(x))` is tested. The
+proposed scope for that work is `APPROVED-CORE-EDIT: canonical-cbor-codec`
+(conformance report §6). JSON must never be promoted to a canonical wire format;
+the resident canonical serializations are HyMeKo text (human) and CBOR (binary,
+once wired).
+
+### CLI
+
+Target: one user-facing `hymeko` CLI with subcommands; the P-graph engine linked
+as a library, not a second binary. Current: two product CLIs (`hymeko`, `pgraph`)
++ a debug CLI + a stub `main`. Inventory and consolidation plan in
+`docs/unified-ir-single-cli.md`; conformance in `UIR-CLI-01..04`.
+
+## Ownership & layering model — 2026-08-30 (Phase H, from measured evidence)
+
+Derived from the conformance audit, not a new abstract framework. Each layer is
+named with its current status so the model is falsifiable.
+
+| # | layer | owner (crate) | status |
+|---|---|---|---|
+| 1 | HyMeKo source ⇄ CBOR are representations of one semantics | core `parser`/`writers` | text VERIFIED (skeleton); CBOR NOT_IMPLEMENTED |
+| 2 | canonical entity state | `hymeko_core::ir::Ir` | VERIFIED (sole owner; accessor layer is the read contract) |
+| 3 | immutable/versioned snapshots for concurrent readers | core (`Ir` clone; `ir_stream::SnapshotVersion`) | clone VERIFIED; version-bound snapshot publication NOT_IMPLEMENTED (M4) |
+| 4 | derived-view builders own conversion + validation | hnn `HyperGraphView::try_from_ir` | VERIFIED (uses the accessor layer; rejects malformed) |
+| 5 | CPU/Rayon/WGPU/CUDA/FPGA consume derived views | core `tensor`, `hymeko_wgpu` | CPU+WGPU VERIFIED; CUDA/FPGA absent |
+| 6 | endpoint interactions → stable-ID semantic commands | — | NOT_IMPLEMENTED (needs stable IDs, M3) |
+| 7 | only the core transaction validates & publishes | — | NOT_IMPLEMENTED (M4; design in Part F) |
+| 8 | views rebuilt or incrementally refreshed from committed versions | hnn | rebuild VERIFIED; incremental refresh NOT_IMPLEMENTED (Part H.4) |
+| 9 | one library façade + one product CLI | core | PARTIAL (`UIR-CLI-04`) |
+
+### Abstraction gate (applied to any new type)
+
+A trait/factory/repository/DTO/context object is admissible only if it names: the
+concrete duplication it removes; ≥2 real consumers or strategies; ownership +
+lifetime; the allocation boundary; the error contract; the concurrency contract;
+static vs enum vs dynamic dispatch; and whether it belongs in core or a
+derived/backend crate. This task admitted **none** — the audit found no
+non-core duplication warranting a new abstraction (see
+`docs/unified-ir-duplication-and-profile-audit.md`).
+
+### Boundaries (binding)
+
+- **Serialization vs transport:** serialization (HyMeKo text, CBOR) turns `Ir`
+  ⇄ bytes; transport (`ir_stream`) frames/sequences/version-checks byte payloads
+  and **carries no entity IDs** (`UIR-M2C-02`). A serializer never frames; the
+  transport never interprets IR semantics.
+- **Parallel-execution boundary:** parallelism lives in the *view/backend* layer
+  (CSR `spmv_into`/`spmm_into` serial+Rayon, wgpu), never in canonical
+  construction or the accessor layer. The Rayon path is bitwise-identical to
+  serial by contract (`APPROVED-CORE-EDIT: csr-spmv-spmm-into`).
+- **Single-CLI boundary:** library capability is exposed once as a library API and
+  once as `hymeko` subcommands; a backend or consumer never ships its own product
+  binary.
+- **Forbidden dependency directions:** `hymeko_core` depends on nothing in the
+  framework (only `parser` + `serde`); `hymeko_wgpu` → `hymeko_core` only, never
+  `hymeko_hnn`; `hymeko_hnn` → `hymeko_core`; no consumer repo is a dependency of
+  core; no derived view (COO/CSR/P-graph/Hotaru/GPU buffer) may become a second
+  owner of canonical state.

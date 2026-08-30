@@ -283,3 +283,48 @@ fn pretty_printer_runs_over_the_corpus_without_panicking() {
 // equivalent branch in `IrWriter` IS covered
 // (`writer_survives_a_dangling_child_link`), because that consumer takes
 // `&Ir` directly and can be handed a corrupted one.
+
+// ── honest emission limitation ──────────────────────────────────────────────
+//
+// `IrWriter` serialises the declaration *skeleton* (names + hierarchy) only. It
+// does not yet emit annotations, values, bases, or hyperarc incidences (arcs are
+// written as a `/* Arc references pending */` stub). This is the reason an
+// emit -> reparse round-trip is NOT lossless today, and it must be exposed
+// honestly rather than implied to be complete. See the platform-conformance
+// report and `docs/unified-ir-architecture.md`.
+
+fn tagged_child_fixture() -> crate::unified_ir::support::builder::TestIr {
+    let mut t = crate::unified_ir::support::builder::TestIr::new();
+    let root = t.node(&["m"], DeclId::NONE);
+    let x = t.node(&["m", "x"], root);
+    t.tag(x, &["temperature"]);
+    t.ir.decl_nodes[root.0].first_child = x;
+    t.ir.decl_nodes[root.0].last_child = x;
+    t
+}
+
+#[test]
+fn writer_emits_the_declaration_skeleton_but_not_annotations_a_known_limitation() {
+    let t = tagged_child_fixture();
+    let out = render_result(&t).expect("a well-formed skeleton renders without error");
+
+    // The name + hierarchy skeleton IS emitted.
+    assert!(
+        out.contains("m {"),
+        "root declaration name is emitted: {out:?}"
+    );
+    assert!(
+        out.contains("x {"),
+        "child declaration name is emitted: {out:?}"
+    );
+
+    // The annotation is NOT: IrWriter is a skeleton-only serialiser today. This
+    // documents the partial-emission contract (valid-IR source emission =
+    // PARTIAL; emit->reparse = non-lossless), not a defect to be asserted as
+    // correct — the report records it as NOT_IMPLEMENTED for full emission.
+    assert!(
+        !out.contains("temperature"),
+        "annotations are not yet serialised by IrWriter; if this now fails, \
+         emission has grown and the conformance matrix must be updated: {out:?}"
+    );
+}
