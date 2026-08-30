@@ -42,9 +42,8 @@ repositories:
     local_path: tensor
     default_branch: main
     status: CORE
-    crates: [hymeko_clifford, hymeko_spline, hymeko_graph, hymeko_tensor, hymeko_vision]
-    owns: [spline kernels, Clifford algebra, tensor arenas]
-    contested: [graph/incidence primitives]     # see conflicts: hymeko_graph-exists-twice
+    crates: [hymeko_clifford, hymeko_spline, hymeko_tensor, hymeko_vision, hymeko_numeric_vv]
+    owns: [spline kernels, Clifford algebra, tensor arenas, vision rasterisation]
     depends_on: []
 
   graph:
@@ -53,7 +52,8 @@ repositories:
     default_branch: main
     status: CORE
     crates: [hymeko_graph, hymeko_pgraph]
-    contested: [graph/incidence primitives]     # see conflicts: hymeko_graph-exists-twice
+    owns: [signed-graph and hypergraph algorithms, incidence, cycle and walk enumeration,
+           CSR primitives, spine, P-graph and Friedler]
 
   parser:
     role: source syntax and lowering into the canonical IR
@@ -67,7 +67,7 @@ repositories:
     local_path: nagare
     default_branch: main
     status: application
-    depends_on: [tensor]
+    depends_on: [tensor, graph]
     must_not_own: [second IR, second GPU runtime, duplicate numerical kernels]
 
   rl:             { role: reinforcement-learning studies,            local_path: rl,                default_branch: main,   status: study }
@@ -98,43 +98,22 @@ repositories:
 
 conflicts:
   - id: hymeko_graph-exists-twice
-    severity: HIGH
-    status: >
-      PARTIALLY RESOLVED 2026-08-30. `hymeko/graph` is now the canonical owner: it carries
-      CLAUDE.md + CORE.YAML declaring it so, has absorbed signed_tuples, hyper_operator and the
-      spine GradRequest/FirBackward extension, and is fully green (fmt/check/clippy -D warnings/
-      tests/doctests/benches all 0). `nagare` resolves the crate from graph and passes
-      scripts/check.sh 12/12. Parity between the two implementations was certified at 10369
-      bit-identical observations before anything moved.
-
-      DELETION OF tensor/hymeko_graph IS BLOCKED, not forgotten. Two other Nagare branches still
-      declare it as a live path dependency -- `feat/auto-holonomy-arc` and
-      `feat/experiments-examples-integration`, both in worktrees carrying uncommitted user work
-      that must not be reshaped. The fix is one line per manifest; it needs those branches' owner.
-      Until then the workspace legitimately holds two packages named hymeko_graph and the doctor
-      says so rather than pretending otherwise.
+    severity: RESOLVED
+    resolved: 2026-08-30
     detail: >
-      A crate named `hymeko_graph` exists in BOTH `graph/hymeko_graph` and `tensor/hymeko_graph`.
-      They share 40 paths; 16 are byte-identical and 24 have DIVERGED. `nagare` links the tensor
-      copy by path. This is not a naming coincidence -- it is one owner split across two
-      repositories, actively drifting. Ownership must be decided before either is extended;
-      until then neither may be treated as canonical.
-
-# Edges below are FILLED FROM THE ACTUAL CARGO GRAPH, never asserted in advance.
-dependency_edges:
-  - nagare -> tensor                # hymeko_clifford, hymeko_graph, hymeko_spline, hymeko_tensor, hymeko_vision, by path
-  - core -> parser                  # `parser = { git = ... }` used by hymeko_core AND hymeko_hnn
-
-# Edges that are DECLARED AS INTENT but DO NOT EXIST in the graph today. Recording them as
-# intent rather than fact is deliberate: an aspirational edge written as real is how a manifest
-# starts lying.
-intended_edges_not_yet_realised:
-  - core -> tensor:
-      evidence: "tensor/hymeko_clifford/Cargo.toml: 'this crate must NOT depend on hymeko_core.
-                 The dependency goes the other way eventually.'"
-      status: not present in any Cargo.toml as of 2026-08-30
-  - nagare -> core:
-      status: absent; required before any nagare model can lower onto the canonical IR
+      A crate named `hymeko_graph` existed in both `graph/hymeko_graph` and `tensor/hymeko_graph`:
+      40 shared paths, 16 byte-identical, 2 formatting-only, 22 with real token deltas, drifting in
+      both directions by date.
+    resolution: >
+      `hymeko/graph` is the sole owner. Parity was certified BEFORE anything moved -- 10369
+      bit-identical observations across spine, cycle_enum (the one path where graph was newer),
+      CSR construction and membership, the bitset API at its word boundaries, walks, signed-graph
+      shape and hyper_operator -- with negative controls proven to make the comparison fail.
+      signed_tuples, hyper_operator and the spine GradRequest/FirBackward extension moved
+      byte-verbatim; `bs_*` moved NOT AT ALL, because a corrected census showed both sides already
+      had it. Every consumer switched, `tensor/hymeko_graph` deleted (54 paths), and the tensor
+      test population reconciled by name: 206 left, 204 owned by exact name in graph, 2 renamed
+      and audited individually.
 
 known_defects:
   - id: stale-clone-urls-predate-the-host-move
