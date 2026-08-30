@@ -27,19 +27,15 @@ forbidden_hosts:
 
 repositories:
 
+  # ---- CORE: the framework. Nothing outside these may own their concerns. -------------------
   core:
     role: unified IR, execution contracts, CPU/WGPU backends
     local_path: core
     default_branch: main
     status: CORE
     crates: [hymeko_core, hymeko_hnn, hymeko_wgpu]
-    owns:
-      - IR                          # hymeko_core::ir  (ir, lower, hash, canonical_hash, coherence)
-      - backend abstraction         # docs/backend-abstraction.md
-      - execution envelope          # docs/unified-ir-architecture.md, contracts U1-U6
-      - GPU lowering                # hymeko_wgpu + docs/wgpu-backend.md (hardware-tested)
-      - unified-IR V&V              # docs/verification/unified-ir/
-    depends_on: [parser]            # MEASURED: hymeko_core and hymeko_hnn both take `parser`
+    owns: [IR, backend abstraction, execution envelope, GPU lowering, unified-IR V&V]
+    depends_on: [parser]
 
   tensor:
     role: numerical primitives and canonical mathematics
@@ -47,41 +43,68 @@ repositories:
     default_branch: main
     status: CORE
     crates: [hymeko_clifford, hymeko_spline, hymeko_graph, hymeko_tensor, hymeko_vision]
-    owns:
-      - spline kernels              # Catmull-Rom, Kochanek-Bartels, Chebyshev parameterization
-      - Clifford algebra
-      - graph/incidence primitives
-      - tensor arenas               # hymeko_tensor::stream (HyMeKoStream)
+    owns: [spline kernels, Clifford algebra, tensor arenas]
+    contested: [graph/incidence primitives]     # see conflicts: hymeko_graph-exists-twice
     depends_on: []
 
+  graph:
+    role: signed graph / hypergraph algorithms and P-graph
+    local_path: graph
+    default_branch: main
+    status: CORE
+    crates: [hymeko_graph, hymeko_pgraph]
+    contested: [graph/incidence primitives]     # see conflicts: hymeko_graph-exists-twice
+
+  parser:
+    role: source syntax and lowering into the canonical IR
+    local_path: parser
+    default_branch: master                      # NOT main -- verified by ls-remote --symref
+    status: CORE
+
+  # ---- applications and studies -------------------------------------------------------------
   nagare:
     role: model prototypes, trainers, studies, application orchestration
     local_path: nagare
     default_branch: main
     status: application
-    depends_on: [tensor]            # MEASURED: five path deps into ../tensor
-    must_not_own:
-      - second IR
-      - second GPU runtime
-      - duplicate numerical kernels
+    depends_on: [tensor]
+    must_not_own: [second IR, second GPU runtime, duplicate numerical kernels]
 
-  parser:
-    role: source syntax and lowering into the canonical IR
-    local_path: parser
-    default_branch: master          # NOT main — verified by ls-remote --symref
-    status: CORE
-    depends_on: []
+  rl:             { role: reinforcement-learning studies,            local_path: rl,                default_branch: main,   status: study }
+  transformation: { role: model/graph transformation passes,         local_path: transformation,    default_branch: main,   status: application }
+  application:    { role: CLI and daemon front ends,                 local_path: application,       default_branch: main,   status: application }
+  network:        { role: network optimization over HyMeKo descriptions, local_path: network,       default_branch: main,   status: application }
+  web:            { role: editor and wasm surface,                   local_path: web,               default_branch: main,   status: application }
+  vscode-plugin:  { role: VS Code support for .hymeko files,         local_path: vscode-plugin,     default_branch: main,   status: tooling }
+  experiment_viewer: { role: local web app indexing repository reports, local_path: experiment_viewer, default_branch: main, status: tooling }
+  hotaru:         { role: runtime / monitor,                         local_path: hotaru,            default_branch: main,   status: application }
+  hystl:          { role: specification and language tooling,        local_path: hystl,             default_branch: main,   status: application }
+  communication:  { role: transport,                                 local_path: communication,     default_branch: main,   status: application }
 
-  rl:            { role: reinforcement learning studies,       local_path: rl,             default_branch: main,   status: study }
-  transformation:{ role: model/graph transformation passes,    local_path: transformation, default_branch: main,   status: application }
-  application:   { role: CLI and daemon front ends,            local_path: application,    default_branch: main,   status: application }
-  web:           { role: editor and wasm surface,              local_path: web,            default_branch: main,   status: application }
-  hotaru:        { role: runtime/monitor,                      local_path: hotaru,         default_branch: main,   status: application }
-  hystl:         { role: specification and language tooling,   local_path: hystl,          default_branch: main,   status: application }
-  communication: { role: transport,                            local_path: communication,  default_branch: main,   status: application }
-  akoire:        { role: unassigned scaffold,                  local_path: akoire,         default_branch: main,   status: scaffold }
-  hive:          { role: unassigned scaffold,                  local_path: hive,           default_branch: main,   status: scaffold }
-  simulation:    { role: unassigned scaffold,                  local_path: simulation,     default_branch: main,   status: scaffold }
+  # ---- scaffolds: empty UPSTREAM too. Emptiness here is verified, not assumed. ---------------
+  akoire:      { role: unassigned scaffold, local_path: akoire,      default_branch: main, status: scaffold }
+  epigene:     { role: unassigned scaffold, local_path: epigene,     default_branch: main, status: scaffold }
+  hive:        { role: unassigned scaffold, local_path: hive,        default_branch: main, status: scaffold }
+  simulation:  { role: unassigned scaffold, local_path: simulation,  default_branch: main, status: scaffold }
+  axon:        { role: unassigned scaffold, local_path: axon,        default_branch: main, status: scaffold, note: "upstream is empty; no commits" }
+
+  # ---- other organisation --------------------------------------------------------------------
+  kyberszittya-parser:
+    role: personal parser checkout (org kyberszittya, not hymeko)
+    local_path: kyberszittya-parser
+    default_branch: main
+    status: scaffold
+    clone_path_override: "ssh://git@192.168.1.228:2222/kyberszittya/parser.git"
+
+conflicts:
+  - id: hymeko_graph-exists-twice
+    severity: HIGH
+    detail: >
+      A crate named `hymeko_graph` exists in BOTH `graph/hymeko_graph` and `tensor/hymeko_graph`.
+      They share 40 paths; 16 are byte-identical and 24 have DIVERGED. `nagare` links the tensor
+      copy by path. This is not a naming coincidence -- it is one owner split across two
+      repositories, actively drifting. Ownership must be decided before either is extended;
+      until then neither may be treated as canonical.
 
 # Edges below are FILLED FROM THE ACTUAL CARGO GRAPH, never asserted in advance.
 dependency_edges:

@@ -60,12 +60,13 @@ txt=open(sys.argv[1]).read()
 # Deliberately a narrow reader, not a YAML engine: the doctor must not acquire a dependency to
 # check that dependencies are correct.
 sec=txt.split("repositories:",1)[1].split("\ndependency_edges:",1)[0]
-for m in re.finditer(r"^  ([a-z_]+):", sec, re.M):
+for m in re.finditer(r"^  ([a-z0-9][a-z0-9_-]*):", sec, re.M):
     name=m.group(1)
     tail=sec[m.end():m.end()+400]
     lp=re.search(r"local_path:\s*([^\s,}]+)", tail)
     db=re.search(r"default_branch:\s*([^\s,}]+)", tail)
-    print(f"{name}\t{lp.group(1) if lp else name}\t{db.group(1) if db else 'main'}")
+    ov=re.search(r"clone_path_override:\s*\"([^\"]+)\"", tail)
+    print(f"{name}\t{lp.group(1) if lp else name}\t{db.group(1) if db else 'main'}\t{ov.group(1) if ov else ''}")
 PY
 ) || die "could not parse the manifest"
 [[ ${#REPOS[@]} -gt 0 ]] || die "the manifest lists no repositories; refusing to pass vacuously"
@@ -73,7 +74,7 @@ PY
 echo "== workspace doctor: ${#REPOS[@]} repositories from $MANIFEST =="
 
 for row in "${REPOS[@]}"; do
-  IFS=$'\t' read -r name path branch <<<"$row"
+  IFS=$'\t' read -r name path branch override <<<"$row"
   dir="$ROOT/$path"
   if [[ ! -d "$dir/.git" ]]; then bad "$name: no checkout at $path"; continue; fi
   url="$(git -C "$dir" remote get-url origin 2>/dev/null || echo '')"
@@ -83,9 +84,20 @@ for row in "${REPOS[@]}"; do
     continue
   fi
   [[ "$url" == *"$CANON_HOST"* ]] || { bad "$name: origin host is not $CANON_HOST ($url)"; continue; }
-  [[ "$url" == *"/hymeko/$name.git" ]] || { bad "$name: origin path is not /hymeko/$name.git ($url)"; continue; }
+  if [[ -n "$override" ]]; then
+    [[ "$url" == "$override" ]] || { bad "$name: origin does not match its declared clone_path_override ($url)"; continue; }
+  else
+    [[ "$url" == *"/hymeko/$name.git" ]] || { bad "$name: origin path is not /hymeko/$name.git ($url)"; continue; }
+  fi
   if ! git ls-remote --heads "$url" "refs/heads/$branch" 2>/dev/null | grep -q "refs/heads/$branch"; then
-    bad "$name: canonical branch '$branch' not reachable on the registry host"
+    # A repository with NO branches at all is an empty upstream, which is a legitimate state for a
+    # declared scaffold. It is VERIFIED here rather than taken from the manifest, so the
+    # declaration cannot be used to hide a repository that merely lost its branch.
+    if [[ -z "$(git ls-remote --heads "$url" 2>/dev/null)" ]]; then
+      ok "$name: upstream has no branches at all (empty scaffold, verified)"
+      continue
+    fi
+    bad "$name: canonical branch '$branch' not reachable, but the upstream HAS branches"
     continue
   fi
   ok "$name: origin canonical, branch '$branch' reachable"
