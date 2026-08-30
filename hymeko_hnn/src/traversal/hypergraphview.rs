@@ -8,7 +8,22 @@ use hymeko::tensor::common::Real;
 use hymeko::tensor::representations::tensor_coo::TensorInc;
 use hymeko::tensor::tensor_val::{EdgeWeight, IncVal, RefValueExtractor};
 use rayon::prelude::*;
+use rustc_hash::FxHashMap;
 use std::marker::PhantomData;
+
+/// A single incidence translated to view-local dense coordinates.
+///
+/// **Transient** — built during `try_from_ir`, consumed by the CSR builders, and
+/// dropped. Never stored resident. Carries dense coordinates only, so every sort
+/// key, offset, cursor and flat-array write downstream is representation-
+/// independent (no canonical `raw()` reaches them).
+#[cfg_attr(test, derive(Debug))]
+struct DenseInc<V> {
+    e: DenseEdgeIndex,
+    n: DenseNodeIndex,
+    s: i8,
+    w: V,
+}
 
 /// Bipartite vertex of the hypergraph's incidence graph.
 ///
@@ -76,6 +91,13 @@ pub enum ViewBuildError {
     NodeCountOverflow { count: usize },
     /// The `Ir` has more edges than a `u32` dense view coordinate can address.
     EdgeCountOverflow { count: usize },
+    /// An incidence names a `NodeId` that is not in the view's canonical→dense
+    /// map (i.e. not one of the enumerated node records). Carries the raw id
+    /// value only (bounded numeric), never source text.
+    NodeNotInView { raw: usize },
+    /// An incidence names an `EdgeId` that is not in the view's canonical→dense
+    /// map. Carries the raw id value only.
+    EdgeNotInView { raw: usize },
 }
 
 impl core::fmt::Display for ViewBuildError {
@@ -106,6 +128,12 @@ impl core::fmt::Display for ViewBuildError {
                 f,
                 "edge count {count} exceeds the u32 dense view-index domain"
             ),
+            Self::NodeNotInView { raw } => {
+                write!(f, "node id {raw} is not mapped into this view")
+            }
+            Self::EdgeNotInView { raw } => {
+                write!(f, "edge id {raw} is not mapped into this view")
+            }
         }
     }
 }
@@ -118,8 +146,19 @@ where
     V: IncVal<F>,
     EW: EdgeWeight<V, F>,
 {
-    pub node_decl: Vec<DeclId>, // NodeId -> DeclId
-    pub edge_decl: Vec<DeclId>, // EdgeId -> DeclId
+    /// Dense position → the canonical `NodeId` it came from. The real provenance,
+    /// read by [`Self::dense_node_id`] — a dense coordinate is never turned back
+    /// into a canonical id by arithmetic. Independent of any dense==raw
+    /// coincidence, so it stays correct if canonical ids become non-contiguous,
+    /// non-zero-based, permuted, or generational.
+    pub node_canonical: Vec<NodeId>,
+    /// Dense position → the canonical `EdgeId` it came from. See `node_canonical`.
+    pub edge_canonical: Vec<EdgeId>,
+    /// Dense **position** → declaration. (Not "NodeId → DeclId": the index is a
+    /// dense view coordinate, not a canonical id.)
+    pub node_decl: Vec<DeclId>,
+    /// Dense **position** → declaration. See `node_decl`.
+    pub edge_decl: Vec<DeclId>,
     /// Flat array of all incident edges, as **dense view coordinates**.
     pub flat_node_edges: Vec<DenseEdgeIndex>,
     /// Parallel array: sign/weight info per node-edge incidence (aligned with flat_node_edges)
@@ -218,25 +257,26 @@ where
 
     // ── dense → canonical provenance ────────────────────────────────────────
     //
-    // This view enumerates every node/edge of the `Ir` in canonical id order, so
-    // a dense coordinate `i` corresponds to canonical `NodeId::new(i)` /
-    // `EdgeId::new(i)`. That 1:1 relationship is a property of *this* full view;
-    // it is stated explicitly here so no numerical code re-derives it by treating
-    // a canonical `raw()` as an array offset. A dense coordinate must never be
-    // persisted or used to address the canonical `Ir` directly — map it first.
+    // These read the provenance vectors captured at construction. They do NOT
+    // reconstruct a canonical id from a dense coordinate (the former
+    // `NodeId::new(dense)` was only correct by the accidental dense==raw
+    // coincidence). A dense coordinate must never be persisted or used to address
+    // the canonical `Ir` directly — map it through here first.
 
-    /// The canonical `NodeId` a dense node coordinate came from.
+    /// The canonical `NodeId` a dense node coordinate came from (read from the
+    /// stored provenance).
     #[inline]
     #[must_use]
     pub fn dense_node_id(&self, nid: DenseNodeIndex) -> NodeId {
-        NodeId::new(nid.as_usize())
+        self.node_canonical[nid.as_usize()]
     }
 
-    /// The canonical `EdgeId` a dense edge coordinate came from.
+    /// The canonical `EdgeId` a dense edge coordinate came from (read from the
+    /// stored provenance).
     #[inline]
     #[must_use]
     pub fn dense_edge_id(&self, eid: DenseEdgeIndex) -> EdgeId {
-        EdgeId::new(eid.as_usize())
+        self.edge_canonical[eid.as_usize()]
     }
 
     /// The declaration a dense node coordinate came from.
@@ -339,19 +379,50 @@ where
         Ok(out)
     }
 
-    fn sort_reduce_pairs(mut triples: Vec<TensorInc<F, V>>, cfg: &AggCfg) -> Vec<TensorInc<F, V>> {
+    /// Translate canonical incidences to dense view coordinates through the
+    /// explicit maps. A canonical id absent from a map is a **typed error** —
+    /// never a panic, a silent drop, or a default coordinate. The maps are
+    /// transient (construction-only); nothing here is stored resident.
+    fn translate_to_dense(
+        triples: Vec<TensorInc<F, V>>,
+        node_map: &FxHashMap<NodeId, DenseNodeIndex>,
+        edge_map: &FxHashMap<EdgeId, DenseEdgeIndex>,
+    ) -> Result<Vec<DenseInc<V>>, ViewBuildError> {
+        let mut out = Vec::with_capacity(triples.len());
+        for t in triples {
+            let n = *node_map
+                .get(&t.n)
+                .ok_or(ViewBuildError::NodeNotInView { raw: t.n.raw() })?;
+            let e = *edge_map
+                .get(&t.e)
+                .ok_or(ViewBuildError::EdgeNotInView { raw: t.e.raw() })?;
+            out.push(DenseInc {
+                e,
+                n,
+                s: t.s,
+                w: t.w,
+            });
+        }
+        Ok(out)
+    }
+
+    fn sort_reduce_pairs(mut triples: Vec<DenseInc<V>>, cfg: &AggCfg) -> Vec<DenseInc<V>> {
+        // Sort by (dense edge, dense node) — dense view coordinates, not canonical
+        // ids. For a full view this yields the same order as the old raw-id sort
+        // (because the enumeration assigns dense == position), but the key is now
+        // representation-independent.
         if triples.len() >= Self::PAR_SORT_THRESHOLD {
-            triples.par_sort_unstable_by_key(|x| (x.e.raw(), x.n.raw()));
+            triples.par_sort_unstable_by_key(|x| (x.e.as_u32(), x.n.as_u32()));
         } else {
-            triples.sort_unstable_by_key(|x| (x.e.raw(), x.n.raw()));
+            triples.sort_unstable_by_key(|x| (x.e.as_u32(), x.n.as_u32()));
         }
 
         // reduce/dedup
-        let mut out: Vec<TensorInc<F, V>> = Vec::with_capacity(triples.len());
+        let mut out: Vec<DenseInc<V>> = Vec::with_capacity(triples.len());
         for inc in triples {
             if let Some(last) = out.last_mut()
-                && last.e.raw() == inc.e.raw()
-                && last.n.raw() == inc.n.raw()
+                && last.e == inc.e
+                && last.n == inc.n
             {
                 let new_w = V::agg(cfg, &last.w, &inc.w);
                 let wa = last.w.as_scalar();
@@ -367,28 +438,22 @@ where
     }
 
     fn build_csr_edge_to_nodes(
-        pairs: &[TensorInc<F, V>],
+        pairs: &[DenseInc<V>],
         num_edges: usize,
     ) -> (Vec<DenseNodeIndex>, Vec<i8>, Vec<V>, Vec<usize>) {
-        // CSR: Edge -> Nodes. This is the representation-owner boundary where the
-        // canonical node order *defines* the dense coordinate: `entry.n` is a
-        // canonical `NodeId` and its `raw()` is the dense node index (the view is
-        // 1:1 with the `Ir` node table). `try_from_ir` has already checked the
-        // node count fits `u32`, so the narrowing cannot truncate.
+        // CSR: Edge -> Nodes. Everything here is a dense view coordinate; no
+        // canonical id and no `raw()` appear. `pairs` are already dense
+        // (translated through the checked map in `try_from_ir`).
         let mut flat_nodes = Vec::with_capacity(pairs.len());
         let mut flat_sign = Vec::with_capacity(pairs.len());
         let mut flat_w = Vec::with_capacity(pairs.len());
         let mut offsets = vec![0usize; num_edges + 1];
 
         for entry in pairs {
-            debug_assert!(
-                entry.n.raw() <= u32::MAX as usize,
-                "node count checked in try_from_ir"
-            );
-            flat_nodes.push(DenseNodeIndex::from_u32(entry.n.raw() as u32));
+            flat_nodes.push(entry.n);
             flat_sign.push(entry.s);
             flat_w.push(entry.w.clone());
-            offsets[entry.e.raw() + 1] += 1;
+            offsets[entry.e.as_usize() + 1] += 1;
         }
         for i in 0..num_edges {
             offsets[i + 1] += offsets[i];
@@ -420,7 +485,7 @@ where
     /// is load-bearing beyond construction: the parallel scatter in
     /// `tensor::message_passing` depends on it for bitwise-identical results.
     fn build_csr_node_to_edges(
-        pairs: &[TensorInc<F, V>],
+        pairs: &[DenseInc<V>],
         num_nodes: usize,
     ) -> (Vec<DenseEdgeIndex>, Vec<i8>, Vec<V>, Vec<usize>)
     where
@@ -428,16 +493,15 @@ where
     {
         let nnz = pairs.len();
 
+        // Dense only: `entry.n`/`entry.e` are view coordinates, no `raw()`.
         let mut offsets = vec![0usize; num_nodes + 1];
         for entry in pairs {
-            offsets[entry.n.raw() + 1] += 1;
+            offsets[entry.n.as_usize() + 1] += 1;
         }
         for i in 0..num_nodes {
             offsets[i + 1] += offsets[i];
         }
 
-        // Representation-owner boundary: `entry.e` (canonical `EdgeId`) defines the
-        // dense edge coordinate; the edge count is checked to fit `u32` upfront.
         let mut flat_edges = vec![DenseEdgeIndex::from_u32(0); nnz];
         let mut flat_sign = vec![0i8; nnz];
         let mut flat_w = vec![V::zero(); nnz];
@@ -445,15 +509,11 @@ where
         // Running write cursor per node; starts at each bucket's base.
         let mut cursor = offsets.clone();
         for entry in pairs {
-            let slot = cursor[entry.n.raw()];
-            debug_assert!(
-                entry.e.raw() <= u32::MAX as usize,
-                "edge count checked in try_from_ir"
-            );
-            flat_edges[slot] = DenseEdgeIndex::from_u32(entry.e.raw() as u32);
+            let slot = cursor[entry.n.as_usize()];
+            flat_edges[slot] = entry.e;
             flat_sign[slot] = entry.s;
             flat_w[slot] = entry.w.clone();
-            cursor[entry.n.raw()] = slot + 1;
+            cursor[entry.n.as_usize()] = slot + 1;
         }
 
         (flat_edges, flat_sign, flat_w, offsets)
@@ -509,15 +569,39 @@ where
             return Err(ViewBuildError::EdgeCountOverflow { count: num_edges });
         }
 
+        // M2c.1 corrective: capture the *real* canonical provenance by enumerating
+        // the node/edge records, and build an explicit, checked canonical→dense
+        // map. The dense coordinate of a record is its enumeration position — not
+        // its `raw()`. These provenance vectors and maps make construction correct
+        // even if canonical ids are non-contiguous, non-zero-based, permuted, or
+        // later generational.
+        let node_canonical: Vec<NodeId> = ir.node_records().map(|(nid, _)| nid).collect();
+        let edge_canonical: Vec<EdgeId> = ir.edge_records().map(|(eid, _)| eid).collect();
         let node_decl: Vec<DeclId> = ir.node_records().map(|(_, n)| n.decl).collect();
         let edge_decl: Vec<DeclId> = ir.edge_records().map(|(_, e)| e.decl).collect();
 
+        // Transient (construction-only) canonical→dense maps. Not stored: no
+        // resident reverse map exists until a consumer measurably needs one.
+        let node_map: FxHashMap<NodeId, DenseNodeIndex> = node_canonical
+            .iter()
+            .enumerate()
+            .map(|(i, &nid)| (nid, DenseNodeIndex::from_u32(i as u32)))
+            .collect();
+        let edge_map: FxHashMap<EdgeId, DenseEdgeIndex> = edge_canonical
+            .iter()
+            .enumerate()
+            .map(|(i, &eid)| (eid, DenseEdgeIndex::from_u32(i as u32)))
+            .collect();
+
+        // Collect canonical incidences, then translate every one to dense through
+        // the explicit map *before* any sort/offset/cursor/fill.
         let triples = Self::try_collect_triples(ir, ex)?;
+        let dense = Self::translate_to_dense(triples, &node_map, &edge_map)?;
 
-        // sort by (eid,nid)
-        let pairs = Self::sort_reduce_pairs(triples, cfg);
+        // sort by (dense edge, dense node)
+        let pairs = Self::sort_reduce_pairs(dense, cfg);
 
-        // Edge -> Nodes CSR
+        // Edge -> Nodes CSR (dense only)
         let (flat_edge_nodes, flat_edge_sign, flat_edge_w, edge_offsets) =
             Self::build_csr_edge_to_nodes(&pairs, num_edges);
 
@@ -527,6 +611,8 @@ where
             Self::build_csr_node_to_edges(&pairs, num_nodes);
 
         Ok(Self {
+            node_canonical,
+            edge_canonical,
             node_decl,
             edge_decl,
             flat_node_edges,
@@ -589,5 +675,58 @@ where
                 BergeIter::Edge(self.hg.flat_edge_nodes[start..end].iter())
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod corrective_tests {
+    use super::*;
+    use hymeko::tensor::tensor_val::EdgeWScalar;
+
+    type V = HyperGraphView<f32, EdgeWScalar<f32>, f32>;
+
+    fn inc(e: usize, n: usize) -> TensorInc<f32, f32> {
+        TensorInc {
+            e: EdgeId::new(e),
+            n: NodeId::new(n),
+            s: 1,
+            w: 1.0f32,
+            _pd: PhantomData,
+        }
+    }
+
+    #[test]
+    fn translate_reports_missing_node_mapping_typed_no_panic() {
+        // A canonical node id absent from the map is a typed error — never a
+        // panic, silent drop, or default coordinate.
+        let node_map: FxHashMap<NodeId, DenseNodeIndex> = FxHashMap::default();
+        let mut edge_map: FxHashMap<EdgeId, DenseEdgeIndex> = FxHashMap::default();
+        edge_map.insert(EdgeId::new(0), DenseEdgeIndex::from_u32(0));
+        let err = V::translate_to_dense(vec![inc(0, 5)], &node_map, &edge_map).unwrap_err();
+        assert!(matches!(err, ViewBuildError::NodeNotInView { raw: 5 }));
+    }
+
+    #[test]
+    fn translate_reports_missing_edge_mapping_typed_no_panic() {
+        let mut node_map: FxHashMap<NodeId, DenseNodeIndex> = FxHashMap::default();
+        node_map.insert(NodeId::new(5), DenseNodeIndex::from_u32(0));
+        let edge_map: FxHashMap<EdgeId, DenseEdgeIndex> = FxHashMap::default();
+        let err = V::translate_to_dense(vec![inc(7, 5)], &node_map, &edge_map).unwrap_err();
+        assert!(matches!(err, ViewBuildError::EdgeNotInView { raw: 7 }));
+    }
+
+    #[test]
+    fn translate_maps_non_contiguous_ids_to_dense_positions() {
+        // Non-contiguous canonical ids -> dense 0..n by map position, not by raw.
+        let mut node_map: FxHashMap<NodeId, DenseNodeIndex> = FxHashMap::default();
+        node_map.insert(NodeId::new(700), DenseNodeIndex::from_u32(0));
+        node_map.insert(NodeId::new(3), DenseNodeIndex::from_u32(1));
+        let mut edge_map: FxHashMap<EdgeId, DenseEdgeIndex> = FxHashMap::default();
+        edge_map.insert(EdgeId::new(42), DenseEdgeIndex::from_u32(0));
+        let out =
+            V::translate_to_dense(vec![inc(42, 700), inc(42, 3)], &node_map, &edge_map).unwrap();
+        assert_eq!(out[0].n, DenseNodeIndex::from_u32(0)); // NodeId(700) -> dense 0
+        assert_eq!(out[1].n, DenseNodeIndex::from_u32(1)); // NodeId(3)   -> dense 1
+        assert_eq!(out[0].e, DenseEdgeIndex::from_u32(0));
     }
 }

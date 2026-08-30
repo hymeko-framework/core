@@ -1,0 +1,11 @@
+\begin{tikzpicture}[>=Stealth,node distance=6mm and 11mm,
+  b/.style={draw,rounded corners,align=center,font=\scriptsize,minimum height=6mm}]
+  \node[b,fill=blue!8](rec){ir.node\_records/\edge\_records};
+  \node[b,fill=green!8,right=of rec](prov){provenance\node\_canonical: Vec<NodeId>\edge\_canonical: Vec<EdgeId>};
+  \node[b,fill=orange!10,right=of prov](map){transient checked map\FxHashMap<Id,Dense>};
+  \node[b,fill=red!8,below=of map](tr){translate incidence\canonical->dense\(missing => typed err)};
+  \node[b,fill=green!8,left=of tr](csr){sort/offset/cursor/fill\dense-only};
+  \node[b,fill=blue!8,left=of csr](read){dense\_node\_id\reads node\_canonical};
+  \draw[->](rec)--(prov);\draw[->](prov)--(map);\draw[->](map)--(tr);
+  \draw[->](tr)--(csr);\draw[->](prov)--(read);
+\end{tikzpicture}

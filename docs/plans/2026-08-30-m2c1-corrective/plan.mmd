@@ -1,0 +1,7 @@
+flowchart TD
+  R[ir.node_records / edge_records] --> P[provenance: node_canonical Vec<NodeId>, edge_canonical Vec<EdgeId>]
+  P --> M[transient checked FxHashMap: NodeId->DenseNodeIndex, EdgeId->DenseEdgeIndex]
+  M --> T[translate each incidence canonical->dense; missing => ViewBuildError::MissingNode/EdgeMapping]
+  T --> C[sort/offset/cursor/fill by Dense*Index only]
+  P --> D[dense_node_id/dense_edge_id read provenance; never NodeId::new(dense)]
+  C --> V[view: no canonical raw indexing in builder]

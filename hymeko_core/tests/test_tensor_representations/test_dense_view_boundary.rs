@@ -139,4 +139,124 @@ mod tests {
             DenseNodeIndex::from_u32(0).as_usize()
         );
     }
+
+    #[test]
+    fn dense_node_id_reads_provenance_not_arithmetic() {
+        // The corrective's core catcher: dense_node_id/dense_edge_id must READ the
+        // stored provenance, never fabricate `NodeId::new(dense)`. Overwrite the
+        // provenance with deliberately NON-contiguous, non-zero-based canonical ids
+        // while the dense indices stay 0..n; dense→canonical must return exactly
+        // the stored ids. If dense_node_id reverted to `NodeId::new(dense)`, it
+        // would return NodeId(0)/NodeId(1)/NodeId(2) and this fails.
+        let mut v = sample_view();
+        v.node_canonical = vec![NodeId::new(3), NodeId::new(19), NodeId::new(700)];
+        v.edge_canonical = vec![EdgeId::new(42), EdgeId::new(5)];
+        assert_eq!(v.dense_node_id(DenseNodeIndex::from_u32(0)), NodeId::new(3));
+        assert_eq!(
+            v.dense_node_id(DenseNodeIndex::from_u32(1)),
+            NodeId::new(19)
+        );
+        assert_eq!(
+            v.dense_node_id(DenseNodeIndex::from_u32(2)),
+            NodeId::new(700)
+        );
+        assert_eq!(
+            v.dense_edge_id(DenseEdgeIndex::from_u32(0)),
+            EdgeId::new(42)
+        );
+        assert_eq!(v.dense_edge_id(DenseEdgeIndex::from_u32(1)), EdgeId::new(5));
+        // Proof it is not arithmetic: dense 0 -> NodeId(3), not NodeId(0).
+        assert_ne!(v.dense_node_id(DenseNodeIndex::from_u32(0)), NodeId::new(0));
+    }
+
+    #[test]
+    fn permuted_provenance_keeps_semantics_and_real_ids() {
+        // Same hypergraph numerics, permuted canonical provenance: the dense
+        // incidence structure is unchanged (it is view-local), while dense→canonical
+        // returns whatever real ids the provenance holds. This is what makes the
+        // dense coordinate representation-independent.
+        let base = sample_view();
+        let mut permuted = sample_view();
+        // Reverse the node provenance permutation (a legal re-labelling of the
+        // same view coordinates).
+        permuted.node_canonical.reverse();
+        // View-local dense structure is identical...
+        assert_eq!(base.flat_edge_nodes, permuted.flat_edge_nodes);
+        assert_eq!(base.flat_node_edges, permuted.flat_node_edges);
+        // ...but the canonical provenance differs and is read from the vector.
+        let n = base.num_nodes();
+        assert_eq!(
+            permuted.dense_node_id(DenseNodeIndex::from_u32(0)),
+            base.dense_node_id(DenseNodeIndex::from_u32((n - 1) as u32))
+        );
+    }
+}
+
+#[cfg(test)]
+mod memory {
+    use hymeko::tensor::aggregation::{AggCfg, SignAgg, WeightAgg};
+    use hymeko::tensor::tensor_val::{EdgeWScalar, ScalarWeightExtractor};
+    use hymeko_hnn::traversal::hypergraphview::HyperGraphView;
+    use hymeko_hnn::workloads::{DegreeShape, HyperSpec, SignPattern};
+
+    type View = HyperGraphView<f32, EdgeWScalar<f32>, f32>;
+
+    #[test]
+    #[ignore = "run with --ignored: prints the real net memory accounting on a large view"]
+    fn large_view_net_memory_accounting() {
+        let spec = HyperSpec {
+            nodes: 200_000,
+            edges: 100_000,
+            avg_cardinality: 16,
+            shape: DegreeShape::Uniform,
+            signs: SignPattern::Mixed,
+            seed: 0xBEEF,
+        };
+        let ir = spec.ir();
+        let v = View::from_ir(
+            &ir,
+            &AggCfg {
+                weight: WeightAgg::Sum,
+                sign: SignAgg::PreferNonNeutral,
+                clamp01: false,
+            },
+            &ScalarWeightExtractor,
+        );
+        let inc = v.flat_edge_nodes.len();
+        let nodes = v.node_canonical.len();
+        let edges = v.edge_canonical.len();
+        // Actual capacities (allocator-truth), not size_of.
+        let dense_bytes = v.flat_edge_nodes.capacity() * 4 + v.flat_node_edges.capacity() * 4;
+        let old_incidence_bytes =
+            v.flat_edge_nodes.capacity() * 8 + v.flat_node_edges.capacity() * 8;
+        let gross_saving = old_incidence_bytes - dense_bytes;
+        let provenance_bytes = v.node_canonical.capacity() * 8 + v.edge_canonical.capacity() * 8;
+        let net = gross_saving as i64 - provenance_bytes as i64;
+        eprintln!("[mem] nodes={nodes} edges={edges} incidences={inc}");
+        eprintln!(
+            "[mem] dense incidence arrays cap-bytes = {dense_bytes} (was {old_incidence_bytes})"
+        );
+        eprintln!(
+            "[mem] gross saving = {gross_saving} B = {:.2} MiB",
+            gross_saving as f64 / 1048576.0
+        );
+        eprintln!(
+            "[mem] NEW provenance (node_canonical+edge_canonical) = {provenance_bytes} B = {:.2} MiB",
+            provenance_bytes as f64 / 1048576.0
+        );
+        eprintln!(
+            "[mem] NET saving = {net} B = {:.2} MiB",
+            net as f64 / 1048576.0
+        );
+        // Formula check: net ≈ 8*inc − 8*(nodes+edges) using lengths (not capacities).
+        let formula = 8i64 * inc as i64 - 8 * (nodes + edges) as i64;
+        eprintln!(
+            "[mem] formula 8*inc - 8*(nodes+edges) = {formula} B = {:.2} MiB",
+            formula as f64 / 1048576.0
+        );
+        assert!(
+            inc > 1_000_000,
+            "large workload reaches >1M incidences: {inc}"
+        );
+    }
 }

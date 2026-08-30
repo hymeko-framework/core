@@ -205,3 +205,91 @@ seam that lets `workloads.rs` stop minting raw ids (unblocking a `pub(crate)`
 ## HARD STOP
 
 No generational arenas begun; `Id::new` unchanged.
+
+---
+
+## 18. Corrective addendum (2026-08-30, `fix(hnn): make dense view construction id-independent`)
+
+This section **additively corrects** four claims above. The original text is left
+intact for the audit trail; the corrections below supersede it.
+
+### 18.1 Construction was still canonical-raw-dependent (corrects §6.5, line 83)
+
+§6.5 retained, as "intentional", canonical-raw indexing *inside construction*:
+`sort_unstable_by_key(|x| (x.e.raw(), x.n.raw()))`, `offsets[entry.e.raw()+1]`,
+`cursor[entry.n.raw()]`, and `DenseNodeIndex::from_u32(entry.n.raw() as u32)`.
+That was a **representation leak**: it assumed the canonical `raw()` of an entity
+equals its dense position. It is true only because today's `Ir` enumerates entities
+as `0..len`; it silently breaks under non-contiguous, permuted, or generational
+canonical ids. The corrective removes **every** such site. Construction now:
+
+1. collects real provenance `node_canonical: Vec<NodeId>` / `edge_canonical: Vec<EdgeId>`
+   from `ir.node_records()` / `ir.edge_records()`;
+2. builds transient, **checked** `FxHashMap<NodeId, DenseNodeIndex>` /
+   `FxHashMap<EdgeId, DenseEdgeIndex>` (rustc-hash, already an HNN dep — **no new
+   dependency**);
+3. `translate_to_dense` maps every incidence canonical→dense **before** any sort /
+   offset / cursor / fill; a missing mapping is a typed
+   `ViewBuildError::{NodeNotInView,EdgeNotInView}{raw}` — **no panic, no silent drop,
+   no `unwrap_or_default`**;
+4. sort/dedup/CSR run on `DenseInc<V>` (dense-typed), so a raw index cannot re-enter.
+
+The maps are **transient** (dropped at end of construction); no resident reverse map
+is added. Residual `.raw()` in HNN is now confined to error-display diagnostics and
+the decl-owner table — **0** occurrences of `array[canonical_id.raw()]` and **0**
+occurrences of canonical `raw()` in the sort key / offset / cursor / fill path.
+
+### 18.2 `dense_node_id`/`dense_edge_id` fabricated ids (new — corrects the §5 API)
+
+The original `dense_node_id(nid) = NodeId::new(nid.as_usize())` **fabricated** a
+canonical id by arithmetic. Corrected to read stored provenance:
+`self.node_canonical[nid.as_usize()]` (resp. `edge_canonical`). Caught by the new
+`dense_node_id_reads_provenance_not_arithmetic` test (sets non-contiguous provenance
+`[3,19,700]`, asserts the reads, asserts `dense 0 → NodeId(3) ≠ NodeId(0)`).
+
+### 18.3 "12.51 MiB" was **gross**, not net (corrects §7, line 106)
+
+The "12.51 MiB saved" was the **gross** narrowing of the incidence arrays (u64→u32)
+and did not subtract the new provenance vectors. Re-measured on this build with real
+allocator capacities (large view: nodes=200 000, edges=100 000, incidences=1 599 950):
+
+| quantity | bytes | MiB |
+|---|---:|---:|
+| gross saving (dense incidence arrays, u64→u32) | 12 799 600 | **12.21** |
+| **new** provenance (`node_canonical`+`edge_canonical`) | 2 400 000 | 2.29 |
+| **NET saving** | 10 399 600 | **9.92** |
+
+Formula check `8·inc − 8·(nodes+edges) = 10 399 600 B` matches exactly. The honest
+figure is **9.92 MiB net**, not 12.51 MiB. (The prior 12.51 also used a slightly
+different incidence count; the gross on this fixture is 12.21 MiB.)
+
+### 18.4 "Runtime-neutral / within the 3% gate" was a **hypothesis**, not a measurement (corrects §8, lines 116–121)
+
+The original called the change "structurally runtime-neutral" and rested the ≤3%
+claim on loop-shape reasoning **with no A/B run**. Corrected with a real A/B:
+baseline = parent commit **fbba816** built in a separate detached worktree; after =
+this corrective. Construction of the large view (`from_ir`, 25 samples,
+median+IQR), alternated A/B, with an A/A null:
+
+| binary | median | IQR |
+|---|---:|---|
+| AFTER (dense + provenance + maps + translate) | ~102.3 ms | [101.2, 103.5] |
+| BASE (fbba816, canonical view) | ~92.9 ms | [91.6, 94.6] |
+| A/A null (AFTER twice) | Δ ≈ 1.8 ms | noise floor |
+
+**Construction is ≈10.1% slower vs fbba816 — this exceeds the 3% gate.** The
+regression is **isolated to the new correctness cost** and does not touch the hot
+paths: the two provenance `collect()`s, two `FxHashMap` builds (300 k inserts), and
+the `translate_to_dense` pass (1.6 M checked lookups). Traversal and the SpMM /
+degree kernels consume the **same** dense arrays as before and are unchanged (PoW-0
+CPU-serial/rayon/GPU parity all still pass). The A/B is **provisional**: ambient CPU
+was ≈45.7% (machine not quiet); the median gap (≈9.4 ms) is ~5× the A/A noise
+(≈1.8 ms), so the *sign* of the regression is trustworthy while the *magnitude*
+carries host-load uncertainty. Baseline fbba816 predates the dense module entirely,
+so this A/B measures M2c.1 **plus** the corrective against the pre-dense view — not
+the corrective alone.
+
+**Verdict:** the ≤3% construction-neutrality claim is **withdrawn**. The measured
+one-time construction cost (~10%) is the accepted price of representation-independent
+provenance + checked translation; it buys the 9.92 MiB net residency win and
+correctness under non-identity canonical ids. Recorded as measured, not asserted.

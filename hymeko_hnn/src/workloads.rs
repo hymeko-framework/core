@@ -386,7 +386,20 @@ impl HyperSpec {
     /// Build the design and adapt it straight to a view.
     #[must_use]
     pub fn build(&self) -> HyperGraphView<f32, EdgeWScalar<f32>, f32> {
-        HyperGraphView::from_design(&self.design(), self.signs, self.seed)
+        // M2c.1 corrective: build a coherent `Ir` and go through the real,
+        // representation-independent `try_from_ir` path — no fabricated canonical
+        // ids and no false provenance. The `Ir`-build cost is isolated from the
+        // resident view operations in the benchmark by pre-building the `Ir`
+        // outside the timed region.
+        HyperGraphView::from_ir(
+            &self.ir(),
+            &hymeko::tensor::aggregation::AggCfg {
+                weight: hymeko::tensor::aggregation::WeightAgg::Sum,
+                sign: hymeko::tensor::aggregation::SignAgg::PreferNonNeutral,
+                clamp01: false,
+            },
+            &hymeko::tensor::tensor_val::ScalarWeightExtractor,
+        )
     }
 
     /// Deterministic node-feature vector (`nodes` entries).
@@ -495,6 +508,13 @@ impl<F: Real> HyperGraphView<F, EdgeWScalar<F>, F> {
         }
 
         Self {
+            // Benchmark-only synthetic provenance: this view has NO backing `Ir`,
+            // so its canonical coordinates are the identity `0..n`. Honestly
+            // fixture-local, not provenance from a real `Ir` — kept only to isolate
+            // pure CSR-construction cost in `hnn_bench` (the production path is
+            // `try_from_ir`, which build() now uses).
+            node_canonical: (0..num_nodes).map(NodeId::new).collect(),
+            edge_canonical: (0..num_edges).map(EdgeId::new).collect(),
             node_decl: (0..num_nodes).map(DeclId::new).collect(),
             edge_decl: (0..num_edges).map(DeclId::new).collect(),
             flat_node_edges,

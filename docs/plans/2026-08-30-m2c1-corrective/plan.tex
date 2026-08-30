@@ -1,0 +1,65 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=25mm]{geometry}
+\usepackage{amsmath,booktabs,longtable,hyperref}
+\usepackage{tikz}\usetikzlibrary{arrows.meta,positioning,fit}
+\title{M2c.1 corrective: representation-independent dense view construction}
+\author{APPROVED-CORE-EDIT: dense-view-index-compute-degree (corrective; hymeko\_hnn only)}
+\date{Created-at: 2026-08-30 21:38 CEST}
+\begin{document}\maketitle
+\section*{Scope}
+Make \texttt{DenseNodeIndex}/\texttt{DenseEdgeIndex} truly representation-independent,
+view-local coordinates. The view must stay correct even if canonical
+\texttt{NodeId}/\texttt{EdgeId} are non-contiguous, non-zero-based, permuted, or
+later carry a generation --- i.e. their \texttt{raw()} has no relation to the dense
+index. \texttt{hymeko\_hnn} only (production/tests/benches); the core
+\texttt{compute\_degree\_by\_index} seam is used unchanged. No generational arenas,
+no \texttt{Id::new} visibility change, no deps, no core src, no Cargo change.
+\texttt{plan.pdf} waived. Base HEAD \texttt{30921ce}; A/B baseline \texttt{fbba816}.
+\section{Pre-corrective defects (to reproduce then fix)}
+(1) \texttt{dense\_node\_id}/\texttt{dense\_edge\_id} fabricate
+\texttt{NodeId::new(dense.as\_usize())} --- correct only by the accidental
+dense==raw coincidence. (2) The builder indexes/sorts by \texttt{entry.n.raw()} /
+\texttt{entry.e.raw()} and casts canonical raw to \texttt{u32} --- representation
+leaks. (3) The $\le$3\% claim had no A/B. (4) 12.51 MiB was gross, not net.
+\section{Corrective design}
+\texttt{try\_from\_ir}: enumerate \texttt{ir.node\_records()}/\texttt{edge\_records()}
+$\to$ store real provenance \texttt{node\_canonical: Vec<NodeId>},
+\texttt{edge\_canonical: Vec<EdgeId>} (dense position $\to$ canonical id); build
+\emph{transient, construction-only} checked maps
+\texttt{FxHashMap<NodeId,DenseNodeIndex>} / \texttt{<EdgeId,DenseEdgeIndex>}
+(rustc-hash already a dep). Every incidence is translated canonical$\to$dense via
+the map (missing $\Rightarrow$ typed \texttt{ViewBuildError::Missing\{Node,Edge\}Mapping},
+no panic/drop/default) \emph{before} any sort/offset/cursor/fill --- which then use
+\texttt{Dense*Index} only. \texttt{dense\_node\_id}/\texttt{dense\_edge\_id} read
+\texttt{node\_canonical}/\texttt{edge\_canonical}; never construct a canonical id.
+\texttt{node\_decl}/\texttt{edge\_decl} docs corrected to ``dense position $\to$
+declaration''. No resident reverse map (maps are dropped after construction).
+\section{Workload fixture}
+\texttt{HyperSpec::build() -> HyperGraphView} delegates to
+\texttt{try\_from\_ir(\&self.ir(), ...)} --- no fabricated canonical ids / false
+provenance. Fixture (IR) build cost measured separately from resident view ops.
+\section{V\&V (fault first, then fix)}
+Non-contiguous canonical ids (3,19,700; dense 0..n; dense$\to$canonical exact);
+permuted allocation order (same view-semantics, provenance keeps real ids); a test
+that fails if \texttt{dense\_node\_id} reverts to \texttt{NodeId::new(dense)}; a test
+that fails if the builder indexes by \texttt{raw()}; missing mapping typed error;
+both orientations; empty/singleton/dup/self-ref/near-\texttt{u32::MAX} checked;
+overflow no-truncation; PoW-0 11/11, serial==Rayon, GPU tolerance, traversal,
+deterministic rebuild, canonical hash unchanged. $\ge$4 fault-injection mutants
+(fabricated id; raw-index bypass; node/edge map swap; silent missing-mapping skip)
+each caught by a named test, restored by hash.
+\section{Performance \& memory}
+Real A/B (\texttt{fbba816} vs after) via a separate worktree/bundle (no reset of the
+work tree): construction small/medium/large, traversal, gather/scatter, HGNN/
+Signed-HGNN, CSR/PoW resident; alternating A/B + A/A null; ambient load recorded;
+$\ge$1 large ($\approx$1.64M inc) workload; Amaterasu optional, hosts separate.
+Memory: gross incidence saving; provenance vector resident cost; \textbf{net}
+($\approx 8\times$inc $- 8\times$(nodes+edges), $\approx$10.22 MiB at the large case);
+construction map peak; measured by allocator capacity + peak WS.
+\section{Not authorised}
+core src, Cargo/lock/deps, generational arena, \texttt{Id::new} visibility,
+mutation/transaction/snapshot, CBOR/ir\_stream, CLI/facade, new framework/IR.
+\section{Rollback} One \texttt{git revert}; hnn-only. \section{Risk} The dense
+rewrite must preserve ordering/FP-sum (guarded by serial==Rayon + frozen hash +
+both-orientations); provenance adds resident memory (measured net).
+\end{document}
