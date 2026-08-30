@@ -14,6 +14,14 @@ provenance/adapter need); **any change to a numerical contract is an automatic H
 STOP** requiring a differential verdict first; A/A null control + alternating A/B on
 every delegation; freeze the differential oracle *before* deleting the old code.
 
+**Hard design guardrail (user constraint, 2026-08-30): the canonical IR stays a
+hypergraph.** No phase may reshape `hymeko_core::Ir` / `hymeko_hnn::HyperGraphView`
+into a dyadic graph. Clique/star/Levi/line-graph expansions remain *derived views*.
+In particular, sharing the incidence operator (I4/I5, audit item 4) must keep the
+ragged hypergraph incidence as the canonical object and treat `hymeko_graph`'s
+uniform-arity dyadic operator as an adapter over it — never fold the hypergraph into a
+graph to make the kernels match. See `docs/hymeko-kernel-ownership.md` invariant 8.
+
 ---
 
 ## Phase order and rationale

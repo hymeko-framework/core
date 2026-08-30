@@ -259,3 +259,40 @@ modified.** No Nagare source was chosen without evidence (§4). No dependency wa
 or code moved. The phased execution (I1–I8), each with its own approval token and
 rollback point, is specified in [`docs/hymeko-kernel-migration.md`](../docs/hymeko-kernel-migration.md);
 none of it begins without explicit user approval per phase.
+
+---
+
+## 11. Addendum (2026-08-30, same day) — Nagare re-verified + IR-stays-hypergraph constraint
+
+**Nagare moved during the audit; re-checked.** The GitHub `nagare` advanced
+`a8ca716 → 9432103` (30 commits). Inspection: these are **science/benchmark commits
+only** — HSiKAN edge-chunk parallelization (7.3× / beats CPU PyTorch), Nagare-vs-PyTorch
+closed-form KAN benchmarks, deep-holonomy learning (Adam rotor acceleration, honest
+negative baseline), the Evolvent multifrontal/junction-tree series, `mesh_tensor`
+(hypergraph latent space as a contraction), and article figures. **The vendoring is
+unchanged:** `vendor/hymeko_graph` + `vendor/hymeko_clifford` are still present, still
+the stale 2026-07-06 snapshot, deps still path-vendored. The Gitea `hymeko/nagare`
+target is unchanged (`a59f9fe` + the same migration branches); the monorepo remote was
+unreachable at re-check (local stays `5b53a92`).
+
+**Net effect on the audit:** the category-E stale-vendor finding (items 1–2) and the
+production-owner determination (§4) **stand**. One refinement: `nagare_github` is the
+**actively developed science line** (not a frozen one) — so the migration must treat it
+as a live consumer, freezing the differential oracles (I1) against its *current* head
+`9432103`, and the re-point (I4) must not disturb the HSiKAN/Evolvent/holonomy results
+it now carries. The commit `c578892 "integrate the real spine into the registry"`
+confirms it still consumes the vendored FIR spine — exactly the re-point target.
+
+**IR-stays-hypergraph constraint (user, 2026-08-30) — now a hard guardrail.** The
+canonical `hymeko_core::Ir` and `hymeko_hnn::HyperGraphView` **remain a hypergraph**
+(ragged hyperedges + signed incidence, two orientations). All dyadic forms — 2-section
+clique graph, star/Levi expansion, line graph, `assemble_clique` — are **derived
+views**, never the canonical representation. This directly constrains the item-4
+consolidation (`hymeko_graph::hyper_operator` vs `hymeko_hnn::message_passing`): a
+shared kernel is permitted **only** as an adapter over the hypergraph incidence with
+hnn's ragged view canonical; it must **not** fold the hypergraph into a uniform-arity
+dyadic graph to make the two kernels line up. The science direction supports this —
+`nagare_github`'s own results (`F-EVO-5: hyperedge tensor beats pairwise`, `mesh_tensor:
+hypergraph latent space`) depend on the hypergraph structure surviving. Recorded as
+ownership invariant 8 (`docs/hymeko-kernel-ownership.md`) and a governing constraint in
+`docs/hymeko-kernel-migration.md`.

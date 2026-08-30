@@ -73,3 +73,13 @@ it (approval-gated; do not create speculatively).
 5. Friedler lives only in `hymeko_pgraph`.
 6. `hymeko_numeric_vv` is downstream-only; no production crate depends on it.
 7. The Nagare closed-form backwards stay in Nagare; only forwards may be delegated.
+8. **The canonical IR stays a hypergraph** (user constraint, 2026-08-30). The
+   canonical `hymeko_core::Ir` and the `hymeko_hnn::HyperGraphView` remain a
+   **hypergraph** representation — ragged hyperedges + signed incidence, two
+   orientations. Dyadic/pairwise forms (2-section clique graph, star/Levi expansion,
+   line graph, `assemble_clique`) are **derived views**, never the canonical form. No
+   consolidation may collapse the IR to a plain graph: when the incidence operator is
+   shared with `hymeko_graph::hyper_operator` (note A), the shared kernel must operate
+   on hypergraph incidence and hnn's ragged view stays canonical — the uniform-arity
+   dyadic operator is an adapter over it, not a replacement for it. Consistent with the
+   unified-IR invariant (one canonical Ir; derived rebuildable views).
