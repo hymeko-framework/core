@@ -22,6 +22,19 @@ ragged hypergraph incidence as the canonical object and treat `hymeko_graph`'s
 uniform-arity dyadic operator as an adapter over it — never fold the hypergraph into a
 graph to make the kernels match. See `docs/hymeko-kernel-ownership.md` invariant 8.
 
+**STATUS UPDATE (2026-08-30, audit §12): I2 and I4 are substantially already done.**
+The canonical Nagare is `hymeko/nagare` on Gitea, branch `feat/graph-canonical-dependency`
+(tip `a182c99`) — **not** the monorepo (a predecessor). That branch has already
+**de-vendored (2026-08-16)** and **re-pointed to canonical crates** (`hymeko_graph =
+../graph/hymeko_graph`, `hymeko_{clifford,tensor,spline,vision} = ../tensor/…`, no
+`vendor/`; `Phase 4: Nagare consumes the canonical hymeko_graph`), with oracle-first
+discipline (freezes *before* moves) and a Phase-7 traversal consolidation in progress.
+So **I2/I4 below shift from "propose" to "verify + finish + merge to main"**; the
+remaining cross-repo work is the FIR differential oracle (I1, §5 divergence still
+applies), the incidence **triad** reconciliation (graph + hnn + Nagare `hg_message` —
+audit §12), and the hnn-internal items (I5). Nagare consumes graph+tensor **only** (not
+`hymeko_core`/`hymeko_hnn`) — the `core/hnn → Nagare` edge is absent by design.
+
 ---
 
 ## Phase order and rationale

@@ -35,19 +35,24 @@ Verified against canonical `origin/main`: core `e2952c7`, graph `5078980`, tenso
 | Hypergraph NN message passing | `hymeko_hnn` | `gather_edges_from_nodes`, `scatter_nodes_from_edges`, `clique_diag(_into)`, `implicit_clique_step`, `build_explicit_a` | ragged, generic-`F`, two-orientation, implicit, sign/abs/edge-weight, `*_into`, Rayon-threshold | **note A** |
 | HGNN / Signed-HGNN / GCN-clique / Mesh layers | `hymeko_hnn` | `*Layer::forward` | compositions over core seam + core SpMM + hnn mp | consume |
 | Dense row transform `X·Θ` (internal) | `hymeko_hnn` (4 copies) | `hgnn`, `signed_hgnn`, `gcn_clique`, `mesh_nn` | internal duplication | consolidate to one private helper (**note D**) |
-| Runtime / training step / optimizer / model composition | Nagare (**owner = monorepo `hymeko_nagare`**) | `NagareRuntime`, `adam_step`, `FsrMixer` | closed-form (autodiff-free) backwards; Adam-only today | the genuine Nagare band; do not vendor kernels into it |
+| Runtime / training step / optimizer / model composition | Nagare (**owner = `hymeko/nagare` Gitea, branch `feat/graph-canonical-dependency`** — the monorepo/github/non-git are predecessors; see audit §12) | `NagareRuntime`, `adam_step`, `FsrMixer`, HSiKAN/KAN/rotor/SLAM/vision ops | closed-form (autodiff-free) backwards; already de-vendored + consumes canonical graph/tensor by path-dep; **parallel consumer of graph+tensor, not layered on core/hnn** | the genuine Nagare band; keep it de-vendored |
 | Closed-form backward passes | Nagare | `*_backward` per op | hand-derived adjoints; **the Nagare-specific asset** | keep in Nagare even where the forward is delegated |
 | Holonomy learning subsystem | Nagare (monorepo) | `EntropyPoolLocalLearner`, `projection`, `features` | experiment/science layer | Nagare-owned |
 
 ## Notes (the overlaps that need a decision, not a mechanical move)
 
-**A — `hymeko_graph::hyper_operator` vs `hymeko_hnn::message_passing`.** Both apply a
-signed hypergraph incidence (`B·x`, `Bᵀ·x`, clique). They are a **responsibility
-overlap, not a drop-in equivalence**: graph is uniform-arity/f32/edge-major/allocating;
-hnn is ragged/generic-`F`/two-orientation/`*_into`/threshold/sign+abs+edge-weight. A
-shared kernel is permitted **only after a differential test** proves numerical
-agreement on the shared sub-domain (uniform-arity, f32, no threshold). Until then both
-stand as measured Strategy variants.
+**A — signed-hypergraph-incidence TRIAD.** Three implementations apply a signed
+hypergraph incidence (`B·x`, `Bᵀ·x`, clique): `hymeko_graph::hyper_operator`
+(uniform-arity/f32/edge-major/allocating), `hymeko_hnn::message_passing`
+(ragged/generic-`F`/two-orientation/`*_into`/threshold/sign+abs+edge-weight), and
+Nagare `src/ops/hg_message.rs` (cycles-as-hyperedges, signed scaled mean/sum, star
+expansion, fixed structural `s_v` scale — a port of `hymeko_neuro/.../cpml.py`). All
+three are **hypergraph-based** (they honor invariant 8). They are a **responsibility
+overlap, not a drop-in equivalence**. A shared kernel is permitted **only after a
+differential test** proves numerical agreement across all three contracts on the shared
+sub-domain (uniform-arity, f32, no threshold). Until then they stand as measured
+Strategy variants, and the shared kernel — if adopted — must adapt over the hypergraph
+incidence, never fold it into a dyadic graph.
 
 **B — traversal.** hnn's Levi-graph `bfs_dense`/`dfs_preorder_dense` (bipartite
 Node\|Edge state, allocating `Vec`) is an **intentionally different contract** from

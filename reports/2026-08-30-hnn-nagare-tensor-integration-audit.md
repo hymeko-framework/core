@@ -296,3 +296,66 @@ dyadic graph to make the two kernels line up. The science direction supports thi
 hypergraph latent space`) depend on the hypergraph structure surviving. Recorded as
 ownership invariant 8 (`docs/hymeko-kernel-ownership.md`) and a governing constraint in
 `docs/hymeko-kernel-migration.md`.
+
+---
+
+## 12. Material correction (2026-08-30) — the canonical Nagare is `hymeko/nagare`, and it has already executed I2/I4
+
+The user pointed to a new Nagare commit. Re-inspection **corrects the §4 production-owner
+determination.** The audit judged the Gitea `hymeko/nagare` by its `main` (`a59f9fe`,
+"essentially empty") and treated it as a target-only. That was wrong: the active branch
+**`feat/graph-canonical-dependency`** (tip `a182c99`) is a **mature, canonical-consuming
+Nagare** in the same `hymeko/*` governance namespace as core/graph/tensor — i.e. **the
+canonical Nagare owner**. The on-disk instances I inventoried (monorepo `hymeko_nagare`
+`5b53a92`, `nagare_github` `a8ca716`/`9432103`, non-git `nagare`) are **predecessors /
+public mirrors** of this line.
+
+**What this branch already is (verified from its tree + log):**
+
+- **De-vendored + re-pointed to canonical crates** (my I2 + I4 — *already done*):
+  `Cargo.toml` path-deps `hymeko_graph = ../graph/hymeko_graph`,
+  `hymeko_{clifford,tensor,spline,vision} = ../tensor/…`; **no `vendor/` dir**; comment
+  "De-vendored 2026-08-16: the shared algebra crates now come from the `tensor`
+  workspace… single source of truth." Commit `444882d "Phase 4: Nagare consumes the
+  canonical hymeko_graph from hymeko/graph"`.
+- **Oracle-first discipline** (my I1): `26b584f "Freeze the public KAN surface as a
+  behavioural oracle, before anything moves"`, `87fd896 "Capture the cascade example as
+  a frozen oracle and measure it against the framework"`, `2c4ebf6 "Phase 7E-A
+  (capture): freeze the pre-extraction HSiKAN before anything moves"`.
+- **Traversal consolidation** (my I6, in progress): `a182c99 "Phase 7E-A: one
+  aggregation traversal, one backward traversal, statically monomorphized"` (+ a
+  300-line frozen-oracle test) — matches the §6.5 preference (Strategy, static
+  monomorphization, no `Box<dyn>` in the hot loop).
+- **Chebyshev-claim separation** (my audit item 12): `592a6fe "…separate two Chebyshev
+  claims the audit ran together"`.
+
+**Two structural facts that revise the audit model:**
+
+1. **Nagare is a *parallel* consumer of graph/tensor, not layered on core/hnn.** This
+   branch depends on `hymeko_graph` + the tensor-workspace crates but **not** on
+   `hymeko_core` or `hymeko_hnn`. It carries its own `src/{core, graph, runtime}` —
+   `src/graph` is Nagare-specific *modeling* (pose graphs, junction trees, Steiner,
+   planar, CSP), not a topology duplicate. The target DAG's optional edge
+   "core/hnn → Nagare" is currently **absent by design**; Nagare reaches the framework
+   through graph+tensor only.
+2. **The signed-hypergraph-incidence overlap is a TRIAD, not a pair.** Beyond graph's
+   `hyper_operator` and hnn's `message_passing`, this Nagare has a **third**
+   implementation, `src/ops/hg_message.rs` (`hg_node_to_edge_forward` /
+   `hg_edge_to_node_forward` — signed scaled **mean**/**sum**, star expansion, fixed
+   structural `s_v` scale; a port of `hymeko_neuro/hyperedge/cpml.py`
+   `CapsuleHypergraphRouter`). **It is hypergraph-based** (cycles-as-hyperedges) — so it
+   honors the IR-stays-hypergraph guardrail (§11). Audit item 4 is therefore a
+   three-way family (graph f32-uniform-arity / hnn ragged-generic / Nagare
+   cycles-as-hyperedges-with-`s_v`), and any shared kernel must be gated by a
+   differential test across **all three** contracts.
+
+**Revised plan status.** I2 (de-vendor) and I4 (canonical re-point) are **substantially
+already executed on this branch** — the migration plan's role shifts from "propose" to
+"verify + finish + merge to `main`": confirm the FIR differential oracle against the
+canonical `hymeko_graph::spine` (the §5 divergence still applies — the branch's
+`../graph/hymeko_graph` must be the canonical `5078980`, not a stale checkout), complete
+the Phase-7 traversal consolidation, and reconcile the incidence triad. **I did not
+re-inventory this ~40-op framework** (HSiKAN, KAN, rotor, SLAM, vision) — a full
+contract-level audit of the canonical `hymeko/nagare` line is the natural next step if
+you want it; this correction records the ownership fact and the already-done phases so
+the plan is not built on a stale snapshot. **No Nagare source was touched.**
