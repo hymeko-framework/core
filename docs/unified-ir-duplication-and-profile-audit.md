@@ -87,3 +87,37 @@ subprocess); they add no production duplication.
   *construction* legitimately writes the arena; there is no public mutation API to
   route through yet (that is M2d). Merging into a premature builder now would be
   the single-implementation abstraction the gate forbids.
+
+---
+
+## Addendum (2026-08-30) — scope correction: this audit was core-workspace-only
+
+The Phase I conclusion above — *"No TRUE DUPLICATION and no PERFORMANCE DUPLICATION
+with measurable runtime cost was found in editable (non-core) production code"* — is
+**correct but scope-limited, and must not be read as a framework-wide claim.** It
+audited only the **core workspace** (`hymeko_core`, `hymeko_hnn`, `hymeko_wgpu`). It did
+**not** cover the canonical sibling repositories `hymeko/graph` (`hymeko_graph`,
+`hymeko_pgraph`) or `hymeko/tensor` (`hymeko_tensor`, `hymeko_clifford`, `hymeko_spline`,
+`hymeko_numeric_vv`), nor any Nagare instance.
+
+The cross-repository I0 audit
+(`reports/2026-08-30-hnn-nagare-tensor-integration-audit.md`, 2026-08-30) covers that
+wider scope and finds duplication **does** exist across the framework — concentrated in
+Nagare, not in the core workspace:
+
+- **≈ 17 289 LOC of exact / stale-vendor copies** in the Nagare instances
+  (`nagare_github/vendor/hymeko_graph` 15 421 LOC + `vendor/hymeko_clifford` 776 LOC +
+  the zero-commit non-git `nagare` skeleton 1 092 LOC).
+- A handful of **B/C overlaps**: `hymeko_graph::hyper_operator` vs
+  `hymeko_hnn::message_passing` (same signed-incidence math, different contract —
+  differential-test-gated); `compute_bipartite_degrees` vs the core degree seam; a
+  Chebyshev recurrence duplicated within the tensor workspace; a fixture-scoped LCG in
+  three crates.
+- A **gap** (not a duplication): no canonical dense `matmul`/`linear_forward` owner
+  exists; hnn hand-rolls `X·Θ` 4× internally and Nagare once.
+
+**The core-workspace verdict of this document stands unchanged** — it never claimed
+cross-repo scope. This addendum records that the "no duplication" statement is bounded
+to `core/{hymeko_core,hymeko_hnn,hymeko_wgpu}`, and points to the I0 audit and
+`docs/hymeko-kernel-ownership.md` / `docs/hymeko-kernel-migration.md` for the framework
+picture and the consolidation plan.
