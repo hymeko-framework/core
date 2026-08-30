@@ -100,15 +100,22 @@ intended_edges_not_yet_realised:
       status: absent; required before any nagare model can lower onto the canonical IR
 
 known_defects:
-  - id: gitea-root-url-points-at-dead-host
-    where: Gitea server config, [server] ROOT_URL
-    severity: ROOT CAUSE
+  - id: stale-clone-urls-predate-the-host-move
+    where: twelve local checkouts (fixed 2026-08-30)
+    severity: resolved
     detail: >
-      Gitea 1.27.2 serves from 192.168.1.228 but advertises ROOT_URL
-      http://192.168.89.249:3000. Every clone URL copied from the web UI, and every push hint,
-      therefore names the dead host. This is why twelve of fourteen checkouts were stale, and it
-      will keep regenerating them until the server config is corrected. Server-side; not fixable
-      from any repository.
+      The twelve stale remotes were cloned while the Gitea host was at 192.168.89.249 and were
+      never updated when it moved to 192.168.1.228. That is the entire cause: a one-off historical
+      artifact of clone time, now corrected by `git remote set-url`.
+
+      CORRECTION, 2026-08-30 03:06. An earlier revision of this file labelled Gitea's ROOT_URL the
+      "ROOT CAUSE" and claimed the stale remotes "will keep regenerating until the server config is
+      corrected". That was wrong and it cost the maintainer a wasted investigation of the server.
+      The inference came from a single observation -- push output printing the old address -- which
+      shows only that ROOT_URL in app.ini still holds the pre-move value. It does not show that
+      anything regenerates a remote. Nothing does; the clones were simply older than the move.
+      A stale ROOT_URL affects only URLs copied by hand out of the web UI, which is cosmetic and
+      has no bearing on any existing checkout.
 
   - id: default-branches-carry-no-governance
     where: tensor/main, nagare/main
