@@ -1,0 +1,139 @@
+# WORKSPACE.yaml — the canonical HyMeKo workspace registry
+#
+# WHY THIS FILE EXISTS
+#
+# On 2026-08-30 an agent session designed a backend-independent IR, a CPU executor and a
+# WGPU/CUDA lowering contract for `nagare` — all of which already existed in `hymeko/core`,
+# including a WGPU backend tested on real hardware. The reason was not carelessness: twelve of
+# the fourteen local checkouts were two-file stubs whose `origin` pointed at 192.168.89.249,
+# which is unreachable. The workspace *looked* empty everywhere except the two repositories that
+# happened to be in use.
+#
+# THE RULE THAT FOLLOWS, AND IT IS THE POINT OF THIS FILE:
+#
+#   A repository that looks empty or unreachable LOCALLY is never evidence that a capability
+#   does not exist. Check the canonical registry first. An unreachable owner is a HARD STOP,
+#   never a licence to build a parallel implementation.
+#
+# Canonical host: amaterasu = 192.168.1.228 (Gitea, SSH port 2222).
+# This file is the registry; the local checkout is a mirror of it, never the other way round.
+
+schema: 1
+workspace: hymeko
+canonical_host: amaterasu            # 192.168.1.228; Gitea SSH on 2222, HTTP on 3000
+clone_scheme: "ssh://git@192.168.1.228:2222/hymeko/<repo>.git"
+forbidden_hosts:
+  - 192.168.89.249                   # dead; the cause of the 2026-08-30 near-duplication
+
+repositories:
+
+  core:
+    role: unified IR, execution contracts, CPU/WGPU backends
+    local_path: core
+    default_branch: main
+    status: CORE
+    crates: [hymeko_core, hymeko_hnn, hymeko_wgpu]
+    owns:
+      - IR                          # hymeko_core::ir  (ir, lower, hash, canonical_hash, coherence)
+      - backend abstraction         # docs/backend-abstraction.md
+      - execution envelope          # docs/unified-ir-architecture.md, contracts U1-U6
+      - GPU lowering                # hymeko_wgpu + docs/wgpu-backend.md (hardware-tested)
+      - unified-IR V&V              # docs/verification/unified-ir/
+    depends_on: [parser]            # MEASURED: hymeko_core and hymeko_hnn both take `parser`
+
+  tensor:
+    role: numerical primitives and canonical mathematics
+    local_path: tensor
+    default_branch: main
+    status: CORE
+    crates: [hymeko_clifford, hymeko_spline, hymeko_graph, hymeko_tensor, hymeko_vision]
+    owns:
+      - spline kernels              # Catmull-Rom, Kochanek-Bartels, Chebyshev parameterization
+      - Clifford algebra
+      - graph/incidence primitives
+      - tensor arenas               # hymeko_tensor::stream (HyMeKoStream)
+    depends_on: []
+
+  nagare:
+    role: model prototypes, trainers, studies, application orchestration
+    local_path: nagare
+    default_branch: main
+    status: application
+    depends_on: [tensor]            # MEASURED: five path deps into ../tensor
+    must_not_own:
+      - second IR
+      - second GPU runtime
+      - duplicate numerical kernels
+
+  parser:
+    role: source syntax and lowering into the canonical IR
+    local_path: parser
+    default_branch: master          # NOT main — verified by ls-remote --symref
+    status: CORE
+    depends_on: []
+
+  rl:            { role: reinforcement learning studies,       local_path: rl,             default_branch: main,   status: study }
+  transformation:{ role: model/graph transformation passes,    local_path: transformation, default_branch: main,   status: application }
+  application:   { role: CLI and daemon front ends,            local_path: application,    default_branch: main,   status: application }
+  web:           { role: editor and wasm surface,              local_path: web,            default_branch: main,   status: application }
+  hotaru:        { role: runtime/monitor,                      local_path: hotaru,         default_branch: main,   status: application }
+  hystl:         { role: specification and language tooling,   local_path: hystl,          default_branch: main,   status: application }
+  communication: { role: transport,                            local_path: communication,  default_branch: main,   status: application }
+  akoire:        { role: unassigned scaffold,                  local_path: akoire,         default_branch: main,   status: scaffold }
+  hive:          { role: unassigned scaffold,                  local_path: hive,           default_branch: main,   status: scaffold }
+  simulation:    { role: unassigned scaffold,                  local_path: simulation,     default_branch: main,   status: scaffold }
+
+# Edges below are FILLED FROM THE ACTUAL CARGO GRAPH, never asserted in advance.
+dependency_edges:
+  - nagare -> tensor                # hymeko_clifford, hymeko_graph, hymeko_spline, hymeko_tensor, hymeko_vision, by path
+  - core -> parser                  # `parser = { git = ... }` used by hymeko_core AND hymeko_hnn
+
+# Edges that are DECLARED AS INTENT but DO NOT EXIST in the graph today. Recording them as
+# intent rather than fact is deliberate: an aspirational edge written as real is how a manifest
+# starts lying.
+intended_edges_not_yet_realised:
+  - core -> tensor:
+      evidence: "tensor/hymeko_clifford/Cargo.toml: 'this crate must NOT depend on hymeko_core.
+                 The dependency goes the other way eventually.'"
+      status: not present in any Cargo.toml as of 2026-08-30
+  - nagare -> core:
+      status: absent; required before any nagare model can lower onto the canonical IR
+
+known_defects:
+  - id: gitea-root-url-points-at-dead-host
+    where: Gitea server config, [server] ROOT_URL
+    severity: ROOT CAUSE
+    detail: >
+      Gitea 1.27.2 serves from 192.168.1.228 but advertises ROOT_URL
+      http://192.168.89.249:3000. Every clone URL copied from the web UI, and every push hint,
+      therefore names the dead host. This is why twelve of fourteen checkouts were stale, and it
+      will keep regenerating them until the server config is corrected. Server-side; not fixable
+      from any repository.
+
+  - id: default-branches-carry-no-governance
+    where: tensor/main, nagare/main
+    severity: HIGH
+    detail: >
+      Neither default branch contains CORE.YAML or CLAUDE.md. A fresh clone at the default branch
+      gets no operating contract and no core protection. tensor/main is 24 commits behind its
+      working branch; nagare/main is 292 behind. The workspace doctor reports this and exits 1 by
+      design -- it is a real unfixed defect, and suppressing it to make the gate green would be the
+      exact failure this registry exists to prevent.
+
+  - id: root-core-yaml-is-factually-wrong
+    where: <workspace root>/CORE.YAML
+    severity: HIGH
+    detail: >
+      Line 48 states "core/ is an empty scaffold repository (README.md + LICENSE)" and line 53
+      lists parser as having "no commits on any branch as of 2026-08-19". Both are false:
+      core/main is 420 files including the unified IR and a hardware-tested WGPU backend, and
+      parser/master is 28 files. That record is what licensed a session to begin designing a
+      replacement IR. Correction pending: it is a governance file and needs its own commit.
+
+  - id: parser-git-dep-unresolvable
+    where: core/Cargo.toml [workspace.dependencies]
+    detail: >
+      `parser = { git = "ssh://git@amaterasu.local:2222/hymeko/parser.git" }`.
+      `amaterasu` resolves to 192.168.1.228; `amaterasu.local` does not resolve in this
+      environment even with avahi active. Recorded, not changed: it is core's file and may
+      resolve on the maintainer's own host.
