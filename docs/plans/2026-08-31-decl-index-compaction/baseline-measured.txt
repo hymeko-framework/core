@@ -1,0 +1,14 @@
+Part A baseline (measured, isolated prototype at 1M decls, kind mix 40/40/20, release, median-of-15):
+  size_of::<Id>()          = 8
+  size_of::<Option<Id>>()  = 16
+  current mapping storage  = 48 bytes/decl (3 x Vec<Option<Id>>)
+  as_node sequential (1M)  = ~0.30 ms (baseline A)
+  as_node random     (1M)  = ~5.4  ms (baseline A)
+Prototype A/B/C/D comparison (bytes/decl ; seq% ; random% vs A):
+  A 3xOption   48 ; base    ; base
+  B enum       16 ; +37..45 ; +0.6..2.3
+  C sentinel+kind-from-arena  8 ; +651..751 ; +90     <- REJECTED (arena stride kills locality)
+  D tagged u64  8 ; -4..-11 ; -79                     <- CHOSEN (6x mem, faster lookup)
+Canonical hash: independent of the 3 maps (hashes decl_nodes+records+tree) -> bit-neutral.
+Serde/CBOR: keep the 3-map wire via #[serde(from/into="IrWire")] boundary adapter; compat
+alloc measured separately. CBOR writer is latent/unwired (CborPayload never constructed).
