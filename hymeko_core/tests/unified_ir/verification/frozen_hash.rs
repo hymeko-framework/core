@@ -197,3 +197,43 @@ fn dense_permutation_does_not_change_v1() {
         "dense-ID assignment must not affect v1"
     );
 }
+
+// --- Authority-flip differential oracle (U2) --------------------------------
+//
+// The link-derived hash must equal the index-based hash on every well-formed
+// fixture. `dense_permuted` is excluded here: it manufactures an index/link
+// divergence (fillers removed from the index but left in `decl_nodes`), which is
+// exactly what the flip resolves in favour of the links — it is redesigned as a
+// genuine DeclId permutation in the authority tests.
+
+fn v1_ir(t: &TestIr) -> String {
+    hex(&hymeko::ir::canonical_hash::canonical_program_hash_ir(
+        CanonHashCfg::default(),
+        &t.ir,
+        &t.it,
+    ))
+}
+
+#[test]
+fn link_derived_hash_equals_index_hash_on_wellformed_vectors() {
+    for (name, t) in [
+        ("small_hierarchy", vec_small_hierarchy()),
+        ("ordered_signs", vec_ordered_signs()),
+        ("duplicate_incidences", vec_duplicate_incidences()),
+        ("slot_permuted", vec_slot_permuted()),
+    ] {
+        assert_eq!(
+            v1_ir(&t),
+            v1(&t),
+            "U2 authority flip diverged from the index-based hash for `{name}`"
+        );
+    }
+}
+
+#[test]
+fn link_derived_hash_matches_frozen_kats_on_wellformed_vectors() {
+    assert_eq!(v1_ir(&vec_small_hierarchy()), KAT_SMALL_HIERARCHY);
+    assert_eq!(v1_ir(&vec_ordered_signs()), KAT_ORDERED_SIGNS);
+    assert_eq!(v1_ir(&vec_duplicate_incidences()), KAT_DUPLICATE_INCIDENCES);
+    assert_eq!(v1_ir(&vec_slot_permuted()), KAT_SLOT_PERMUTED);
+}

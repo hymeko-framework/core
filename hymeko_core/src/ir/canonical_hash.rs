@@ -57,6 +57,127 @@ pub fn canonical_program_hash(cfg: CanonHashCfg, idx: &Index, ir: &Ir, it: &Inte
     HashId(*h.finalize().as_bytes())
 }
 
+/// Authority-flip form (U2): the canonical hash of `ir` with **no** `Index` —
+/// the declaration hierarchy read exclusively from the `Ir` intrusive links
+/// (`DeclNode.parent`, `name`, `kind`).
+///
+/// **DEFERRED — not a drop-in replacement for [`canonical_program_hash`].** For
+/// single-module programs the two are bit-identical (lowering builds the links
+/// from the index, arcs never parent a Node/Edge). But for **multi-module
+/// programs the results DIVERGE**: the v1 hash embeds the resolution-`Index`
+/// import namespace prefix (e.g. `meta_kinematics`) in every imported
+/// declaration's path, and that prefix is stored *only* in the `Index` — the
+/// `Ir` has no field for it and an imported module's root has `parent == NONE`,
+/// so a pure-links path cannot recover it. Measured on the corpus: 35 fixtures
+/// agree, 61 (all import-bearing) diverge. Making this the production hash would
+/// change the digest for every multi-module program, i.e. an `algo_version`
+/// bump, which the U2 phase forbade — so the flip is HARD-STOPPED pending the
+/// `Ir` gaining explicit namespace state. See
+/// `reports/2026-08-31-hierarchy-authority-decision.md`.
+///
+/// Kept as the study artifact and the differential oracle that pins the exact
+/// divergence; **do not** call it as the canonical hash.
+///
+/// # Preconditions
+/// None — total over any `Ir`; malformed hierarchies terminate deterministically
+/// (bounded walks).
+pub fn canonical_program_hash_ir(cfg: CanonHashCfg, ir: &Ir, it: &Interner) -> HashId {
+    let did_to_path = build_did_to_path_from_ir(ir);
+    let (verts, parent, children, roots) = build_skeleton_forest_from_ir(ir);
+    let vhash = compute_subtree_hashes_with_kinds(cfg, &ir.decl_nodes, &roots, &children);
+    let vtie = compute_tiebreak(cfg, &verts, &did_to_path, it);
+    let prufer_bytes = prufer_from_forest(cfg, &verts, &parent, &roots, &vhash, &vtie);
+    let incidence_bytes = canonical_incidence_bytes(cfg, ir, &did_to_path, it);
+    let sk = canonical_chunk_hash(cfg, *b"SKELETON", &prufer_bytes);
+    let inc = canonical_chunk_hash(cfg, *b"INCIDENC", &incidence_bytes);
+    let mut h = blake3::Hasher::new();
+    write_header(&mut h, cfg, *b"PROGRAM\0");
+    h.update(&sk.0);
+    h.update(&inc.0);
+    HashId(*h.finalize().as_bytes())
+}
+
+// -----------------------------
+//  DeclId -> PathKey from the Ir links (parent chain of `name`s)
+// -----------------------------
+//
+// Each named (Node/Edge) declaration's path is the sequence of `name`s from the
+// root down to it, read by walking `parent`. Anonymous arcs have no path (they
+// are never used as a path in the incidence, which keys on the edge and target
+// declarations). The parent walk is bounded by `decl_nodes.len()` so a malformed
+// cycle terminates rather than looping.
+fn build_did_to_path_from_ir(ir: &Ir) -> Vec<Option<PathKey>> {
+    let n = ir.decl_nodes.len();
+    let mut v: Vec<Option<PathKey>> = vec![None; n];
+    let mut buf: Vec<crate::common::ids::SymId> = Vec::new();
+    for i in 0..n {
+        match ir.decl_nodes[i].kind {
+            DeclKind::Node | DeclKind::Edge => {
+                buf.clear();
+                let mut cur = DeclId::new(i);
+                let mut guard = 0usize;
+                while cur.is_some() && (cur.0) < n {
+                    buf.push(ir.decl_nodes[cur.0].name);
+                    cur = ir.decl_nodes[cur.0].parent;
+                    guard += 1;
+                    if guard > n {
+                        break; // malformed cycle: stop deterministically
+                    }
+                }
+                buf.reverse();
+                v[i] = Some(PathKey(buf.clone()));
+            }
+            DeclKind::HyperArc => {}
+        }
+    }
+    v
+}
+
+// -----------------------------
+//  Skeleton forest from the Ir links
+//   - vertices = Node/Edge declarations, in DeclId order
+//   - parent   = DeclNode.parent (a Node/Edge; arcs never parent a Node/Edge),
+//                which equals the nearest Node/Edge path-prefix on well-formed IR
+//   - children = inversion of parent in DeclId order (matches the DeclId sort
+//                the index-based forest applied)
+// -----------------------------
+fn build_skeleton_forest_from_ir(
+    ir: &Ir,
+) -> (
+    Vec<DeclId>,
+    Vec<Option<DeclId>>,
+    Vec<Vec<DeclId>>,
+    Vec<DeclId>,
+) {
+    let n = ir.decl_nodes.len();
+    let mut verts = Vec::new();
+    for i in 0..n {
+        match ir.decl_nodes[i].kind {
+            DeclKind::Node | DeclKind::Edge => verts.push(DeclId::new(i)),
+            DeclKind::HyperArc => {}
+        }
+    }
+    let mut parent: Vec<Option<DeclId>> = vec![None; n];
+    let mut children: Vec<Vec<DeclId>> = vec![Vec::new(); n];
+    let mut roots = Vec::new();
+    for &did in &verts {
+        let p = ir.decl_nodes[did.0].parent;
+        let skeleton_parent = if p.is_some() && p.0 < n {
+            matches!(ir.decl_nodes[p.0].kind, DeclKind::Node | DeclKind::Edge).then_some(p)
+        } else {
+            None
+        };
+        match skeleton_parent {
+            Some(p) => {
+                parent[did.0] = Some(p);
+                children[p.0].push(did); // verts in DeclId order => children sorted
+            }
+            None => roots.push(did),
+        }
+    }
+    (verts, parent, children, roots)
+}
+
 // -----------------------------
 //  Header + chunk hashing
 // -----------------------------

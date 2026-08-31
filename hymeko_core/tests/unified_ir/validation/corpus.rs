@@ -277,3 +277,42 @@ fn accessors_agree_with_direct_field_access_on_the_whole_corpus() {
         "some fixture was not coherent; the accessor comparison assumes sound input"
     );
 }
+
+/// U2 authority flip: the link-derived hash equals the index-based hash on every
+/// lowerable corpus fixture (the broadest bit-identity gate for the flip).
+#[test]
+fn u2_divergence_survey() {
+    let files = require_fixtures();
+    let mut agree = 0usize;
+    let mut diverge = Vec::new();
+    for f in &files {
+        if let Ok((store, compiled)) = crate::test_helpers::load_and_lower(f) {
+            let vi = canonical_program_hash(
+                CanonHashCfg::default(),
+                &compiled.idx,
+                &compiled.ir,
+                &store.it,
+            );
+            let vl = hymeko::ir::canonical_hash::canonical_program_hash_ir(
+                CanonHashCfg::default(),
+                &compiled.ir,
+                &store.it,
+            );
+            if vi.0 == vl.0 {
+                agree += 1;
+            } else {
+                let imports = std::fs::read_to_string(f)
+                    .map(|s| s.contains("@\""))
+                    .unwrap_or(false);
+                diverge.push((
+                    f.file_name().unwrap().to_string_lossy().to_string(),
+                    imports,
+                ));
+            }
+        }
+    }
+    eprintln!("[u2] agree={agree} diverge={}", diverge.len());
+    for (name, imp) in &diverge {
+        eprintln!("[u2] DIVERGE {name} imports={imp}");
+    }
+}

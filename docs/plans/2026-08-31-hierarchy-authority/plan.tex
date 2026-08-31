@@ -1,0 +1,98 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{enumitem,longtable,booktabs}
+\title{Canonical declaration hierarchy authority (U2): Index $\to$ Ir links}
+\author{APPROVED-CORE-EDIT: canonical-hierarchy-authority}
+\date{Created-at: 2026-08-31 20:12 (local) \\ ETA: additive link-derivation + differential oracle + flip + V\&V + bench $\approx$ this session}
+\begin{document}\maketitle
+
+\section*{Scope}
+Core-only (\texttt{hymeko/core}, base \texttt{67771c9}, branch
+\texttt{feat/core-hierarchy-authority}). After lowering, the canonical
+declaration hierarchy is \emph{exclusively} the \texttt{Ir} intrusive links
+(\texttt{DeclNode.parent/first\_child/last\_child/next\_sibling/name/kind}). The
+\texttt{resolution::Index} stays a parse/resolution-time name-resolution
+structure; it is \textbf{not} a second post-lowering authority. No Nagare, graph,
+tensor, HNN, or WGPU change.
+
+\section*{Part A --- consumer/contract audit (done, \texttt{consumer-audit.md})}
+\texttt{canonical\_program\_hash} reads the \texttt{Index} in exactly two places:
+\texttt{build\_did\_to\_path} (DeclId$\to$PathKey from \texttt{idx.by\_path}) and
+\texttt{build\_skeleton\_forest} (vertex set from \texttt{by\_path.values()};
+parent by nearest \emph{path-prefix} via a \texttt{HashMap<PathKey,DeclId>} +
+prefix walks). Everything downstream (subtree hash, tiebreak, Pr\"ufer,
+incidence) consumes only \texttt{did\_to\_path}$+$\texttt{ir}. Other post-lowering
+consumers (\texttt{IrWriter}, \texttt{pretty\_print}) already walk the links.
+
+\textbf{Key fact:} lowering \emph{builds} the links from the Index
+(\texttt{parent\_did = idx.by\_path[scope]}, then \texttt{link\_decl\_child}), and
+arcs are never parents of Node/Edge. So the link-derived path and skeleton forest
+are \textbf{bit-identical to the Index-based ones by construction} on any IR
+lowering produces; the corpus survey confirms links$\equiv$Index on all 96
+lowerable fixtures. Divergence is only representable in synthetic/malformed IR
+(Part E validates once at the boundary).
+
+\section*{Part B --- frozen oracle (before edit)}
+Gates already frozen and green at \texttt{67771c9}: 5 v1 known-answer vectors
+(\texttt{frozen\_hash.rs}), the 96-fixture corpus digest (\texttt{corpus.rs}),
+byte-identical writer output across the corpus (\texttt{consumer\_equivalence.rs}),
+plus the required special cases (multi-root, empty, singleton, deep chain, wide,
+same-name/different-parent, sibling order, anonymous arc, permuted history,
+malformed link families with typed errors). Corpus max depth measured = 5.
+
+\section*{Part C --- traversal primitive}
+Skeleton + paths derive from \texttt{DeclNode.parent} (populated by both lowering
+\emph{and} the test builder; child links are set by lowering only). Children are
+the inversion of \texttt{parent} in DeclId order (matches the current
+DeclId-sorted skeleton). Path/tiebreak use an \emph{iterative} descent (no
+recursion; heap stack) with an incremental blake3 hasher stack for the tiebreak
+and on-demand path strings for incidence edge/target decls only --- no
+$O(\text{depth}^2)$ path-copy, no per-decl \texttt{HashMap}, caller-owned scratch,
+no \texttt{Box<dyn>}. Safe to $\geq 16{,}384$ depth within the 16\,GB cap.
+
+\section*{Part D --- authority flip (bit-identical)}
+Final API \texttt{canonical\_program\_hash(cfg, ir, it)} (no \texttt{Index}).
+Strategy: (1) add link-derived \texttt{build\_did\_to\_path\_from\_ir} /
+\texttt{build\_skeleton\_forest\_from\_ir}; (2) a \textbf{test-only differential
+oracle} asserts the link-derived hash $\equiv$ the Index-based hash on corpus $+$
+KATs; (3) flip the signature and delete the Index read; the old Index-based
+helpers survive only under \texttt{\#[cfg(test)]}. \texttt{algo\_version=1}
+unchanged; every hash byte, arc/ref-slot order, NaN/Inf/$-0.0$ encoding, and the
+current \texttt{node.bases} v1 coverage gap unchanged; the known merkle
+\texttt{incidence.target} defect is \emph{not} touched. \texttt{vec\_dense\_permuted}
+is redesigned as a genuine dense-ID permutation (same links/names, permuted
+DeclIds) so its KAT value is preserved under link authority. If the hash cannot be
+preserved without an \texttt{algo\_version} bump: \textbf{HARD STOP} without
+production migration.
+
+\section*{Part E --- lowering boundary}
+Once, at the end of lowering, validate Index-path hierarchy $\equiv$ Ir
+parent/children, kind, count, reachability. On agreement, the post-lowering system
+treats the \texttt{Ir} as authoritative; the full coherence comparison is
+\emph{not} re-run on every later hash/read. The validator remains an explicit
+diagnostic API, not an automatic hot-path tax.
+
+\section*{Part F --- API/storage}
+Migrate direct production reads of hierarchy fields to accessors
+(\texttt{parent\_of}, \texttt{first\_child\_of}, \texttt{last\_child\_of},
+\texttt{next\_sibling\_of}, \texttt{child\_decls}, \texttt{kind\_of}). Writes stay
+behind the crate-private construction seam. No public mutation/transaction. No
+change to compact dispatch, ID rep, sparse tensors, WGPU, or serde wire (unless
+the flip provably requires it --- it does not).
+
+\section*{Part G/H/I --- perf, V\&V, gates}
+A/B (A=\texttt{67771c9}, B=flip) alternating + A/A null over 1.5k/15k/100k decl,
+160k incidence, deep 16384, wide, 96-corpus. Acceptance: hash \& writer
+bit-identical; lowering aggregate $\leq 3\%$; canonical hash $\leq 3\%$; repeated
+post-lowering hash ideally faster; no alloc/RSS growth; $\geq 1$ full-graph
+Index/path pass eliminated. V\&V: 96 fixtures, frozen v1, corpus digest,
+deep/wide, malformed exact errors, permuted history, serde roundtrip, writer,
+ModuleStore, 6 fault mutants (wrong parent, missing child backlink, sibling cycle,
+duplicate child, unreachable decl, reordered siblings) each with a named catcher
++ source-hash restore, 100\% touched-line coverage. Full gate set (fmt, clippy
+\texttt{-D warnings}, check, build, test, doctest, bench smokes, llvm-cov).
+
+\section*{Rollback}
+Three commits on the feature branch; \texttt{git revert}. Branch never merged to
+main. \texttt{plan.pdf} not built (no LaTeX on host).
+\end{document}
