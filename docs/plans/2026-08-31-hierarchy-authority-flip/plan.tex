@@ -1,0 +1,69 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{enumitem,longtable,booktabs}
+\title{Remove post-lowering Index authority (U2.2)}
+\author{APPROVED-CORE-EDIT: canonical-hierarchy-authority-flip}
+\date{Created-at: 2026-08-31 22:41 (local) \\ ETA: dense-oracle repair + flip + derived index + V\&V + bench $\approx$ this session}
+\begin{document}\maketitle
+
+\section*{Scope}
+Core-only (\texttt{hymeko/core}, base \texttt{3db8924} = U2.1 namespace roots).
+Branch \texttt{feat/core-hierarchy-authority-flip}. The production canonical hash
+reads the declaration hierarchy \emph{exclusively} from the \texttt{Ir}
+(links + \texttt{namespace\_roots}) + \texttt{Interner} + \texttt{CanonHashCfg} —
+no \texttt{resolution::Index}. \texttt{algo\_version=1} and every hash byte
+unchanged.
+
+\section*{Part A --- dense-permutation oracle repair}
+The old \texttt{vec\_dense\_permuted} added filler decls to the \texttt{Ir} and
+removed them from the \texttt{Index} only — an Index/Ir divergence, invalid once
+the \texttt{Ir} is authoritative. Replaced by a genuine permutation: the same
+program declared in a different order (edge first) so dense \texttt{DeclId}s
+differ; both IRs coherent, no fillers, v1 unchanged. A proof test asserts the
+\texttt{DeclId}s genuinely differ and the hash (index- and link-derived) is
+identical. Two sibling tests (\texttt{c6\_simulated\_remove\_readd\_residue},
+\texttt{intrusive\_parent\_links\_do\_not\_affect\_the\_canonical\_hash}) encoded
+the same Index-authority assumption and were redesigned: c6 to a genuine dense
+shift, the intrusive test to assert the links \emph{now determine} the hash.
+
+\section*{Part B --- CompiledProgram.idx consumer audit}
+Production consumers: \texttt{module\_store::compile} (the hash — removed by the
+flip) and \texttt{pretty\_print} (path lookup — migrated to the derived index).
+Category map: path$\to$DeclId + DeclId$\to$path (pretty-print), iteration
+(corpus depth survey), resolution-time (lowering), test-only fault injection.
+
+\section*{Part C --- derived path-index API}
+\texttt{canonical\_hash::build\_path\_index(\&Ir) -> Result<DerivedPathIndex,
+PathIndexError>} — a view derived from the \texttt{Ir} (links + namespaces): total
+\texttt{path\_of}/\texttt{decl\_of}, deterministic path-ordered \texttt{iter},
+\texttt{DuplicatePath} typed error, no hidden cache/lock, no per-lookup rebuild,
+caller-owned. \texttt{pretty\_print} uses it; round-trips on 96/96 fixtures.
+
+\section*{Part D/E --- production flip and ModuleStore}
+\texttt{canonical\_program\_hash(cfg, ir, it)} (the U2.1 link+namespace form; the
+index-based twin and \texttt{\_ir} name deleted — one implementation).
+\texttt{compile}: lower $\to$ merkle $\to$ \textbf{once} \texttt{validate\_namespace\_roots(\&ir,\&idx)}
+(typed \texttt{ModuleLoadError} on mismatch, before the Index is discarded) $\to$
+hash from the \texttt{Ir}. \texttt{CompiledProgram.idx} is retained but
+\textbf{non-authoritative} (documented; external/test consumers unverifiable),
+scheduled for a breaking-release removal --- the sanctioned compatibility path.
+The \texttt{node.bases} coverage gap and the merkle \texttt{incidence.target}
+defect are \emph{not} touched.
+
+\section*{Part G/H --- V\&V and performance}
+Full suite green (112 lib + 203 integration + doctests). Canonical hash A/B
+(A=\texttt{3db8924}): 818\,$\mu$s/10.15\,ms/26.65\,ms $\to$ 643\,$\mu$s/7.47\,ms/22.84\,ms
+= \textbf{$-21/-26/-14\%$} (the Index prefix-\texttt{HashMap} pass eliminated;
+A/A-null $\pm 0.2\%$). Compile (corpus load+lower incl.\ boundary check)
+$137.8\to133.7$\,ms, no regression. Hash bit-identical (frozen v1 KATs, corpus
+digest, identity oracle). $\geq 1$ Index full-graph pass removed from the hash.
+
+\section*{Rollback / gates}
+Commits on the feature branch; \texttt{git revert}. Never merged to main.
+fmt, clippy \texttt{-D warnings}, tests, doctests green. \texttt{plan.pdf} not
+built (no LaTeX on host).
+
+\section*{Self-note}
+The plan bundle was formalized alongside implementation; the Part B consumer
+audit preceded the edits, the \texttt{.tex} did not — recorded honestly.
+\end{document}
