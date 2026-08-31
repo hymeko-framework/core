@@ -1,3 +1,14 @@
+> CORRECTIVE ERRATUM (2026-09-01). The Stage-3 benchmark section below is
+> RETRACTED, superseded by reports/2026-09-01-incidence-navigation-corrective.md.
+> Errors kept visible per policy: (1) times were printed in MICROSECONDS but
+> labelled "ns"; (2) the "DENSE" control was a clique / 2-section expansion
+> (O(sum k^2)), not a true O(nnz) sparse star; (3) the prototype used a u32 arc
+> id, understating the real 8-byte HyperArcId memory. Corrected re-measured
+> numbers (12.4-14.8 bytes/incidence; clique 1.2x memory at arity 5, 6.1x at
+> arity 20) and the reworked API (borrowed IncidenceIndex<'ir>, (arc,slot)
+> coordinates, exact bijection validator, Bx/BTy/BTBx operator) are in the
+> corrective report.
+
 # Canonical reverse-incidence navigation — report
 
 **APPROVED-CORE-EDIT: canonical-ir-incidence-navigation**
