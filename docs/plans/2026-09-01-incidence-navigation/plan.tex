@@ -1,0 +1,67 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{enumitem,longtable,booktabs}
+\title{Canonical reverse-incidence navigation}
+\author{APPROVED-CORE-EDIT: canonical-ir-incidence-navigation}
+\date{Created-at: 2026-09-01 01:10 (local) \\ ETA: reference benchmark + core index + V\&V $\approx$ this session}
+\begin{document}\maketitle
+
+\section*{Scope}
+Core-only (\texttt{hymeko/core}, base \texttt{3190097} = core main after the U2.2
+flip). Branch \texttt{feat/core-incidence-navigation}. Add the missing
+\emph{node $\to$ incidence} direction to the canonical \texttt{Ir} navigation so
+\texttt{hymeko\_graph} algorithms can traverse the hypergraph directly, without
+materialising a SignedGraph / CSR / dense / star / clique view.
+
+\section*{Decision (Stage 3 benchmark first)}
+\texttt{proto\_incidence\_bench.rs} models the canonical incidence (edge $\to$ arc
+$\to$ ref $\to$ target) and measures Berge-reachability three ways, so the full
+cost (build $+$ search $+$ memory) is visible:
+\begin{longtable}{lrrr}\toprule
+metric & REV (reverse index) & DENSE (star CSR) & note \\\midrule
+build & baseline & $1.5$--$7.1\times$ slower & DENSE quadratic in arity \\
+bytes/incidence & $4.8$--$12$ & $16.8$--$78$ ($2$--$13\times$) & DENSE lossy \\
+search & baseline & $-42\%$ .. $+41\%$ & parity; DENSE wins pure reachability, REV wins high arity \\
+end-to-end & baseline & $1.0$--$2.3\times$ slower & REV wins \\
+no-index scan & --- & --- & $\sim 650\times$ REV ($O(VE)$, unusable) \\\bottomrule
+\end{longtable}
+\textbf{The reverse-incidence index is justified} (cheaper build, far less
+memory, lossless, end-to-end faster); the no-index scan is unusable, so
+node-major traversal needs it. It is added as a \emph{derived} index, not stored
+state.
+
+\section*{Representation}
+\texttt{IncidenceIndex} — a compact \textbf{CSR} (\texttt{DeclId $\to$ incident
+HyperArcIds}), \texttt{build\_incidence\_index(\&Ir) -> Result<\_, IncidenceError>}
+(two passes, $O(\text{incidences})$, one alloc per array), and
+\texttt{incident\_arcs(node) -> \&[HyperArcId]} (total, allocation-free). Lossless
+(sign/weight reachable through the arc; duplicate incidences preserved);
+canonical IDs in and out; \textbf{no} pairwise/star/clique/Levi expansion, no
+implicit dedup. Caller-owned, built once and reused --- never rebuilt per query,
+never stored in the serde wire. Typed errors: \texttt{TargetOutOfRange},
+\texttt{IncidenceOverflow}. \texttt{index\_matches\_ir} is the opt-in coherence
+gate (not a hot-path tax).
+
+\section*{Why derived, not stored (Stage 5)}
+The current \texttt{Ir} is append-only (no mutation/transaction), so a stored
+index would only duplicate what is $O(\text{incidences})$-derivable and would add
+serde/consistency burden for no benefit; the algorithm layer builds it once per
+\texttt{Ir} and reuses it. The transaction-updated stored form for a future
+mutable IR is Stage 14 (next step).
+
+\section*{V\&V}
+Golden shapes (multiway $+/-/\sim$, duplicate incidence, self-reference,
+multi-arc-per-edge, same node in many edges, empty/singleton); an
+\emph{independent} $O(VE)$ scan oracle (no index); a metamorphic reachability
+check (reverse-index BFS $\equiv$ edge-major scan BFS); a dangling-target fault.
+112 lib $+$ 210 integration $+$ doctests green; fmt, clippy \texttt{-D warnings}
+clean.
+
+\section*{Out of scope / next}
+Not built here (needs core pushed first, separate repo/edit
+\texttt{graph-direct-ir-algorithms}): the \texttt{hymeko\_graph} direct-Ir
+algorithm suite (\texttt{berge\_bfs}, \texttt{reachable\_nodes},
+\texttt{connected\_components}, \texttt{s\_connected\_components}, \dots) built on
+\texttt{incident\_arcs}. The full workload matrix and the Ir$\to$SignedGraph
+retirement live there. \texttt{plan.pdf} not built (no LaTeX on host).
+\end{document}
