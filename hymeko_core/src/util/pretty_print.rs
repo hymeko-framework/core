@@ -38,20 +38,6 @@ fn fmt_hash_opt(h: Option<HashId>) -> String {
     }
 }
 
-fn build_declid_to_path(idx: &Index, decl_count: usize) -> Vec<Option<PathKey>> {
-    let mut v = vec![None; decl_count];
-    for (k, &did) in &idx.by_path {
-        let i = did.0 as usize;
-        if i < v.len() {
-            // ha több path is ugyanarra a DeclId-ra mutat, az elsőt hagyjuk (ok)
-            if v[i].is_none() {
-                v[i] = Some(k.clone());
-            }
-        }
-    }
-    v
-}
-
 #[derive(Default)]
 struct TrieNode {
     // segment SymId -> child
@@ -184,26 +170,30 @@ pub fn pretty_print_compiled(it: &Interner, compiled: &CompiledProgram) {
         }
     }
 
-    println!("\nIndex size: {}", compiled.idx.by_path.len());
+    // U2.2: paths come from a view DERIVED from the Ir (links + namespace_roots),
+    // not the resolution Index -- the Ir is the sole post-lowering authority.
+    let path_index = match crate::ir::canonical_hash::build_path_index(&compiled.ir) {
+        Ok(pi) => pi,
+        Err(e) => {
+            println!("\n(path index unavailable: {e})");
+            return;
+        }
+    };
+    println!("\nDerived path count: {}", path_index.len());
     println!("IR decls:   {}", compiled.ir.decl_count());
     println!("IR edges:   {}", compiled.ir.edge_count());
     println!("IR arcs:    {}", compiled.ir.arc_count());
 
     // Top-N decl list (rendezetten path szerint)
-    let mut keys: Vec<_> = compiled.idx.by_path.keys().cloned().collect();
-    keys.sort_by(|a, b| fmt_path(it, a).cmp(&fmt_path(it, b)));
-
     println!("\nDecls (hierarchy):");
 
     let mut trie = TrieNode::default();
 
     // töltsük a trie-t a globál indexből
-    for (k, &did) in &compiled.idx.by_path {
+    for (k, did) in path_index.iter() {
         // ha a PathKey nálad tuple struct: PathKey(Vec<SymId>) → k.0
         insert_path(&mut trie, &k.0, did);
     }
 
-    // print
-    let did_to_path = build_declid_to_path(&compiled.idx, compiled.ir.decl_count());
-    print_trie(&it, &compiled.ir, &did_to_path, &trie, 0);
+    print_trie(&it, &compiled.ir, path_index.did_to_path(), &trie, 0);
 }

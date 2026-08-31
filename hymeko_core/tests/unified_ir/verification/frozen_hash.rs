@@ -30,7 +30,6 @@ fn hex(h: &hymeko::ir::hash::HashId) -> String {
 fn v1(t: &TestIr) -> String {
     hex(&canonical_program_hash(
         CanonHashCfg::default(),
-        &t.idx,
         &t.ir,
         &t.it,
     ))
@@ -83,31 +82,17 @@ fn vec_slot_permuted() -> TestIr {
     t
 }
 
-/// `vec_small_hierarchy` with every dense `DeclId` shifted by leading fillers,
-/// which are then removed from the index so the *program* is identical.
+/// The same *program* as `vec_small_hierarchy`, but the declarations are inserted
+/// in a different order, so the dense `DeclId`s differ. No fillers, no `Index`
+/// edits: both IRs are fully coherent and hash equal iff dense-ID assignment is
+/// irrelevant to v1 (U2.2 Part A â the honest dense-permutation oracle).
 fn vec_dense_permuted() -> TestIr {
     let mut t = TestIr::new();
-    let mut doomed = Vec::new();
-    for i in 0..5 {
-        let name = format!("f{i}");
-        t.node(&["filler", &name], DeclId::NONE);
-        doomed.push(name);
-    }
-    let root = t.node(&["m"], DeclId::NONE);
-    let x = t.node(&["m", "x"], root);
-    let y = t.node(&["m", "y"], root);
-    let e = t.edge(&["m", "e"], root);
+    let root = t.node(&["m"], DeclId::NONE); // m -> 0 (same)
+    let e = t.edge(&["m", "e"], root); // e -> 1 (was 3)
+    let y = t.node(&["m", "y"], root); // y -> 2 (same)
+    let x = t.node(&["m", "x"], root); // x -> 3 (was 1)
     t.arc(e, &[(x, S::Plus), (y, S::Minus)]);
-    let keys: Vec<_> = t
-        .idx
-        .by_path
-        .keys()
-        .filter(|pk| pk.0.len() == 2 && t.it.resolve(pk.0[0]) == "filler")
-        .cloned()
-        .collect();
-    for k in keys {
-        t.idx.by_path.remove(&k);
-    }
     t
 }
 
@@ -207,7 +192,7 @@ fn dense_permutation_does_not_change_v1() {
 // genuine DeclId permutation in the authority tests.
 
 fn v1_ir(t: &TestIr) -> String {
-    hex(&hymeko::ir::canonical_hash::canonical_program_hash_ir(
+    hex(&hymeko::ir::canonical_hash::canonical_program_hash(
         CanonHashCfg::default(),
         &t.ir,
         &t.it,
@@ -236,4 +221,38 @@ fn link_derived_hash_matches_frozen_kats_on_wellformed_vectors() {
     assert_eq!(v1_ir(&vec_ordered_signs()), KAT_ORDERED_SIGNS);
     assert_eq!(v1_ir(&vec_duplicate_incidences()), KAT_DUPLICATE_INCIDENCES);
     assert_eq!(v1_ir(&vec_slot_permuted()), KAT_SLOT_PERMUTED);
+}
+
+/// Part A proof: the dense-permutation fixture really assigns different DeclIds to
+/// the same program, both IRs are coherent, and v1 is unchanged.
+#[test]
+fn dense_permutation_uses_genuinely_different_declids() {
+    let a = vec_small_hierarchy();
+    let b = vec_dense_permuted();
+    // find the edge `m.e` DeclId in each by its path
+    let eid = |t: &TestIr| -> usize {
+        for (pk, did) in &t.idx.by_path {
+            if pk.0.len() == 2 && t.it.resolve(pk.0[1]) == "e" {
+                return did.raw();
+            }
+        }
+        panic!("no edge e");
+    };
+    assert_ne!(
+        eid(&a),
+        eid(&b),
+        "the permutation must assign a different DeclId to `e`"
+    );
+    // same program => identical v1 (both index- and link-derived)
+    assert_eq!(v1(&a), v1(&b), "dense permutation changed v1");
+    assert_eq!(
+        v1_ir(&a),
+        v1_ir(&b),
+        "dense permutation changed the link-derived v1"
+    );
+    assert_eq!(
+        v1_ir(&b),
+        v1(&b),
+        "link and index hash disagree on the permutation"
+    );
 }

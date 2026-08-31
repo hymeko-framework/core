@@ -153,12 +153,7 @@ fn corpus_digest() -> (usize, String) {
     let mut n = 0usize;
     for f in &files {
         if let Ok((store, compiled)) = crate::test_helpers::load_and_lower(f) {
-            let d = canonical_program_hash(
-                CanonHashCfg::default(),
-                &compiled.idx,
-                &compiled.ir,
-                &store.it,
-            );
+            let d = canonical_program_hash(CanonHashCfg::default(), &compiled.ir, &store.it);
             // Include the file name so a reordering or omission is detected.
             h.update(
                 f.file_name()
@@ -291,13 +286,8 @@ fn link_derived_hash_equals_index_hash_on_the_whole_corpus() {
         // (namespace prefix + links) reproduces the Index hierarchy exactly
         hymeko::ir::canonical_hash::validate_namespace_roots(&compiled.ir, &compiled.idx)
             .unwrap_or_else(|e| panic!("namespace validation failed on {}: {e}", f.display()));
-        let vi = canonical_program_hash(
-            CanonHashCfg::default(),
-            &compiled.idx,
-            &compiled.ir,
-            &store.it,
-        );
-        let vl = hymeko::ir::canonical_hash::canonical_program_hash_ir(
+        let vi = canonical_program_hash(CanonHashCfg::default(), &compiled.ir, &store.it);
+        let vl = hymeko::ir::canonical_hash::canonical_program_hash(
             CanonHashCfg::default(),
             &compiled.ir,
             &store.it,
@@ -413,4 +403,25 @@ fn bench_lowering_corpus() {
         "[lowbench] corpus load+lower median = {:.2} ms  (total decls {})",
         med.0, med.1
     );
+}
+
+/// U2.2 Part C: the Ir-derived path index reproduces the canonical paths and
+/// round-trips path<->DeclId on the corpus (including imported namespaces).
+#[test]
+fn derived_path_index_round_trips_on_the_corpus() {
+    let files = require_fixtures();
+    let mut checked = 0usize;
+    for f in &files {
+        let Ok((_s, c)) = crate::test_helpers::load_and_lower(f) else { continue };
+        let pi = hymeko::ir::canonical_hash::build_path_index(&c.ir)
+            .unwrap_or_else(|e| panic!("build_path_index failed on {}: {e}", f.display()));
+        assert_eq!(pi.len(), c.idx.by_path.len(), "path count on {}", f.display());
+        for (path, did) in pi.iter() {
+            assert_eq!(pi.decl_of(&path.0), Some(did), "round-trip on {}", f.display());
+            assert_eq!(pi.path_of(did).map(|p| &p.0), Some(&path.0));
+        }
+        checked += 1;
+    }
+    assert!(checked >= 96);
+    eprintln!("[u2.2] derived path index round-trips on {checked} fixtures");
 }

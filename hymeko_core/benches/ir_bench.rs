@@ -458,7 +458,7 @@ fn bench_ir_canonical_hash(c: &mut Criterion) {
         (10_000, 5_000, 4),
         (10_000, 5_000, 32),
     ] {
-        let (ir, idx, it) = build_indexed(nodes, edges, arity);
+        let (ir, _idx, it) = build_indexed(nodes, edges, arity);
         let incidences: usize = ir.arcs.iter().map(|a| a.refs.len()).sum();
         eprintln!(
             "[ir_canonical_hash n{nodes}_a{arity}] decls={} incidences={incidences}",
@@ -474,7 +474,6 @@ fn bench_ir_canonical_hash(c: &mut Criterion) {
                 b.iter(|| {
                     black_box(canonical_program_hash(
                         CanonHashCfg::default(),
-                        black_box(&idx),
                         black_box(&ir),
                         black_box(&it),
                     ))

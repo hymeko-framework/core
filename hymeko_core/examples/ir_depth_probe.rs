@@ -102,7 +102,7 @@ fn main() -> ExitCode {
     let do_hash = args.iter().any(|a| a == "--hash");
 
     eprintln!("probe: building chain depth={depth}");
-    let (ir, idx, it) = build_chain(depth);
+    let (ir, _idx, it) = build_chain(depth);
     eprintln!("probe: built decls={}", ir.decl_nodes.len());
 
     // Iterative traversal of the intrusive parent chain — this one is a loop,
@@ -123,7 +123,7 @@ fn main() -> ExitCode {
         // The recursive path. If it overflows, the process dies here and the
         // caller sees an abnormal exit status.
         eprintln!("probe: hashing (recursive subtree fold)…");
-        let h = canonical_program_hash(CanonHashCfg::default(), &idx, &ir, &it);
+        let h = canonical_program_hash(CanonHashCfg::default(), &ir, &it);
         eprintln!(
             "probe: hash_ok prefix={:02x}{:02x}{:02x}",
             h.0[0], h.0[1], h.0[2]

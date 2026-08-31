@@ -30,6 +30,13 @@ pub struct ModuleEntry {
 
 pub struct CompiledProgram {
     pub root: ModuleKey,
+    /// The resolution `Index`. **Non-authoritative after U2.2**: the canonical
+    /// hash and all post-lowering path consumers read the `Ir`
+    /// (`canonical_program_hash(cfg, ir, it)`, `canonical_hash::build_path_index`).
+    /// This is a resolution-time artifact retained for external/test consumers;
+    /// its removal is planned for a breaking release once they migrate to the
+    /// derived path index. It is NOT re-validated against the `Ir` after the
+    /// one-time lowering-boundary check in `compile`.
     pub idx: Index,
     pub ir: Ir,
     // extra debug/teszt kényelmesség:
@@ -259,8 +266,15 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
             algo_version: 1,
             flags: 0,
         };
-        let canon_hash =
-            crate::ir::canonical_hash::canonical_program_hash(cfg, &idx, &ir, &self.it);
+        // U2.2 lowering boundary: prove the Ir (namespace_roots + intrusive links)
+        // reproduces the resolution Index hierarchy, ONCE, before the Index is
+        // discarded. After this the Ir is the sole post-lowering authority and the
+        // canonical hash reads no Index.
+        crate::ir::canonical_hash::validate_namespace_roots(&ir, &idx).map_err(|e| {
+            ModuleLoadError::Parse(format!("namespace boundary validation failed: {e}"))
+        })?;
+
+        let canon_hash = crate::ir::canonical_hash::canonical_program_hash(cfg, &ir, &self.it);
 
         // 9) bundle + cache
         let compiled = Arc::new(CompiledProgram {
