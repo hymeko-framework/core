@@ -43,6 +43,17 @@ pub struct Ir {
     // `dispatch` module for the checked encoding. The legacy three-map serde wire is
     // preserved byte-for-byte by the manual `Serialize`/`Deserialize` impls below.
     pub(crate) decl_to_record: Vec<u64>,
+
+    // Canonical namespace roots (U2.1, 2026-08-31): the import namespace prefix
+    // lowering applies to each imported module's root declarations -- the one piece
+    // of the hierarchy the intrusive links do not encode (an imported root has
+    // `parent == NONE`), and which the v1 canonical hash embeds via the path.
+    // Stored so the `Ir` is a complete post-lowering authority.
+    //
+    // Invariant: sorted ascending by `DeclId`; each `DeclId` is a live link-root;
+    // prefixes are non-empty (single-module roots absent -> zero cost). Storage is
+    // PRIVATE; reads via `namespace_prefix`, writes via `record_namespace_root`.
+    pub(crate) namespace_roots: Vec<(DeclId, Box<[SymId]>)>,
 }
 
 /// Checked encode/decode for the compact declaration-dispatch slot (option D).
@@ -267,6 +278,45 @@ impl Ir {
             meta: Some(meta),
             ..Default::default()
         }
+    }
+
+    /// Record an imported module's namespace prefix for a root declaration (U2.1).
+    ///
+    /// Crate-private construction seam, called by lowering while the resolution
+    /// `Index` is still available. `prefix` is the namespace segments applied
+    /// before the root's own name; empty prefixes (single-module roots) are not
+    /// recorded. Lowering visits declarations in ascending `DeclId`, so entries
+    /// are appended in order and the sorted invariant holds (asserted in debug).
+    ///
+    /// # Preconditions
+    /// `root` is a live link-root (its `parent` is `NONE` or a non-Node/Edge).
+    /// # Postconditions
+    /// On a non-empty `prefix`, `namespace_prefix(root)` returns it thereafter.
+    pub(crate) fn record_namespace_root(&mut self, root: DeclId, prefix: &[SymId]) {
+        if prefix.is_empty() {
+            return;
+        }
+        debug_assert!(
+            self.namespace_roots
+                .last()
+                .is_none_or(|(d, _)| d.raw() < root.raw()),
+            "namespace roots must be recorded in ascending DeclId order"
+        );
+        self.namespace_roots
+            .push((root, prefix.to_vec().into_boxed_slice()));
+    }
+
+    /// The import namespace prefix of a root declaration, or `None` for a
+    /// single-module (unprefixed) root.
+    ///
+    /// Total read-only accessor; `O(log R)` over the namespace-root table
+    /// (`R` = number of imported roots), no allocation, no `HashMap`.
+    #[must_use]
+    pub fn namespace_prefix(&self, root: DeclId) -> Option<&[SymId]> {
+        self.namespace_roots
+            .binary_search_by(|(d, _)| d.raw().cmp(&root.raw()))
+            .ok()
+            .map(|i| &*self.namespace_roots[i].1)
     }
 
     // M2a.1: no explicit `is_none()` guard on the Option-returning lookups.
@@ -585,6 +635,16 @@ pub enum IrDecodeError {
     WrongBacklink { decl: DeclId },
     /// The record index did not fit the compact 62-bit dispatch domain.
     DispatchEncode(dispatch::DispatchError),
+    /// Namespace metadata carries a schema version this build does not understand.
+    UnknownNamespaceSchema { schema: u16 },
+    /// A namespace root's `DeclId` is outside `decl_nodes`.
+    NamespaceRootOutOfRange { decl: DeclId },
+    /// The same declaration appears twice in the namespace-root table.
+    DuplicateNamespaceRoot { decl: DeclId },
+    /// A namespace root carries an empty prefix (single-module roots must be absent).
+    EmptyNamespacePrefix { decl: DeclId },
+    /// The namespace-root table is not sorted ascending by `DeclId`.
+    UnsortedNamespaceRoots,
 }
 
 impl core::fmt::Display for IrDecodeError {
@@ -620,10 +680,39 @@ impl core::fmt::Display for IrDecodeError {
                 write!(f, "decl {} record back-pointer does not match", decl.raw())
             }
             Self::DispatchEncode(e) => write!(f, "dispatch encode failed: {e:?}"),
+            Self::UnknownNamespaceSchema { schema } => {
+                write!(f, "unknown namespace metadata schema version {schema}")
+            }
+            Self::NamespaceRootOutOfRange { decl } => {
+                write!(f, "namespace root decl {} is out of range", decl.raw())
+            }
+            Self::DuplicateNamespaceRoot { decl } => {
+                write!(
+                    f,
+                    "namespace root decl {} appears more than once",
+                    decl.raw()
+                )
+            }
+            Self::EmptyNamespacePrefix { decl } => {
+                write!(f, "namespace root decl {} has an empty prefix", decl.raw())
+            }
+            Self::UnsortedNamespaceRoots => {
+                write!(f, "namespace-root table is not sorted by DeclId")
+            }
         }
     }
 }
 impl std::error::Error for IrDecodeError {}
+
+/// Wire schema version for the canonical namespace-root metadata (U2.1).
+const NAMESPACE_SCHEMA: u16 = 1;
+
+/// Borrowed serialize view of the namespace-root table (no clone of the prefixes).
+#[derive(Serialize)]
+struct NamespaceWireRef<'a> {
+    schema: u16,
+    roots: &'a [(DeclId, Box<[SymId]>)],
+}
 
 impl Serialize for Ir {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
@@ -644,8 +733,11 @@ impl Serialize for Ir {
                 }
             }
         }
-        // Field order/names identical to the former derived form -> wire byte-identical.
-        let mut st = s.serialize_struct("Ir", 11)?;
+        // Field order/names identical to the former derived form. With no namespace
+        // metadata (single-module) the wire keeps exactly the legacy 11 fields ->
+        // byte-identical to the pre-U2.1 form (and the frozen serde KAT).
+        let has_ns = !self.namespace_roots.is_empty();
+        let mut st = s.serialize_struct("Ir", if has_ns { 12 } else { 11 })?;
         st.serialize_field("meta", &self.meta)?;
         st.serialize_field("doc_hash", &self.doc_hash)?;
         st.serialize_field("decl_hash", &self.decl_hash)?;
@@ -657,8 +749,24 @@ impl Serialize for Ir {
         st.serialize_field("decl_to_node", &d2n)?;
         st.serialize_field("decl_to_edge", &d2e)?;
         st.serialize_field("decl_to_arc", &d2a)?;
+        if has_ns {
+            st.serialize_field(
+                "namespace_roots",
+                &NamespaceWireRef {
+                    schema: NAMESPACE_SCHEMA,
+                    roots: &self.namespace_roots,
+                },
+            )?;
+        }
         st.end()
     }
+}
+
+/// Owned shadow of the namespace metadata read from the wire.
+#[derive(Deserialize)]
+struct NamespaceWire {
+    schema: u16,
+    roots: Vec<(DeclId, Vec<SymId>)>,
 }
 
 /// Owned shadow with the legacy layout, used only to read the wire before compacting.
@@ -675,6 +783,8 @@ struct IrWire {
     decl_to_node: Vec<Option<NodeId>>,
     decl_to_edge: Vec<Option<EdgeId>>,
     decl_to_arc: Vec<Option<HyperArcId>>,
+    #[serde(default)]
+    namespace_roots: Option<NamespaceWire>,
 }
 
 impl Ir {
@@ -733,6 +843,36 @@ impl Ir {
                     dispatch::encode(k, idx).map_err(IrDecodeError::DispatchEncode)?;
             }
         }
+        let namespace_roots = match w.namespace_roots {
+            None => Vec::new(),
+            Some(nw) => {
+                if nw.schema != NAMESPACE_SCHEMA {
+                    return Err(IrDecodeError::UnknownNamespaceSchema { schema: nw.schema });
+                }
+                let mut out: Vec<(DeclId, Box<[SymId]>)> = Vec::with_capacity(nw.roots.len());
+                let mut prev: Option<usize> = None;
+                for (root, prefix) in nw.roots {
+                    if root.raw() >= n {
+                        return Err(IrDecodeError::NamespaceRootOutOfRange { decl: root });
+                    }
+                    if prefix.is_empty() {
+                        return Err(IrDecodeError::EmptyNamespacePrefix { decl: root });
+                    }
+                    match prev {
+                        Some(pp) if root.raw() == pp => {
+                            return Err(IrDecodeError::DuplicateNamespaceRoot { decl: root });
+                        }
+                        Some(pp) if root.raw() < pp => {
+                            return Err(IrDecodeError::UnsortedNamespaceRoots);
+                        }
+                        _ => {}
+                    }
+                    prev = Some(root.raw());
+                    out.push((root, prefix.into_boxed_slice()));
+                }
+                out
+            }
+        };
         Ok(Ir {
             meta: w.meta,
             doc_hash: w.doc_hash,
@@ -743,6 +883,7 @@ impl Ir {
             edges: w.edges,
             arcs: w.arcs,
             decl_to_record,
+            namespace_roots,
         })
     }
 }

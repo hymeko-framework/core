@@ -10,3 +10,4 @@ pub mod hash_coverage;
 pub mod hierarchy;
 pub mod identity;
 pub mod ids;
+pub mod namespace_faults;

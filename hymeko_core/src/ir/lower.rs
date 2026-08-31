@@ -109,6 +109,12 @@ fn lower_node(
 
     let parent_did = parent_decl(idx, &path[..scope_len]);
     ir.decl_nodes[did.0].parent = parent_did;
+    // U2.1: an imported module's root has no in-Ir parent; record its namespace
+    // prefix (the path segments before this decl's own name) so the Ir hierarchy
+    // is complete. Empty prefixes (single-module roots) are ignored by the mutator.
+    if parent_did.is_none() && scope_len > 0 {
+        ir.record_namespace_root(did, &path[..scope_len]);
+    }
 
     let anno = resolve_anno(idx, path, &n.anno, it)?;
     ir.decl_nodes[did.0].anno = anno;
@@ -192,6 +198,10 @@ fn lower_edge(
 
     let parent_did = parent_decl(idx, &path[..scope_len]);
     ir.decl_nodes[idx_usize].parent = parent_did;
+    // U2.1: record the import namespace prefix for an imported edge-root (see lower_node).
+    if parent_did.is_none() && scope_len > 0 {
+        ir.record_namespace_root(did, &path[..scope_len]);
+    }
 
     let anno = resolve_anno(idx, path, &e.anno, it)?;
     ir.decl_nodes[idx_usize].anno = anno;

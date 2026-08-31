@@ -115,9 +115,11 @@ fn build_did_to_path_from_ir(ir: &Ir) -> Vec<Option<PathKey>> {
             DeclKind::Node | DeclKind::Edge => {
                 buf.clear();
                 let mut cur = DeclId::new(i);
+                let mut root = cur;
                 let mut guard = 0usize;
                 while cur.is_some() && (cur.0) < n {
                     buf.push(ir.decl_nodes[cur.0].name);
+                    root = cur;
                     cur = ir.decl_nodes[cur.0].parent;
                     guard += 1;
                     if guard > n {
@@ -125,7 +127,13 @@ fn build_did_to_path_from_ir(ir: &Ir) -> Vec<Option<PathKey>> {
                     }
                 }
                 buf.reverse();
-                v[i] = Some(PathKey(buf.clone()));
+                // U2.1: prepend the root's import namespace prefix so imported
+                // declarations reconstruct their full canonical path.
+                let full: Vec<crate::common::ids::SymId> = match ir.namespace_prefix(root) {
+                    Some(prefix) => prefix.iter().copied().chain(buf.iter().copied()).collect(),
+                    None => buf.clone(),
+                };
+                v[i] = Some(PathKey(full));
             }
             DeclKind::HyperArc => {}
         }
@@ -659,4 +667,71 @@ fn push_str(out: &mut Vec<u8>, s: &str) {
     let n16: u16 = n.try_into().unwrap_or(u16::MAX);
     out.extend_from_slice(&n16.to_le_bytes());
     out.extend_from_slice(&bytes[..(n16 as usize)]);
+}
+
+// -----------------------------
+//  U2.1 lowering-boundary namespace validator
+// -----------------------------
+
+/// A disagreement between the resolution `Index` and the `Ir` (namespace + links)
+/// declaration hierarchy. Ids-only, deterministic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NamespaceError {
+    /// A declaration's `(namespace prefix + intrusive-link path)` does not equal
+    /// its resolution-`Index` path.
+    PathMismatch { decl: DeclId },
+    /// An imported root's `Index` path carries a prefix but no namespace metadata
+    /// was recorded for it — e.g. an `Ir` deserialized from a pre-U2.1 wire. Such
+    /// an `Ir` must not be treated as a complete canonical authority.
+    MissingNamespaceMetadata { root: DeclId },
+}
+
+impl core::fmt::Display for NamespaceError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::PathMismatch { decl } => write!(
+                f,
+                "decl {} namespace+link path disagrees with the Index path",
+                decl.raw()
+            ),
+            Self::MissingNamespaceMetadata { root } => write!(
+                f,
+                "imported root {} has an Index prefix but no namespace metadata",
+                root.raw()
+            ),
+        }
+    }
+}
+impl std::error::Error for NamespaceError {}
+
+/// Lowering-boundary check (U2.1, Part C): prove the `Ir` reproduces the
+/// resolution `Index` hierarchy from `(namespace prefix + intrusive links)` for
+/// every declaration. This is the diagnostic that authorises treating the `Ir` as
+/// the post-lowering authority; it is **not** a hot-path tax — call it once at the
+/// lowering boundary, not per hash.
+///
+/// # Errors
+/// [`NamespaceError::MissingNamespaceMetadata`] when an imported root lacks its
+/// prefix (an incomplete `Ir`); [`NamespaceError::PathMismatch`] on any other
+/// disagreement (corrupt metadata, malformed links).
+pub fn validate_namespace_roots(ir: &Ir, idx: &Index) -> Result<(), NamespaceError> {
+    let n = ir.decl_nodes.len();
+    let idx_paths = build_did_to_path(idx, n);
+    let link_paths = build_did_to_path_from_ir(ir);
+    for i in 0..n {
+        if let (Some(ip), Some(lp)) = (&idx_paths[i], &link_paths[i]) {
+            if ip.0 != lp.0 {
+                let did = DeclId::new(i);
+                let p = ir.decl_nodes[i].parent;
+                let is_root = p.is_none()
+                    || (p.0 < n
+                        && !matches!(ir.decl_nodes[p.0].kind, DeclKind::Node | DeclKind::Edge));
+                if is_root && ir.namespace_prefix(did).is_none() && ip.0.len() > lp.0.len() {
+                    return Err(NamespaceError::MissingNamespaceMetadata { root: did });
+                }
+                return Err(NamespaceError::PathMismatch { decl: did });
+            }
+        }
+    }
+    Ok(())
 }

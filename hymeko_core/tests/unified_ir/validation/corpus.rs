@@ -281,38 +281,136 @@ fn accessors_agree_with_direct_field_access_on_the_whole_corpus() {
 /// U2 authority flip: the link-derived hash equals the index-based hash on every
 /// lowerable corpus fixture (the broadest bit-identity gate for the flip).
 #[test]
-fn u2_divergence_survey() {
+fn link_derived_hash_equals_index_hash_on_the_whole_corpus() {
     let files = require_fixtures();
-    let mut agree = 0usize;
-    let mut diverge = Vec::new();
+    let mut checked = 0usize;
     for f in &files {
-        if let Ok((store, compiled)) = crate::test_helpers::load_and_lower(f) {
-            let vi = canonical_program_hash(
-                CanonHashCfg::default(),
-                &compiled.idx,
-                &compiled.ir,
-                &store.it,
-            );
-            let vl = hymeko::ir::canonical_hash::canonical_program_hash_ir(
-                CanonHashCfg::default(),
-                &compiled.ir,
-                &store.it,
-            );
-            if vi.0 == vl.0 {
-                agree += 1;
-            } else {
-                let imports = std::fs::read_to_string(f)
-                    .map(|s| s.contains("@\""))
-                    .unwrap_or(false);
-                diverge.push((
-                    f.file_name().unwrap().to_string_lossy().to_string(),
-                    imports,
-                ));
+        let Ok((store, compiled)) = crate::test_helpers::load_and_lower(f) else {
+            continue;
+        };
+        // (namespace prefix + links) reproduces the Index hierarchy exactly
+        hymeko::ir::canonical_hash::validate_namespace_roots(&compiled.ir, &compiled.idx)
+            .unwrap_or_else(|e| panic!("namespace validation failed on {}: {e}", f.display()));
+        let vi = canonical_program_hash(
+            CanonHashCfg::default(),
+            &compiled.idx,
+            &compiled.ir,
+            &store.it,
+        );
+        let vl = hymeko::ir::canonical_hash::canonical_program_hash_ir(
+            CanonHashCfg::default(),
+            &compiled.ir,
+            &store.it,
+        );
+        assert_eq!(
+            vl.0,
+            vi.0,
+            "U2.1 link-derived hash diverged from index on {}",
+            f.display()
+        );
+        checked += 1;
+    }
+    assert!(checked >= 96, "expected >= 96 fixtures, got {checked}");
+    eprintln!("[u2.1] link-derived hash == index hash on {checked} fixtures (namespaces complete)");
+}
+
+#[test]
+fn nsroots_prefix_length_survey() {
+    use std::collections::HashMap;
+    let files = require_fixtures();
+    let mut hist: std::collections::BTreeMap<usize, usize> = std::collections::BTreeMap::new();
+    let mut multiseg: Vec<String> = Vec::new();
+    let mut max_roots_with_prefix = 0usize;
+    for f in &files {
+        let Ok((store, compiled)) = crate::test_helpers::load_and_lower(f) else {
+            continue;
+        };
+        let ir = &compiled.ir;
+        let it = &store.it;
+        let mut idx_path: HashMap<usize, Vec<hymeko::common::ids::SymId>> = HashMap::new();
+        for (pk, did) in &compiled.idx.by_path {
+            idx_path.entry(did.raw()).or_insert_with(|| pk.0.clone());
+        }
+        let mut roots_with_prefix = 0usize;
+        for i in 0..ir.decl_nodes.len() {
+            let node = &ir.decl_nodes[i];
+            if !matches!(
+                node.kind,
+                hymeko::ir::ir::DeclKind::Node | hymeko::ir::ir::DeclKind::Edge
+            ) {
+                continue;
+            }
+            // link-root iff parent NONE (or parent not Node/Edge)
+            let p = node.parent;
+            let is_root = p.is_none()
+                || !matches!(
+                    ir.decl_nodes[p.raw()].kind,
+                    hymeko::ir::ir::DeclKind::Node | hymeko::ir::ir::DeclKind::Edge
+                );
+            if !is_root {
+                continue;
+            }
+            if let Some(ip) = idx_path.get(&i) {
+                // prefix = ip[0..len-1] (everything before the root's own name)
+                let plen = ip.len().saturating_sub(1);
+                *hist.entry(plen).or_default() += 1;
+                if plen > 0 {
+                    roots_with_prefix += 1;
+                }
+                if plen > 1 {
+                    let segs: Vec<_> = ip[..plen]
+                        .iter()
+                        .map(|s| it.resolve(*s).to_string())
+                        .collect();
+                    multiseg.push(format!(
+                        "{}: root={} prefix={:?}",
+                        f.file_name().unwrap().to_string_lossy(),
+                        it.resolve(node.name),
+                        segs
+                    ));
+                }
             }
         }
+        max_roots_with_prefix = max_roots_with_prefix.max(roots_with_prefix);
     }
-    eprintln!("[u2] agree={agree} diverge={}", diverge.len());
-    for (name, imp) in &diverge {
-        eprintln!("[u2] DIVERGE {name} imports={imp}");
+    eprintln!("[nsroots] prefix-length histogram (link-roots): {hist:?}");
+    eprintln!("[nsroots] max roots-with-prefix in a single fixture: {max_roots_with_prefix}");
+    assert!(
+        multiseg.is_empty(),
+        "Part A invariant: import prefixes are single-segment; found {multiseg:?}"
+    );
+    eprintln!("[nsroots] multi-segment prefixes: {}", multiseg.len());
+    for m in multiseg.iter().take(10) {
+        eprintln!("[nsroots]   {m}");
     }
+}
+
+/// U2.1 Part G: median lowering wall over the corpus (portable A/B harness).
+#[test]
+#[ignore]
+fn bench_lowering_corpus() {
+    let files = crate::unified_ir::support::corpus::require_fixtures();
+    let mut samples = Vec::new();
+    for _ in 0..3 {
+        // warmup
+        for f in &files {
+            let _ = crate::test_helpers::load_and_lower(f);
+        }
+    }
+    for _ in 0..15 {
+        let t = std::time::Instant::now();
+        let mut n = 0usize;
+        for f in &files {
+            if let Ok((_s, c)) = crate::test_helpers::load_and_lower(f) {
+                n += c.ir.decl_nodes.len();
+            }
+        }
+        samples.push((t.elapsed().as_secs_f64() * 1e3, n));
+    }
+    samples.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+    let med = samples[samples.len() / 2];
+    eprintln!(
+        "[lowbench] corpus load+lower median = {:.2} ms  (total decls {})",
+        med.0, med.1
+    );
 }
