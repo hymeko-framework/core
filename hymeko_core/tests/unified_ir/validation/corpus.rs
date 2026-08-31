@@ -412,12 +412,24 @@ fn derived_path_index_round_trips_on_the_corpus() {
     let files = require_fixtures();
     let mut checked = 0usize;
     for f in &files {
-        let Ok((_s, c)) = crate::test_helpers::load_and_lower(f) else { continue };
+        let Ok((_s, c)) = crate::test_helpers::load_and_lower(f) else {
+            continue;
+        };
         let pi = hymeko::ir::canonical_hash::build_path_index(&c.ir)
             .unwrap_or_else(|e| panic!("build_path_index failed on {}: {e}", f.display()));
-        assert_eq!(pi.len(), c.idx.by_path.len(), "path count on {}", f.display());
+        assert_eq!(
+            pi.len(),
+            c.idx.by_path.len(),
+            "path count on {}",
+            f.display()
+        );
         for (path, did) in pi.iter() {
-            assert_eq!(pi.decl_of(&path.0), Some(did), "round-trip on {}", f.display());
+            assert_eq!(
+                pi.decl_of(&path.0),
+                Some(did),
+                "round-trip on {}",
+                f.display()
+            );
             assert_eq!(pi.path_of(did).map(|p| &p.0), Some(&path.0));
         }
         checked += 1;
