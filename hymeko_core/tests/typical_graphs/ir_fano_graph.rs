@@ -81,7 +81,8 @@ mod ir_fano_graph {
             let edge_did = did_of_path(&idx, &[fano_sid, e_sid]);
 
             // IR: DeclId -> EdgeId -> EdgeRec
-            let edge_id = ir.decl_to_edge[edge_did.raw()]
+            let edge_id = ir
+                .as_edge(edge_did)
                 .unwrap_or_else(|| panic!("Edge DeclId {:?} not mapped to EdgeId in IR", edge_did));
 
             let edge = &ir.edges[edge_id.raw()];
@@ -92,11 +93,9 @@ mod ir_fano_graph {
                     edge_did, edge_id
                 );
                 for (i, arc_ref) in edge.arcs.iter().enumerate() {
-                    let arc_did = ir
-                        .decl_to_arc
-                        .iter()
-                        .position(|&aid| aid == Some(*arc_ref))
-                        .map(|idx| DeclId::new(idx))
+                    let arc_did = (0..ir.decl_nodes.len())
+                        .map(DeclId::new)
+                        .find(|&d| ir.as_arc(d) == Some(*arc_ref))
                         .unwrap_or_else(|| {
                             panic!("ArcId {:?} not mapped to DeclId in IR", arc_ref)
                         });

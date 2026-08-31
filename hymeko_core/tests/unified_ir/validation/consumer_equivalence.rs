@@ -13,7 +13,7 @@
 //! last remaining direct-index readers in the suite and exist precisely to
 //! prove the migration changed nothing.
 
-use hymeko::common::ids::DeclId;
+use hymeko::common::ids::{DeclId, EdgeId};
 use hymeko::ir::ir::Ir;
 use hymeko::resolution::interner::Interner;
 use hymeko::writers::ir_writer::IrWriter;
@@ -214,11 +214,13 @@ fn edge_for_decl_matches_map_then_index_on_the_corpus() {
         for i in 0..ir.decl_nodes.len() {
             let d = DeclId::new(i);
             // reference: the pre-M2b form
+            // reference: independent of the dispatch slot -- scan edge records by backlink
             let reference = ir
-                .decl_to_edge
-                .get(i)
-                .and_then(|x| *x)
-                .map(|eid| (eid, &ir.edges[eid.raw()]));
+                .edges
+                .iter()
+                .enumerate()
+                .find(|(_, rec)| rec.decl == d)
+                .map(|(ei, rec)| (EdgeId::new(ei), rec));
             let migrated = ir.edge_for_decl(d);
             match (reference, migrated) {
                 (Some((rid, rrec)), Some((mid, mrec))) => {

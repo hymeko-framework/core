@@ -45,8 +45,7 @@ fn build_chain(depth: usize) -> (Ir, Index, Interner) {
     let mut last = DeclId::NONE;
 
     let push = |ir: &mut Ir, idx: &mut Index, segs: &[hymeko::common::ids::SymId], kind, parent| {
-        let id = DeclId::new(ir.decl_nodes.len());
-        ir.decl_nodes.push(DeclNode {
+        let id = ir.push_decl(DeclNode {
             kind,
             name: *segs.last().expect("non-empty path"),
             parent,
@@ -56,9 +55,6 @@ fn build_chain(depth: usize) -> (Ir, Index, Interner) {
             anno: AnnoR::default(),
         });
         ir.decl_hash.push(None);
-        ir.decl_to_node.push(None);
-        ir.decl_to_edge.push(None);
-        ir.decl_to_arc.push(None);
         idx.by_path.insert(PathKey(segs.to_vec()), id);
         id
     };
@@ -68,7 +64,8 @@ fn build_chain(depth: usize) -> (Ir, Index, Interner) {
         let d = push(&mut ir, &mut idx, &segs, DeclKind::Node, last);
         let nid = NodeId::new(ir.nodes.len());
         ir.nodes.push(NodeRec::new(d, Vec::new()));
-        ir.decl_to_node[d.raw()] = Some(nid);
+        ir.bind_node_decl(d, nid)
+            .expect("probe: node index representable");
         last = d;
     }
 
@@ -77,7 +74,8 @@ fn build_chain(depth: usize) -> (Ir, Index, Interner) {
     let ed = push(&mut ir, &mut idx, &esegs, DeclKind::Edge, last);
     let eid = EdgeId::new(ir.edges.len());
     ir.edges.push(EdgeRec::new(ed, Vec::new()));
-    ir.decl_to_edge[ed.raw()] = Some(eid);
+    ir.bind_edge_decl(ed, eid)
+        .expect("probe: edge index representable");
 
     let aid = HyperArcId::new(ir.arcs.len());
     ir.arcs.push(ArcRec {

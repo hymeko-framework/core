@@ -116,7 +116,8 @@ fn lower_node(
     let nid = NodeId::new(ir.nodes.len());
     let bases = resolve_node_bases(idx, path, &n.inner.bases, it)?;
     ir.nodes.push(NodeRec::new(did, bases));
-    ir.decl_to_node[did.0] = Some(nid);
+    ir.bind_node_decl(did, nid)
+        .expect("fresh node index fits the dispatch domain");
 
     if parent_did.is_some() {
         link_decl_child(ir, parent_did, did);
@@ -160,7 +161,8 @@ fn lower_arc(
         in_edge: edge_decl,
         refs,
     });
-    ir.decl_to_arc[idx_usize] = Some(aid);
+    ir.bind_arc_decl(arc_decl, aid)
+        .expect("fresh arc index fits the dispatch domain");
 
     // 6) link into edge's decl-children chain
     link_decl_child(ir, edge_decl, arc_decl);
@@ -198,7 +200,8 @@ fn lower_edge(
     let eid = EdgeId::new(ir.edges.len());
     let bases = resolve_node_bases(idx, path, &e.inner.bases, it)?;
     ir.edges.push(EdgeRec::new(did, bases));
-    ir.decl_to_edge[idx_usize] = Some(eid);
+    ir.bind_edge_decl(did, eid)
+        .expect("fresh edge index fits the dispatch domain");
 
     if parent_did.is_some() {
         link_decl_child(ir, parent_did, did);

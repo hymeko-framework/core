@@ -12,7 +12,7 @@
 //! index directly afterwards and would panic. That distinction is tested too.
 
 use hymeko::common::ids::{DeclId, EdgeId, HyperArcId, NodeId};
-use hymeko::ir::ir::Ir;
+use hymeko::ir::ir::{DeclKind, Ir};
 
 use crate::unified_ir::support::builder::{S, TestIr};
 
@@ -146,18 +146,21 @@ fn retained_guards_still_return_none_for_the_sentinel() {
 #[test]
 fn backlink_validation_survives_the_optimisation() {
     let mut t = fixture();
-    let d0 = DeclId::new(0);
     let foreign = t.ir.as_node(DeclId::new(1)).expect("decl 1 is a node");
-    t.ir.decl_to_node[d0.raw()] = Some(foreign);
-    assert_eq!(t.ir.as_node(d0), Some(foreign), "raw mapping unchanged");
+    let dx = t.fresh_decl(DeclKind::Node);
+    t.ir.bind_node_decl(dx, foreign).unwrap();
+    assert_eq!(t.ir.as_node(dx), Some(foreign), "raw mapping unchanged");
     assert!(
-        t.ir.node_for_decl(d0).is_none(),
+        t.ir.node_for_decl(dx).is_none(),
         "back-link validation must still refuse a foreign record"
     );
 
-    // A mapping pointing far out of range must also be refused, not panic.
-    t.ir.decl_to_node[d0.raw()] = Some(NodeId::new(usize::MAX - 3));
-    assert!(t.ir.node_for_decl(d0).is_none());
+    // A record index beyond the 62-bit dispatch domain is refused at encode
+    // time, not silently truncated or stored.
+    assert!(
+        t.ir.bind_node_decl(dx, NodeId::new(usize::MAX - 3))
+            .is_err()
+    );
 }
 
 /// Hierarchy accessors remain total after the change.
@@ -193,7 +196,11 @@ fn guard_free_agrees_with_an_explicitly_guarded_reference_implementation() {
         if id.is_none() {
             return None;
         }
-        t.ir.decl_to_node.get(id.raw()).copied().flatten()
+        // independent of the dispatch slot: scan node records by backlink
+        t.ir.nodes
+            .iter()
+            .position(|rec| rec.decl == id)
+            .map(NodeId::new)
     };
 
     let probes: Vec<usize> = (0..n)

@@ -119,9 +119,9 @@ fn ref_str(r: &SignedRefR, t: &TestIr) -> String {
 
 fn bases_str(d: DeclId, t: &TestIr) -> String {
     let ir: &Ir = &t.ir;
-    let bases = if let Some(nid) = ir.decl_to_node[d.raw()] {
+    let bases = if let Some(nid) = ir.as_node(d) {
         &ir.nodes[nid.raw()].bases
-    } else if let Some(eid) = ir.decl_to_edge[d.raw()] {
+    } else if let Some(eid) = ir.as_edge(d) {
         &ir.edges[eid.raw()].bases
     } else {
         return String::from("-");

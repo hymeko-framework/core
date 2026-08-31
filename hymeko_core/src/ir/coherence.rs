@@ -31,7 +31,7 @@
 //! `findings` are ordered deterministically and capped.
 
 use crate::common::ids::DeclId;
-use crate::ir::ir::{DeclKind, Ir};
+use crate::ir::ir::{DeclKind, Ir, dispatch};
 use crate::resolution::interner::Interner;
 use crate::resolution::resolve::Index;
 
@@ -86,6 +86,8 @@ pub enum Finding {
     KindMapMismatch { decl: DeclId, kind: DeclKind },
     /// A declaration maps into more than one concrete record table.
     MultipleConcreteRecords { decl: DeclId },
+    /// A compact dispatch slot carries the reserved tag or is otherwise malformed.
+    ReservedDispatchSlot { decl: DeclId },
     /// A concrete record's `decl` back-pointer does not match the declaration
     /// that maps to it.
     RecordBacklinkMismatch { decl: DeclId, record_decl: DeclId },
@@ -154,9 +156,7 @@ pub fn validate_hierarchy_index_coherence(
     // --- parallel array lengths -------------------------------------------
     for (name, len) in [
         ("decl_hash", ir.decl_hash.len()),
-        ("decl_to_node", ir.decl_to_node.len()),
-        ("decl_to_edge", ir.decl_to_edge.len()),
-        ("decl_to_arc", ir.decl_to_arc.len()),
+        ("decl_to_record", ir.decl_to_record.len()),
     ] {
         if len != n {
             c.push(Finding::ParallelArrayLengthMismatch {
@@ -286,51 +286,60 @@ pub fn validate_hierarchy_index_coherence(
         }
     }
 
-    // --- kind / concrete-record agreement ----------------------------------
+    // --- kind / concrete-record agreement (compact dispatch, option D) ------
+    // The single `decl_to_record` slot makes "more than one concrete record" a
+    // structural impossibility. We instead validate: the slot decodes (reserved /
+    // malformed tags are always an error), the slot tag agrees with `DeclKind`, the
+    // record index is in range, and the record's back-pointer matches. NONE is
+    // permitted (partial/malformed test states).
     for d in 0..n {
+        let did = DeclId::new(d);
         let kind = ir.decl_nodes[d].kind;
-        let as_node = ir.decl_to_node.get(d).copied().flatten();
-        let as_edge = ir.decl_to_edge.get(d).copied().flatten();
-        let as_arc = ir.decl_to_arc.get(d).copied().flatten();
-        let count = usize::from(as_node.is_some())
-            + usize::from(as_edge.is_some())
-            + usize::from(as_arc.is_some());
-        if count > 1 {
-            c.push(Finding::MultipleConcreteRecords {
-                decl: DeclId::new(d),
-            });
-        }
-
-        let matches_kind = match kind {
-            DeclKind::Node => as_edge.is_none() && as_arc.is_none(),
-            DeclKind::Edge => as_node.is_none() && as_arc.is_none(),
-            DeclKind::HyperArc => as_node.is_none() && as_edge.is_none(),
+        let decoded = match dispatch::decode_checked(ir.decl_to_record[d]) {
+            Ok(x) => x,
+            Err(_) => {
+                c.push(Finding::ReservedDispatchSlot { decl: did });
+                continue;
+            }
         };
-        if !matches_kind {
-            c.push(Finding::KindMapMismatch {
-                decl: DeclId::new(d),
-                kind,
-            });
+        let Some((tag, idx)) = decoded else { continue };
+        let tag_kind = match tag {
+            dispatch::TAG_NODE => DeclKind::Node,
+            dispatch::TAG_EDGE => DeclKind::Edge,
+            _ => DeclKind::HyperArc, // tag 3 already rejected by decode_checked
+        };
+        if tag_kind != kind {
+            c.push(Finding::KindMapMismatch { decl: did, kind });
+            continue;
         }
-
-        // Record back-pointers.
-        if let Some(nid) = as_node
-            && let Some(rec) = ir.nodes.get(nid.0)
-            && rec.decl.0 != d
-        {
-            c.push(Finding::RecordBacklinkMismatch {
-                decl: DeclId::new(d),
-                record_decl: rec.decl,
-            });
-        }
-        if let Some(eid) = as_edge
-            && let Some(rec) = ir.edges.get(eid.0)
-            && rec.decl.0 != d
-        {
-            c.push(Finding::RecordBacklinkMismatch {
-                decl: DeclId::new(d),
-                record_decl: rec.decl,
-            });
+        match kind {
+            DeclKind::Node => {
+                if ir.nodes.get(idx).map(|r| r.decl) != Some(did) {
+                    let record_decl = ir.nodes.get(idx).map_or(DeclId::NONE, |r| r.decl);
+                    c.push(Finding::RecordBacklinkMismatch {
+                        decl: did,
+                        record_decl,
+                    });
+                }
+            }
+            DeclKind::Edge => {
+                if ir.edges.get(idx).map(|r| r.decl) != Some(did) {
+                    let record_decl = ir.edges.get(idx).map_or(DeclId::NONE, |r| r.decl);
+                    c.push(Finding::RecordBacklinkMismatch {
+                        decl: did,
+                        record_decl,
+                    });
+                }
+            }
+            DeclKind::HyperArc => {
+                // ArcRec carries no `decl` back-pointer; validate the index is in range.
+                if idx >= ir.arcs.len() {
+                    c.push(Finding::RecordBacklinkMismatch {
+                        decl: did,
+                        record_decl: DeclId::NONE,
+                    });
+                }
+            }
         }
     }
 

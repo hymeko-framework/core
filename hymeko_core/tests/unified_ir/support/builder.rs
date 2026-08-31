@@ -68,8 +68,7 @@ impl TestIr {
     pub fn decl(&mut self, path: &[&str], kind: DeclKind, parent_hint: DeclId) -> DeclId {
         let pk = self.path_key(path);
         let name = *pk.0.last().expect("path must not be empty");
-        let id = DeclId::new(self.ir.decl_nodes.len());
-        self.ir.decl_nodes.push(DeclNode {
+        let id = self.ir.push_decl(DeclNode {
             kind,
             name,
             parent: parent_hint,
@@ -79,9 +78,6 @@ impl TestIr {
             anno: AnnoR::default(),
         });
         self.ir.decl_hash.push(None);
-        self.ir.decl_to_node.push(None);
-        self.ir.decl_to_edge.push(None);
-        self.ir.decl_to_arc.push(None);
         self.idx.by_path.insert(pk, id);
         id
     }
@@ -90,7 +86,7 @@ impl TestIr {
         let d = self.decl(path, DeclKind::Node, parent_hint);
         let nid = NodeId::new(self.ir.nodes.len());
         self.ir.nodes.push(NodeRec::new(d, Vec::new()));
-        self.ir.decl_to_node[d.raw()] = Some(nid);
+        self.ir.bind_node_decl(d, nid).unwrap();
         d
     }
 
@@ -98,7 +94,7 @@ impl TestIr {
         let d = self.decl(path, DeclKind::Edge, parent_hint);
         let eid = EdgeId::new(self.ir.edges.len());
         self.ir.edges.push(EdgeRec::new(d, Vec::new()));
-        self.ir.decl_to_edge[d.raw()] = Some(eid);
+        self.ir.bind_edge_decl(d, eid).unwrap();
         d
     }
 
@@ -115,7 +111,10 @@ impl TestIr {
         edge_decl: DeclId,
         refs: &[(DeclId, S, Option<Vec<ValueR>>)],
     ) -> HyperArcId {
-        let eid = self.ir.decl_to_edge[edge_decl.raw()].expect("edge_decl is not an edge");
+        let eid = self
+            .ir
+            .as_edge(edge_decl)
+            .expect("edge_decl is not an edge");
         let aid = HyperArcId::new(self.ir.arcs.len());
         let built: Vec<SignedRefR> = refs
             .iter()
@@ -155,9 +154,9 @@ impl TestIr {
                 })
             })
             .collect();
-        if let Some(nid) = self.ir.decl_to_node[d.raw()] {
+        if let Some(nid) = self.ir.as_node(d) {
             self.ir.nodes[nid.raw()].bases = built;
-        } else if let Some(eid) = self.ir.decl_to_edge[d.raw()] {
+        } else if let Some(eid) = self.ir.as_edge(d) {
             self.ir.edges[eid.raw()].bases = built;
         } else {
             panic!("bases target is neither node nor edge");
@@ -181,6 +180,27 @@ impl TestIr {
 }
 
 impl TestIr {
+    /// Fault-injection seam. Append a fresh declaration of `kind` whose dispatch
+    /// slot starts NONE, so a following `bind_*_decl` is a first binding (never a
+    /// conflicting rebind) and can install a deliberately-malformed mapping. The
+    /// compact dispatch makes most malformations unrepresentable through normal
+    /// construction; this reproduces them for the accessor/coherence tests by
+    /// exploiting that `bind_*` checks index-representability but not kind
+    /// agreement, table range, or the record backlink.
+    pub fn fresh_decl(&mut self, kind: DeclKind) -> DeclId {
+        let d = self.ir.push_decl(DeclNode {
+            kind,
+            name: SymId::new(0),
+            parent: DeclId::NONE,
+            first_child: DeclId::NONE,
+            last_child: DeclId::NONE,
+            next_sibling: DeclId::NONE,
+            anno: AnnoR::default(),
+        });
+        self.ir.decl_hash.push(None);
+        d
+    }
+
     /// Give every `ArcRec` a matching `HyperArc` **declaration** and register it
     /// in `decl_to_arc`.
     ///
@@ -192,13 +212,14 @@ impl TestIr {
     /// ignored incidence signs, when in fact the fixture never reached them.
     pub fn attach_arc_decls(&mut self) {
         for ai in 0..self.ir.arcs.len() {
-            if self.ir.decl_to_arc.iter().flatten().any(|a| a.raw() == ai) {
+            let target = HyperArcId::new(ai);
+            if (0..self.ir.decl_nodes.len()).any(|d| self.ir.as_arc(DeclId::new(d)) == Some(target))
+            {
                 continue; // already declared
             }
             let in_edge = self.ir.arcs[ai].in_edge;
             let name = self.it.intern(&format!("__arc{ai}"));
-            let did = DeclId::new(self.ir.decl_nodes.len());
-            self.ir.decl_nodes.push(DeclNode {
+            let did = self.ir.push_decl(DeclNode {
                 kind: DeclKind::HyperArc,
                 name,
                 parent: in_edge,
@@ -208,10 +229,7 @@ impl TestIr {
                 anno: AnnoR::default(),
             });
             self.ir.decl_hash.push(None);
-            self.ir.decl_to_node.push(None);
-            self.ir.decl_to_edge.push(None);
-            self.ir.decl_to_arc.push(None);
-            self.ir.decl_to_arc[did.raw()] = Some(HyperArcId::new(ai));
+            self.ir.bind_arc_decl(did, target).unwrap();
         }
     }
 }

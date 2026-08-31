@@ -231,7 +231,7 @@ mod test_ref_values {
             &[CONTEXT_NODE_NAME, NODE_LEVEL1_NAME, EDGE_E0_NAME],
         );
 
-        let edge_id = ir.decl_to_edge[did_e0.raw()].expect("e0 not lowered as edge");
+        let edge_id = ir.as_edge(did_e0).expect("e0 not lowered as edge");
         let edge_rec = &ir.edges[edge_id.raw()];
         assert_eq!(edge_rec.arcs.len(), 1, "expected a single arc in e0");
         let arc_id = edge_rec.arcs[0];

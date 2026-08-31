@@ -60,7 +60,9 @@ mod test_import_graphs {
             .expect("operator edge missing");
         assert_eq!(ir.decl_nodes[did_operator.raw()].kind, DeclKind::Edge);
 
-        let edge_id = ir.decl_to_edge[did_operator.raw()].expect("operator not lowered as edge");
+        let edge_id = ir
+            .as_edge(did_operator)
+            .expect("operator not lowered as edge");
         let edge_rec = &ir.edges[edge_id.raw()];
         assert_eq!(
             edge_rec.arcs.len(),
