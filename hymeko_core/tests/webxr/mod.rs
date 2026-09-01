@@ -544,3 +544,95 @@ fn bench_compile_vs_validate() {
     }
     println!();
 }
+
+// ---------------------------------------------------------------------------------------------
+// coverage-closing: vocabulary-missing, anchoring roles, error Display
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn vocabulary_missing_when_not_imported() {
+    // a scene that does not import the webxr vocabulary at all
+    let provider = MemProvider::default()
+        .with_file("/bare.hymeko", "bare {}\nroot { a {} b {} }\n".to_string());
+    let mut store = ModuleStore::new(provider, RealParser);
+    let prog = store.compile(Path::new("/bare.hymeko")).unwrap();
+    let v = validate(&prog.ir, &store.it);
+    assert_eq!(v, vec![SemanticError::VocabularyMissing]);
+}
+
+#[test]
+fn anchoring_without_anchor_is_wrong_role() {
+    let v = errs(
+        r#"
+        @xr_session: x.session.session_config { (+ x.session_modes.immersive_ar, - x.reference_spaces.local_floor); }
+        frame: + <isa> s.kinds.spatial_frame {}
+        ent:   + <isa> s.kinds.spatial_entity {}
+        @an: s.relations.anchoring { (+ ent, - frame); }
+    "#,
+    );
+    assert!(
+        v.iter().any(|e| matches!(
+            e,
+            SemanticError::RelationRole {
+                reason: RoleReason::NoTarget,
+                ..
+            }
+        )),
+        "{v:#?}"
+    );
+}
+
+#[test]
+fn anchoring_non_entity_subject_is_wrong_kind() {
+    let v = errs(
+        r#"
+        @xr_session: x.session.session_config { (+ x.session_modes.immersive_ar, - x.reference_spaces.local_floor); }
+        frame: + <isa> s.kinds.spatial_frame {}
+        anc:   + <isa> s.kinds.semantic_anchor {}
+        notent: + <isa> s.kinds.spatial_frame {}
+        @an: s.relations.anchoring { (+ notent, - frame, ~ anc); }
+    "#,
+    );
+    assert!(
+        v.iter().any(|e| matches!(
+            e,
+            SemanticError::RelationRole {
+                reason: RoleReason::WrongKind { .. },
+                ..
+            }
+        )),
+        "{v:#?}"
+    );
+}
+
+#[test]
+fn error_display_is_non_empty_and_ids_only() {
+    use hymeko::common::ids::SymId;
+    let samples = [
+        SemanticError::VocabularyMissing,
+        SemanticError::SessionModeCardinality {
+            scene: DeclId::new(1),
+            found: 0,
+        },
+        SemanticError::FrameCycle {
+            frame: DeclId::new(2),
+        },
+        SemanticError::QuaternionNotNormalizable {
+            relation: DeclId::new(3),
+        },
+        SemanticError::RelationRole {
+            relation: DeclId::new(4),
+            archetype: SymId::new(5),
+            reason: RoleReason::NoTarget,
+        },
+        SemanticError::RuntimeHandleField {
+            decl: DeclId::new(6),
+            field: SymId::new(7),
+        },
+    ];
+    for e in samples {
+        let s = format!("{e}");
+        assert!(!s.is_empty());
+        let _: &dyn std::error::Error = &e;
+    }
+}
