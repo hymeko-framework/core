@@ -13,14 +13,13 @@
 # created"), scoped to the two crates that actually live here.
 #
 # Differences from the monorepo manifest, deliberate:
-#   * only `hymeko_core` and `hymeko_hnn` are in scope; crates that never
+#   * only `hymeko_core` and `hymeko_wgpu` are in scope; crates that never
 #     migrated (hymeko_query, hymeko_client, hymeko_daemon, rtl/, docs/spec/)
-#     are dropped rather than inherited as dead entries.
+#     are dropped rather than inherited as dead entries, and `hymeko_hnn` was
+#     relocated 2026-08-31 to hymeko/nagare (hymeko_nagare::hnn).
 #   * `nalgebra` is pinned to the version this workspace actually builds
 #     (0.34.1). The monorepo pin (=0.33.0) was stale here and tripped
 #     `on_dependency_drift`; see `dependencies.pinned.rust` below.
-#   * `hymeko_hnn` is declared explicitly instead of falling through
-#     `on_unknown_path: treat_as_non_core`.
 
 schema_version: 1
 
@@ -109,7 +108,8 @@ crates:
           New module hymeko_core/src/tensor/compute/ holding exactly four
           backend-independent types: TensorShape, SparseCsrShape, BackendKind,
           ComputeError (plus the checked try_u32 helper). Exists so hymeko_wgpu
-          need not depend on hymeko_hnn merely to name a shape or an error.
+          need not depend on the HNN operator layer (relocated 2026-08-31 to
+          hymeko/nagare) merely to name a shape or an error.
         constraints:
           - no dependency added to hymeko_core (errors hand-written, not thiserror)
           - no wgpu type, async runtime, GPU handle, pipeline, bind group,
@@ -119,15 +119,11 @@ crates:
           - no abstraction without a concrete CPU *and* WGPU consumer
           - DType/ScalarType deliberately omitted (first GPU path is f32-explicit)
 
-  - name: hymeko_hnn
-    path: hymeko_hnn
-    lockdown: none
-    reason: >
-      Hypergraph NN operator layer, extracted from core on 2026-04-19.
-      Deliberately non-core: this is where HyperGraphView, message
-      passing, and the HGNN / Signed-HGNN convolutions evolve. Numerical
-      results are still covered by the regression tests in
-      hymeko_core/tests/, which are the acceptance gate for changes here.
+  # `hymeko_hnn` was RELOCATED 2026-08-31 to hymeko/nagare (hymeko_nagare::hnn) and no longer
+  # exists in this workspace (Cargo.toml members = [hymeko_core, hymeko_wgpu]; the directory is
+  # gone). Its stale crate declaration was removed here on 2026-09-01 under
+  # APPROVED-CORE-EDIT: reconcile-core-manifest-after-hnn-relocation. HyperGraphView, message
+  # passing and the HGNN / Signed-HGNN convolutions now live in Nagare; core is not their owner.
 
   - name: hymeko_wgpu
     path: hymeko_wgpu
@@ -137,7 +133,7 @@ crates:
       APPROVED-ARCHITECTURE-EVOLUTION: hymeko-compute-framework-wgpu.
       Non-core by design: it is one backend among several planned
       (CUDA/FPGA later), and its churn must not be gated on core review.
-      Depends on hymeko_core only -- never on hymeko_hnn.
+      Depends on hymeko_core only.
       Feature set is deliberately minimal (dx12, vulkan, wgsl, std); GL,
       WebGPU and WebAssembly are OFF because enabling them pulls 26 extra
       crates (~32 MiB) into the shared vendor tree for no benefit here.
