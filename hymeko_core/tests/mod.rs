@@ -43,3 +43,7 @@ mod webxr;
 // deterministic sparse-CSR fixture (no core-src change; tests/ is allowlisted).
 #[path = "sparse_workload_kat.rs"]
 mod sparse_workload_kat;
+
+// P2 §4.1 isolation profile (temporary; wired here because autotests=false).
+#[path = "incidence_precompute_profile.rs"]
+mod incidence_precompute_profile;

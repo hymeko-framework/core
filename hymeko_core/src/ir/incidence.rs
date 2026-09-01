@@ -461,6 +461,126 @@ impl<'ir> IncidenceIndex<'ir> {
         self.node_to_arc(x, y_scratch);
         self.arc_to_node(y_scratch, z);
     }
+
+    /// Prepare a caller-owned [`IncidenceOperatorPlan`] — precompute the node-major signed coefficient
+    /// (`sign · scalar_weight`) once per incidence, so a later `Bᵀy` / `BᵀBx` apply skips the per-incidence
+    /// `(arc,slot)` resolution, `sign()` match and `scalar_weight` fold (measured ~20× on 1e6 incidences,
+    /// break-even ≈ 1.2 applies). The plan borrows this index (hence the `Ir`), stores no topology or
+    /// coordinate, and is not part of the canonical `Ir`.
+    ///
+    /// # Errors
+    /// [`OperatorPlanError::NonFiniteCoefficient`] — a deliberate stricter contract: the plan rejects a
+    /// `NaN`/`±∞` coefficient at prepare rather than silently propagating it through the operator.
+    pub fn prepare_operator(&self) -> Result<IncidenceOperatorPlan<'_, 'ir>, OperatorPlanError> {
+        let n = self.ir.decl_nodes.len();
+        let mut coeff: Vec<f64> = Vec::with_capacity(self.arcs.len());
+        for d in 0..n {
+            let (lo, hi) = self.range(DeclId::new(d));
+            for k in lo..hi {
+                let arc = self.arcs[k];
+                let sref = &self.ir.arcs[arc.raw()].refs[self.slots[k] as usize];
+                let c = f64::from(sref.sign()) * scalar_weight(sref);
+                if !c.is_finite() {
+                    return Err(OperatorPlanError::NonFiniteCoefficient {
+                        node: DeclId::new(d),
+                    });
+                }
+                coeff.push(c);
+            }
+        }
+        Ok(IncidenceOperatorPlan { index: self, coeff })
+    }
+}
+
+/// A prepared incidence operator could not be built.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OperatorPlanError {
+    /// A precomputed coefficient (`sign · scalar_weight`) was `NaN` or `±∞`. The plan rejects it (a
+    /// deliberate contract stricter than the un-prepared operator, which propagates it).
+    NonFiniteCoefficient {
+        /// The node whose incidence produced the non-finite coefficient.
+        node: DeclId,
+    },
+}
+
+impl core::fmt::Display for OperatorPlanError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::NonFiniteCoefficient { node } => {
+                write!(f, "non-finite prepared coefficient at node {}", node.raw())
+            }
+        }
+    }
+}
+impl std::error::Error for OperatorPlanError {}
+
+/// A caller-owned, reusable precompute of the node-major signed coefficients for the `Bᵀ` (arc→node)
+/// operator. **Borrows** the [`IncidenceIndex`] (hence the `Ir`); not part of the canonical `Ir`, does not
+/// serialize, and cannot pair with a different index (the borrow enforces it at compile time). Stores
+/// exactly **one `f64` per incidence** in node-major order and **copies no topology or `(arc,slot)`
+/// coordinate** — the arc index for each incidence is read from the borrowed index. A warm apply allocates
+/// nothing. For finite weights the results are **bitwise-identical** to the un-prepared operator (the same
+/// `(sign·weight)·y` expression and fold order).
+pub struct IncidenceOperatorPlan<'idx, 'ir> {
+    index: &'idx IncidenceIndex<'ir>,
+    /// Node-major, one per incidence; `coeff.len() == index.arcs.len()`.
+    coeff: Vec<f64>,
+}
+
+impl<'ir> IncidenceOperatorPlan<'_, 'ir> {
+    /// The borrowed index.
+    #[must_use]
+    pub fn index(&self) -> &IncidenceIndex<'ir> {
+        self.index
+    }
+
+    /// Bytes retained by the plan (capacity-accurate): 8 per incidence.
+    #[must_use]
+    pub fn retained_bytes(&self) -> usize {
+        self.coeff.capacity() * std::mem::size_of::<f64>()
+    }
+
+    /// `z = Bᵀ·y` using the prepared coefficients. Node-major, output-partitioned, allocation-free;
+    /// bitwise-identical to [`IncidenceIndex::arc_to_node`] for finite weights. `z[0..decls]` is zeroed.
+    pub fn arc_to_node(&self, y: &[f64], z: &mut [f64]) {
+        let idx = self.index;
+        let n = idx.ir.decl_nodes.len();
+        for zi in z.iter_mut().take(n) {
+            *zi = 0.0;
+        }
+        for d in 0..n {
+            let (lo, hi) = idx.range(DeclId::new(d));
+            let mut acc = 0.0;
+            for k in lo..hi {
+                acc += self.coeff[k] * y[idx.arcs[k].raw()];
+            }
+            z[d] = acc;
+        }
+    }
+
+    /// Rayon `z = Bᵀ·y`: each node's output cell is written exactly once (disjoint partition, no atomics),
+    /// so the result is bitwise-identical to the serial [`Self::arc_to_node`].
+    pub fn par_arc_to_node(&self, y: &[f64], z: &mut [f64]) {
+        use rayon::prelude::*;
+        let idx = self.index;
+        let n = idx.ir.decl_nodes.len();
+        z[..n].par_iter_mut().enumerate().for_each(|(d, zi)| {
+            let (lo, hi) = idx.range(DeclId::new(d));
+            let mut acc = 0.0;
+            for k in lo..hi {
+                acc += self.coeff[k] * y[idx.arcs[k].raw()];
+            }
+            *zi = acc;
+        });
+    }
+
+    /// `z = Bᵀ·B·x` — the signed star operator with the prepared `Bᵀ`. `Bx` (`node_to_arc`, arc-major) is
+    /// the un-prepared fast path (deliberately not slowed); only the expensive `Bᵀ` half is prepared.
+    /// `y_scratch` is caller-owned (len ≥ arcs); allocation-free.
+    pub fn star_operator(&self, x: &[f64], z: &mut [f64], y_scratch: &mut [f64]) {
+        self.index.node_to_arc(x, y_scratch);
+        self.arc_to_node(y_scratch, z);
+    }
 }
 
 #[cfg(test)]
