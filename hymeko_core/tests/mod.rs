@@ -38,3 +38,8 @@ mod unified_ir;
 // APPROVED-CORE-EDIT: webxr-semantic-vocabulary (2026-09-01).
 #[path = "webxr/mod.rs"]
 mod webxr;
+
+// P1 benchmark-harness consolidation: frozen-identity KAT for the shared
+// deterministic sparse-CSR fixture (no core-src change; tests/ is allowlisted).
+#[path = "sparse_workload_kat.rs"]
+mod sparse_workload_kat;
