@@ -18,12 +18,10 @@
 //! (fd, dense_block-bits[]) for fd in {8,32,128}` — all little-endian, `u64`
 //! for indices, `f32::to_bits` for weights.
 
-// COMMIT-1 binding: the OLD bench fixture. COMMIT-2 rebinds this to
-// `use hymeko::tensor::sparse_workload::SparseSpec;` and drops the `#[path]`
-// module — the digest constants below must not change.
-#[path = "../benches/sparse_fixture.rs"]
-mod fixture;
-use fixture::SparseSpec;
+// Bound to the consolidated owner module (commit 2). The digest constants below
+// are the ones frozen in commit 1 against the OLD benches/sparse_fixture.rs, so a
+// green run here proves the relocation is byte-identical.
+use hymeko::tensor::sparse_workload::SparseSpec;
 
 use blake3::Hasher;
 
