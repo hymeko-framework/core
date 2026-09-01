@@ -1,0 +1,112 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}\usepackage{hyperref}\usepackage{longtable}
+\title{P1 --- benchmark-harness consolidation}\author{Aiko Seto}
+\date{Created-at: 2026-09-01 19:05 CEST}
+\begin{document}\maketitle
+
+\section*{Governance}
+\texttt{GOVERNING-STRATEGY: docs/hymeko-platform-strategy.md} \textperiodcentered{}
+\texttt{STRATEGY-ID: HYMEKO-PLATFORM-2026-09-01-v1} \textperiodcentered{}
+\texttt{ROADMAP-TASK: P1 / benchmark-harness-consolidation}. \\
+\texttt{APPROVED-CORE-EDIT: benchmark-harness-consolidation} --- scoped to the minimal core owner
+module (\texttt{hymeko\_core/src/tensor/sparse\_workload.rs}) and the \texttt{tensor/mod.rs} export line
+\emph{only}. No tensor kernel, IR, wire, ID, transaction, or manifest-dependency change is authorised by
+this token. Strategy ID is \textbf{not} bumped (this is an implementation-consolidation task).
+\textbf{plan.pdf waiver}: no TeX engine on this host (\texttt{tools.yaml on\_absent\_tool:
+document\_waiver\_in\_report}; pdflatex/lualatex/xelatex/tectonic/MiKTeX all absent). plan.tex/.tikz/.mmd
+are authored compilable; plan.pdf is not built.
+
+\section*{ETA}
+$\approx$110 min: baseline+KAT freeze 25; core owner move + 3 consumer edits 25; wgpu re-export + build/test
+15; graph lint (2 loops) + verify 15; V\&V (fmt/clippy/test/doctests/bench-smoke both repos) 20; mutation
+sweep 10. Basis: the change is a verbatim code \emph{relocation} (no algorithm rewrite) plus a two-loop
+\texttt{enumerate} lint fix; the risk is entirely in preserving bit-identity, which the KAT gates.
+
+\section*{Scope / goal}
+Consolidate the \emph{one} proven exact duplicate --- the deterministic sparse-CSR fixture
+(\texttt{Lcg}, \texttt{DegreeShape}, \texttt{SparseSpec}) that exists byte-for-byte in
+\texttt{hymeko\_core/benches/sparse\_fixture.rs} \emph{and} \texttt{hymeko\_wgpu/src/testing.rs} --- into a
+single backend-neutral core-side owner, and clear the two pre-existing \texttt{explicit\_counter\_loop}
+lints in \texttt{hymeko\_pgraph/src/pgip\_io.rs} that P0 identified. Goal is single-ownership +
+comparability + zero fixture drift + $\le 3\%$ / bit-identical perf, \emph{not} file-count reduction.
+
+\section*{Entry state (verified by \texttt{git ls-remote})}
+Core \texttt{origin/main = 2ebb833}; graph \texttt{origin/main = cbaadd4}. Both matched exactly; fresh
+scratch worktrees \texttt{core-p1-bench} (branch \texttt{feat/benchmark-harness-consolidation} @ 2ebb833)
+and \texttt{graph-p1-lint} (branch \texttt{feat/p1-lint-cleanup} @ cbaadd4). The user dirty checkout is not
+touched.
+
+\section*{Ownership decision (\S4)}
+The dependency edge is \texttt{hymeko\_wgpu $\rightarrow$ hymeko\_core}. A \texttt{hymeko\_core} bench cannot
+reach a symbol defined in \texttt{hymeko\_wgpu} without a dev-dependency cycle
+(core-bench $\rightarrow$ wgpu $\rightarrow$ core). The \emph{only} location reachable by both the core
+benches and wgpu's tests/benches/examples is therefore \texttt{hymeko\_core}'s own public lib API. Owner:
+\texttt{hymeko\_core/src/tensor/sparse\_workload.rs}, \texttt{\#[doc(hidden)] pub mod}, minimal surface
+(\texttt{Lcg}, \texttt{DegreeShape}, \texttt{SparseSpec} --- the exact three names both copies export).
+Placed under \texttt{tensor/} (next to \texttt{TensorCsr}), \emph{not} in \texttt{generators.rs}: it emits a
+numeric \texttt{TensorCsr<f32>}, it is not a canonical hypergraph family, so it must not mix with the
+Steiner/sunflower generator semantics (\S4). Name signals ``deterministic sparse workload'', not a graph
+model. No new crate, no new runtime dependency, no second RNG, no second \texttt{SparseSpec}.
+
+\section*{Affected files}
+\begin{longtable}{l l}
+\texttt{hymeko\_core/src/tensor/sparse\_workload.rs} & NEW owner (moved code, \texttt{\#[doc(hidden)] pub}) \\
+\texttt{hymeko\_core/src/tensor/mod.rs} & +1 line \texttt{\#[doc(hidden)] pub mod sparse\_workload;} \\
+\texttt{hymeko\_core/benches/sparse\_fixture.rs} & DELETED (moved to owner) \\
+\texttt{hymeko\_core/benches/csr\_bench.rs} & drop \texttt{\#[path]} include; import from owner \\
+\texttt{hymeko\_wgpu/src/testing.rs} & delete duplicate sparse block; \texttt{pub use} owner re-export \\
+\texttt{hymeko\_core/tests/sparse\_workload\_kat.rs} & NEW frozen-identity KAT (commit 1, rebound commit 2) \\
+\texttt{hymeko\_pgraph/src/pgip\_io.rs} & two loops $\rightarrow$ \texttt{enumerate}; 1-based ids preserved \\
+\end{longtable}
+CORE.YAML items touched: \textbf{none} (the manifest is unchanged; \texttt{hymeko\_core/src/**} is
+lockdown:full and the new module is added under the \texttt{benchmark-harness-consolidation} token).
+
+\section*{Interface changes}
+Core public API \emph{additive}: \texttt{hymeko::tensor::sparse\_workload::\{Lcg, DegreeShape, SparseSpec\}}
+(doc-hidden). \texttt{hymeko\_wgpu::testing::\{Lcg, DegreeShape, SparseSpec\}} unchanged \emph{as a path}
+(now a re-export) --- every downstream \texttt{use} line stays byte-identical, so all benchmark
+invocations and group/bench names are unchanged. No signature of \texttt{build/dense\_vector/dense\_block}
+changes.
+
+\section*{Test strategy}
+(1) Frozen KAT (commit 1) binds to the OLD \texttt{benches/sparse\_fixture.rs} via \texttt{\#[path]}, pins a
+BLAKE3 digest over rows/cols/nnz/row\_ptr/col\_ind/val-bits/dense\_vector/dense\_block(8,32,128) for
+small/medium/large; run green on the old code. (2) After the move (commit 2) the KAT is rebound to
+\texttt{hymeko::tensor::sparse\_workload}; the \emph{same} digests must hold $\Rightarrow$ bit-identity.
+(3) Full core + graph V\&V gates (\S7). (4) Mutation sweep (\S7): RNG multiplier/addend, high-bit
+extraction, degree-bucket boundary, sort/dedup removal, dense-block seed XOR, wgpu re-bind to a local copy,
+SQL-id 0-based --- each caught by a named test; no mutant committed; hash-verified restore.
+
+\section*{Performance budget}
+Fixtures bit-identical (KAT). Generator source relocated verbatim $\Rightarrow$ identical codegen; no
+kernel touched. Accept: every fixture bit-identical; untouched CPU/GPU kernel timing $\le 3\%$; fixture
+build $\le 3\%$; runtime allocation count non-increasing; no new per-call allocation. Report core/wgpu
+rlib size delta (expected: the fixture moves out of the bench crate + wgpu rlib into the core rlib). Host
+ambient may exceed the 3\% quiet target $\Rightarrow$ rest no-regression on bit-identity + codegen identity,
+not on noisy wall deltas (CLAUDE.md \S3 structural-evidence allowance).
+
+\section*{Graph lint (\S5, separate commit, behaviour-neutral)}
+\texttt{pgip\_io.rs} \texttt{next\_id}/\texttt{next\_uid} manual counters $\rightarrow$
+\texttt{.iter().enumerate()} with \texttt{i as i64 + 1}. Stable 1-based SQL ids unchanged; material/unit
+insertion order unchanged; the six P-graph dump hashes byte-identical; \texttt{.pgip} round-trip identical.
+Only the two loops and their directly-owned locals change. Not mixed with the core consolidation (separate
+branch \texttt{feat/p1-lint-cleanup}).
+
+\section*{Rollback}
+Additive on two feature branches; not promoted to main this phase. If any gate fails or a remote race
+occurs: drop the branches, leave both mains at 2ebb833 / cbaadd4. The core owner move is one revertible
+commit; the lint fix is behaviour-neutral.
+
+\section*{Risk anticipation}
+Worst case: a silent behaviour change in the relocated generator (a dropped \texttt{sort\_unstable}, a
+changed shift) $\Rightarrow$ the KAT digest diverges and commit 2 fails loudly. Production-scale input: the
+\texttt{large} preset (200k$\times$200k, irregular, $\approx$4M nnz) and \texttt{dense\_block(128)}
+($\approx$25.6M f32) are hashed in the KAT, well under the 16\,GiB cap. Contract preserved: no cap or
+budget lives on this path; the only invariant is byte-identity, gated by the KAT. Graph risk: an off-by-one
+in the id derivation $\Rightarrow$ the dump-hash test fails.
+
+\section*{HARD STOP conditions}
+Entry ref mismatch; a non-additive core change beyond the token; a KAT digest divergence not explained;
+a graph dump-hash/round-trip change; a forbidden \S6 artefact (new framework/crate/RNG/second SparseSpec);
+a remote race; a user-owned dirty file touched. Do NOT promote to main; do NOT start P2.
+\end{document}

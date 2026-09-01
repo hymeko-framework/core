@@ -1,0 +1,40 @@
+% P1 benchmark-harness consolidation --- ownership dataflow (standalone-compilable)
+\documentclass[tikz,border=6pt]{standalone}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds}
+\begin{document}
+\begin{tikzpicture}[
+  font=\small,
+  owner/.style={draw,rounded corners,fill=green!12,minimum height=8mm,align=center},
+  cons/.style={draw,rounded corners,fill=blue!8,minimum height=7mm,align=center},
+  gone/.style={draw,dashed,rounded corners,fill=red!8,minimum height=7mm,align=center},
+  dep/.style={-{Latex[length=2mm]}},
+  reexp/.style={-{Latex[length=2mm]},densely dashed}]
+
+  % Owner
+  \node[owner] (own) {\texttt{hymeko\_core::tensor::sparse\_workload}\\\{Lcg, DegreeShape, SparseSpec\}\\(\#[doc(hidden)] pub; emits TensorCsr<f32>)};
+
+  % Removed duplicates
+  \node[gone,above left=10mm and 12mm of own] (bf) {\texttt{core/benches/sparse\_fixture.rs}\\DELETED (moved)};
+  \node[gone,above right=10mm and 12mm of own] (wt) {\texttt{wgpu/src/testing.rs} sparse block\\DELETED $\rightarrow$ \texttt{pub use} re-export};
+
+  % Consumers - core side
+  \node[cons,below left=14mm and 6mm of own] (csr) {\texttt{core/benches/csr\_bench}\\(imports owner)};
+
+  % wgpu re-export hub (kept: backend\_or\_skip, Fixture, encode\_chain, chain\_output)
+  \node[cons,right=26mm of csr] (tst) {\texttt{wgpu::testing}\\re-exports owner +\\keeps GPU scaffolding};
+
+  % wgpu consumers
+  \node[cons,below=10mm of tst] (wgpuc) {wgpu benches (spmm/chain/arena),\\examples ($\times$4), tests ($\times$5),\\src/fanout\_tests};
+
+  \draw[dep] (bf) -- node[above,sloped,font=\scriptsize]{code moved} (own);
+  \draw[dep] (wt) -- node[above,sloped,font=\scriptsize]{code moved} (own);
+  \draw[dep] (csr) -- node[left,font=\scriptsize]{use} (own);
+  \draw[dep] (tst) -- node[right,sloped,font=\scriptsize]{pub use} (own);
+  \draw[reexp] (wgpuc) -- node[right,font=\scriptsize]{unchanged path}(tst);
+
+  \begin{scope}[on background layer]
+    \node[draw,dotted,rounded corners,fit=(csr)(own)(bf),label=above:{hymeko\_core}] {};
+    \node[draw,dotted,rounded corners,fit=(wt)(tst)(wgpuc),label=above:{hymeko\_wgpu (dep $\rightarrow$ core)}] {};
+  \end{scope}
+\end{tikzpicture}
+\end{document}

@@ -1,0 +1,45 @@
+# P1 baseline manifest — captured BEFORE the consolidation (entry state core@2ebb833)
+# Created-at 2026-09-01 19:20 CEST. rustc 1.97.1 x86_64-pc-windows-msvc, release profile.
+# The AFTER comparison lives in reports/2026-09-01-benchmark-harness-consolidation.md.
+
+## SECTION 1 — frozen sparse-workload identity (blake3 digest domain HYMEKO-P1-SPARSE-KAT-v1)
+preset	rows	cols	nnz	digest
+small	1000	1000	7967	d29a53e99ef4b7ba91a463ddce424d403760666a789ef081b3b64d5633a818ce
+medium	50000	50000	799877	311abed61138e62f23c2968f5436469816ff455a0ce49620d32edc554f766ef6
+large	200000	200000	5442303	7d764dea1f397ba9e2eca89e4faae941b17496490b41bb1ed96caa4db259c883
+# digest covers, per preset: rows, cols, full row_ptr[], full col_ind[], val f32 bit-patterns,
+# dense_vector[] bits, dense_block(fd) bits for fd in {8,32,128}. Captured on the OLD byte-identical
+# benches/sparse_fixture.rs (== wgpu/src/testing.rs sparse block; 136/136 non-comment lines, diff-clean).
+
+## SECTION 2 — target / consumer inventory (the fixture's blast radius)
+kind	path	consumes
+core-bench	hymeko_core/benches/csr_bench.rs	#[path] sparse_fixture::{DegreeShape, SparseSpec}
+owner-old-A	hymeko_core/benches/sparse_fixture.rs	DEFINES Lcg/DegreeShape/SparseSpec (to be moved)
+owner-old-B	hymeko_wgpu/src/testing.rs	DEFINES duplicate Lcg/DegreeShape/SparseSpec (to be re-export)
+wgpu-bench	hymeko_wgpu/benches/spmm_bench.rs	testing::SparseSpec
+wgpu-bench	hymeko_wgpu/benches/chain_bench.rs	testing::{DegreeShape, SparseSpec}
+wgpu-bench	hymeko_wgpu/benches/arena_bench.rs	testing::{SparseSpec, Fixture, encode_chain}
+wgpu-example	hymeko_wgpu/examples/arena_memory.rs	testing::{SparseSpec, Fixture, encode_chain}
+wgpu-example	hymeko_wgpu/examples/crossover_sweep.rs	testing::{DegreeShape, SparseSpec}
+wgpu-example	hymeko_wgpu/examples/phase7_probe.rs	testing::{DegreeShape, SparseSpec, Fixture}
+wgpu-example	hymeko_wgpu/examples/sustained_chain.rs	testing::{SparseSpec, Fixture, encode_chain}
+wgpu-test	hymeko_wgpu/tests/activation.rs	testing::{SparseSpec, backend_or_skip}
+wgpu-test	hymeko_wgpu/tests/arena.rs	testing::{SparseSpec, backend_or_skip}
+wgpu-test	hymeko_wgpu/tests/session.rs	testing::{SparseSpec, backend_or_skip}
+wgpu-test	hymeko_wgpu/tests/spmm.rs	testing::{DegreeShape, SparseSpec, backend_or_skip}
+wgpu-test	hymeko_wgpu/tests/readback_workspace.rs	testing::backend_or_skip
+wgpu-src	hymeko_wgpu/src/fanout_tests.rs	crate::testing::{SparseSpec, backend_or_skip}
+# CPU/GPU oracle directions: csr_bench = standalone CPU baseline; spmm_bench spmm_cpu A/B = same-run GPU
+# crossover reference (both call production TensorCsr::spmm_into_{serial,parallel}; no re-implemented kernel).
+# generator imports: csr_bench + wgpu targets import ONLY the fixture; no cross-repo generator copy.
+# feature-gate/dependency: hymeko_wgpu -> hymeko_core (normal dep); core benches cannot see wgpu (would cycle).
+
+## SECTION 3 — size / build baseline (release, target/release/deps)
+artifact	bytes
+libhymeko.rlib	3872274
+libhymeko_wgpu.rlib	1586558
+# fixture build & dense-block timings are NOT single-shot-benched here: the generator source is relocated
+# verbatim (identical codegen) and the emitted bytes are KAT-frozen, so build cost is unchanged by
+# construction; the report records the A/B rlib-size delta (the real, expected change: the fixture leaves
+# the bench crate + wgpu rlib and lives once in the core rlib) and any measured wall delta with host-noise
+# caveat. Peak RSS for the large KAT cell (dense_block(128) ~= 25.6M f32 ~= 102 MiB transient) << 16 GiB.
