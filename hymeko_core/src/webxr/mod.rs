@@ -9,10 +9,12 @@
 //! # Contract
 //! - Works over `&Ir + &Interner`, through the [`crate::ir::access`] accessor boundary (never raw
 //!   `ir.nodes`/`ir.edges`/`ir.arcs` table indexing).
-//! - Bounded: `O(declarations + incidences)`; every hierarchy walk is cycle-safe (a visited set or a
-//!   decl-count budget), because the `Ir` does not *guarantee* an acyclic containment/relation graph.
-//! - Errors are ids-only ([`DeclId`]/[`HyperArcId`]/[`SymId`]), one variant per validation family,
-//!   deterministic; no panic/`unwrap` on the validation path.
+//! - Linear: `O(declarations + incidences)` — one classification pass buckets relation/kind instances,
+//!   the checks consume the buckets, and no per-entity temporary allocation is made (a single reusable
+//!   participant buffer is threaded through). Every inheritance/parent walk is cycle-safe (a depth
+//!   budget), because the `Ir` does not *guarantee* an acyclic containment/relation graph.
+//! - Errors are ids-only ([`DeclId`]/[`SymId`]), one variant per validation family, deterministic; no
+//!   panic/`unwrap` on the validation path.
 //!
 //! The canonical / runtime boundary is a documented contract: authoring pose, placement, affordance,
 //! capability *intent* and asset references live in the `Ir`; `XRSession`/`XRFrame`/`XRSpace`/
@@ -21,12 +23,16 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::common::ids::{DeclId, HyperArcId, SymId};
-use crate::ir::ir::{DeclKind, Ir, SignedRefR, ValueR};
+use crate::common::ids::{DeclId, SymId};
+use crate::ir::ir::{DeclKind, Ir, ValueR};
 use crate::resolution::interner::Interner;
 
 /// The tolerance below which a quaternion's norm is treated as un-normalizable (zero quaternion).
 const QUAT_NORM_EPSILON: f64 = 1.0e-6;
+
+/// Maximum inheritance / parent depth walked. Real chains are a handful deep; this bounds a walk (so
+/// a cycle terminates) without a per-call heap allocation.
+const MAX_WALK_DEPTH: u32 = 1024;
 
 /// A WebXR semantic-contract violation. Ids-only, deterministic, one variant per family.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -85,8 +91,6 @@ pub enum SemanticError {
 pub enum RoleReason {
     /// Expected exactly one subject (`+`) of the required kind; found a different count.
     SubjectCount { found: u32 },
-    /// Expected exactly one object (`-`) of the required kind; found a different count.
-    ObjectCount { found: u32 },
     /// A participant is not of the kind its role requires.
     WrongKind { participant: DeclId },
     /// Expected at least one target object; found none.
@@ -103,7 +107,7 @@ impl std::fmt::Display for SemanticError {
 impl std::error::Error for SemanticError {}
 
 /// Validate a compiled scene against the WebXR spatial contract. Returns every violation found
-/// (empty == valid). Reads only `ir` and `it`, through the accessor boundary; bounded and cycle-safe.
+/// (empty == valid). Reads only `ir` and `it`, through the accessor boundary; linear and cycle-safe.
 #[must_use]
 pub fn validate(ir: &Ir, it: &Interner) -> Vec<SemanticError> {
     let mut out = Vec::new();
@@ -114,13 +118,14 @@ pub fn validate(ir: &Ir, it: &Interner) -> Vec<SemanticError> {
             return out;
         }
     };
-    let scenes = reg.instances_of(ir, reg.scene);
-    check_session(ir, &reg, &scenes, &mut out);
-    check_capabilities(ir, it, &reg, &mut out);
-    check_frames_and_placements(ir, it, &reg, &mut out);
-    check_interactions_and_anchoring(ir, it, &reg, &mut out);
-    check_assets(ir, it, &reg, &mut out);
-    check_runtime_handle_fields(ir, it, &reg, &mut out);
+    let b = Buckets::collect(ir, &reg);
+    let mut buf: Vec<(i8, DeclId)> = Vec::new(); // one reusable participant buffer for every relation
+    check_session(ir, &reg, &b, &mut buf, &mut out);
+    check_capabilities(ir, it, &reg, &b, &mut buf, &mut out);
+    check_frames_and_placements(ir, it, &reg, &b, &mut buf, &mut out);
+    check_interactions_and_anchoring(ir, &reg, &b, &mut buf, &mut out);
+    check_assets(ir, &reg, &b, &mut out);
+    check_runtime_handle_fields(ir, &reg, &mut out);
     out
 }
 
@@ -129,29 +134,22 @@ pub fn validate(ir: &Ir, it: &Interner) -> Vec<SemanticError> {
 // ---------------------------------------------------------------------------------------------
 
 struct Registry {
-    // meta_spatial kinds
     scene: DeclId,
     spatial_frame: DeclId,
     spatial_entity: DeclId,
     visual_asset: DeclId,
     semantic_anchor: DeclId,
     action: DeclId,
-    input_role: DeclId,
-    // relation archetypes
     placement: DeclId,
     parent_frame: DeclId,
     anchoring: DeclId,
     interaction: DeclId,
-    appearance_binding: DeclId,
-    effect: DeclId,
-    // meta_webxr container children (kind sets)
+    capability_request: DeclId,
+    session_config: DeclId,
     session_modes: Vec<DeclId>,
     reference_spaces: Vec<DeclId>,
     capabilities: Vec<DeclId>,
     actions: Vec<DeclId>,
-    capability_request: DeclId,
-    session_config: DeclId,
-    // interned attribute symbols
     sym_position: Option<SymId>,
     sym_orientation: Option<SymId>,
     sym_scale: Option<SymId>,
@@ -166,31 +164,27 @@ impl Registry {
         let kinds = child_named(ir, it, spatial, "kinds")?;
         let relations = child_named(ir, it, spatial, "relations")?;
         let webxr = find_root(ir, it, "webxr")?;
+        let session = child_named(ir, it, webxr, "session")?;
         let k = |n: &str| child_named(ir, it, kinds, n);
         let r = |n: &str| child_named(ir, it, relations, n);
         let container = |n: &str| child_named(ir, it, webxr, n);
-
-        let session = child_named(ir, it, webxr, "session")?;
-        let reg = Registry {
+        Some(Registry {
             scene: k("scene")?,
             spatial_frame: k("spatial_frame")?,
             spatial_entity: k("spatial_entity")?,
             visual_asset: k("visual_asset")?,
             semantic_anchor: k("semantic_anchor")?,
             action: k("action")?,
-            input_role: k("input_role")?,
             placement: r("placement")?,
             parent_frame: r("parent_frame")?,
             anchoring: r("anchoring")?,
             interaction: r("interaction")?,
-            appearance_binding: r("appearance_binding")?,
-            effect: r("effect")?,
+            capability_request: child_named(ir, it, session, "capability_request")?,
+            session_config: child_named(ir, it, session, "session_config")?,
             session_modes: children(ir, container("session_modes")?),
             reference_spaces: children(ir, container("reference_spaces")?),
             capabilities: children(ir, container("capabilities")?),
             actions: children(ir, container("actions")?),
-            capability_request: child_named(ir, it, session, "capability_request")?,
-            session_config: child_named(ir, it, session, "session_config")?,
             sym_position: it.get_id("position"),
             sym_orientation: it.get_id("orientation"),
             sym_scale: it.get_id("scale"),
@@ -200,42 +194,74 @@ impl Registry {
                 .iter()
                 .filter_map(|n| it.get_id(n))
                 .collect(),
-        };
-        Some(reg)
-    }
-
-    /// Every decl in the Ir that transitively `<isa>` `kind` (an instance of that kind).
-    fn instances_of(&self, ir: &Ir, kind: DeclId) -> Vec<DeclId> {
-        ir.decls()
-            .filter(|(d, _)| *d != kind && isa_transitive(ir, *d, kind))
-            .map(|(d, _)| d)
-            .collect()
-    }
-
-    /// The relation archetype a given edge instance specialises, if any (by direct/transitive base).
-    fn archetype_of(&self, ir: &Ir, edge: DeclId) -> Option<(DeclId, SymId)> {
-        for (arch, name) in self.relation_archetypes(ir) {
-            if isa_transitive(ir, edge, arch) {
-                return Some((arch, name));
-            }
-        }
-        None
-    }
-
-    fn relation_archetypes(&self, ir: &Ir) -> [(DeclId, SymId); 6] {
-        let nm = |d: DeclId| ir.decl_node(d).map(|n| n.name).unwrap_or(SymId::NONE);
-        [
-            (self.placement, nm(self.placement)),
-            (self.parent_frame, nm(self.parent_frame)),
-            (self.anchoring, nm(self.anchoring)),
-            (self.interaction, nm(self.interaction)),
-            (self.appearance_binding, nm(self.appearance_binding)),
-            (self.effect, nm(self.effect)),
-        ]
+        })
     }
 
     fn is_kind_in(&self, ir: &Ir, d: DeclId, set: &[DeclId]) -> bool {
         set.iter().any(|&k| isa_transitive(ir, d, k))
+    }
+
+    fn name(&self, ir: &Ir, d: DeclId) -> SymId {
+        ir.decl_node(d).map(|n| n.name).unwrap_or(SymId::NONE)
+    }
+}
+
+/// One classification pass: every scene / relation-instance / visual-asset decl, bucketed by its
+/// `<isa>` archetype. `O(declarations)` with a short bounded isa-walk each; buckets allocate once.
+#[derive(Default)]
+struct Buckets {
+    scenes: Vec<DeclId>,
+    session_configs: Vec<DeclId>,
+    capability_requests: Vec<DeclId>,
+    placements: Vec<DeclId>,
+    parent_frames: Vec<DeclId>,
+    interactions: Vec<DeclId>,
+    anchorings: Vec<DeclId>,
+    visual_assets: Vec<DeclId>,
+}
+
+impl Buckets {
+    fn collect(ir: &Ir, reg: &Registry) -> Self {
+        let mut b = Buckets::default();
+        for (d, node) in ir.decls() {
+            match node.kind {
+                DeclKind::Edge | DeclKind::HyperArc => {
+                    if d == reg.placement
+                        || d == reg.parent_frame
+                        || d == reg.anchoring
+                        || d == reg.interaction
+                        || d == reg.capability_request
+                        || d == reg.session_config
+                    {
+                        continue; // the archetype itself is not an instance
+                    }
+                    if isa_transitive(ir, d, reg.placement) {
+                        b.placements.push(d);
+                    } else if isa_transitive(ir, d, reg.parent_frame) {
+                        b.parent_frames.push(d);
+                    } else if isa_transitive(ir, d, reg.interaction) {
+                        b.interactions.push(d);
+                    } else if isa_transitive(ir, d, reg.anchoring) {
+                        b.anchorings.push(d);
+                    } else if isa_transitive(ir, d, reg.capability_request) {
+                        b.capability_requests.push(d);
+                    } else if isa_transitive(ir, d, reg.session_config) {
+                        b.session_configs.push(d);
+                    }
+                }
+                DeclKind::Node => {
+                    if d == reg.scene || d == reg.visual_asset {
+                        continue;
+                    }
+                    if isa_transitive(ir, d, reg.scene) {
+                        b.scenes.push(d);
+                    } else if isa_transitive(ir, d, reg.visual_asset) {
+                        b.visual_assets.push(d);
+                    }
+                }
+            }
+        }
+        b
     }
 }
 
@@ -262,7 +288,7 @@ const RUNTIME_HANDLE_NAMES: &[&str] = &[
 fn find_root(ir: &Ir, it: &Interner, name: &str) -> Option<DeclId> {
     let sym = it.get_id(name)?;
     ir.decls()
-        .find(|(d, node)| node.parent.is_none() && node.name == sym)
+        .find(|(_, node)| node.parent.is_none() && node.name == sym)
         .map(|(d, _)| d)
 }
 
@@ -276,46 +302,56 @@ fn children(ir: &Ir, parent: DeclId) -> Vec<DeclId> {
     ir.child_decls(parent).collect()
 }
 
-/// The inheritance bases of a decl (node or edge), via the accessor boundary.
-fn base_targets(ir: &Ir, d: DeclId) -> Vec<DeclId> {
+/// Invoke `f` for each direct inheritance base of `d`, borrowing (no allocation).
+#[inline]
+fn each_base(ir: &Ir, d: DeclId, f: &mut impl FnMut(DeclId)) {
     if let Some((_, node)) = ir.node_for_decl(d) {
-        return node.bases.iter().map(|b| b.target()).collect();
+        for base in &node.bases {
+            f(base.target());
+        }
+        return;
     }
     if let Some((_, edge)) = ir.edge_for_decl(d) {
-        return edge.bases.iter().map(|b| b.target()).collect();
+        for base in &edge.bases {
+            f(base.target());
+        }
     }
-    Vec::new()
 }
 
-/// Cycle-safe transitive `<isa>`: does `d` reach `target` through inheritance bases?
+/// Transitive `<isa>`: does `d` reach `target` through inheritance bases? Allocation-free and
+/// depth-bounded ([`MAX_WALK_DEPTH`]), so an inheritance cycle terminates instead of looping.
 fn isa_transitive(ir: &Ir, d: DeclId, target: DeclId) -> bool {
-    let mut seen: HashSet<DeclId> = HashSet::new();
-    let mut stack = vec![d];
-    while let Some(cur) = stack.pop() {
-        if cur == target {
+    fn go(ir: &Ir, d: DeclId, target: DeclId, budget: u32) -> bool {
+        if d == target {
             return true;
         }
-        if !seen.insert(cur) {
-            continue; // visited-set makes an inheritance cycle terminate
+        if budget == 0 {
+            return false;
         }
-        stack.extend(base_targets(ir, cur));
+        let mut hit = false;
+        each_base(ir, d, &mut |b| {
+            if !hit && go(ir, b, target, budget - 1) {
+                hit = true;
+            }
+        });
+        hit
     }
-    false
+    go(ir, d, target, MAX_WALK_DEPTH)
 }
 
-/// The signed incidence participants `(sign, target)` of a relation edge instance (all arcs).
-fn edge_participants(ir: &Ir, edge: DeclId) -> Vec<(i8, DeclId)> {
-    let mut out = Vec::new();
+/// Fill `buf` with the signed incidence participants `(sign, target)` of a relation edge instance
+/// (all arcs). Reuses `buf` — no per-relation allocation once warmed.
+fn edge_participants_into(ir: &Ir, edge: DeclId, buf: &mut Vec<(i8, DeclId)>) {
+    buf.clear();
     if let Some((_, rec)) = ir.edge_for_decl(edge) {
         for &aid in &rec.arcs {
             if let Some(arc) = ir.arc(aid) {
                 for sref in &arc.refs {
-                    out.push((sref.sign(), sref.target()));
+                    buf.push((sref.sign(), sref.target()));
                 }
             }
         }
     }
-    out
 }
 
 /// A decl's direct child attribute `attr` value, if present.
@@ -325,97 +361,120 @@ fn attr_value(ir: &Ir, d: DeclId, attr: SymId) -> Option<&ValueR> {
         .and_then(|c| ir.decl_node(c).and_then(|n| n.anno.value.as_ref()))
 }
 
-/// A numeric list attribute as `f64`s (with a `None` for any non-`Num` element, preserving index).
-fn num_list(v: &ValueR) -> Option<Vec<Option<f64>>> {
-    match v {
-        ValueR::List(items) => Some(
-            items
-                .iter()
-                .map(|e| match e {
-                    ValueR::Num(n) => Some(*n),
-                    _ => None,
-                })
-                .collect(),
-        ),
-        _ => None,
+/// The scene that (transitively) contains `d`, found by a bounded parent walk.
+fn owning_scene(ir: &Ir, d: DeclId, scenes: &HashSet<DeclId>) -> Option<DeclId> {
+    let mut cur = ir.parent_of(d);
+    let mut budget = MAX_WALK_DEPTH;
+    while let Some(p) = cur {
+        if scenes.contains(&p) {
+            return Some(p);
+        }
+        if budget == 0 {
+            break;
+        }
+        budget -= 1;
+        cur = ir.parent_of(p);
+    }
+    None
+}
+
+fn check_dangling(ir: &Ir, relation: DeclId, buf: &[(i8, DeclId)], out: &mut Vec<SemanticError>) {
+    for (_, target) in buf {
+        if ir.decl_node(*target).is_none() {
+            out.push(SemanticError::DanglingReference {
+                relation,
+                target: *target,
+            });
+        }
     }
 }
 
 // ---------------------------------------------------------------------------------------------
-// checks
+// checks (consume the buckets; no full-Ir rescans)
 // ---------------------------------------------------------------------------------------------
 
-fn check_session(ir: &Ir, reg: &Registry, scenes: &[DeclId], out: &mut Vec<SemanticError>) {
-    for &scene in scenes {
-        let descendants = subtree(ir, scene);
-        // The scene selects its (one) primary mode + (one) primary reference space through a single
-        // @session_config relation; a fallback mode is the `~` participant and is not counted.
-        let configs: Vec<DeclId> = descendants
-            .iter()
-            .copied()
-            .filter(|&d| d != reg.session_config && isa_transitive(ir, d, reg.session_config))
-            .collect();
-        if configs.len() != 1 {
-            out.push(SemanticError::SessionModeCardinality {
-                scene,
-                found: configs.len() as u32,
-            });
-            continue;
-        }
-        let parts = edge_participants(ir, configs[0]);
-        let primary_modes: Vec<DeclId> = parts
+fn check_session(
+    ir: &Ir,
+    reg: &Registry,
+    b: &Buckets,
+    buf: &mut Vec<(i8, DeclId)>,
+    out: &mut Vec<SemanticError>,
+) {
+    let scene_set: HashSet<DeclId> = b.scenes.iter().copied().collect();
+    let mut configs_per_scene: HashMap<DeclId, u32> = HashMap::new();
+    for &cfg in &b.session_configs {
+        let scene = owning_scene(ir, cfg, &scene_set);
+        edge_participants_into(ir, cfg, buf);
+        let modes = buf
             .iter()
             .filter(|(s, _)| *s > 0)
             .map(|(_, t)| *t)
-            .collect();
-        let primary_spaces: Vec<DeclId> = parts
+            .collect::<Vec<_>>();
+        let spaces = buf
             .iter()
             .filter(|(s, _)| *s < 0)
             .map(|(_, t)| *t)
-            .collect();
-        if primary_modes.len() != 1
-            || !primary_modes
+            .collect::<Vec<_>>();
+        let scene_id = scene.unwrap_or(cfg);
+        if modes.len() != 1
+            || !modes
                 .iter()
                 .all(|&t| reg.is_kind_in(ir, t, &reg.session_modes))
         {
             out.push(SemanticError::SessionModeCardinality {
-                scene,
-                found: primary_modes.len() as u32,
+                scene: scene_id,
+                found: modes.len() as u32,
             });
         }
-        if primary_spaces.len() != 1
-            || !primary_spaces
+        if spaces.len() != 1
+            || !spaces
                 .iter()
                 .all(|&t| reg.is_kind_in(ir, t, &reg.reference_spaces))
         {
             out.push(SemanticError::ReferenceSpaceCardinality {
-                scene,
-                found: primary_spaces.len() as u32,
+                scene: scene_id,
+                found: spaces.len() as u32,
             });
+        }
+        if let Some(sc) = scene {
+            *configs_per_scene.entry(sc).or_insert(0) += 1;
+        }
+    }
+    for &scene in &b.scenes {
+        let n = configs_per_scene.get(&scene).copied().unwrap_or(0);
+        if n != 1 {
+            out.push(SemanticError::SessionModeCardinality { scene, found: n });
         }
     }
 }
 
-fn check_capabilities(ir: &Ir, it: &Interner, reg: &Registry, out: &mut Vec<SemanticError>) {
+fn check_capabilities(
+    ir: &Ir,
+    it: &Interner,
+    reg: &Registry,
+    b: &Buckets,
+    buf: &mut Vec<(i8, DeclId)>,
+    out: &mut Vec<SemanticError>,
+) {
     let mut required: HashSet<DeclId> = HashSet::new();
     let mut optional: HashSet<DeclId> = HashSet::new();
-    for req in reg.instances_of(ir, reg.capability_request) {
-        // capability = the `-` object; requirement = the attribute
-        let parts = edge_participants(ir, req);
-        for (sign, target) in &parts {
-            if *sign < 0 {
-                if !reg.is_kind_in(ir, *target, &reg.capabilities) {
+    for &req in &b.capability_requests {
+        edge_participants_into(ir, req, buf);
+        let requirement = requirement_of(ir, it, reg, req);
+        for &(sign, target) in buf.iter() {
+            if sign < 0 {
+                if !reg.is_kind_in(ir, target, &reg.capabilities) {
                     out.push(SemanticError::UnknownCapability {
                         request: req,
-                        target: *target,
+                        target,
                     });
                 } else {
-                    match requirement_of(ir, it, reg, req) {
+                    match requirement {
                         Some(true) => {
-                            required.insert(*target);
+                            required.insert(target);
                         }
                         Some(false) => {
-                            optional.insert(*target);
+                            optional.insert(target);
                         }
                         None => out.push(SemanticError::BadCapabilityRequirement { request: req }),
                     }
@@ -430,8 +489,7 @@ fn check_capabilities(ir: &Ir, it: &Interner, reg: &Registry, out: &mut Vec<Sema
 
 /// `Some(true)` = required, `Some(false)` = optional, `None` = missing/invalid.
 fn requirement_of(ir: &Ir, it: &Interner, reg: &Registry, req: DeclId) -> Option<bool> {
-    let sym = reg.sym_requirement?;
-    match attr_value(ir, req, sym)? {
+    match attr_value(ir, req, reg.sym_requirement?)? {
         ValueR::Str(s) => match it.resolve(*s) {
             "required" => Some(true),
             "optional" => Some(false),
@@ -443,16 +501,18 @@ fn requirement_of(ir: &Ir, it: &Interner, reg: &Registry, req: DeclId) -> Option
 
 fn check_frames_and_placements(
     ir: &Ir,
-    it: &Interner,
+    _it: &Interner,
     reg: &Registry,
+    b: &Buckets,
+    buf: &mut Vec<(i8, DeclId)>,
     out: &mut Vec<SemanticError>,
 ) {
-    // parent-frame relation, for the acyclicity check
+    // parent-frame acyclicity
     let mut parent: HashMap<DeclId, DeclId> = HashMap::new();
-    for pf in reg.instances_of(ir, reg.parent_frame) {
-        let parts = edge_participants(ir, pf);
-        let child = parts.iter().find(|(s, _)| *s > 0).map(|(_, t)| *t);
-        let par = parts.iter().find(|(s, _)| *s < 0).map(|(_, t)| *t);
+    for &pf in &b.parent_frames {
+        edge_participants_into(ir, pf, buf);
+        let child = buf.iter().find(|(s, _)| *s > 0).map(|(_, t)| *t);
+        let par = buf.iter().find(|(s, _)| *s < 0).map(|(_, t)| *t);
         if let (Some(c), Some(p)) = (child, par) {
             parent.insert(c, p);
         }
@@ -463,48 +523,25 @@ fn check_frames_and_placements(
         }
     }
 
-    // placements: role cardinality, frame existence, pose validity
-    for pl in reg.instances_of(ir, reg.placement) {
-        let parts = edge_participants(ir, pl);
-        check_dangling(ir, pl, &parts, out);
-        let subjects: Vec<DeclId> = parts
+    // placements: dangling, role cardinality, frame kind, pose
+    let arch = reg.name(ir, reg.placement);
+    for &pl in &b.placements {
+        edge_participants_into(ir, pl, buf);
+        check_dangling(ir, pl, buf, out);
+        let subjects = buf.iter().filter(|(s, _)| *s > 0).count() as u32;
+        let subject_ok = buf
             .iter()
             .filter(|(s, _)| *s > 0)
-            .map(|(_, t)| *t)
-            .collect();
-        let objects: Vec<DeclId> = parts
-            .iter()
-            .filter(|(s, _)| *s < 0)
-            .map(|(_, t)| *t)
-            .collect();
-        let arch = ir
-            .decl_node(reg.placement)
-            .map(|n| n.name)
-            .unwrap_or(SymId::NONE);
-        if subjects.len() != 1
-            || !subjects
-                .iter()
-                .all(|&d| isa_transitive(ir, d, reg.spatial_entity))
-        {
+            .all(|(_, t)| isa_transitive(ir, *t, reg.spatial_entity));
+        if subjects != 1 || !subject_ok {
             out.push(SemanticError::RelationRole {
                 relation: pl,
                 archetype: arch,
-                reason: RoleReason::SubjectCount {
-                    found: subjects.len() as u32,
-                },
+                reason: RoleReason::SubjectCount { found: subjects },
             });
         }
-        if objects.len() != 1 {
-            out.push(SemanticError::RelationRole {
-                relation: pl,
-                archetype: arch,
-                reason: RoleReason::ObjectCount {
-                    found: objects.len() as u32,
-                },
-            });
-        }
-        for &frame in &objects {
-            if !isa_transitive(ir, frame, reg.spatial_frame) {
+        for &(sign, frame) in buf.iter() {
+            if sign < 0 && !isa_transitive(ir, frame, reg.spatial_frame) {
                 out.push(SemanticError::FrameMissingOrNotAFrame {
                     placement: pl,
                     frame,
@@ -516,18 +553,22 @@ fn check_frames_and_placements(
 }
 
 fn frame_chain_has_cycle(parent: &HashMap<DeclId, DeclId>, start: DeclId) -> bool {
-    let mut seen: HashSet<DeclId> = HashSet::new();
     let mut cur = start;
+    let mut steps = 0u32;
     while let Some(&p) = parent.get(&cur) {
-        if !seen.insert(cur) {
-            return true;
-        }
         cur = p;
-        if cur == start {
+        steps += 1;
+        if cur == start || steps as usize > parent.len() {
             return true;
         }
     }
     false
+}
+
+enum PosKind {
+    Finite,
+    Positive,
+    Quaternion,
 }
 
 fn check_pose(ir: &Ir, reg: &Registry, relation: DeclId, out: &mut Vec<SemanticError>) {
@@ -542,12 +583,6 @@ fn check_pose(ir: &Ir, reg: &Registry, relation: DeclId, out: &mut Vec<SemanticE
     }
 }
 
-enum PosKind {
-    Finite,
-    Positive,
-    Quaternion,
-}
-
 fn check_vec(
     ir: &Ir,
     relation: DeclId,
@@ -558,11 +593,11 @@ fn check_vec(
 ) {
     let value = match attr_value(ir, relation, attr) {
         Some(v) => v,
-        None => return, // absent pose component is allowed (identity default); presence is validated
+        None => return, // an absent pose component defaults to identity; presence is validated
     };
-    let list = match num_list(value) {
-        Some(l) => l,
-        None => {
+    let items = match value {
+        ValueR::List(items) => items,
+        _ => {
             out.push(SemanticError::PoseBadLength {
                 relation,
                 attr,
@@ -572,29 +607,19 @@ fn check_vec(
             return;
         }
     };
-    if list.len() as u32 != n {
+    if items.len() as u32 != n {
         out.push(SemanticError::PoseBadLength {
             relation,
             attr,
             expected: n,
-            found: list.len() as u32,
+            found: items.len() as u32,
         });
         return;
     }
     let mut norm2 = 0.0f64;
-    for (i, comp) in list.iter().enumerate() {
+    for (i, comp) in items.iter().enumerate() {
         match comp {
-            None => out.push(SemanticError::PoseNonFinite {
-                relation,
-                attr,
-                index: i as u32,
-            }),
-            Some(x) if !x.is_finite() => out.push(SemanticError::PoseNonFinite {
-                relation,
-                attr,
-                index: i as u32,
-            }),
-            Some(x) => {
+            ValueR::Num(x) if x.is_finite() => {
                 norm2 += x * x;
                 if matches!(kind, PosKind::Positive) && *x <= 0.0 {
                     out.push(SemanticError::ScaleNonPositive {
@@ -603,6 +628,11 @@ fn check_vec(
                     });
                 }
             }
+            _ => out.push(SemanticError::PoseNonFinite {
+                relation,
+                attr,
+                index: i as u32,
+            }),
         }
     }
     if matches!(kind, PosKind::Quaternion) && norm2 < QUAT_NORM_EPSILON {
@@ -612,25 +642,17 @@ fn check_vec(
 
 fn check_interactions_and_anchoring(
     ir: &Ir,
-    it: &Interner,
     reg: &Registry,
+    b: &Buckets,
+    buf: &mut Vec<(i8, DeclId)>,
     out: &mut Vec<SemanticError>,
 ) {
-    let arch_i = ir
-        .decl_node(reg.interaction)
-        .map(|n| n.name)
-        .unwrap_or(SymId::NONE);
-    for ix in reg.instances_of(ir, reg.interaction) {
-        let parts = edge_participants(ir, ix);
-        check_dangling(ir, ix, &parts, out);
-        // + input_role, ~ action, - target(s)
-        let inputs = parts.iter().filter(|(s, _)| *s > 0).count() as u32;
-        let actions: Vec<DeclId> = parts
-            .iter()
-            .filter(|(s, _)| *s == 0)
-            .map(|(_, t)| *t)
-            .collect();
-        let targets = parts.iter().filter(|(s, _)| *s < 0).count() as u32;
+    let arch_i = reg.name(ir, reg.interaction);
+    for &ix in &b.interactions {
+        edge_participants_into(ir, ix, buf);
+        check_dangling(ir, ix, buf, out);
+        let inputs = buf.iter().filter(|(s, _)| *s > 0).count() as u32;
+        let targets = buf.iter().filter(|(s, _)| *s < 0).count() as u32;
         if inputs != 1 {
             out.push(SemanticError::RelationRole {
                 relation: ix,
@@ -645,8 +667,11 @@ fn check_interactions_and_anchoring(
                 reason: RoleReason::NoTarget,
             });
         }
-        for &act in &actions {
-            if !reg.is_kind_in(ir, act, &reg.actions) && !isa_transitive(ir, act, reg.action) {
+        for &(sign, act) in buf.iter() {
+            if sign == 0
+                && !reg.is_kind_in(ir, act, &reg.actions)
+                && !isa_transitive(ir, act, reg.action)
+            {
                 out.push(SemanticError::UnknownAction {
                     interaction: ix,
                     target: act,
@@ -655,36 +680,27 @@ fn check_interactions_and_anchoring(
         }
     }
 
-    let arch_a = ir
-        .decl_node(reg.anchoring)
-        .map(|n| n.name)
-        .unwrap_or(SymId::NONE);
-    for an in reg.instances_of(ir, reg.anchoring) {
-        let parts = edge_participants(ir, an);
-        check_dangling(ir, an, &parts, out);
-        let entity_ok = parts
-            .iter()
-            .filter(|(s, _)| *s > 0)
-            .all(|(_, t)| isa_transitive(ir, *t, reg.spatial_entity));
-        let frame_ok = parts
+    let arch_a = reg.name(ir, reg.anchoring);
+    for &an in &b.anchorings {
+        edge_participants_into(ir, an, buf);
+        check_dangling(ir, an, buf, out);
+        let frame_ok = buf
             .iter()
             .filter(|(s, _)| *s < 0)
             .all(|(_, t)| isa_transitive(ir, *t, reg.spatial_frame));
-        let anchor_ok = parts
+        let anchor_ok = buf
             .iter()
             .filter(|(s, _)| *s == 0)
             .any(|(_, t)| isa_transitive(ir, *t, reg.semantic_anchor));
-        if !entity_ok {
-            if let Some((_, t)) = parts
-                .iter()
-                .find(|(s, t)| *s > 0 && !isa_transitive(ir, *t, reg.spatial_entity))
-            {
-                out.push(SemanticError::RelationRole {
-                    relation: an,
-                    archetype: arch_a,
-                    reason: RoleReason::WrongKind { participant: *t },
-                });
-            }
+        if let Some(&(_, t)) = buf
+            .iter()
+            .find(|(s, t)| *s > 0 && !isa_transitive(ir, *t, reg.spatial_entity))
+        {
+            out.push(SemanticError::RelationRole {
+                relation: an,
+                archetype: arch_a,
+                reason: RoleReason::WrongKind { participant: t },
+            });
         }
         if !frame_ok || !anchor_ok {
             out.push(SemanticError::RelationRole {
@@ -696,12 +712,12 @@ fn check_interactions_and_anchoring(
     }
 }
 
-fn check_assets(ir: &Ir, it: &Interner, reg: &Registry, out: &mut Vec<SemanticError>) {
+fn check_assets(ir: &Ir, reg: &Registry, b: &Buckets, out: &mut Vec<SemanticError>) {
     let uri = match reg.sym_uri {
         Some(s) => s,
         None => return,
     };
-    for asset in reg.instances_of(ir, reg.visual_asset) {
+    for &asset in &b.visual_assets {
         match attr_value(ir, asset, uri) {
             Some(ValueR::Str(_)) => {}
             _ => out.push(SemanticError::AssetUriNotString { asset }),
@@ -709,48 +725,16 @@ fn check_assets(ir: &Ir, it: &Interner, reg: &Registry, out: &mut Vec<SemanticEr
     }
 }
 
-fn check_runtime_handle_fields(
-    ir: &Ir,
-    it: &Interner,
-    reg: &Registry,
-    out: &mut Vec<SemanticError>,
-) {
+fn check_runtime_handle_fields(ir: &Ir, reg: &Registry, out: &mut Vec<SemanticError>) {
     if reg.runtime_handle_fields.is_empty() {
         return;
     }
-    for (d, node) in ir.decls() {
+    for (_, node) in ir.decls() {
         if reg.runtime_handle_fields.contains(&node.name) {
-            let parent = node.parent;
             out.push(SemanticError::RuntimeHandleField {
-                decl: parent,
+                decl: node.parent,
                 field: node.name,
             });
         }
     }
-}
-
-fn check_dangling(ir: &Ir, relation: DeclId, parts: &[(i8, DeclId)], out: &mut Vec<SemanticError>) {
-    for (_, target) in parts {
-        if ir.decl_node(*target).is_none() {
-            out.push(SemanticError::DanglingReference {
-                relation,
-                target: *target,
-            });
-        }
-    }
-}
-
-/// Every decl in the containment subtree of `root` (inclusive), cycle-safe (visited set).
-fn subtree(ir: &Ir, root: DeclId) -> Vec<DeclId> {
-    let mut out = Vec::new();
-    let mut seen: HashSet<DeclId> = HashSet::new();
-    let mut stack = vec![root];
-    while let Some(d) = stack.pop() {
-        if !seen.insert(d) {
-            continue;
-        }
-        out.push(d);
-        stack.extend(ir.child_decls(d));
-    }
-    out
 }

@@ -482,3 +482,65 @@ fn import_alias_change_is_invariant() {
         "alias choice must not change the verdict"
     );
 }
+
+// ---------------------------------------------------------------------------------------------
+// benchmark (ignored; run with --release --ignored --nocapture)
+// ---------------------------------------------------------------------------------------------
+
+/// Generate a scene with `n` spatial entities, each placed in one of two frames.
+fn gen_scene(n: usize) -> String {
+    use std::fmt::Write as _;
+    let mut s = String::from(HEAD);
+    s.push_str("scene: + <isa> s.kinds.scene {\n");
+    s.push_str("@xr_session: x.session.session_config { (+ x.session_modes.immersive_ar, - x.reference_spaces.local_floor); }\n");
+    s.push_str("fa: + <isa> s.kinds.spatial_frame {}\n");
+    s.push_str("fb: + <isa> s.kinds.spatial_frame {}\n");
+    s.push_str("@pf: s.relations.parent_frame { (+ fb, - fa); }\n");
+    for i in 0..n {
+        let _ = writeln!(s, "e{i}: + <isa> s.kinds.spatial_entity {{}}");
+        let frame = if i % 2 == 0 { "fa" } else { "fb" };
+        let _ = writeln!(
+            s,
+            "@p{i}: s.relations.placement {{ (+ e{i}, - {frame}); position [0.0, 1.0, -2.0]; orientation [0.0, 0.0, 0.0, 1.0]; scale [1.0, 1.0, 1.0]; }}"
+        );
+    }
+    s.push_str("}\n");
+    s
+}
+
+fn median_ms(iters: usize, mut f: impl FnMut()) -> f64 {
+    let mut xs: Vec<f64> = Vec::new();
+    for _ in 0..iters {
+        let t = std::time::Instant::now();
+        f();
+        xs.push(t.elapsed().as_secs_f64() * 1e3);
+    }
+    xs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    xs[xs.len() / 2]
+}
+
+#[test]
+#[ignore = "measurement bench; run with --release --ignored --nocapture"]
+fn bench_compile_vs_validate() {
+    println!("\n=== WebXR semantic bench (ms; median-of-3) — parse+lowering vs validation ===");
+    println!("n_entities | parse+lower ms | validate ms | validate us/entity");
+    for &n in &[100usize, 1_000, 10_000, 100_000] {
+        let src = gen_scene(n);
+        // parse + lowering (median over fresh compiles)
+        let compile_ms = median_ms(3, || {
+            let _ = compile_scene(&src);
+        });
+        // validate on the already-compiled Ir
+        let c = compile_scene(&src);
+        let (ir, it) = (c.ir(), c.it());
+        let validate_ms = median_ms(3, || {
+            let v = validate(ir, it);
+            assert!(v.is_empty(), "generated scene must be valid at n={n}");
+        });
+        println!(
+            "{n:>9} | {compile_ms:>13.1} | {validate_ms:>10.2} | {:>6.2}",
+            validate_ms * 1000.0 / n as f64
+        );
+    }
+    println!();
+}
