@@ -168,8 +168,12 @@ fn corpus_digest() -> (usize, String) {
     (n, h.finalize().to_hex().to_string())
 }
 
-const KAT_CORPUS_COUNT: usize = 96;
-const KAT_CORPUS_DIGEST: &str = "525fa75cf87828c2c70e8ca3f3b13a8a5641133b55d5c4d956e12b5769ade379";
+// Bumped 2026-09-01 (APPROVED-CORE-EDIT: webxr-semantic-vocabulary): +2 lowerable fixtures
+// under data/webxr/ (webxr_vocabulary.hymeko, webxr_scene_demo.hymeko). The existing 96 fixtures
+// are untouched (git confirms no modified data/** file), and the count guard proves the set grew
+// by exactly 2 — this is corpus growth, NOT a lowering regression of algo_version=1.
+const KAT_CORPUS_COUNT: usize = 98;
+const KAT_CORPUS_DIGEST: &str = "de65bbab9d281501a57a349fa9fdd2c36347e3cd8f1f0b08676e07303ccade35";
 
 #[test]
 fn print_corpus_digest_for_capture() {
