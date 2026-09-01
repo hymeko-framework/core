@@ -1,0 +1,59 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+\title{WebXR semantic vocabulary (PoW-0) for HyMeKo core}
+\author{Aiko Seto}
+\date{Created-at: 2026-09-01 03:30 CEDT (design record; brief arrived truncated, design settled interactively)}
+\begin{document}
+\maketitle
+
+\section*{Scope}
+A WebXR-demo \emph{semantic} vocabulary, a compilable \texttt{.hymeko} demo model, and a strict
+validator, all in \texttt{hymeko\_core}. Semantic phase only: no JS/TS, WASM, WebXR session, renderer,
+WebGL/WGPU, scene DTO, second scene graph, asset loader, or runtime XR handles in the Ir; no new crate,
+no parser-grammar or Ir-layout change. The canonical truth stays \texttt{hymeko\_core::ir::Ir}.
+
+\section*{Design (X3D-mirror + CogInfoCom top, chosen by the user)}
+A two-layer \texttt{<isa>} vocabulary in the \texttt{meta\_kinematics} style:
+\begin{itemize}
+  \item \textbf{Abstract top (CogInfoCom-inspired, authored):} \texttt{cognitive\_entity} and its
+        \texttt{spatial\_frame} / \texttt{perceptual} / \texttt{channel} kinds --- a scene is cognitive
+        entities exchanging information over channels within spatial frames.
+  \item \textbf{Concrete kinds (ISO X3D node taxonomy + WebXR declarative counterparts):}
+        \texttt{node}, \texttt{reference\_space}, \texttt{anchor} ($<$isa$>$ spatial\_frame);
+        \texttt{geometry}, \texttt{appearance}, \texttt{light} ($<$isa$>$ perceptual);
+        \texttt{viewpoint}, \texttt{input\_source} ($<$isa$>$ channel). WebXR runtime concepts
+        (reference space, anchor, input source) are modelled as \emph{declarative} kinds, never as
+        XRSession/XRSpace/XRAnchor runtime handles.
+\end{itemize}
+No published CogInfoCom scene ontology exists (bounded search); the top is authored, X3D-informed.
+
+\section*{Affected files}
+\begin{itemize}
+  \item \texttt{data/webxr/webxr\_vocabulary.hymeko} --- the vocabulary (new).
+  \item \texttt{data/webxr/webxr\_scene\_demo.hymeko} --- the demo scene, importing the vocabulary (new).
+  \item \texttt{hymeko\_core/tests/webxr/mod.rs} --- the strict validator + tests (new).
+  \item \texttt{hymeko\_core/tests/mod.rs} --- register the module (allowlisted).
+  \item \texttt{hymeko\_core/tests/unified\_ir/validation/corpus.rs} --- bump the frozen corpus
+        count/digest for the +2 fixtures (allowlisted; existing 96 untouched).
+\end{itemize}
+
+\section*{CORE.YAML items touched}
+\texttt{data/**} is \texttt{lockdown: full}: two \emph{new} files added under \texttt{data/webxr/}
+(authorised by \texttt{APPROVED-CORE-EDIT: webxr-semantic-vocabulary}); no existing fixture edited.
+\texttt{**/tests/**} is allowlisted (editable). No \texttt{src/**}, no manifest, no dependency change.
+
+\section*{Validator (read-back, per language doc \S{}"failure mode")}
+A green CLI compile proves parse+resolve, not meaning (HyMeKo has no schema validation). So
+\texttt{validate\_scene(ir, it)} reads the canonical Ir and enforces: every scene element $<$isa$>$ a
+known vocabulary kind (no bare nodes, no foreign inheritance); required attributes present per kind
+(\texttt{reference\_space.type}, \texttt{geometry.primitive}, \texttt{light.type},
+\texttt{input\_source.handedness} $\in\{$left,right,none$\}$); anchors spatially contained in a
+reference\_space; and the vocabulary's own two-layer $<$isa$>$ structure. Proven strict by
+negative in-memory scenes (each malformed one is rejected with the specific violation).
+
+\section*{Test strategy / rollback}
+Source-first: \texttt{*.hymeko} $\to$ RealParser $\to$ ModuleStore::compile $\to$ Ir $\to$
+validate\_scene. 6 tests (1 valid demo, 1 vocabulary-layer, 4 negative). CLI compile-gate both
+\texttt{.hymeko} files. Rollback: additive on a feature branch; drop the branch. Core \texttt{main}
+untouched, not merged.
