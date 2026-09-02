@@ -1,0 +1,32 @@
+[package]
+name = "hymeko_python"
+version = "0.1.0"
+edition = "2024"
+description = "PyO3 bindings exposing the real HyMeKo parser and hymeko_core canonical IR to Python (import hymeko)."
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lib]
+# Rust lib name differs from `hymeko` (the hymeko_core dep's lib name) to avoid a
+# name clash; the *Python* module is named `hymeko` via the `#[pymodule]` fn +
+# maturin `module-name` (see pyproject.toml).
+name = "hymeko_python"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# APPROVED-DEPENDENCY-EDIT: pyo3-python-packaging. 0.23.5 is the version already
+# in the local registry cache (offline-resolvable); abi3-py312 builds a single
+# forward-compatible wheel. `extension-module` is a feature (below), off for
+# `cargo test`/`clippy` so the test binary links libpython (via PYO3_PYTHON).
+pyo3 = { version = "0.23", default-features = false, features = ["abi3-py312", "macros"] }
+hymeko_core = { path = "../hymeko_core" }
+parser = { workspace = true }
+
+[features]
+# maturin enables this for the wheel build; kept out of `default` so `cargo test`
+# can link the interpreter for the Rust-side tests.
+extension-module = ["pyo3/extension-module"]
+
+[dev-dependencies]
+hymeko_core = { path = "../hymeko_core" }
+parser = { workspace = true }

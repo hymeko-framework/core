@@ -1,0 +1,126 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\title{HyMeKo Python PoW-0 --- \texttt{hymeko\_python} PyO3 binding}
+\author{STRATEGY-ID: HYMEKO-PLATFORM-2026-09-01-v1 \\ ROADMAP-TASK: PY0}
+\date{Created-at: 2026-09-02 16:05 CEDT}
+\begin{document}
+\maketitle
+
+\section*{ETA}
+$\approx$4--6 h: audit (0.5) $+$ crate scaffold \& PyO3 model (1.5) $+$ ID-safety \& errors
+(0.75) $+$ batch arrays \& GIL release (0.75) $+$ Python tests \& hash parity (1.0) $+$
+benchmarks (0.5) $+$ docs/packaging/report (0.75). Basis: the binding is a thin read-only
+wrapper over an existing, tested core API; the cost is surface area (many small getters),
+tests, and the wheel/import round-trip, not algorithmic difficulty.
+
+\section{Scope and goal}
+Deliver a usable, tested \texttt{hymeko\_python} crate exposing the \emph{real} HyMeKo parser
+and \texttt{hymeko\_core} canonical \texttt{Ir} to Python as \texttt{import hymeko}. Read-only
+value views over the canonical \texttt{Ir}; no second IR, no editor IR, no JSON intermediate,
+no dense graph, no CLI, no mutation/transaction API. The Python \texttt{Model} object directly
+owns the canonical \texttt{Ir} and the compile-context (\texttt{Interner}) needed to resolve
+names.
+
+\section{Ownership (mission \S1)}
+Dependency edges, only: \texttt{hymeko\_python} $\to$ \texttt{parser},
+\texttt{hymeko\_python} $\to$ \texttt{hymeko\_core}. Forbidden: \texttt{hymeko\_core} $\to$
+PyO3; \texttt{parser} $\to$ Python; a second IR; a Python-side canonical DTO. The audit fixes
+exactly which parser/lowering results must be kept together (expected: the owned \texttt{Ir}
+$+$ the \texttt{Interner}); \texttt{ModuleStore}/\texttt{Index} scaffolding is dropped once the
+\texttt{Ir} and \texttt{Interner} are extracted.
+
+\section{Affected files (all new; no core edit)}
+\begin{itemize}[nosep]
+  \item \texttt{Cargo.toml} (root) --- add \texttt{hymeko\_python} to \texttt{[workspace] members}
+        (APPROVED-CORE-EDIT: add-hymeko-python-workspace-crate).
+  \item \texttt{hymeko\_python/Cargo.toml} --- \texttt{pyo3} (abi3) $+$ deps
+        (APPROVED-DEPENDENCY-EDIT: pyo3-python-packaging); versions chosen by audit.
+  \item \texttt{hymeko\_python/pyproject.toml}, \texttt{hymeko\_python/README.md},
+        \texttt{hymeko\_python/hymeko.pyi} (type stub).
+  \item \texttt{hymeko\_python/src/\{lib,model,ids,errors,entities,arrays,pipeline\}.rs}.
+  \item \texttt{hymeko\_python/python/tests/*.py} (stdlib \texttt{unittest}).
+  \item \texttt{hymeko\_python/benches/} or a \texttt{bench.py} (import/parse/lower/hash/batch).
+  \item \texttt{docs/python-architecture.md}, \texttt{reports/2026-09-02-hymeko-python-pow0.md}.
+\end{itemize}
+\textbf{CORE.YAML items touched:} the two approval tokens above only. No
+\texttt{hymeko\_core/src/**} or \texttt{hymeko\_core/Cargo.toml} edit; \texttt{data/**} read-only.
+
+\section{Interface (mission \S3--\S7)}
+\texttt{hymeko.parse(source, filename)}, \texttt{hymeko.load(path)} $\to$ \texttt{Model}.
+\texttt{Model}: \texttt{declaration\_count}, \texttt{node\_count}, \texttt{edge\_count},
+\texttt{hyperarc\_count}, \texttt{canonical\_hash()}; \texttt{declaration/node/edge/hyperarc(id)};
+\texttt{declarations()/nodes()/edges()/hyperarcs()};
+\texttt{parent\_of/children\_of/incidences\_of\_node/incidences\_of\_arc};
+\texttt{incidence\_arrays()} (arc-major SoA). Entities are read-only value views exposing
+target/slot/sign/weight/annotation/value/base-isa/name/canonical-path. ID types
+\texttt{DeclId/NodeId/EdgeId/HyperArcId} carry a model-instance token; wrong model $\to$
+\texttt{CrossModelIdError}; wrong domain / out-of-range $\to$ typed errors; the raw
+\texttt{usize} is not a public contract; no pickle/wire stability promised.
+
+\paragraph{Incidence direction (constraint discovered in audit).} Core \texttt{main}
+(\texttt{791939b}) has \emph{no} reverse-incidence index (\texttt{incidence.rs} lives only on
+unmerged feature branches). Per \S7 (``if the current core API allows'' \& ``do not copy the
+not-yet-promoted feature-branch API'') PoW-0 reads incidences \emph{directly from the canonical
+\texttt{Ir}} (arc $\to$ \texttt{refs}, forward, arc-major --- this is the natural batch layout);
+\texttt{incidences\_of\_node} is an on-demand query over the \texttt{Ir} (documented $O(\text{arcs}\cdot\text{arity})$,
+no stored reverse structure). \texttt{prepare\_incidence\_index()} / \texttt{star\_operator()}
+are documented as the future integration point that lands when canonical-incidence-backbone
+promotes; they are \emph{not} implemented here.
+
+\section{Test strategy (mission \S8)}
+Rust: \texttt{fmt}, \texttt{clippy --workspace --all-features --all-targets -D warnings},
+\texttt{check/build}, full Rust test/doctest. Python (stdlib \texttt{unittest}, run from an
+\emph{installed wheel}): import; in-memory parse; file parse; import-fixture; syntax/resolution
+errors; every entity count; canonical-hash parity vs a Rust oracle; hierarchy; node/edge/arc
+read; sign $+/-/\sim$; weights; annotations/values; duplicate incidence; empty graph;
+malformed ID; cross-model ID; deterministic iteration; model lifetime; batch incidence access;
+Unicode; parser-first WebXR demo; service/VLAN fixture; Steiner/sunflower/Mycielski golden;
+generated $10^3/10^4/\ge 10^5$-incidence sources (reuse core generators or lift to shared
+test-support; no new generator framework).
+
+\section{Performance budget (mission \S4, \S10)}
+Peak RSS $\le$ 16\,GiB (canonical \texttt{Ir} $+$ Python view cost). Batch incidence export
+overhead $\le 25\%$ vs the equivalent Rust-only operation, \emph{or} the gap fully decomposed.
+No per-incidence Python object allocation on the batch hot path. Long Rust ops
+(parse/lower/hash/validation) release the GIL. Bench axes: \texttt{import hymeko}, parse-only,
+parse+lower, coherence, canonical hash, scalar lookup, $10^3$ scalar loop, batch export vs
+Rust-only, boundary overhead, peak RSS; small/medium/$10^5$ (optional $10^6$).
+
+\section{Batch API representation study (mission \S6)}
+Compare (A) Python \texttt{list}/\texttt{tuple}; (B) single bulk copy into an immutable Python
+buffer; (C) safe zero-copy \texttt{memoryview} with parent-retention. Keep only a measured,
+memory-safe option; no undocumented \texttt{unsafe} for zero-copy --- if safe zero-copy is not
+tenable now, one bulk copy, documented.
+
+\section{Rollback path}
+The crate is additive and isolated: revert by removing \texttt{hymeko\_python} from
+\texttt{[workspace] members} and deleting the directory. No core file changes to unwind; no
+main merge. The feature branch is discardable without affecting any other branch.
+
+\section{Risk anticipation}
+\begin{itemize}[nosep]
+  \item \textbf{Worst-case input:} a generated $\ge 10^5$-incidence \texttt{.hymeko} source
+        through the real parser; batch export must stay $O(\text{nnz})$ with a single bulk copy
+        and no per-incidence Python object.
+  \item \textbf{Contract preservation:} the binding must not weaken any core invariant ---
+        canonical hash must be \emph{bit-identical} to the Rust oracle; all parse/lower/validate
+        failures become typed Python exceptions, never a panic across the FFI boundary
+        (\texttt{catch\_unwind} / \texttt{Result} at every entry).
+  \item \textbf{Lifetime:} the \texttt{Ir} and \texttt{Interner} are owned by the \texttt{Model};
+        entity/array views must not outlive it (Python parent-retention on any \texttt{memoryview}).
+  \item \textbf{ID safety:} a model-instance token prevents cross-model ID confusion; the raw
+        \texttt{usize} is never a public contract, so a later generational-ID migration is a
+        wrapper-internal change.
+  \item \textbf{Toolchain:} no system Python on host; project-local Python via \texttt{uv}
+        (managed dir, no global install), \texttt{maturin} $+$ \texttt{pytest}/\texttt{unittest}
+        into a project-local venv. Reported explicitly per \S2.
+\end{itemize}
+
+\section{Halt conditions honored}
+No \texttt{hymeko\_core} edit; if a required core API is absent (e.g. single-model canonical
+hash), halt and report rather than reimplement it in the binding. No global toolchain install.
+\end{document}

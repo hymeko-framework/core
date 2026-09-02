@@ -1,0 +1,17 @@
+# Build artifacts and environments — never committed (mission §9).
+/target
+**/*.pyd
+**/*.so
+**/*.dll
+**/*.dylib
+/.venv
+/.venv-*
+/dist
+/build
+/wheels
+*.whl
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/

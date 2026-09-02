@@ -1,0 +1,24 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "hymeko"
+version = "0.1.0"
+description = "Python bindings for the HyMeKo parser and canonical IR (read-only value views)."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT OR Apache-2.0" }
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3 :: Only",
+    "Development Status :: 3 - Alpha",
+]
+
+[tool.maturin]
+# The Rust crate is `hymeko_python`; the imported Python module is `hymeko`.
+module-name = "hymeko"
+features = ["pyo3/extension-module"]
+# abi3 → a single wheel for CPython >= 3.12. Pure-Rust extension: the type stub
+# (`hymeko.pyi`) + `py.typed` ship alongside the compiled module via `include`.
+include = ["hymeko.pyi", "py.typed"]
