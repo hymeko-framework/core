@@ -47,3 +47,7 @@ mod sparse_workload_kat;
 // P2 §4.1 isolation profile (temporary; wired here because autotests=false).
 #[path = "incidence_precompute_profile.rs"]
 mod incidence_precompute_profile;
+
+// Part-2 §4 Bx profile (temporary; autotests=false).
+#[path = "bx_profile.rs"]
+mod bx_profile;
