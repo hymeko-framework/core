@@ -3,87 +3,10 @@
 //! Rayon bitwise; an independent dense-Bᵀ oracle; NaN/Inf rejected at prepare; empty/single/duplicate/-0.0.
 //! Bench: the §4.1/§4.5 profile (30× confirmed, break-even, Bx no-regression, Rayon scaling).
 
-use std::time::Instant;
+use hymeko::ir::incidence::{OperatorPlanError, build_incidence_index};
+use hymeko::ir::ir::Ir;
 
-use hymeko::common::ids::{DeclId, NodeId};
-use hymeko::ir::incidence::{
-    IncidenceIndex, OperatorPlanError, build_incidence_index, scalar_weight,
-};
-use hymeko::ir::ir::{
-    AnnoR, ArcRec, DeclKind, DeclNode, Ir, NodeRec, RefAtomR, SignedRefR, ValueR,
-};
-
-fn median_ms(iters: usize, mut f: impl FnMut()) -> f64 {
-    for _ in 0..2 {
-        f();
-    }
-    let mut s = Vec::with_capacity(iters);
-    for _ in 0..iters {
-        let t = Instant::now();
-        f();
-        s.push(t.elapsed().as_secs_f64() * 1e3);
-    }
-    s.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    s[s.len() / 2]
-}
-
-fn node(ir: &mut Ir) -> DeclId {
-    let d = ir.push_decl(DeclNode {
-        kind: DeclKind::Node,
-        name: hymeko::common::ids::SymId::new(0),
-        parent: DeclId::NONE,
-        first_child: DeclId::NONE,
-        last_child: DeclId::NONE,
-        next_sibling: DeclId::NONE,
-        anno: AnnoR::default(),
-    });
-    let nid = NodeId::new(ir.nodes.len());
-    ir.nodes.push(NodeRec::new(d, Vec::new()));
-    ir.bind_node_decl(d, nid).unwrap();
-    d
-}
-
-/// A ref with sign in {+1,-1,0} and an optional weight list.
-fn r(target: usize, sign: i8, weights: Option<Vec<f64>>) -> SignedRefR {
-    let atom = RefAtomR {
-        target: DeclId::new(target),
-        anno: AnnoR::default(),
-        weights: weights.map(|ws| ws.into_iter().map(ValueR::Num).collect()),
-    };
-    match sign {
-        s if s < 0 => SignedRefR::Minus(atom),
-        s if s > 0 => SignedRefR::Plus(atom),
-        _ => SignedRefR::Neutral(atom),
-    }
-}
-
-fn arc(ir: &mut Ir, refs: Vec<SignedRefR>) {
-    ir.arcs.push(ArcRec {
-        anno: AnnoR::default(),
-        in_edge: DeclId::NONE,
-        refs,
-    });
-}
-
-/// Independent dense-Bᵀ oracle: `z[d] = Σ_arc (Σ_incidence of d in arc  sign·weight) · y[arc]`.
-fn dense_bt(ir: &Ir, index: &IncidenceIndex<'_>, y: &[f64]) -> Vec<f64> {
-    let n = ir.decl_nodes.len();
-    let mut z = vec![0.0; n];
-    for d in 0..n {
-        let mut acc = 0.0;
-        for (i, &a) in index.incident_arcs(DeclId::new(d)).iter().enumerate() {
-            let slot = index.incident_slots(DeclId::new(d))[i];
-            let sref = &ir.arcs[a.raw()].refs[slot as usize];
-            acc += f64::from(sref.sign()) * scalar_weight(sref) * y[a.raw()];
-        }
-        z[d] = acc;
-    }
-    z
-}
-
-fn bits_eq(a: &[f64], b: &[f64]) -> bool {
-    a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.to_bits() == y.to_bits())
-}
+use super::incidence_support::{arc, bits_eq, dense_bt, median_ms, node, r, windowed};
 
 #[test]
 fn prepared_equals_legacy_and_oracle_across_sign_weight_variants() {
@@ -173,26 +96,6 @@ fn nan_and_inf_coefficient_rejected_at_prepare() {
     }
 }
 
-fn weighted_window(m: usize, k: usize) -> Ir {
-    let mut ir = Ir::default();
-    for _ in 0..m {
-        node(&mut ir);
-    }
-    for i in 0..(m - k + 1) {
-        let refs: Vec<SignedRefR> = (i..i + k)
-            .map(|j| {
-                r(
-                    j,
-                    if j % 3 == 1 { -1 } else { 1 },
-                    Some(vec![1.0 + (j % 7) as f64 * 0.25]),
-                )
-            })
-            .collect();
-        arc(&mut ir, refs);
-    }
-    ir
-}
-
 #[test]
 fn irregular_high_cardinality_parity() {
     // one arc over all nodes (high cardinality) + irregular small arcs.
@@ -227,7 +130,7 @@ fn irregular_high_cardinality_parity() {
 #[test]
 fn bench_operator_plan_decision_gate() {
     let (m, k) = (200_001usize, 5usize);
-    let ir = weighted_window(m, k);
+    let ir = windowed(m, k);
     let index = build_incidence_index(&ir).unwrap();
     let n = ir.decl_nodes.len();
     let n_arcs = ir.arcs.len();

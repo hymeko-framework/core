@@ -44,6 +44,14 @@ mod webxr;
 #[path = "sparse_workload_kat.rs"]
 mod sparse_workload_kat;
 
+// Shared incidence-test scaffolding (§6.1) used by the P2 + P2.1 suites below.
+#[path = "incidence_support.rs"]
+mod incidence_support;
+
 // P2 §4.1 isolation profile (temporary; wired here because autotests=false).
 #[path = "incidence_precompute_profile.rs"]
 mod incidence_precompute_profile;
+
+// P2.1 canonical incidence backbone: PreparedIr owned bundle + borrowed view.
+#[path = "prepared_ir_backbone.rs"]
+mod prepared_ir_backbone;
