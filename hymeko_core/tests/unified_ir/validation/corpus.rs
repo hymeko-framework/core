@@ -173,8 +173,30 @@ fn corpus_digest() -> (usize, String) {
     (n, h.finalize().to_hex().to_string())
 }
 
-const KAT_CORPUS_COUNT: usize = 96;
-const KAT_CORPUS_DIGEST: &str = "525fa75cf87828c2c70e8ca3f3b13a8a5641133b55d5c4d956e12b5769ade379";
+// Re-frozen 2026-09-03: one model added (`dynamics/lattice_chain.hymeko`, six masses on seven
+// springs) and `dynamics/meta_dynamics.hymeko` edited to carry the mechanical vocabulary. Checked
+// the same way as below and with the same result: with this project's six models moved out of the
+// tree, the corpus is 96 files and hashes to
+// 525fa75cf87828c2c70e8ca3f3b13a8a5641133b55d5c4d956e12b5769ade379 — the ORIGINAL constant, byte for
+// byte. Every file that moved is one of ours.
+//
+// Re-frozen 2026-09-02 because the corpus GREW, not because output moved.
+//
+// `data/` gained five models — `dynamics/{meta_dynamics, maxwell_rlc, divider_maxwell}` and
+// `optimization/{meta_optimization, resistor_divider}` — and every file under `data/` is a fixture,
+// so the count and the digest both had to move. That is the set changing, which the count assertion
+// below exists to distinguish from the thing this gate actually guards.
+//
+// The distinction was checked rather than assumed: with those five moved out of the tree, the
+// corpus is 96 files and hashes to 525fa75cf87828c2c70e8ca3f3b13a8a5641133b55d5c4d956e12b5769ade379
+// — the previous constant, unchanged to the byte. So `algo_version=1` output is still identical on
+// every program it was frozen over.
+//
+// Anyone re-freezing this again should do the same: move the new fixtures aside, confirm the digest
+// over the OLD set is what it was, and only then capture the new pair. A digest that moves while
+// the set holds still is the failure this test is for, and no comment makes that safe.
+const KAT_CORPUS_COUNT: usize = 102;
+const KAT_CORPUS_DIGEST: &str = "f9ab7da8b5d823fa9d55c28e78fd63bc37660a97f67852ad587a145f951cb3b5";
 
 #[test]
 fn print_corpus_digest_for_capture() {

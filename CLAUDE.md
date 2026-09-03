@@ -66,12 +66,13 @@ For every substantive implementation or experiment task, in this order:
 
 1. **Read `CORE.YAML` and `tools.yaml`** at the repository root.
 2. **Discovery pass** — for any task that might introduce a new artifact (module, crate, script, plan, fixture, function), run `find` / `grep` / `ls` first to confirm no existing scaffolding covers it. This is a Section 6.1 / §6.5 #12 precondition; skipping it has cost ~1700 LOC of duplicated work in 2026-06-03 incidents alone.
-3. **Plan** the change (Section 2) before touching code.
-4. **Implement** the change outside of `CORE.YAML`-protected files (Section 1).
-5. **Write tests** at all required layers (Section 3).
-6. **Run tests** and **measure** memory + latency (Sections 3, 4).
-7. **Write the report** (Section 9).
-8. Only then, return control to the user with a summary.
+3. **Ownership pass** — for any task that adds a capability, answer *which package owns this* before answering *how to build it* (Section 0.1). The discovery pass above asks whether the thing already exists; this asks where it belongs. They fail differently: a grep can come back empty and the placement still be wrong.
+4. **Plan** the change (Section 2) before touching code.
+5. **Implement** the change outside of `CORE.YAML`-protected files (Section 1).
+6. **Write tests** at all required layers (Section 3).
+7. **Run tests** and **measure** memory + latency (Sections 3, 4).
+8. **Write the report** (Section 9).
+9. Only then, return control to the user with a summary.
 
 For lightweight triage, questions, and one-file mechanical edits, use the same
 ordering in compressed form: read the relevant files, check whether `CORE.YAML`
@@ -83,6 +84,30 @@ If any required step fails, stop and report the failure. Do not proceed past a
 failing step.
 
 ---
+
+### 0.1 Ownership pass — docs index it, code decides it
+
+Before adding a capability, build a short **ownership map**: which package owns each piece of what
+was asked for. Start from the documentation — repo `README`s, `docs/`, the charter comments at the
+top of each `Cargo.toml` — because that is the fastest index of what lives where.
+
+Then **confirm every entry against the code**, because in this framework the two have disagreed
+repeatedly:
+
+- a crate's stated charter described what it was *meant* to contain, while it in fact owned a whole
+  domain vocabulary that belonged elsewhere;
+- two repositories' `README`s each claimed to be the canonical home of the same crate;
+- a module's public API read as exactly the right seam for a new capability, and it was scheduled to
+  be retired — which no document recorded.
+
+So: **documentation is the index, the code is the authority.** The load-bearing checks are the
+dependency edges in each `Cargo.toml` (which way may a dependency point?), the public exports, and a
+grep for the capability under every name it might carry. Where a capability already exists partially,
+extend it in the owning package rather than starting a competing one in the consumer.
+
+**A doc that disagrees with the code is a finding.** Report it; do not silently follow either one.
+And where placement is still unclear after this pass, stop and ask — a capability put in the wrong
+package is expensive to move once anything depends on it.
 
 ## 1. Core Framework Protection
 
@@ -550,7 +575,52 @@ Tools that track an external toolchain (rustup, Linux kernel, LLVM) are declared
 
 ---
 
-## 11. Halt Conditions
+## 11. Authoring HyMeKo models
+
+`.hymeko` files are **source**, and they get the same discipline as Rust: nothing is claimed to work
+until it has been through the compiler.
+
+### The gate
+
+```bash
+cargo build --release            # once
+target/release/hymeko_core <file.hymeko>
+```
+
+Exit `0` compiles, `1` is a parse or resolution failure, `2` is a usage error. Run it on every model
+you write or edit, and on every example you put in a document. **A model that has not been through
+the CLI is a draft**, and an example in prose that has not been through it is a liability — it will
+be copied.
+
+### Where the language is written down
+
+[`docs/hymeko-language.md`](docs/hymeko-language.md) — what the language can express, derived from
+the grammar (`parser/src/hymeko.lalrpop`), with every construct CLI-verified. Read it before
+authoring a model rather than pattern-matching off the nearest existing file; several things that
+look like syntax are conventions a particular consumer reads, and the two are easy to confuse.
+
+### The failure mode that matters
+
+HyMeKo has **no schema validation**. Inheritance is a relation, not a type: `link` is something to
+inherit from, not a declaration of which fields are legal. So a misspelled attribute is not an error
+— `mas 2.0;` compiles cleanly, exit 0, and simply means nothing to the consumer looking for `mass`.
+
+A green compile therefore proves the model *parses and resolves*, not that it says what you meant.
+Check the CLI's declaration hierarchy dump, and prefer a test that reads the model back through its
+actual consumer (see `transformation/hymeko_geometry/tests/end_to_end.rs`, which drives a fixture
+from source to link poses) over eyeballing the source.
+
+### Adding a new attribute
+
+Name it, give it a block, reference it — the `limit -> joint_rev_limit` pattern in
+`data/minimal_examples/constants/meta_kinematics.hymeko`. Attributes declared this way are
+inheritable, shareable and self-describing. Do **not** encode new meaning positionally in an
+incidence's value list; that is how the joint origin travels (`[[xyz],[rpy]]`) and it is already the
+fragile part of the model — a swapped pair is silently a different pose.
+
+---
+
+## 12. Halt Conditions
 
 Stop and ask the user before proceeding if any of the following hold:
 

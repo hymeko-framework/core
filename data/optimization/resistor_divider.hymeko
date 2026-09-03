@@ -1,0 +1,156 @@
+// resistor_divider.hymeko — a constrained inverse-design problem, declared.
+//
+// Choose R1 and R2 so that a 6 V supply presents 1.5 V at node A with the bulb connected, holds no
+// more than 2.0 V there with the bulb removed, and wastes as little as possible in the resistors.
+//
+// Nothing here is a formula. The network is declared as branches between nets; the nodal equations
+// are ASSEMBLED from that topology by the projection, per scenario. A voltage divider never appears
+// in this file and must never appear in a backend — if it did, the topology would be decoration and
+// the equations would be the model.
+//
+// The two scenarios are ONE base model. Every net, branch, parameter and contract below is shared;
+// the single semantic difference is whether the bulb branch participates, and that difference is one
+// `participation` hyperedge.
+
+resistor_divider_description {
+    @"meta_optimization.hymeko";
+    using opt.units       as u;
+    using opt.kinds       as kind;
+    using opt.ops         as ops;
+    using opt.laws        as law;
+    using opt.constraints as con;
+    using opt.scenarios   as sc;
+    using opt.topology    as net;
+    using opt.goals       as goal;
+    using opt.provenance  as prov;
+}
+
+resistor_divider: u, kind, ops, law, con, sc, net, goal, prov {
+
+    // ── The nets ────────────────────────────────────────────────────────────────
+    // A net is a set of ports at one potential. It is solved for, not declared, so it carries no
+    // value — only the ground reference fixes one.
+    supply: net.net {}
+    node_a: net.net {}
+    gnd:    net.net {}
+
+    @ground_reference: law.ground { (~ gnd); }
+
+    // ── The source ──────────────────────────────────────────────────────────────
+    Vs: kind.parameter {
+        unit  u.volt;
+        value 6.0;
+    }
+    @source: law.ideal_source { (+ supply, - gnd, ~ Vs); }
+
+    // ── The decision variables ──────────────────────────────────────────────────
+    // Typed as `decision`, not as parameters that something happens to move. The lower bound IS the
+    // positivity constraint: a resistance of zero is not a design the model admits, and saying so
+    // here keeps it out of the solver's conscience.
+    R1: kind.decision {
+        unit  u.ohm;
+        lower 0.000001;
+        upper 1000000.0;
+        start 10.0;
+    }
+    R2: kind.decision {
+        unit  u.ohm;
+        lower 0.000001;
+        upper 1000000.0;
+        start 10.0;
+    }
+
+    @branch_r1: law.resistor { (+ supply, - node_a, ~ R1); }
+    @branch_r2: law.resistor { (+ node_a, - gnd,    ~ R2); }
+
+    // ── The bulb ────────────────────────────────────────────────────────────────
+    // One operating point is known and nothing else is. `Rb = Vb / Ib` is therefore a LINEARISATION
+    // at that point, not a claim that an incandescent filament has constant resistance — its cold
+    // resistance is an order of magnitude lower and it rises with temperature.
+    //
+    // The claim and its evidence stay in the IR: `Rb` is declared an approximation, and the
+    // `@bulb_provenance` edge names the two measurements it rests on. The projection refuses a
+    // quantity that declares itself an approximation and carries no such edge.
+    bulb {
+        Vb: kind.parameter {
+            unit  u.volt;
+            value 1.5;
+        }
+        Ib: kind.parameter {
+            unit  u.ampere;
+            value 0.5;
+        }
+        Rb: kind.derived {
+            unit           u.ohm;
+            approximation  "operating-point linearisation: one measured (V, I) pair, valid only near it";
+        }
+        @rb_from_operating_point: ops.divide { (+ Rb, - Vb, - Ib); }
+    }
+    @bulb_provenance: prov.approximation { (+ bulb.Rb, - bulb.Vb, - bulb.Ib); }
+
+    @branch_bulb: law.resistor { (+ node_a, - gnd, ~ bulb.Rb); }
+
+    // ── The scenarios ───────────────────────────────────────────────────────────
+    // The whole of the difference. Everything above is shared; `branch_bulb` participates in one
+    // scenario and not the other, and there is no second copy of anything.
+    connected:    sc.scenario {}
+    disconnected: sc.scenario {}
+
+    @bulb_participates: sc.participation { (+ connected, - branch_bulb); }
+
+    // ── Derived quantities ──────────────────────────────────────────────────────
+    // `net_potential` and `branch_power` are readouts of the assembled solution: the projection
+    // solves the nodal system for a scenario and names the results. Nothing here computes.
+    V_A_connected:    kind.derived { unit u.volt; }
+    V_A_disconnected: kind.derived { unit u.volt; }
+
+    @read_v_a_connected:    law.net_potential { (+ V_A_connected,    - node_a, ~ connected); }
+    @read_v_a_disconnected: law.net_potential { (+ V_A_disconnected, - node_a, ~ disconnected); }
+
+    P_R1_connected:   kind.derived { unit u.watt; }
+    P_R2_connected:   kind.derived { unit u.watt; }
+    P_bulb_connected: kind.derived { unit u.watt; }
+    P_source_connected: kind.derived { unit u.watt; }
+
+    @read_p_r1:     law.branch_power { (+ P_R1_connected,     - branch_r1,   ~ connected); }
+    @read_p_r2:     law.branch_power { (+ P_R2_connected,     - branch_r2,   ~ connected); }
+    @read_p_bulb:   law.branch_power { (+ P_bulb_connected,   - branch_bulb, ~ connected); }
+    @read_p_source: law.branch_power { (+ P_source_connected, - source,      ~ connected); }
+
+    P_R1_disconnected: kind.derived { unit u.watt; }
+    P_R2_disconnected: kind.derived { unit u.watt; }
+    @read_p_r1_open: law.branch_power { (+ P_R1_disconnected, - branch_r1, ~ disconnected); }
+    @read_p_r2_open: law.branch_power { (+ P_R2_disconnected, - branch_r2, ~ disconnected); }
+
+    // The expression graph proper. A relation is a hyperedge because the language has no runtime
+    // expression: `P_loss = P_R1 + P_R2` is an edge over three quantities, with the coefficients on
+    // the arc.
+    P_resistor_loss_connected:    kind.derived { unit u.watt; }
+    P_resistor_loss_disconnected: kind.derived { unit u.watt; }
+    efficiency_connected:         kind.derived { unit u.dimensionless; }
+
+    @loss_connected: ops.add {
+        (+ P_resistor_loss_connected, - P_R1_connected 1.0, - P_R2_connected 1.0);
+    }
+    @loss_disconnected: ops.add {
+        (+ P_resistor_loss_disconnected, - P_R1_disconnected 1.0, - P_R2_disconnected 1.0);
+    }
+    @efficiency: ops.divide {
+        (+ efficiency_connected, - P_bulb_connected, - P_source_connected);
+    }
+
+    // ── The design contract ─────────────────────────────────────────────────────
+    target_node_a:      kind.parameter { unit u.volt; value 1.5; }
+    open_circuit_limit: kind.parameter { unit u.volt; value 2.0; }
+
+    @contract_operating: con.equality { (+ V_A_connected,    - target_node_a); }
+    @contract_open:      con.at_most  { (+ V_A_disconnected, - open_circuit_limit); }
+
+    // ── The objective ───────────────────────────────────────────────────────────
+    // The disconnected loss is carried at weight ZERO rather than left out. Dropping the arc would
+    // make the choice invisible; carrying it at zero makes it a decision somebody can see and argue
+    // with. Minimising both is a different design problem and this file does not pretend otherwise.
+    @design_objective: goal.minimise {
+        (- P_resistor_loss_connected 1.0, - P_resistor_loss_disconnected 0.0);
+    }
+}

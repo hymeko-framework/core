@@ -1,0 +1,231 @@
+// divider_maxwell.hymeko — the resistor divider, as Maxwell sees it.
+//
+// `optimization/resistor_divider.hymeko` declares the same circuit as a NETWORK and the projection
+// solves it with Kirchhoff's current law and Ohm's law: one linear system, one answer, `V_A = 1.5 V`.
+// That answer is exact — and it is exact only in the QUASI-STATIC limit, where the fields settle
+// faster than anything else in the problem. Kirchhoff's laws are what Maxwell's equations reduce to
+// when `dD/dt` through a node and `dB/dt` around a loop are negligible.
+//
+// This file declines to neglect them. The node has a capacitance to ground, because a conductor at a
+// potential holds charge; each branch has an inductance, because a current encircles flux. Nothing
+// about the circuit changed — same source, same three resistors, same topology — but the state is now
+// four coordinates instead of none, and the answer is a trajectory instead of a number.
+//
+// # What the two must agree about, and where they may differ
+//
+// Set every derivative to zero and the port-Hamiltonian equations become
+//
+//     0 = i1 - i2 - ib          (the charge coordinate: Kirchhoff's current law)
+//     0 = Vs - V_A - R1 i1      (the flux coordinates: Kirchhoff's voltage law with Ohm's law)
+//     0 = V_A - R2 i2
+//     0 = V_A - Rb ib
+//
+// which is the nodal system `hymeko_optimize` assembles, exactly, with the parasitics nowhere in it.
+// **The steady state is the DC answer for ANY parasitic values**, and `the_steady_state_is_the_dc_answer`
+// checks that across a sweep of them. What the parasitics decide is how the circuit gets there: the
+// node rings at about 16 MHz with a quality factor near 33 and takes roughly a microsecond to settle.
+// That ringing is the whole of what Maxwell adds here, and Kirchhoff cannot see it.
+
+divider_maxwell_description {
+    @"meta_dynamics.hymeko";
+    @"../optimization/meta_optimization.hymeko";
+    using opt.kinds    as kind;
+    using opt.units    as u;
+    using ph.units     as pu;
+    using ph.stores    as store;
+    using ph.couplings as couple;
+    using ph.losses    as loss;
+    using ph.inputs    as input;
+    using ph.waveforms as wave;
+    using ph.readouts  as read;
+    using ph.studies   as study;
+    using ph.shapes    as shape;
+    using ph.regions   as region;
+    using ph.layout    as layout;
+    using ph.routes    as route;
+}
+
+divider_maxwell: kind, u, pu, store, couple, loss, input, wave, read, study, shape, region, layout, route {
+
+    // ── The circuit, unchanged from the network model ────────────────────────────
+    // These are the values `resistor_divider.hymeko` was SOLVED for: the design that puts 1.5 V at
+    // node A with the bulb connected while wasting as little as possible in the resistors.
+    Vs: kind.parameter { unit u.volt; value 6.0; }
+    R1: kind.parameter { unit u.ohm;  value 3.0; }
+    R2: kind.parameter { unit u.ohm;  value 1.5; }
+    Rb: kind.parameter { unit u.ohm;  value 3.0; }   // the bulb, linearised at its operating point
+
+    // ── What Kirchhoff neglects ──────────────────────────────────────────────────
+    // A node plane ten centimetres across, a millimetre above ground, is a hundred picofarads. A few
+    // centimetres of wire around a loop is a microhenry. Neither is a modelling flourish; both are
+    // what a real board has, and both are what the quasi-static limit throws away.
+    C_node: kind.parameter { unit pu.farad; value 0.0000000001; }   // 100 pF
+    L_1:    kind.parameter { unit pu.henry; value 0.000001; }        // 1 uH
+    L_2:    kind.parameter { unit pu.henry; value 0.0000005; }       // 0.5 uH
+    L_bulb: kind.parameter { unit pu.henry; value 0.0000005; }       // 0.5 uH
+
+    unity: kind.parameter { unit u.dimensionless; value 1.0; }
+
+    // ── The state ────────────────────────────────────────────────────────────────
+    // Charge on node A, and flux in each of the three branches. The network model has no state at
+    // all: that is precisely the difference between the two readings of this circuit.
+    charge_a:   store.capacitive { unit pu.coulomb; capacity C_node; }
+    flux_1:     store.inductive  { unit pu.weber;   capacity L_1; }
+    flux_2:     store.inductive  { unit pu.weber;   capacity L_2; }
+    flux_bulb:  store.inductive  { unit pu.weber;   capacity L_bulb; }
+
+    // ── J: the topology, as signed incidence ─────────────────────────────────────
+    // Read them as currents at the node. Branch 1 delivers charge to it; branches 2 and the bulb take
+    // charge away. That is Kirchhoff's current law, and it is here as the SIGN of an incidence rather
+    // than as an equation — which is why the matrix is skew and the energy balance follows.
+    //
+    //     dq_a/dt = i1 - i2 - ib
+    //     dL1/dt  = Vs - V_A - R1 i1        the minus on V_A is the skew partner of the plus above
+    //
+    @branch_1:    couple.port { (+ flux_1,   - charge_a, ~ unity); }
+    @branch_2:    couple.port { (+ charge_a, - flux_2,   ~ unity); }
+    @branch_bulb: couple.port { (+ charge_a, - flux_bulb, ~ unity); }
+
+    // ── R: Ohm's law, as dissipation ─────────────────────────────────────────────
+    // A resistance on a flux coordinate multiplies that coordinate's effort, which is its current —
+    // so the term is `-R i`, and Ohm's law is the diagonal of `R` rather than a separate statement.
+    @ohm_1:    loss.dissipative { (+ flux_1,    ~ R1); }
+    @ohm_2:    loss.dissipative { (+ flux_2,    ~ R2); }
+    @ohm_bulb: loss.dissipative { (+ flux_bulb, ~ Rb); }
+
+    // ── G u: the supply ──────────────────────────────────────────────────────────
+    // A cosine at zero hertz is a constant, which is what a DC supply is. Declaring it as a waveform
+    // rather than as a special case means a step, a ripple and a sweep are the same declaration with
+    // a different number in it.
+    dc: kind.parameter { unit pu.hertz; value 0.0; }
+    supply: wave.cosine {
+        amplitude Vs;
+        frequency dc;
+    }
+    @source: input.drive { (+ flux_1, ~ supply); }
+
+    // ── Readouts ─────────────────────────────────────────────────────────────────
+    V_A:      kind.derived { unit u.volt;   }
+    i_1:      kind.derived { unit u.ampere; }
+    i_2:      kind.derived { unit u.ampere; }
+    i_bulb:   kind.derived { unit u.ampere; }
+
+    @read_va: read.effort { (+ V_A,    - charge_a); }
+    @read_i1: read.effort { (+ i_1,    - flux_1); }
+    @read_i2: read.effort { (+ i_2,    - flux_2); }
+    @read_ib: read.effort { (+ i_bulb, - flux_bulb); }
+
+    // `V_A * i` — the power a branch takes from the node. A product of two efforts, which is exactly
+    // what the readout vocabulary already has for a Poynting flux.
+    P_R2:   kind.derived { unit u.watt; }
+    P_bulb: kind.derived { unit u.watt; }
+    @read_p2: read.product { (+ P_R2,   - charge_a, - flux_2); }
+    @read_pb: read.product { (+ P_bulb, - charge_a, - flux_bulb); }
+
+    node_energy: kind.derived { unit pu.joule; }
+    @read_wa: read.stored_energy { (+ node_energy, - charge_a); }
+
+    // ── The study ────────────────────────────────────────────────────────────────
+    // Sweeping the node capacitance moves the ringing — the resonance goes as `1/sqrt(L C)` — and
+    // must leave the settled voltage exactly where it was. That invariance IS the quasi-static limit,
+    // stated as something checkable rather than as a remark: a hundredfold change in what Kirchhoff
+    // neglects may not move the answer Kirchhoff gives.
+    parasitic_sweep: study.sweep {
+        over  C_node;
+        from  0.00000000001;
+        to    0.000000001;
+        steps 21;
+    }
+
+    // ── The circuit in space ──────────────────────────────────────────────
+    // Three terminals and the four conductors between them. This is the divider as somebody would
+    // draw it, and it is what the regions above are NOT: those say where the parasitic energy sits,
+    // this says where the circuit is.
+    //
+    // Each wire names the coordinate whose effort is its current. The resistors need no placement of
+    // their own — each dissipation is attached to a coordinate, and that coordinate's wire is where
+    // it sits.
+    supply_rail: layout.terminal { at [-2.6,  1.5, 0.0]; }
+    node_a:      layout.terminal { at [ 1.4,  1.5, 0.0]; }
+    ground_rail: layout.terminal { at [-2.6, -1.6, 0.0]; }
+
+    // Which node the potentials are above. Without it "the voltage at A" is half a sentence.
+    @ground: layout.reference { (+ ground_rail); }
+
+    // The source, from ground up to the supply rail. It carries the branch-1 current because that is
+    // the loop it drives.
+    @source_wire: route.supply { (+ supply_rail, - ground_rail, ~ flux_1); }
+
+    // R1 and its loop inductance, from the supply rail across to node A.
+    @wire_r1: route.wire { (+ node_a, - supply_rail, ~ flux_1); }
+
+    // R2 down to ground, and the bulb beside it. `via` bends the second one so two branches between
+    // the same pair of terminals do not lie on top of each other.
+    @wire_r2: route.wire {
+        (+ ground_rail, - node_a, ~ flux_2);
+        via [ 1.4, -1.6, 0.0];
+    }
+    @wire_bulb: route.wire {
+        (+ ground_rail, - node_a, ~ flux_bulb);
+        via [ 3.1, -0.2, 0.0];
+    }
+
+    // What the bulb does with the power it takes. An incandescent lamp radiates what it burns, and
+    // saying so here is what lets a view light the scene from the simulated dissipation rather than
+    // from a brightness somebody typed into a renderer.
+    @bulb_emits: route.emits { (+ flux_bulb); }
+
+    // ── Probes ───────────────────────────────────────────────────────────────────
+    // Two leads on the circuit, read the way a scope reads: by adding up what every conductor
+    // between them drops. `V_A` above is the same voltage taken from the STATE — the charge on the
+    // node capacitance divided by it — so the two are computed from different declarations by
+    // different routes, and have to agree. That they do is what says the drawing above and the
+    // interconnection above are the same circuit.
+    V_probe:  kind.derived { unit u.volt; }
+    V_supply: kind.derived { unit u.volt; }
+
+    @probe_node:   read.potential { (+ V_probe,  - node_a); }
+    @probe_supply: read.across    { (+ V_supply, - supply_rail, - ground_rail); }
+
+    // ── Mode geometry ────────────────────────────────────────────────────────────
+    // Where the neglected fields actually sit: the node's charge in the gap between its plane and
+    // ground, each branch's flux inside its own loop. Every dimension was solved so the geometry
+    // implies the declared capacity — otherwise the drawn field would carry a different energy from
+    // the simulated coordinate.
+    node_plate: shape.parallel_plate {
+        area                  0.0112940906737302;   // 10.6 cm square
+        separation            0.001;
+        relative_permittivity 1.0;                  // air, over a ground plane
+        // Inside the loop, between the node's potential above and the ground plane below, which is
+        // what a node-to-ground capacitance is.
+        centre [-0.6, -0.1, 0.0];
+        axis   [0.0, 1.0, 0.0];
+    }
+    coil_1: shape.solenoid {
+        turns  10.0;
+        area   0.0000785398163397448;   // 5 mm radius
+        length 0.0098696044064621;      // 9.87 mm
+        // On the wire it belongs to: this is the loop inductance of branch 1, not a component.
+        centre [-0.6, 1.5, 0.0];
+        axis   [1.0, 0.0, 0.0];
+    }
+    coil_2: shape.solenoid {
+        turns  10.0;
+        area   0.0000785398163397448;
+        length 0.0197392088129243;      // 19.74 mm
+        centre [1.4, 0.3, 0.0];
+        axis   [0.0, 1.0, 0.0];
+    }
+    coil_bulb: shape.solenoid {
+        turns  10.0;
+        area   0.0000785398163397448;
+        length 0.0197392088129243;
+        centre [2.25, 0.65, 0.0];
+        axis   [0.7071, -0.7071, 0.0];
+    }
+
+    @node_region:   region.occupies { (+ charge_a,  ~ node_plate); }
+    @branch_1_flux: region.occupies { (+ flux_1,    ~ coil_1); }
+    @branch_2_flux: region.occupies { (+ flux_2,    ~ coil_2); }
+    @bulb_flux:     region.occupies { (+ flux_bulb, ~ coil_bulb); }
+}

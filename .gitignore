@@ -7,3 +7,7 @@
 # since — so every test run dirtied the tree for no reason.
 hymeko_core/hash_performance_runs.csv
 hymeko_core/hash_performance_summary.csv
+
+# Conference materials: 81 MB of PPTX/PDF/PNG that `tools/build_ifac_materials.ps1`
+# regenerates. Git would keep every version of them forever.
+deliverables/

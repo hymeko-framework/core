@@ -1,0 +1,198 @@
+// lattice_chain.hymeko — six masses on seven springs, between two walls.
+//
+// The same vocabulary as the circuits, because it is the same structure. A body has one velocity, so
+// a mass sits at a JUNCTION the way a node's capacitance does; a spring passes a force, so it sits on
+// a BRANCH the way an inductance does. Under
+//
+//     voltage <-> velocity      current <-> force      node capacitance <-> mass
+//     inductance <-> compliance      resistance <-> damping
+//
+// the projection needs to know nothing new: `J` is still assembled from signed incidences, `R` is
+// still non-negative, the energy balance is still a consequence of the sign convention, and the walk
+// that turns branch drops into node potentials turns relative velocities into body velocities.
+//
+// # Why this model
+//
+// It is a MANY-BODY system with an exact answer. A chain of `N` equal masses `m` coupled by equal
+// springs `k`, fixed at both ends, has normal modes
+//
+//     omega_n = 2 sqrt(k/m) sin( n pi / (2(N+1)) ),      n = 1 .. N
+//
+// and nothing in the projection knows that. It assembles thirteen coordinates from twelve ports and
+// solves an eigenvalue problem; the closed form is arithmetic on paper. `tests/many_body.rs` compares
+// them, which is a check on the assembly, on the eigen solver, and on the sign convention at once —
+// get one incidence backwards and the spectrum is not a chain's.
+//
+// # The state
+//
+// Thirteen coordinates: six momenta and seven extensions. `p_j` is body `j`'s momentum and `q_j` is
+// the extension of the spring to its right, with `q_0` the spring to the left wall.
+
+lattice_chain_description {
+    @"meta_dynamics.hymeko";
+    // Imports are not transitive: `meta_dynamics` reaches the optimisation vocabulary's quantity
+    // kinds and unit root, and a file that wants the same names must say so itself.
+    @"../optimization/meta_optimization.hymeko";
+    using opt.kinds    as kind;
+    using opt.units    as u;
+    using ph.units     as pu;
+    using ph.stores    as store;
+    using ph.couplings as couple;
+    using ph.losses    as loss;
+    using ph.inputs    as input;
+    using ph.waveforms as wave;
+    using ph.readouts  as read;
+    using ph.studies   as study;
+    using ph.layout    as layout;
+    using ph.routes    as route;
+}
+
+lattice_chain: kind, u, pu, store, couple, loss, input, wave, read, study, layout, route {
+
+    // ── What every body and every spring is made of ───────────────────────────────
+    // One mass and one compliance, referenced by all of them, so the chain is uniform because it is
+    // DECLARED uniform. A sweep over either moves every body at once, which is what makes the
+    // closed-form spectrum comparable.
+    m:          kind.parameter { unit pu.kilogram;                value 0.5; }
+    compliance: kind.parameter { unit pu.metre_per_newton;        value 0.005; }   // k = 200 N/m
+    damping:    kind.parameter { unit pu.newton_second_per_metre; value 0.35; }
+    unity:      kind.parameter { unit u.dimensionless;            value 1.0; }
+
+    // ── The state ─────────────────────────────────────────────────────────────────
+    p_1: store.kinetic { unit pu.newton_second; capacity m; }
+    p_2: store.kinetic { unit pu.newton_second; capacity m; }
+    p_3: store.kinetic { unit pu.newton_second; capacity m; }
+    p_4: store.kinetic { unit pu.newton_second; capacity m; }
+    p_5: store.kinetic { unit pu.newton_second; capacity m; }
+    p_6: store.kinetic { unit pu.newton_second; capacity m; }
+
+    q_0: store.elastic { unit pu.metre; capacity compliance; }
+    q_1: store.elastic { unit pu.metre; capacity compliance; }
+    q_2: store.elastic { unit pu.metre; capacity compliance; }
+    q_3: store.elastic { unit pu.metre; capacity compliance; }
+    q_4: store.elastic { unit pu.metre; capacity compliance; }
+    q_5: store.elastic { unit pu.metre; capacity compliance; }
+    q_6: store.elastic { unit pu.metre; capacity compliance; }
+
+    // ── J: the chain ──────────────────────────────────────────────────────────────
+    //
+    // `(+ target, - source, ~ w)` puts `+w` at `J[source][target]` and `-w` at `J[target][source]`,
+    // and `xdot = J e`, so it contributes
+    //
+    //     xdot_source += w e_target        xdot_target -= w e_source
+    //
+    // A spring between bodies `a` (left) and `b` (right) takes exactly two ports:
+    //
+    //     (+ q, - p_b, ~ unity)   gives   pdot_b += F   and   qdot -= v_b
+    //     (+ p_a, - q, ~ unity)   gives   qdot  += v_a  and   pdot_a -= F
+    //
+    // so `qdot = v_a - v_b` and the two bodies take equal and opposite forces. `q` is therefore the
+    // spring's COMPRESSION rather than its extension, which is a labelling and not a choice: flip
+    // both ports and it is the extension, with every sign in the model flipped to match and not one
+    // number moved. Newton's third law is not asserted anywhere — it is the skew-symmetry of `J`,
+    // which is the sign convention.
+    //
+    // A WALL is the absence of the other port. `q_0` has no body to its left, so it has only the
+    // first; `q_6` has none to its right, so it has only the second.
+    @wall_left:  couple.port { (+ q_0, - p_1, ~ unity); }
+
+    @s1_a: couple.port { (+ q_1, - p_2, ~ unity); }
+    @s1_b: couple.port { (+ p_1, - q_1, ~ unity); }
+    @s2_a: couple.port { (+ q_2, - p_3, ~ unity); }
+    @s2_b: couple.port { (+ p_2, - q_2, ~ unity); }
+    @s3_a: couple.port { (+ q_3, - p_4, ~ unity); }
+    @s3_b: couple.port { (+ p_3, - q_3, ~ unity); }
+    @s4_a: couple.port { (+ q_4, - p_5, ~ unity); }
+    @s4_b: couple.port { (+ p_4, - q_4, ~ unity); }
+    @s5_a: couple.port { (+ q_5, - p_6, ~ unity); }
+    @s5_b: couple.port { (+ p_5, - q_5, ~ unity); }
+
+    @wall_right: couple.port { (+ p_6, - q_6, ~ unity); }
+
+    // ── R: where energy leaves ────────────────────────────────────────────────────
+    // On the bodies, which is viscous drag: `pdot -= c v`. On a spring it would be a dashpot in
+    // series with it, which is a different mechanism and is not what this chain has.
+    @drag_1: loss.dissipative { (+ p_1, ~ damping); }
+    @drag_2: loss.dissipative { (+ p_2, ~ damping); }
+    @drag_3: loss.dissipative { (+ p_3, ~ damping); }
+    @drag_4: loss.dissipative { (+ p_4, ~ damping); }
+    @drag_5: loss.dissipative { (+ p_5, ~ damping); }
+    @drag_6: loss.dissipative { (+ p_6, ~ damping); }
+
+    // ── G u: what shakes it ───────────────────────────────────────────────────────
+    // A force on the first body. It enters that body's momentum equation, which is what a force is.
+    shake_amplitude: kind.parameter { unit pu.newton; value 6.0; }
+    shake_frequency: kind.parameter { unit pu.hertz;  value 3.1; }
+    shaker: wave.cosine {
+        amplitude shake_amplitude;
+        frequency shake_frequency;
+    }
+    @drive: input.drive { (+ p_1, ~ shaker); }
+
+    // ── The chain in space ────────────────────────────────────────────────────────
+    // Two walls and six bodies in a line. The springs are the branches between them, and each one
+    // carries the extension coordinate whose effort is the force in it — so a view shows the force
+    // without being told what a force is, exactly as it shows a current.
+    wall_a: layout.body { at [-3.5, 0.0, 0.0]; }
+    b_1:    layout.body { at [-2.5, 0.0, 0.0]; }
+    b_2:    layout.body { at [-1.5, 0.0, 0.0]; }
+    b_3:    layout.body { at [-0.5, 0.0, 0.0]; }
+    b_4:    layout.body { at [ 0.5, 0.0, 0.0]; }
+    b_5:    layout.body { at [ 1.5, 0.0, 0.0]; }
+    b_6:    layout.body { at [ 2.5, 0.0, 0.0]; }
+    wall_b: layout.body { at [ 3.5, 0.0, 0.0]; }
+
+    // The wall everything else moves relative to. A chain fixed at both ends has two walls and one
+    // of them is the reference; that the other comes out at zero as well is then a result.
+    @ground: layout.reference { (+ wall_a); }
+
+    // `(+ to, - from, ~ coordinate)`, where what the branch DROPS is `v(from) - v(to)`.
+    //
+    // `qdot = v_left - v_right` from the ports above, so the left-hand junction is the `from` and the
+    // right-hand one is the `to` — the springs run left to right, as they are drawn. Get it the other
+    // way round and every body's velocity comes out negated, which
+    // `a_probe_on_a_body_reads_what_its_momentum_holds` catches and nothing else does: the spectrum,
+    // the energy balance and the far wall are all unmoved by a global sign.
+    @link_0: route.link { (+ b_1,    - wall_a, ~ q_0); }
+    @link_1: route.link { (+ b_2,    - b_1,    ~ q_1); }
+    @link_2: route.link { (+ b_3,    - b_2,    ~ q_2); }
+    @link_3: route.link { (+ b_4,    - b_3,    ~ q_3); }
+    @link_4: route.link { (+ b_5,    - b_4,    ~ q_4); }
+    @link_5: route.link { (+ b_6,    - b_5,    ~ q_5); }
+    @link_6: route.link { (+ wall_b, - b_6,    ~ q_6); }
+
+    // ── Readouts ──────────────────────────────────────────────────────────────────
+    v_1: kind.derived { unit pu.metre_per_second; }
+    v_3: kind.derived { unit pu.metre_per_second; }
+    v_6: kind.derived { unit pu.metre_per_second; }
+    F_0: kind.derived { unit pu.newton; }
+    F_3: kind.derived { unit pu.newton; }
+
+    @read_v1: read.effort { (+ v_1, - p_1); }
+    @read_v3: read.effort { (+ v_3, - p_3); }
+    @read_v6: read.effort { (+ v_6, - p_6); }
+    @read_f0: read.effort { (+ F_0, - q_0); }
+    @read_f3: read.effort { (+ F_3, - q_3); }
+
+    // Two leads on the chain, read the way a scope reads: the relative velocity between two bodies,
+    // found by walking the springs between them and adding up what each one carries. `v_3` above is
+    // the same velocity taken from the STATE, so the two must agree and neither knows the other.
+    v_probe:  kind.derived { unit pu.metre_per_second; }
+    v_across: kind.derived { unit pu.metre_per_second; }
+    @probe_b3:   read.potential { (+ v_probe,  - b_3); }
+    @probe_span: read.across    { (+ v_across, - b_6, - b_1); }
+
+    chain_energy: kind.derived { unit pu.joule; }
+    @read_energy: read.stored_energy { (+ chain_energy, - q_3); }
+
+    // ── The study ─────────────────────────────────────────────────────────────────
+    // Stiffening every spring together moves the whole spectrum as `sqrt(k)`, and moves nothing about
+    // its SHAPE: the ratios between the six modes are set by the chain's length alone. That is the
+    // invariant worth declaring, and it is one the closed form makes checkable.
+    stiffness_sweep: study.sweep {
+        over  compliance;
+        from  0.001;
+        to    0.02;
+        steps 21;
+    }
+}
