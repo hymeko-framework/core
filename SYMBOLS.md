@@ -13,9 +13,9 @@ Extracted by grammar -- tree-sitter for Rust and C++, `ast` for Python -- so tha
 `pub(crate)`, a `pub fn` inside a private `mod`, and a `def` written inside a
 docstring are all excluded for a stated reason rather than by luck.
 
-**3 package(s), 633 public symbol(s).**
+**3 package(s), 613 public symbol(s).**
 
-## core (rust)
+## core-contract-webxr-integrated (rust)
 
 - **Root:** `.`
 - **Manifest:** `Cargo.toml`
@@ -49,7 +49,6 @@ _No public symbols._
 - `AnnoR` — `hymeko_core/src/ir/ir.rs`
 - `ArcRec` — `hymeko_core/src/ir/ir.rs`
 - `AssemblerLimits` — `hymeko_core/src/ir_stream/assembler.rs`
-- `CameraFrame` — `hymeko_core/src/webxr/query.rs`
 - `CanonHashCfg` — `hymeko_core/src/ir/canonical_hash.rs`
 - `CborPayload` — `hymeko_core/src/writers/cbor_writer.rs`
 - `ChildDecls` — `hymeko_core/src/ir/access.rs`
@@ -73,8 +72,6 @@ _No public symbols._
 - `EnvelopeDraft` — `hymeko_core/src/ir_stream/envelope.rs`
 - `ExpansionHeader` — `hymeko_core/src/tensor/shared_state.rs`
 - `ExpansionOffsets` — `hymeko_core/src/tensor/shared_state.rs`
-- `FiducialBinding` — `hymeko_core/src/webxr/query.rs`
-- `FrameParent` — `hymeko_core/src/webxr/query.rs`
 - `HashId` — `hymeko_core/src/ir/hash.rs`
 - `HosvdResult` — `hymeko_core/src/tensor/decomposition.rs`
 - `HyperArcTag` — `hymeko_core/src/common/ids.rs`
@@ -105,8 +102,6 @@ _No public symbols._
 - `NodeTag` — `hymeko_core/src/common/ids.rs`
 - `Ones` — `hymeko_core/src/tensor/conv/weight_init/weight_init.rs`
 - `PathKey` — `hymeko_core/src/common/pathkey.rs`
-- `Placement` — `hymeko_core/src/webxr/query.rs`
-- `Pose` — `hymeko_core/src/webxr/query.rs`
 - `RealParser` — `hymeko_core/src/util/real_parser.rs`
 - `RefAtomR` — `hymeko_core/src/ir/ir.rs`
 - `ScalarWeightExtractor` — `hymeko_core/src/tensor/tensor_val.rs`
@@ -114,8 +109,6 @@ _No public symbols._
 - `SnapshotVersion` — `hymeko_core/src/ir_stream/version.rs`
 - `SparseCsrShape` — `hymeko_core/src/tensor/compute/mod.rs`
 - `SparseSpec` — `hymeko_core/src/tensor/sparse_workload.rs`
-- `SpatialFrame` — `hymeko_core/src/webxr/query.rs`
-- `SpatialQuery` — `hymeko_core/src/webxr/query.rs`
 - `StagedSection` — `hymeko_core/src/ir_stream/assembler.rs`
 - `StdFsProvider` — `hymeko_core/src/module_store/source_provider.rs`
 - `StringTable` — `hymeko_core/src/resolution/string_table.rs`
@@ -149,7 +142,6 @@ _No public symbols._
 - `DispatchError` — `hymeko_core/src/ir/ir.rs`
 - `ElementKind` — `hymeko_core/src/ir_stream/section.rs`
 - `ExpansionKind` — `hymeko_core/src/tensor/shared_state.rs`
-- `FiducialKind` — `hymeko_core/src/webxr/query.rs`
 - `Finding` — `hymeko_core/src/ir/coherence.rs`
 - `GeneratorError` — `hymeko_core/src/generators.rs`
 - `HypergraphGenerator` — `hymeko_core/src/generators.rs`
@@ -161,12 +153,9 @@ _No public symbols._
 - `PathIndexError` — `hymeko_core/src/ir/canonical_hash.rs`
 - `ResolveError` — `hymeko_core/src/resolution/resolve.rs`
 - `ResyncReason` — `hymeko_core/src/ir_stream/assembler.rs`
-- `RoleReason` — `hymeko_core/src/webxr/mod.rs`
 - `SectionKind` — `hymeko_core/src/ir_stream/section.rs`
-- `SemanticError` — `hymeko_core/src/webxr/mod.rs`
 - `SignAgg` — `hymeko_core/src/tensor/aggregation.rs`
 - `SignedRefR` — `hymeko_core/src/ir/ir.rs`
-- `SpatialQueryError` — `hymeko_core/src/webxr/query.rs`
 - `TransactionKind` — `hymeko_core/src/ir_stream/assembler.rs`
 - `ValueR` — `hymeko_core/src/ir/ir.rs`
 - `WeightAgg` — `hymeko_core/src/tensor/aggregation.rs`
@@ -207,7 +196,6 @@ _No public symbols._
 - `bytes` — `hymeko_core/src/ir_stream/assembler.rs`
 - `bytes` — `hymeko_core/src/ir_stream/section.rs`
 - `calculate_required_bytes` — `hymeko_core/src/tensor/shared_state.rs`
-- `camera_frames` — `hymeko_core/src/webxr/query.rs`
 - `canonical_hash` — `hymeko_core/src/writers/cbor_writer.rs`
 - `canonical_program_hash` — `hymeko_core/src/ir/canonical_hash.rs`
 - `canonicalize_path` — `hymeko_core/src/module_store/module_store.rs`
@@ -263,9 +251,7 @@ _No public symbols._
 - `entry` — `hymeko_core/src/tensor/representations/tensor_coo.rs`
 - `envelope` — `hymeko_core/src/ir_stream/codec.rs`
 - `evaluate_consts` — `hymeko_core/src/resolution/const_resolve.rs`
-- `external_frame_id` — `hymeko_core/src/webxr/query.rs`
 - `extract_ref_weight_scalar` — `hymeko_core/src/tensor/tensor_val.rs`
-- `fiducial_bindings` — `hymeko_core/src/webxr/query.rs`
 - `finalize_coalesced` — `hymeko_core/src/tensor/representations/tensor_csr_builder_impl.rs`
 - `find_edge` — `hymeko_core/src/lib.rs`
 - `find_node` — `hymeko_core/src/lib.rs`
@@ -273,8 +259,6 @@ _No public symbols._
 - `first_child` — `hymeko_core/src/ir/ir.rs`
 - `first_child_of` — `hymeko_core/src/ir/access.rs`
 - `flags` — `hymeko_core/src/ir_stream/envelope.rs`
-- `frame_parents` — `hymeko_core/src/webxr/query.rs`
-- `frames` — `hymeko_core/src/webxr/query.rs`
 - `from_interner` — `hymeko_core/src/resolution/string_table.rs`
 - `from_le_bytes` — `hymeko_core/src/ir_stream/version.rs`
 - `from_vec` — `hymeko_core/src/resolution/string_table.rs`
@@ -337,7 +321,6 @@ _No public symbols._
 - `mode_k_unfold` — `hymeko_core/src/tensor/decomposition.rs`
 - `msg_type` — `hymeko_core/src/ir_stream/envelope.rs`
 - `n_edges` — `hymeko_core/src/generators.rs`
-- `name` — `hymeko_core/src/webxr/query.rs`
 - `namespace_prefix` — `hymeko_core/src/ir/ir.rs`
 - `new` — `hymeko_core/src/common/ids.rs`
 - `new` — `hymeko_core/src/ir/ir.rs`
@@ -353,7 +336,6 @@ _No public symbols._
 - `new` — `hymeko_core/src/tensor/representations/tensor_coo.rs`
 - `new` — `hymeko_core/src/tensor/shared_state.rs`
 - `new` — `hymeko_core/src/tensor/sparse_workload.rs`
-- `new` — `hymeko_core/src/webxr/query.rs`
 - `new` — `hymeko_core/src/writers/ir_writer.rs`
 - `next_sibling` — `hymeko_core/src/ir/ir.rs`
 - `next_sibling_of` — `hymeko_core/src/ir/access.rs`
@@ -377,7 +359,6 @@ _No public symbols._
 - `payload_digest` — `hymeko_core/src/ir_stream/assembler.rs`
 - `payload_hash` — `hymeko_core/src/ir_stream/envelope.rs`
 - `payload_len` — `hymeko_core/src/ir_stream/envelope.rs`
-- `placements` — `hymeko_core/src/webxr/query.rs`
 - `preallocate_from_index` — `hymeko_core/src/ir/ir.rs`
 - `pretty_print_compiled` — `hymeko_core/src/util/pretty_print.rs`
 - `print_dense_block` — `hymeko_core/src/tensor/util.rs`
@@ -463,7 +444,6 @@ _No public symbols._
 - `txn_id` — `hymeko_core/src/ir_stream/envelope.rs`
 - `unit_f32` — `hymeko_core/src/tensor/sparse_workload.rs`
 - `validate` — `hymeko_core/src/ir/incidence.rs`
-- `validate` — `hymeko_core/src/webxr/mod.rs`
 - `validate_all_refs_modules` — `hymeko_core/src/module_store/module_view.rs`
 - `validate_all_refs_sym` — `hymeko_core/src/resolution/resolve.rs`
 - `validate_all_refs_sym_with_prefix` — `hymeko_core/src/resolution/resolve.rs`

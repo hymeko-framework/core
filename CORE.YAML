@@ -214,12 +214,11 @@ allowlist:
 # ----------------------------------------------------------------------
 approval:
   required_for:
-    - any modification to a `lockdown: full` item
-    - any modification to a `lockdown: implementation` item beyond
-      additive public API
-    - any modification to `lockdown: api` items in core crates
-    - any addition, removal, or version change of a pinned dependency
-    - any change to this file (`CORE.YAML`)
+    - "any modification to a `lockdown: full` item"
+    - "any modification to a `lockdown: implementation` item beyond additive public API"
+    - "any modification to `lockdown: api` items in core crates"
+    - "any addition, removal, or version change of a pinned dependency"
+    - "any change to this file (`CORE.YAML`)"
 
   mechanism: |
     A change may proceed only after the user replies in the chat with
