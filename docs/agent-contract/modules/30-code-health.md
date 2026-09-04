@@ -1,3 +1,8 @@
+<!-- SYNCED from hymeko/hymeko @ ff0c013 — docs/agent-contract/modules/30-code-health.md
+     Do not edit here. The universal modules have ONE source; a fork of §6.5
+     in each repository makes every citation in every report ambiguous.
+     Edit upstream, then re-sync and record the revision. -->
+
 ---
 source: CLAUDE.md §5, §6 (6.2–6.5), §7, §8, lines 291-318, 343-449, 514-550, as of ad1df25a12e60ddadb7559932f7d2b3a40a03e39
 status: de-projectified (Phase 4)
@@ -145,6 +150,25 @@ The user is an experienced researcher and engineer (see Operating Principles). C
 18. **Optimizing before profiling the real bottleneck (RL / long runs).** Measure the per-step cost split — **physics vs network-forward vs gradient-update** — before choosing an accelerator; optimizing the non-bottleneck is the "defensive optimization" §3 forbids, restated for runs. Corollary costs to budget before touching them: off-policy does a **gradient update every env step** (~30 min / 1e5 steps) that on-policy batches; a vectorized rollout batches the *forward* but steps physics serially. Know which term bounds you. The run where the tempting optimisation was the wrong one: [incidents/2026-07-01-batching-the-non-bottleneck.md](../incidents/2026-07-01-batching-the-non-bottleneck.md).
 
 19. **Leaving a measured optimization as an opt-in flag instead of the default (user directive 2026-07-01).** An optimization that is *measured* to improve — with the measurement on record — must be wired into the **default** entrypoint, not left as a scratchpad flag, an opt-in kwarg, or one call-site out of five. Conversely: do **not** flip a default that changes the **model or the metric** (not pure speed) without the A/B verdict that says it wins — that is a structural change, gated on evidence, not convenience. "Don't optimize for nothing" cuts both ways — default the proven speed-wins; withhold the unproven model-changes. The measured 5–6× rollout that four of six entrypoints were not getting: [incidents/2026-07-01-batching-the-non-bottleneck.md](../incidents/2026-07-01-batching-the-non-bottleneck.md).
+
+20. **Parsing a language with a regular expression.** A string is not a parser. If a
+    grammar exists for the language — and one exists for every language this project
+    touches — use it: `ast` for Python, tree-sitter for Rust and C++, the real front
+    end for HyMeKo. This is §6.5 #7 ("string-typed config that should be an enum")
+    applied one level up: the pattern is a stringly-typed stand-in for a structure
+    that is already available.
+
+    The failures are not marginal and they are not visible in the output. A regex
+    over `pub (fn|struct|trait|enum)` counted `pub(crate)` as public surface, counted
+    a `pub fn` inside a private `mod` as reachable, and missed both a two-line
+    signature and one behind an attribute macro. Reachability is a property of the
+    tree; a line matcher has no tree. The same rule is why duplication is detected on
+    tokens rather than on lines — a copy whose identifiers were renamed is invisible
+    to a line hash and obvious to a parse.
+
+    The narrow exception is a **machine-written region with a shape this project
+    fixes** — `tools/scan_dependencies.py --check` reads its own generated fence with
+    a regex, and says so. Parsing someone else's language that way is the anti-pattern.
 
 **How this section is used:** before adding a new function, file, or HPC submission, sweep your proposed change against this list. If any apply, the action is *refactor first* (or *consult the existing artifact first*), not *add now and defer cleanup*. The cleanup never happens; that's the whole reason this list exists. Reports (§9) should explicitly note "no §6.5 anti-patterns introduced" or list any waivers with justification.
 

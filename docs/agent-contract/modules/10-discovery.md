@@ -1,3 +1,8 @@
+<!-- SYNCED from hymeko/hymeko @ ff0c013 — docs/agent-contract/modules/10-discovery.md
+     Do not edit here. The universal modules have ONE source; a fork of §6.5
+     in each repository makes every citation in every report ambiguous.
+     Edit upstream, then re-sync and record the revision. -->
+
 ---
 source: CLAUDE.md §0.1, §0.2, §6.1, §6.6, §6.7, lines 93-135, 319-335, 454-513, as of ad1df25a12e60ddadb7559932f7d2b3a40a03e39
 status: de-projectified (Phase 4)
@@ -33,22 +38,37 @@ package is expensive to move once anything depends on it.
 
 ### 0.2 The symbol index
 
-> **STATUS — specified, not built (checked 2026-09-04).** No `SYMBOLS.md` and no
-> `make symbols` target exists in this repository or in `core/`. The specification
-> below is kept verbatim so that it stays buildable; until it is built, §6.6's manual
-> ledger is the whole of the discipline. Do not cite this section as a gate that ran.
+> **STATUS — built and enforced (2026-09-04).** `tools/contract_tools/index.py`,
+> committed `SYMBOLS.md`, `--check` in the pre-commit hook and in CI. This section
+> is no longer a specification.
 
 `SYMBOLS.md` at repo root is a generated, always-read index:
 
-    make symbols     # regenerates; CI fails if the file is stale
+    uv run contract-symbols            # regenerate
+    uv run contract-symbols --check    # exit 1 if it is stale
 
-It lists, per crate/package: the charter one-liner, the public traits, the
-public types, the public functions, and the module's owner concept. It is
-generated (`rg` over `pub fn|pub struct|pub trait|pub enum` for Rust,
-`__all__` + top-level defs for Python), never hand-edited.
+It lists, per crate/package: the manifest, the charter one-liner, and the public
+symbols by kind. It is generated, never hand-edited.
 
-§0 step 1 becomes: read the gate file, the toolchain pin, **and `SYMBOLS.md` where it
-exists**. Where it does not, the ownership pass of §0.1 is run the expensive way.
+**Extraction is by grammar, not by pattern.** tree-sitter for Rust and C++; `ast`
+for Python, which is the canonical parser and not a compromise. This is a rule and
+not an implementation note, because the earlier `rg`-over-`pub fn` version got four
+things wrong that no reader of its output could see: it counted `pub(crate)` as
+public surface, counted a `pub fn` inside a private `mod` as reachable, missed a
+signature spread over two lines, and missed one behind an attribute macro.
+Reachability is a property of the tree. A line matcher has no tree.
+
+**The index is a function of the parse, not of the byte stream.** Reformatting,
+reflowing a comment or renaming a local must not change it. That is testable and is
+tested.
+
+**Ownership comes from the manifest where the manifest states it.** A
+`pyproject.toml` at the repository root does not make the whole repository one
+package: the index reads `[tool.hatch.build.targets.wheel] packages`. Getting this
+wrong attributes files to a distribution that does not contain them, which is the
+§0.1 question answered backwards.
+
+§0 step 1 becomes: read the gate file, the toolchain pin, **and `SYMBOLS.md`**.
 
 Rationale: §0.1's ownership pass is correct but expensive — reading ten
 crates' READMEs and manifests to place one function is a cost that gets paid
@@ -113,33 +133,49 @@ Rules:
 
 ### 6.7 Duplication gate (machine-enforced)
 
-> **STATUS — specified, not built (checked 2026-09-04).** None of the three checks
-> below exists: no `.duplication-baseline.json`, no `scripts/preflight_new_artifact.py`,
-> and no `jscpd` / `vulture` / `cargo machete` / `cargo udeps` wiring in any manifest,
-> workflow or Makefile, here or in `core/`. The specification is kept verbatim.
+> **STATUS — built and enforced (2026-09-04).** `tools/contract_tools/duplication.py`,
+> committed `.duplication-baseline.json`, run by the pre-commit hook and by
+> `tools/ci/duplication-gate.yml`. jscpd runs in the container image and has been
+> executed; its baseline entry is committed alongside the built-in one.
 
 Per the §3 precedent (a reward oracle that refuses an uncertified run), a rule that
-matters is wired into tooling, not left to operator discipline. Three checks, to run
-in CI and locally:
+matters is wired into tooling, not left to operator discipline.
 
-1. **Clone detection.** `jscpd --min-lines 20 --min-tokens 120 --reporters json`
-   over `hymeko_*/`, plus `pylint --disable=all --enable=duplicate-code` for
-   Python and `rust-code-analysis` for Rust. The gate is a **delta** gate:
-   a change may not increase the clone count or cloned-line total versus the
-   baseline in `.duplication-baseline.json`. Raising the baseline requires
-   the same written justification as a §1 core edit.
+**A delta gate, never an absolute count.** A change may not increase the clone count
+or the cloned-line total against `.duplication-baseline.json`. Lowering it is welcome
+and needs no ceremony; raising it needs the written justification a §1 core edit needs.
+An absolute ceiling fails on day one in any repository old enough to need one, and a
+gate that fails on day one is switched off on day two.
 
-2. **New-artifact hook.** `scripts/preflight_new_artifact.py <path>`:
-   given a proposed new file or symbol name, it greps the symbol index and
-   the tree for trigram-similar names and prints the candidates. Wire it as
-   a pre-commit hook on added files. Exit code 1 when candidates exist and
-   no `DISCOVERY:` reference is present in the commit message.
+**Duplication is detected on tokens, not on lines.** The detector erases identifiers
+and literals to their node type before hashing, so a copy whose variables were renamed
+afterwards is still a clone — which is what every duplication in this project's
+history actually looked like. A line-hash detector scores those zero. Comments produce
+no tokens at all, so reformatting is invisible to it.
 
-3. **Dead-code sweep.** `cargo machete`, `cargo udeps`, `vulture` for Python,
-   run per change. A duplicate usually leaves the original unreferenced;
-   an orphaned module is evidence of a duplication that already happened.
+**Detectors are never compared against each other.** Each keeps its own baseline
+entry, because two detectors with different minimum-clone sizes legitimately disagree:
+on this repository the built-in one reports 9 clones / 134 lines and jscpd reports 0,
+since jscpd's 20-line floor does not see an 8-line copied function. Comparing across
+them would be a gate that fires whenever a tool changes. This is a precondition in
+code, not a warning in prose.
 
-Report (§9) must quote the clone-delta line once the gate exists. Until then, "no §6.5
-anti-patterns introduced" is a claim made by a person, and it is worth exactly what a
-person's unaided grep is worth — which is the reason this section was specified.
+1. **Clone detection.** The built-in token detector always, since it needs no install;
+   `jscpd --min-lines 20 --min-tokens 120 --reporters json` in the container, because
+   it catches cross-language copies the loaded grammars do not cover. `pylint
+   --enable=duplicate-code` and `cargo clippy` where those manifests exist.
 
+2. **New-artifact preflight.** `uv run contract-preflight <path-or-name>`: given a
+   proposed file or symbol, it reports existing candidates by trigram similarity
+   against the symbol index and the tracked filenames. It is the only check in this
+   section that runs while the duplicate is still a proposal; the rest are detectors.
+   Wired into `commit-msg` — **not** `pre-commit`, which cannot see the message and
+   would read the previous commit's, failing open. Exit 1 when candidates exist and no
+   `DISCOVERY:` line is present.
+
+3. **Dead-code sweep.** `cargo machete`, `cargo udeps`, `vulture` for Python, per
+   change. A duplicate usually leaves the original unreferenced; an orphaned module is
+   evidence of a duplication that already happened. **Still not built** — the one part
+   of this section that remains a specification.
+
+Report (§9) must quote the clone-delta line.

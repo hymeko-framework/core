@@ -1,3 +1,8 @@
+<!-- SYNCED from hymeko/hymeko @ ff0c013 — docs/agent-contract/modules/20-testing.md
+     Do not edit here. The universal modules have ONE source; a fork of §6.5
+     in each repository makes every citation in every report ambiguous.
+     Edit upstream, then re-sync and record the revision. -->
+
 ---
 source: CLAUDE.md §3 (except Live observability), lines 193-259, 272-277, as of ad1df25a12e60ddadb7559932f7d2b3a40a03e39
 status: de-projectified (Phase 4)
@@ -77,6 +82,32 @@ A metric that is mis-measured, un-anchored, or inflatable by failure sends the w
 The four cases that produced these five rules — an unmeasured ceiling, a probe on the
 wrong horizon, a filter that did not equal the metric, and a failure that inflated one:
 [incidents/2026-07-01-metric-integrity.md](../incidents/2026-07-01-metric-integrity.md).
+
+### Properties, where a constant decides something (added 2026-09-04)
+
+Example tests say a function behaves on the inputs someone thought of. Where a
+**calibrated constant** — a threshold, a tolerance, a similarity cut-off — decides
+whether work is accepted or rejected, that is not enough: the constant is only as
+trustworthy as the function it is a constant *of*, and example tests are chosen by
+the same person who chose the constant.
+
+So: **a function carrying a calibrated constant states its algebraic laws, and the
+laws are tested over generated input** (`hypothesis` for Python, `proptest` for Rust).
+Identity, symmetry, boundedness, idempotence, and whatever separation property the
+callers actually rely on.
+
+Two rules that came out of doing this, both of which cost something to learn:
+
+- **The strategy is part of the law.** A separation law over a broad alphabet passed
+  even with the guard that enforces it removed, because two independent draws almost
+  never collide. Over a two-letter alphabet they collide constantly and it failed in
+  under a second. A law that cannot fail when it is false is decoration — so when a
+  property is added, remove the thing it protects and confirm the property *fails*.
+  An unfalsified property is an untested one.
+- **Guard what you mean, not what is convenient to count.** A length guard written as
+  a count of *distinct* trigrams dismissed a six-character name as too short, because
+  a repetitive name collapses to few distinct trigrams. hypothesis found it in 1.6
+  seconds; no example test would have.
 
 Live observability (§3, "never run blind") is in
 [40-observability.md](40-observability.md).

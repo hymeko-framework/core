@@ -1,3 +1,8 @@
+<!-- SYNCED from hymeko/hymeko @ ff0c013 — docs/agent-contract/global.md
+     Do not edit here. The universal modules have ONE source; a fork of §6.5
+     in each repository makes every citation in every report ambiguous.
+     Edit upstream, then re-sync and record the revision. -->
+
 ---
 source: CLAUDE.md §0, Operating principles, lines 51-63, 68-92, as of ad1df25a12e60ddadb7559932f7d2b3a40a03e39
 status: de-projectified (Phase 4)
