@@ -87,6 +87,25 @@ headline and the WebXR-only 24.32-26.13 ms runs because the integrated tree
 contains the approved streaming-incidence canonical hash. This is the expected
 algorithmic effect, not an effect of relocating WebXR.
 
+### Production-scale peak memory
+
+The 1,048,576-incidence release fixture was regenerated and each cell was then
+run in a fresh process while Windows' process high-water counter was sampled at
+5 ms. The wire image remained 51,422,046 bytes and the decoded public IR heap
+estimate remained 94,221,761 bytes.
+
+| Cell | Integrated peak | Original streaming peak |
+|---|---:|---:|
+| read baseline | 56,557,568 B | 56,553,472 B |
+| materialize only | 151,937,024 B | 151,928,832 B |
+| validated decode | 155,901,952 B | 155,906,048 B |
+
+The validation/hash increment is 3,964,928 bytes. Decode adds 99,344,384 bytes
+over the read baseline, or **1.0544x** the decoded IR heap, versus the original
+streaming result of 1.0545x. The final peak differs from the recorded value by
+only 4 KiB and remains far below the 16 GiB cap. This reproduces the strongest
+memory claim essentially exactly on the integrated source tree.
+
 ## Related graph evidence
 
 The independent informed A*/Dijkstra/Berge harness was rerun separately on the
