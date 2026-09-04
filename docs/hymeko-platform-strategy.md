@@ -124,7 +124,7 @@ létre `core → consumer → core` ciklust.
 | sparse numerikus kernel | core tensor API + backendek | szemantikai állapot |
 | WGPU | `hymeko_wgpu` | IR-mutáció és gráfszemantika |
 | emitter/transformation | fogyasztó az `Ir` felett | editor-IR bridge mint állandó modell |
-| WebXR szemantika | core vocabulary/validator/query; browser binding downstream | `XRSession`/`XRFrame`/GPU/DOM handle az IR-ben |
+| WebXR szemantika | `transformation/hymeko_webxr`, az `&Ir` fogyasztója; browser binding downstream | WebXR vocabulary/validator/query a core-ban; `XRSession`/`XRFrame`/GPU/DOM handle az IR-ben |
 | MCU C/C++ | ugyanazon `ir_stream` wire read-only/dynamic view-je | külön C vagy C++ gráfmodell |
 | végső CLI | downstream façade | új szemantikai réteg |
 
@@ -265,9 +265,10 @@ Nem kerül parser az első MCU PoW-ba, és nem készül C-ben második IR.
 
 ## 7. WebXR és más végpontok
 
-A WebXR szemantikai PoW iránya helyes: `meta_spatial` + `meta_webxr`, production
-validator az `&Ir` felett, nincs scene DTO vagy runtime XR handle az IR-ben. A
-következő felület borrowed `webxr::query`, kanonikus ID-kkal. A browser binding
+A WebXR szemantikai PoW viselkedése helyes, de az eredeti core-ownership hibás volt:
+`meta_spatial` + `meta_webxr`, a production validator és a borrowed query a
+`transformation/hymeko_webxr` domainprojekció része. A core csak a kanonikus `Ir`-t
+és annak általános accessorait szolgáltatja. A browser binding
 runtime handle-táblája endpoint állapot, és csak tartós felhasználói döntést küld
 vissza jövőbeli IR-tranzakcióként; per-frame pose nem commitolódik az IR-be.
 
@@ -291,14 +292,14 @@ Az „állapot” oszlop a célállapotot jelöli, nem automatikus engedélyt.
 | **P6** | immutable snapshots + dynamic sparse refresh | lock-free reader publication; versionelt index; value patch ≡ rebuild, topology rebuild ≡ after-source oracle | P5 + core token |
 | **P7** | `ir_stream` canonical apply | idempotens replay, conflict/gap/resync, második replika konvergencia; egy wire séma | P6 + core token |
 | **P8** | MCU C wire-view PoW | C11/Rust frozen-byte parity, zero heap, malformed corpus, sanitizers; majd cross-compile | P0, P1-től függetlenül is mehet |
-| **P9** | WebXR query + dinamikus resync | borrowed query API; browser binding külön; durable event → P5 transaction | read-only rész P0; write-back P5–P7 |
+| **P9** | WebXR projekció + dinamikus resync | transformation-owned borrowed query API; browser binding külön; durable event → P5 transaction | read-only rész P0; write-back P5–P7 |
 | **P10** | accelerator sparse operators | WGPU `B`/`B^T`, resident chain; CUDA kontroll; FPGA streaming interface; CPU oracle | P2–P3 |
 | **P11** | egyetlen CLI façade | source/load/query/emit/benchmark/endpoint parancsok egy downstream CLI-ben; library API marad elsődleges | P7/P9/P10 stabil felületei |
 
 ### Ajánlott következő sorrend
 
-1. P0: a már igazolt core/WebXR/performance és graph ágak kontrollált
-   konszolidációs térképe;
+1. P0: a már igazolt core/performance és graph ágak kontrollált konszolidációs
+   térképe; a WebXR domainprojekció a transformation rétegbe kerül;
 2. P1: benchmark-harness konszolidáció, mert minden következő perf-döntés erre
    épül;
 3. P2: `B^T y` precompute, a legjobban izolált mért hot spot;
@@ -396,7 +397,7 @@ commit/push engedélyt és a kötelező HARD STOP pontot.
 | Ref | Tartalom | Állapot a bizonyítékhatárnál |
 |---|---|---|
 | core `70b4f36` | exact incidencia-koordináták, sparse operator | `origin/main` |
-| core `fb6b783` | WebXR semantic contract | feature branch |
+| core `fb6b783` | WebXR semantic contract, történeti implementáció | ownership szerint superseded: relocation a transformation rétegbe |
 | core `584b9eb` | performance survey + MCU terv | feature branch |
 | core `093eab3` | generációs aréna deferral + architektúra audit | eltérő feature branch; döntési bizonyíték |
 | graph `98c6a93` | direct-IR algoritmusok | feature branch |
