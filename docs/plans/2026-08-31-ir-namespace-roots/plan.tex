@@ -1,0 +1,74 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{enumitem,longtable,booktabs}
+\title{Explicit canonical namespace roots (U2.1)}
+\author{APPROVED-CORE-EDIT: ir-namespace-roots}
+\date{Created-at: 2026-08-31 21:34 (local) \\ ETA: representation + lowering + serde + differential + V\&V + bench $\approx$ this session}
+\begin{document}\maketitle
+
+\section*{Scope}
+Core-only (\texttt{hymeko/core}, base \texttt{3b800b9} = the U2 differential
+oracle, itself on \texttt{67771c9}). Branch \texttt{feat/core-ir-namespace-roots}.
+Give the \texttt{Ir} the import-namespace prefix that the resolution \texttt{Index}
+carries implicitly, so the link-derived canonical hash is bit-identical on the
+full corpus. This phase does \textbf{not} remove the \texttt{Index} parameter from
+the production hash, nor drop \texttt{CompiledProgram.idx} (that is U2.2).
+
+\section*{Part A --- namespace semantic audit (empirical)}
+Grammar: \texttt{ns = imp.alias.unwrap\_or(dep\_ast.name)} --- a single
+\texttt{SymId}; imports are lowered flat under \texttt{\&[ns]}; transitive imports
+are not lowered here. Corpus (96 lowerable fixtures): prefix-length histogram over
+link-roots \texttt{\{0: 109, 1: 81\}}; \textbf{zero multi-segment prefixes};
+$\leq 4$ prefixed roots per fixture. So a single \texttt{SymId} would suffice
+today, but lowering threads a \texttt{\&[SymId]} prefix and nested imports could
+be multi-segment --- the lossless choice is \texttt{Box<[SymId]>}.
+
+\section*{Part B --- representation}
+\texttt{Ir.namespace\_roots: Vec<(DeclId, Box<[SymId]>)>}, \textbf{private},
+sorted ascending by \texttt{DeclId}, holding only non-empty prefixes
+(single-module roots absent $\Rightarrow$ zero cost). Read via the total
+\texttt{namespace\_prefix(root) -> Option<\&[SymId]>} ($O(\log R)$ binary search,
+no \texttt{HashMap}, no allocation); written via the crate-private
+\texttt{record\_namespace\_root}. No fake Node/Edge/Arc; the IR stays a signed
+hypergraph --- this is declaration metadata, not a graph element.
+
+\section*{Part C --- lowering + boundary validator}
+\texttt{lower\_node}/\texttt{lower\_edge} record \texttt{(did, path[..scope\_len])}
+when a decl is a link-root (\texttt{parent==NONE}) with a non-empty prefix ---
+i.e. the imported roots --- directly from the \texttt{Index}-derived path while it
+is still available. \texttt{validate\_namespace\_roots(ir, idx)} compares the
+\texttt{Index} path against \texttt{namespace\,+\,links} for every declaration and
+returns a typed \texttt{NamespaceError} (\texttt{MissingNamespaceMetadata} /
+\texttt{PathMismatch}) --- a diagnostic API, not a per-hash tax.
+
+\section*{Part D --- serde \& versioning}
+The namespace metadata rides the \texttt{Ir} serde as a versioned field
+(\texttt{schema=1}) \textbf{only when non-empty}, so a single-module wire keeps the
+legacy 11 fields byte-for-byte (the frozen serde KAT is preserved). Deserialize is
+fail-closed: \texttt{UnknownNamespaceSchema}, \texttt{NamespaceRootOutOfRange},
+\texttt{DuplicateNamespaceRoot}, \texttt{EmptyNamespacePrefix},
+\texttt{UnsortedNamespaceRoots}. No whole-\texttt{Ir} clone, no per-declaration
+prefix allocation. The \texttt{ir\_stream} envelope schema is \textbf{unchanged}
+(documented as a future carrier).
+
+\section*{Part E --- differential oracle}
+\texttt{canonical\_program\_hash\_ir} (link form) prepends the root's namespace
+prefix. Result: \textbf{96/96 corpus fixtures bit-identical} to the production
+\texttt{Index}-based hash (was 35/61); the 4 well-formed frozen v1 KATs unchanged;
+the boundary validator passes on all 96. \texttt{algo\_version=1} unchanged; the
+production hash is untouched.
+
+\section*{Part G --- performance (measured)}
+Lowering wall over the corpus: A (\texttt{3b800b9}) $=137.78$\,ms, A/A-null
+$=137.51$\,ms (noise $\pm 0.2\%$), B $=138.31$\,ms $\Rightarrow +0.38\%$, within
+noise ($\ll 1\%$/$3\%$ gate). Metadata $O(\text{imports})$ (81 roots corpus-wide,
+$\leq 4$/fixture, 1 \texttt{SymId} each). No per-declaration prefix allocation; the
+link-path builder's per-decl \texttt{PathKey} allocation is unchanged. Production
+hash byte-identical.
+
+\section*{V\&V / gates / rollback}
+96 fixtures + frozen v1 + corpus digest + 8 namespace fault tests (typed errors) +
+serde roundtrip with imports; fmt, clippy \texttt{-D warnings}, tests, doctests
+green. Three intended commits; branch never merged to main. \texttt{plan.pdf} not
+built (no LaTeX on host).
+\end{document}

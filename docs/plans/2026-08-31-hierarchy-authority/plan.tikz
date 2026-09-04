@@ -1,0 +1,16 @@
+% U2 authority flip — data flow (TikZ). Compile inside a tikzpicture.
+\begin{tikzpicture}[font=\small,node distance=7mm,
+  b/.style={draw,rounded corners,align=center,inner sep=3pt},
+  gone/.style={b,fill=red!8},keep/.style={b,fill=green!10},new/.style={b,fill=blue!8}]
+  \node[b] (ast) {AST + resolution};
+  \node[keep,right=10mm of ast] (idx) {resolution::Index\(parse/resolve only)};
+  \node[b,below=7mm of idx] (lower) {lowering\parent = idx[scope];\link\_decl\_child};
+  \node[new,below=7mm of lower] (ir) {Ir links AUTHORITATIVE\parent/first\_child/next\_sibling\name/kind};
+  \node[gone,right=12mm of lower] (bdp) {build\_did\_to\_path(idx)\+ prefix-parent HashMap\ELIMINATED};
+  \node[new,below=7mm of ir] (hash) {canonical\_program\_hash(cfg, ir, it)\skeleton+paths from links};
+  \node[keep,right=12mm of hash] (kat) {frozen v1 KATs\+ corpus digest\bit-identical};
+  \draw[->] (ast)--(idx); \draw[->] (idx)--(lower); \draw[->] (lower)--(ir);
+  \draw[->,dashed] (idx.east)-|(bdp); \draw[red,thick] (bdp.north west)--(bdp.south east);
+  \draw[->] (ir)--(hash); \draw[->] (hash)--(kat);
+  \node[keep,below=6mm of hash,text width=60mm] {Part E: validate idx$\equiv$ir ONCE at boundary\then Ir authoritative; validator = diagnostic API only};
+\end{tikzpicture}

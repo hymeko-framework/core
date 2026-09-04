@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="380" font-family="sans-serif" font-size="13">
+  <rect width="720" height="380" fill="white"/>
+  <text x="360" y="22" text-anchor="middle" font-size="16" font-weight="bold">Incidence operator (nnz=1e6, quiet host 8.7%): Bx / Bᵀy / BᵀBx</text>
+  <text x="360" y="40" text-anchor="middle" fill="#555">Bᵀy/Bx = 4.9× (arity 5), 3.4× (arity 20) — NOT the prior "~10×" (retracted; host contention)</text>
+  <line x1="60" y1="330" x2="700" y2="330" stroke="#333"/>
+  <line x1="60" y1="60" x2="60" y2="330" stroke="#333"/>
+  <g fill="#777" font-size="11">
+    <line x1="60" y1="330" x2="700" y2="330" stroke="#eee"/>
+    <line x1="60" y1="262" x2="700" y2="262" stroke="#eee"/><text x="54" y="266" text-anchor="end">10</text>
+    <line x1="60" y1="194" x2="700" y2="194" stroke="#eee"/><text x="54" y="198" text-anchor="end">20</text>
+    <line x1="60" y1="126" x2="700" y2="126" stroke="#eee"/><text x="54" y="130" text-anchor="end">30</text>
+    <line x1="60" y1="60"  x2="700" y2="60"  stroke="#eee"/><text x="54" y="64"  text-anchor="end">40 ms</text>
+    <text x="54" y="334" text-anchor="end">0</text>
+  </g>
+  <!-- scale: 270px = 40ms -> 6.75 px/ms -->
+  <!-- arity5: Bx 5.9->39.8h, BTy 28.9->195h, BTBx 35.3->238h -->
+  <g>
+    <rect x="130" y="290.2" width="44" height="39.8" fill="#2b6cb0"/><text x="152" y="285" text-anchor="middle" font-size="10">Bx 5.9</text>
+    <rect x="180" y="135.0" width="44" height="195.0" fill="#dd6b20"/><text x="202" y="130" text-anchor="middle" font-size="10">Bᵀy 28.9</text>
+    <rect x="230" y="91.7"  width="44" height="238.3" fill="#e53e3e"/><text x="252" y="86" text-anchor="middle" font-size="10">BᵀBx 35.3</text>
+    <text x="202" y="350" text-anchor="middle" font-weight="bold">arity 5</text>
+  </g>
+  <!-- arity20: Bx 5.2->35.1h, BTy 17.6->118.8h, BTBx 22.8->153.9h -->
+  <g>
+    <rect x="440" y="294.9" width="44" height="35.1" fill="#2b6cb0"/><text x="462" y="290" text-anchor="middle" font-size="10">Bx 5.2</text>
+    <rect x="490" y="211.2" width="44" height="118.8" fill="#dd6b20"/><text x="512" y="206" text-anchor="middle" font-size="10">Bᵀy 17.6</text>
+    <rect x="540" y="176.1" width="44" height="153.9" fill="#e53e3e"/><text x="562" y="171" text-anchor="middle" font-size="10">BᵀBx 22.8</text>
+    <text x="512" y="350" text-anchor="middle" font-weight="bold">arity 20</text>
+  </g>
+  <text x="360" y="372" text-anchor="middle" fill="#555" font-size="11">Arc-scatter penalty is real but ~3.4–4.9×; BᵀBx ≈ Bᵀy + Bx (composition). Clique control 1.2–6.1× index memory (arity-dependent).</text>
+</svg>

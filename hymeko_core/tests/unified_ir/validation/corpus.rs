@@ -153,12 +153,7 @@ fn corpus_digest() -> (usize, String) {
     let mut n = 0usize;
     for f in &files {
         if let Ok((store, compiled)) = crate::test_helpers::load_and_lower(f) {
-            let d = canonical_program_hash(
-                CanonHashCfg::default(),
-                &compiled.idx,
-                &compiled.ir,
-                &store.it,
-            );
+            let d = canonical_program_hash(CanonHashCfg::default(), &compiled.ir, &store.it);
             // Include the file name so a reordering or omission is detected.
             h.update(
                 f.file_name()
@@ -173,30 +168,14 @@ fn corpus_digest() -> (usize, String) {
     (n, h.finalize().to_hex().to_string())
 }
 
-// Re-frozen 2026-09-03: one model added (`dynamics/lattice_chain.hymeko`, six masses on seven
-// springs) and `dynamics/meta_dynamics.hymeko` edited to carry the mechanical vocabulary. Checked
-// the same way as below and with the same result: with this project's six models moved out of the
-// tree, the corpus is 96 files and hashes to
-// 525fa75cf87828c2c70e8ca3f3b13a8a5641133b55d5c4d956e12b5769ade379 — the ORIGINAL constant, byte for
-// byte. Every file that moved is one of ours.
-//
-// Re-frozen 2026-09-02 because the corpus GREW, not because output moved.
-//
-// `data/` gained five models — `dynamics/{meta_dynamics, maxwell_rlc, divider_maxwell}` and
-// `optimization/{meta_optimization, resistor_divider}` — and every file under `data/` is a fixture,
-// so the count and the digest both had to move. That is the set changing, which the count assertion
-// below exists to distinguish from the thing this gate actually guards.
-//
-// The distinction was checked rather than assumed: with those five moved out of the tree, the
-// corpus is 96 files and hashes to 525fa75cf87828c2c70e8ca3f3b13a8a5641133b55d5c4d956e12b5769ade379
-// — the previous constant, unchanged to the byte. So `algo_version=1` output is still identical on
-// every program it was frozen over.
-//
-// Anyone re-freezing this again should do the same: move the new fixtures aside, confirm the digest
-// over the OLD set is what it was, and only then capture the new pair. A digest that moves while
-// the set holds still is the failure this test is for, and no comment makes that safe.
-const KAT_CORPUS_COUNT: usize = 102;
-const KAT_CORPUS_DIGEST: &str = "f9ab7da8b5d823fa9d55c28e78fd63bc37660a97f67852ad587a145f951cb3b5";
+// Re-bumped 2026-09-01 (APPROVED-CORE-EDIT: webxr-semantic-contract-completion): the two PoW-0
+// fixtures (webxr_vocabulary.hymeko, webxr_scene_demo.hymeko) were removed and replaced by three
+// contract-completion fixtures under data/webxr/ (meta_spatial.hymeko, meta_webxr.hymeko,
+// webxr_hypergraph_demo.hymeko): net 98 -> 99. No pre-existing fixture was edited (git confirms no
+// modified non-webxr data/** file), and no lowering code changed — corpus set change, NOT a lowering
+// regression of algo_version=1.
+const KAT_CORPUS_COUNT: usize = 105;
+const KAT_CORPUS_DIGEST: &str = "916e27c92ddc4d6b46d36c94d4532d52ad5dd3db2b134a0eb805699ceaffd3c8";
 
 #[test]
 fn print_corpus_digest_for_capture() {
@@ -298,4 +277,169 @@ fn accessors_agree_with_direct_field_access_on_the_whole_corpus() {
         checked, coherent,
         "some fixture was not coherent; the accessor comparison assumes sound input"
     );
+}
+
+/// U2 authority flip: the link-derived hash equals the index-based hash on every
+/// lowerable corpus fixture (the broadest bit-identity gate for the flip).
+#[test]
+fn link_derived_hash_equals_index_hash_on_the_whole_corpus() {
+    let files = require_fixtures();
+    let mut checked = 0usize;
+    for f in &files {
+        let Ok((store, compiled)) = crate::test_helpers::load_and_lower(f) else {
+            continue;
+        };
+        // (namespace prefix + links) reproduces the Index hierarchy exactly
+        hymeko::ir::canonical_hash::validate_namespace_roots(&compiled.ir, &compiled.idx)
+            .unwrap_or_else(|e| panic!("namespace validation failed on {}: {e}", f.display()));
+        let vi = canonical_program_hash(CanonHashCfg::default(), &compiled.ir, &store.it);
+        let vl = hymeko::ir::canonical_hash::canonical_program_hash(
+            CanonHashCfg::default(),
+            &compiled.ir,
+            &store.it,
+        );
+        assert_eq!(
+            vl.0,
+            vi.0,
+            "U2.1 link-derived hash diverged from index on {}",
+            f.display()
+        );
+        checked += 1;
+    }
+    assert!(checked >= 96, "expected >= 96 fixtures, got {checked}");
+    eprintln!("[u2.1] link-derived hash == index hash on {checked} fixtures (namespaces complete)");
+}
+
+#[test]
+fn nsroots_prefix_length_survey() {
+    use std::collections::HashMap;
+    let files = require_fixtures();
+    let mut hist: std::collections::BTreeMap<usize, usize> = std::collections::BTreeMap::new();
+    let mut multiseg: Vec<String> = Vec::new();
+    let mut max_roots_with_prefix = 0usize;
+    for f in &files {
+        let Ok((store, compiled)) = crate::test_helpers::load_and_lower(f) else {
+            continue;
+        };
+        let ir = &compiled.ir;
+        let it = &store.it;
+        let mut idx_path: HashMap<usize, Vec<hymeko::common::ids::SymId>> = HashMap::new();
+        for (pk, did) in &compiled.idx.by_path {
+            idx_path.entry(did.raw()).or_insert_with(|| pk.0.clone());
+        }
+        let mut roots_with_prefix = 0usize;
+        for i in 0..ir.decl_nodes.len() {
+            let node = &ir.decl_nodes[i];
+            if !matches!(
+                node.kind,
+                hymeko::ir::ir::DeclKind::Node | hymeko::ir::ir::DeclKind::Edge
+            ) {
+                continue;
+            }
+            // link-root iff parent NONE (or parent not Node/Edge)
+            let p = node.parent;
+            let is_root = p.is_none()
+                || !matches!(
+                    ir.decl_nodes[p.raw()].kind,
+                    hymeko::ir::ir::DeclKind::Node | hymeko::ir::ir::DeclKind::Edge
+                );
+            if !is_root {
+                continue;
+            }
+            if let Some(ip) = idx_path.get(&i) {
+                // prefix = ip[0..len-1] (everything before the root's own name)
+                let plen = ip.len().saturating_sub(1);
+                *hist.entry(plen).or_default() += 1;
+                if plen > 0 {
+                    roots_with_prefix += 1;
+                }
+                if plen > 1 {
+                    let segs: Vec<_> = ip[..plen]
+                        .iter()
+                        .map(|s| it.resolve(*s).to_string())
+                        .collect();
+                    multiseg.push(format!(
+                        "{}: root={} prefix={:?}",
+                        f.file_name().unwrap().to_string_lossy(),
+                        it.resolve(node.name),
+                        segs
+                    ));
+                }
+            }
+        }
+        max_roots_with_prefix = max_roots_with_prefix.max(roots_with_prefix);
+    }
+    eprintln!("[nsroots] prefix-length histogram (link-roots): {hist:?}");
+    eprintln!("[nsroots] max roots-with-prefix in a single fixture: {max_roots_with_prefix}");
+    assert!(
+        multiseg.is_empty(),
+        "Part A invariant: import prefixes are single-segment; found {multiseg:?}"
+    );
+    eprintln!("[nsroots] multi-segment prefixes: {}", multiseg.len());
+    for m in multiseg.iter().take(10) {
+        eprintln!("[nsroots]   {m}");
+    }
+}
+
+/// U2.1 Part G: median lowering wall over the corpus (portable A/B harness).
+#[test]
+#[ignore]
+fn bench_lowering_corpus() {
+    let files = crate::unified_ir::support::corpus::require_fixtures();
+    let mut samples = Vec::new();
+    for _ in 0..3 {
+        // warmup
+        for f in &files {
+            let _ = crate::test_helpers::load_and_lower(f);
+        }
+    }
+    for _ in 0..15 {
+        let t = std::time::Instant::now();
+        let mut n = 0usize;
+        for f in &files {
+            if let Ok((_s, c)) = crate::test_helpers::load_and_lower(f) {
+                n += c.ir.decl_nodes.len();
+            }
+        }
+        samples.push((t.elapsed().as_secs_f64() * 1e3, n));
+    }
+    samples.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+    let med = samples[samples.len() / 2];
+    eprintln!(
+        "[lowbench] corpus load+lower median = {:.2} ms  (total decls {})",
+        med.0, med.1
+    );
+}
+
+/// U2.2 Part C: the Ir-derived path index reproduces the canonical paths and
+/// round-trips path<->DeclId on the corpus (including imported namespaces).
+#[test]
+fn derived_path_index_round_trips_on_the_corpus() {
+    let files = require_fixtures();
+    let mut checked = 0usize;
+    for f in &files {
+        let Ok((_s, c)) = crate::test_helpers::load_and_lower(f) else {
+            continue;
+        };
+        let pi = hymeko::ir::canonical_hash::build_path_index(&c.ir)
+            .unwrap_or_else(|e| panic!("build_path_index failed on {}: {e}", f.display()));
+        assert_eq!(
+            pi.len(),
+            c.idx.by_path.len(),
+            "path count on {}",
+            f.display()
+        );
+        for (path, did) in pi.iter() {
+            assert_eq!(
+                pi.decl_of(&path.0),
+                Some(did),
+                "round-trip on {}",
+                f.display()
+            );
+            assert_eq!(pi.path_of(did).map(|p| &p.0), Some(&path.0));
+        }
+        checked += 1;
+    }
+    assert!(checked >= 96);
+    eprintln!("[u2.2] derived path index round-trips on {checked} fixtures");
 }

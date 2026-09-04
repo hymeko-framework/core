@@ -47,8 +47,7 @@ use hymeko::resolution::resolve::Index;
 /// `decl_to_node`, `decl_to_edge` and `decl_to_arc`, so a mutable IR would have
 /// five independent chances to desynchronise on every insertion.
 fn push_decl(ir: &mut Ir, root: DeclId, kind: DeclKind, name: usize) -> DeclId {
-    let id = DeclId::new(ir.decl_nodes.len());
-    ir.decl_nodes.push(DeclNode {
+    let id = ir.push_decl(DeclNode {
         kind,
         name: SymId::new(name),
         parent: root,
@@ -58,9 +57,6 @@ fn push_decl(ir: &mut Ir, root: DeclId, kind: DeclKind, name: usize) -> DeclId {
         anno: AnnoR::default(),
     });
     ir.decl_hash.push(None);
-    ir.decl_to_node.push(None);
-    ir.decl_to_edge.push(None);
-    ir.decl_to_arc.push(None);
 
     // Maintain the intrusive sibling list.
     let prev = ir.decl_nodes[root.raw()].last_child;
@@ -83,7 +79,7 @@ fn build_ir(nodes: usize, edges: usize, arity: usize) -> Ir {
     let mut ir = Ir::default();
 
     // Root declaration, so parent/first_child/next_sibling are exercised.
-    ir.decl_nodes.push(DeclNode {
+    ir.push_decl(DeclNode {
         kind: DeclKind::Node,
         name: SymId::new(0),
         parent: DeclId::NONE,
@@ -93,9 +89,6 @@ fn build_ir(nodes: usize, edges: usize, arity: usize) -> Ir {
         anno: AnnoR::default(),
     });
     ir.decl_hash.push(None);
-    ir.decl_to_node.push(None);
-    ir.decl_to_edge.push(None);
-    ir.decl_to_arc.push(None);
     let root = DeclId::new(0);
 
     let node_decls: Vec<DeclId> = (0..nodes)
@@ -104,14 +97,16 @@ fn build_ir(nodes: usize, edges: usize, arity: usize) -> Ir {
     for &d in &node_decls {
         let nid = NodeId::new(ir.nodes.len());
         ir.nodes.push(NodeRec::new(d, Vec::new()));
-        ir.decl_to_node[d.raw()] = Some(nid);
+        ir.bind_node_decl(d, nid)
+            .expect("bench: node index representable");
     }
 
     for e in 0..edges {
         let ed = push_decl(&mut ir, root, DeclKind::Edge, nodes + e + 1);
         let eid = EdgeId::new(ir.edges.len());
         ir.edges.push(EdgeRec::new(ed, Vec::new()));
-        ir.decl_to_edge[ed.raw()] = Some(eid);
+        ir.bind_edge_decl(ed, eid)
+            .expect("bench: edge index representable");
 
         let ad = push_decl(&mut ir, root, DeclKind::HyperArc, nodes + edges + e + 1);
         let aid = HyperArcId::new(ir.arcs.len());
@@ -136,7 +131,8 @@ fn build_ir(nodes: usize, edges: usize, arity: usize) -> Ir {
             refs,
         });
         ir.arc_hash.push(None);
-        ir.decl_to_arc[ad.raw()] = Some(aid);
+        ir.bind_arc_decl(ad, aid)
+            .expect("bench: arc index representable");
         ir.edges[eid.raw()].arcs.push(aid);
     }
 
@@ -268,8 +264,8 @@ fn bench_ir_redundancy_footprint(c: &mut Criterion) {
         group.bench_function("decl_to_node_lookup", |b| {
             b.iter(|| {
                 let mut hits = 0usize;
-                for i in 0..black_box(&ir).decl_to_node.len() {
-                    if ir.decl_to_node[i].is_some() {
+                for i in 0..black_box(&ir).decl_nodes.len() {
+                    if ir.as_node(DeclId::new(i)).is_some() {
                         hits += 1;
                     }
                 }
@@ -334,8 +330,7 @@ fn build_indexed(nodes: usize, edges: usize, arity: usize) -> (Ir, Index, Intern
     let root_sym = it.intern("m");
 
     fn push(ir: &mut Ir, idx: &mut Index, root: SymId, leaf: SymId, kind: DeclKind) -> DeclId {
-        let id = DeclId::new(ir.decl_nodes.len());
-        ir.decl_nodes.push(DeclNode {
+        let id = ir.push_decl(DeclNode {
             kind,
             name: leaf,
             parent: DeclId::NONE,
@@ -345,9 +340,6 @@ fn build_indexed(nodes: usize, edges: usize, arity: usize) -> (Ir, Index, Intern
             anno: AnnoR::default(),
         });
         ir.decl_hash.push(None);
-        ir.decl_to_node.push(None);
-        ir.decl_to_edge.push(None);
-        ir.decl_to_arc.push(None);
         idx.by_path.insert(PathKey(vec![root, leaf]), id);
         id
     }
@@ -358,7 +350,8 @@ fn build_indexed(nodes: usize, edges: usize, arity: usize) -> (Ir, Index, Intern
             let d = push(&mut ir, &mut idx, root_sym, s, DeclKind::Node);
             let nid = NodeId::new(ir.nodes.len());
             ir.nodes.push(NodeRec::new(d, Vec::new()));
-            ir.decl_to_node[d.raw()] = Some(nid);
+            ir.bind_node_decl(d, nid)
+                .expect("bench: node index representable");
             d
         })
         .collect();
@@ -368,7 +361,8 @@ fn build_indexed(nodes: usize, edges: usize, arity: usize) -> (Ir, Index, Intern
         let ed = push(&mut ir, &mut idx, root_sym, s, DeclKind::Edge);
         let eid = EdgeId::new(ir.edges.len());
         ir.edges.push(EdgeRec::new(ed, Vec::new()));
-        ir.decl_to_edge[ed.raw()] = Some(eid);
+        ir.bind_edge_decl(ed, eid)
+            .expect("bench: edge index representable");
 
         let aid = HyperArcId::new(ir.arcs.len());
         let refs: Vec<SignedRefR> = (0..arity)
@@ -424,7 +418,7 @@ fn bench_ir_lookup(c: &mut Criterion) {
             b.iter(|| {
                 let mut hits = 0usize;
                 for &d in black_box(&ids) {
-                    if ir.decl_to_node[d.raw()].is_some() {
+                    if ir.as_node(d).is_some() {
                         hits += 1;
                     }
                 }
@@ -464,7 +458,7 @@ fn bench_ir_canonical_hash(c: &mut Criterion) {
         (10_000, 5_000, 4),
         (10_000, 5_000, 32),
     ] {
-        let (ir, idx, it) = build_indexed(nodes, edges, arity);
+        let (ir, _idx, it) = build_indexed(nodes, edges, arity);
         let incidences: usize = ir.arcs.iter().map(|a| a.refs.len()).sum();
         eprintln!(
             "[ir_canonical_hash n{nodes}_a{arity}] decls={} incidences={incidences}",
@@ -480,7 +474,6 @@ fn bench_ir_canonical_hash(c: &mut Criterion) {
                 b.iter(|| {
                     black_box(canonical_program_hash(
                         CanonHashCfg::default(),
-                        black_box(&idx),
                         black_box(&ir),
                         black_box(&it),
                     ))
@@ -643,7 +636,7 @@ fn bench_m2a_map_lookup(c: &mut Criterion) {
                 b.iter(|| {
                     let mut hits = 0usize;
                     for &d in black_box(&ids) {
-                        if ir.decl_to_node[d.raw()].is_some() {
+                        if ir.as_node(d).is_some() {
                             hits += 1;
                         }
                     }
@@ -983,9 +976,7 @@ fn bench_m2a1_decl_to_record(c: &mut Criterion) {
                         // `Option<NodeId>`. Comparing those would repeat the M2a
                         // mistake of charging an accessor for work its control
                         // never performed.
-                        if d.raw() < ir.decl_to_node.len()
-                            && let Some(n) = ir.decl_to_node[d.raw()]
-                        {
+                        if let Some(n) = ir.as_node(d) {
                             hits += n.raw() & 1;
                         }
                     }

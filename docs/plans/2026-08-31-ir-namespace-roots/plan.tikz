@@ -1,0 +1,14 @@
+% U2.1 namespace roots — data flow (TikZ).
+\begin{tikzpicture}[font=\small,node distance=6mm,
+  b/.style={draw,rounded corners,align=center,inner sep=3pt},
+  new/.style={b,fill=blue!8},keep/.style={b,fill=green!10}]
+  \node[keep] (idx) {resolution Index\PathKey = [ns, ...names]};
+  \node[b,below=7mm of idx] (low) {lowering\parent = idx[scope]};
+  \node[new,right=10mm of low] (rec) {record\_namespace\_root\(root DeclId -> Box<[SymId]>)\only imported roots};
+  \node[new,below=7mm of low] (ir) {Ir = links + namespace\_roots\COMPLETE authority};
+  \node[new,below=7mm of ir] (hash) {canonical\_program\_hash\_ir\path = namespace\_prefix(root) + link path};
+  \node[keep,right=10mm of hash] (ok) {96/96 bit-identical\+ 4 frozen KATs};
+  \draw[->] (idx)--(low); \draw[->] (low)--(rec); \draw[->] (low)--(ir); \draw[->] (rec)--(ir);
+  \draw[->] (ir)--(hash); \draw[->] (hash)--(ok);
+  \node[b,fill=yellow!12,below=6mm of hash,text width=62mm]{validate\_namespace\_roots(ir, idx): Index == namespace+links, typed NamespaceError};
+\end{tikzpicture}

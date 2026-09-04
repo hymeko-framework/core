@@ -1,0 +1,24 @@
+\documentclass[tikz,border=6pt]{standalone}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds}
+\begin{document}
+\begin{tikzpicture}[font=\small,
+  top/.style={draw,rounded corners,fill=blue!10,minimum width=34mm,align=center},
+  con/.style={draw,rounded corners,fill=green!10,minimum width=30mm,align=center},
+  e/.style={-{Stealth[length=2mm]}}]
+  \node[top] (ce) {cognitive\_entity};
+  \node[top,below left=8mm and 22mm of ce] (sf) {spatial\_frame};
+  \node[top,below=8mm of ce] (pc) {perceptual};
+  \node[top,below right=8mm and 22mm of ce] (ch) {channel};
+  \draw[e] (sf) -- (ce); \draw[e] (pc) -- (ce); \draw[e] (ch) -- (ce);
+
+  \node[con,below=12mm of sf] (rs) {node / reference\_space / anchor};
+  \node[con,below=12mm of pc] (vis) {geometry / appearance / light};
+  \node[con,below=12mm of ch] (chn) {viewpoint / input\_source};
+  \draw[e] (rs) -- (sf); \draw[e] (vis) -- (pc); \draw[e] (chn) -- (ch);
+
+  \begin{scope}[on background layer]
+    \node[draw,dashed,fit=(ce)(sf)(pc)(ch),inner sep=3mm,label=above:{CogInfoCom-inspired top (authored)}] {};
+    \node[draw,dashed,fit=(rs)(vis)(chn),inner sep=3mm,label=below:{X3D / WebXR concrete kinds}] {};
+  \end{scope}
+\end{tikzpicture}
+\end{document}

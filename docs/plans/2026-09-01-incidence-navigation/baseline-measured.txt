@@ -1,0 +1,34 @@
+# Stage 3 reference benchmark — direct-Ir reverse-incidence index (REV) vs star-expansion CSR (DENSE)
+# host x86_64-pc-windows-msvc, rustc 1.97.1, release; 2026-09-01 01:07 CEDT
+
+Direct-Ir reverse-incidence index (REV) vs materialized star-expansion CSR (DENSE)
+
+== uniform-small: n=20000 incidences=100000 arity=5 arcs=20000 hub=false ==
+  build ns:   REV=       525  DENSE=        1230 (2.3x)
+  bytes/inc:  REV=   4.8  DENSE=    16.8 (3.5x)
+  search ns:  REV=       746  DENSE=       402 (-46.1% vs REV)  SCAN=      490159
+  end-to-end (build+search) ns:  REV=      1270  DENSE=        1632 (1.3x)
+
+== uniform-1e5: n=200000 incidences=100000 arity=5 arcs=20000 hub=false ==
+  build ns:   REV=      1274  DENSE=        1940 (1.5x)
+  bytes/inc:  REV=  12.0  DENSE=    24.0 (2.0x)
+  search ns:  REV=         0  DENSE=         0 (NaN% vs REV)  SCAN=          23
+  end-to-end (build+search) ns:  REV=      1274  DENSE=        1940 (1.5x)
+
+== uniform-1e6: n=2000000 incidences=1000000 arity=5 arcs=200000 hub=false ==
+  build ns:   REV=     17302  DENSE=       26481 (1.5x)
+  bytes/inc:  REV=  12.0  DENSE=    24.0 (2.0x)
+  search ns:  REV=         0  DENSE=         0 (NaN% vs REV)  SCAN=         NaN
+  end-to-end (build+search) ns:  REV=     17302  DENSE=       26481 (1.5x)
+
+== hub-skew-1e6: n=2000000 incidences=1000000 arity=5 arcs=200000 hub=true ==
+  build ns:   REV=     17565  DENSE=       30573 (1.7x)
+  bytes/inc:  REV=  12.0  DENSE=    24.0 (2.0x)
+  search ns:  REV=     40303  DENSE=     20799 (-48.4% vs REV)  SCAN=         NaN
+  end-to-end (build+search) ns:  REV=     57868  DENSE=       51372 (0.9x)
+
+== high-arity-1e6: n=500000 incidences=1000000 arity=20 arcs=50000 hub=false ==
+  build ns:   REV=      7762  DENSE=       57032 (7.3x)
+  bytes/inc:  REV=   6.0  DENSE=    78.0 (13.0x)
+  search ns:  REV=     53298  DENSE=     68612 (+28.7% vs REV)  SCAN=         NaN
+  end-to-end (build+search) ns:  REV=     61061  DENSE=      125644 (2.1x)

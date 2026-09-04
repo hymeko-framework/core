@@ -1,0 +1,17 @@
+%% P0 consolidation — fast-forward promotions (no merge of unrelated history).
+graph LR
+  im[core main 70b4f36] --> wx[webxr fb6b783] --> pf[perf 584b9eb] --> p0[p0 tip: +strategy +CORE.YAML +P0 report]
+  im -. fast-forward .-> p0
+  ga[gen-arenas 093eab3 EVIDENCE-ONLY]:::rej
+  gm[graph main 5078980] --> di[direct-Ir 98c6a93] --> gp[graph-perf cbaadd4]
+  gm -. fast-forward .-> gp
+  classDef rej fill:#fdd,stroke:#c33;
+
+sequenceDiagram
+  participant L as local p0 branch
+  participant R as origin
+  L->>R: push feat/platform-p0-consolidation
+  R-->>L: ls-remote verify == local HEAD
+  L->>R: re-read expected old main SHA (70b4f36) ; FF push main -> p0 tip
+  L->>R: graph FF push main -> cbaadd4
+  R-->>L: HEAD == remote main (both repos) ; HARD STOP

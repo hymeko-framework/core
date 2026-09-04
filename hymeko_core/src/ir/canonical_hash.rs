@@ -26,35 +26,125 @@ impl Default for CanonHashCfg {
     }
 }
 
-/// Top-level: H( header || H(skeleton_prufer) || H(incidence_bytes) )
-pub fn canonical_program_hash(cfg: CanonHashCfg, idx: &Index, ir: &Ir, it: &Interner) -> HashId {
-    // 1) reverse map: DeclId -> PathKey (első találat elég)
-    let did_to_path = build_did_to_path(idx, ir.decl_nodes.len());
-
-    // 2) skeleton forest (csak Node+Edge) -> roots + children
-    let (verts, parent, children, roots) = build_skeleton_forest(idx, ir, &did_to_path);
-
-    // 3) skeleton subtree hashes (name-invariant)
+/// Canonical program hash v1: `H( header || H(skeleton_prufer) || H(incidence_bytes) )`.
+///
+/// Reads the declaration hierarchy exclusively from the `Ir` â the intrusive
+/// links (`DeclNode.parent`, `name`, `kind`) plus `Ir.namespace_roots` for the
+/// import prefix â with **no** `resolution::Index`. The post-lowering `Ir` is the
+/// single authority (U2.2). `algo_version = 1` and every hash byte are unchanged
+/// from the former index-based form: proven bit-identical on the 96-fixture
+/// corpus and the frozen v1 known-answer vectors.
+///
+/// # Preconditions
+/// None â total over any `Ir`; a malformed hierarchy (cycle, dangling parent)
+/// terminates deterministically (bounded walks) rather than looping. Structural
+/// coherence is a separate diagnostic (`coherence`, `validate_namespace_roots`).
+///
+/// # Postconditions
+/// Deterministic; independent of dense `DeclId` assignment (name/path-based).
+pub fn canonical_program_hash(cfg: CanonHashCfg, ir: &Ir, it: &Interner) -> HashId {
+    let did_to_path = build_did_to_path_from_ir(ir);
+    let (verts, parent, children, roots) = build_skeleton_forest_from_ir(ir);
     let vhash = compute_subtree_hashes_with_kinds(cfg, &ir.decl_nodes, &roots, &children);
-
-    // 4) tie-break: path hash (csak ütközés ellen)
     let vtie = compute_tiebreak(cfg, &verts, &did_to_path, it);
-
-    // 5) forest -> tree (super-root) + Prüfer encode with hash-labels
     let prufer_bytes = prufer_from_forest(cfg, &verts, &parent, &roots, &vhash, &vtie);
-
-    // 6) incidence bytes (port/slot megőrzésével)
     let incidence_bytes = canonical_incidence_bytes(cfg, ir, &did_to_path, it);
-
-    // 7) program hash
     let sk = canonical_chunk_hash(cfg, *b"SKELETON", &prufer_bytes);
     let inc = canonical_chunk_hash(cfg, *b"INCIDENC", &incidence_bytes);
-
     let mut h = blake3::Hasher::new();
     write_header(&mut h, cfg, *b"PROGRAM\0");
     h.update(&sk.0);
     h.update(&inc.0);
     HashId(*h.finalize().as_bytes())
+}
+
+// -----------------------------
+//  DeclId -> PathKey from the Ir links (parent chain of `name`s)
+// -----------------------------
+//
+// Each named (Node/Edge) declaration's path is the sequence of `name`s from the
+// root down to it, read by walking `parent`. Anonymous arcs have no path (they
+// are never used as a path in the incidence, which keys on the edge and target
+// declarations). The parent walk is bounded by `decl_nodes.len()` so a malformed
+// cycle terminates rather than looping.
+fn build_did_to_path_from_ir(ir: &Ir) -> Vec<Option<PathKey>> {
+    let n = ir.decl_nodes.len();
+    let mut v: Vec<Option<PathKey>> = vec![None; n];
+    let mut buf: Vec<crate::common::ids::SymId> = Vec::new();
+    for i in 0..n {
+        match ir.decl_nodes[i].kind {
+            DeclKind::Node | DeclKind::Edge => {
+                buf.clear();
+                let mut cur = DeclId::new(i);
+                let mut root = cur;
+                let mut guard = 0usize;
+                while cur.is_some() && (cur.0) < n {
+                    buf.push(ir.decl_nodes[cur.0].name);
+                    root = cur;
+                    cur = ir.decl_nodes[cur.0].parent;
+                    guard += 1;
+                    if guard > n {
+                        break; // malformed cycle: stop deterministically
+                    }
+                }
+                buf.reverse();
+                // U2.1: prepend the root's import namespace prefix so imported
+                // declarations reconstruct their full canonical path.
+                let full: Vec<crate::common::ids::SymId> = match ir.namespace_prefix(root) {
+                    Some(prefix) => prefix.iter().copied().chain(buf.iter().copied()).collect(),
+                    None => buf.clone(),
+                };
+                v[i] = Some(PathKey(full));
+            }
+            DeclKind::HyperArc => {}
+        }
+    }
+    v
+}
+
+// -----------------------------
+//  Skeleton forest from the Ir links
+//   - vertices = Node/Edge declarations, in DeclId order
+//   - parent   = DeclNode.parent (a Node/Edge; arcs never parent a Node/Edge),
+//                which equals the nearest Node/Edge path-prefix on well-formed IR
+//   - children = inversion of parent in DeclId order (matches the DeclId sort
+//                the index-based forest applied)
+// -----------------------------
+fn build_skeleton_forest_from_ir(
+    ir: &Ir,
+) -> (
+    Vec<DeclId>,
+    Vec<Option<DeclId>>,
+    Vec<Vec<DeclId>>,
+    Vec<DeclId>,
+) {
+    let n = ir.decl_nodes.len();
+    let mut verts = Vec::new();
+    for i in 0..n {
+        match ir.decl_nodes[i].kind {
+            DeclKind::Node | DeclKind::Edge => verts.push(DeclId::new(i)),
+            DeclKind::HyperArc => {}
+        }
+    }
+    let mut parent: Vec<Option<DeclId>> = vec![None; n];
+    let mut children: Vec<Vec<DeclId>> = vec![Vec::new(); n];
+    let mut roots = Vec::new();
+    for &did in &verts {
+        let p = ir.decl_nodes[did.0].parent;
+        let skeleton_parent = if p.is_some() && p.0 < n {
+            matches!(ir.decl_nodes[p.0].kind, DeclKind::Node | DeclKind::Edge).then_some(p)
+        } else {
+            None
+        };
+        match skeleton_parent {
+            Some(p) => {
+                parent[did.0] = Some(p);
+                children[p.0].push(did); // verts in DeclId order => children sorted
+            }
+            None => roots.push(did),
+        }
+    }
+    (verts, parent, children, roots)
 }
 
 // -----------------------------
@@ -87,76 +177,6 @@ fn build_did_to_path(idx: &Index, decl_count: usize) -> Vec<Option<PathKey>> {
         }
     }
     v
-}
-
-// -----------------------------
-//  Skeleton forest from hierarchy paths
-//   - vertices = DeclId where kind is Node/Edge
-//   - parent is nearest prefix path with Node/Edge
-//   - roots: those without parent
-// -----------------------------
-fn build_skeleton_forest(
-    idx: &Index,
-    ir: &Ir,
-    did_to_path: &[Option<PathKey>],
-) -> (
-    Vec<DeclId>,
-    Vec<Option<DeclId>>,
-    Vec<Vec<DeclId>>,
-    Vec<DeclId>,
-) {
-    // collect skeleton vertices
-    let mut verts = Vec::new();
-    for &did in idx.by_path.values() {
-        match ir.decl_nodes[did.0 as usize].kind {
-            DeclKind::Node | DeclKind::Edge => verts.push(did),
-            DeclKind::HyperArc => {}
-        }
-    }
-    // stable order
-    verts.sort_by_key(|d| d.0);
-
-    // quick lookup: path -> did (only skeleton)
-    let mut path_to_did: HashMap<PathKey, DeclId> = HashMap::new();
-    for &did in &verts {
-        if let Some(pk) = &did_to_path[did.0 as usize] {
-            path_to_did.insert(pk.clone(), did);
-        }
-    }
-
-    // compute parent by nearest prefix
-    let mut parent: Vec<Option<DeclId>> = vec![None; ir.decl_nodes.len()];
-    for &did in &verts {
-        let Some(pk) = &did_to_path[did.0 as usize] else {
-            continue;
-        };
-        // walk prefixes: [a,b,c] -> [a,b] -> [a] -> []
-        for cut in (0..pk.0.len()).rev() {
-            let pref = PathKey(pk.0[..cut].to_vec());
-            if let Some(&pdid) = path_to_did.get(&pref) {
-                parent[did.0 as usize] = Some(pdid);
-                break;
-            }
-        }
-    }
-
-    // children lists
-    let mut children: Vec<Vec<DeclId>> = vec![Vec::new(); ir.decl_nodes.len()];
-    let mut roots = Vec::new();
-    for &did in &verts {
-        match parent[did.0 as usize] {
-            Some(p) => children[p.0 as usize].push(did),
-            None => roots.push(did),
-        }
-    }
-
-    // sort children by DeclId for determinism (hash-invariant will still be ok)
-    for v in &mut children {
-        v.sort_by_key(|d| d.0);
-    }
-    roots.sort_by_key(|d| d.0);
-
-    (verts, parent, children, roots)
 }
 
 /// Proper subtree hash computation with decl kinds supplied.
@@ -538,4 +558,170 @@ fn push_str(out: &mut Vec<u8>, s: &str) {
     let n16: u16 = n.try_into().unwrap_or(u16::MAX);
     out.extend_from_slice(&n16.to_le_bytes());
     out.extend_from_slice(&bytes[..(n16 as usize)]);
+}
+
+// -----------------------------
+//  U2.1 lowering-boundary namespace validator
+// -----------------------------
+
+/// A disagreement between the resolution `Index` and the `Ir` (namespace + links)
+/// declaration hierarchy. Ids-only, deterministic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NamespaceError {
+    /// A declaration's `(namespace prefix + intrusive-link path)` does not equal
+    /// its resolution-`Index` path.
+    PathMismatch { decl: DeclId },
+    /// An imported root's `Index` path carries a prefix but no namespace metadata
+    /// was recorded for it — e.g. an `Ir` deserialized from a pre-U2.1 wire. Such
+    /// an `Ir` must not be treated as a complete canonical authority.
+    MissingNamespaceMetadata { root: DeclId },
+}
+
+impl core::fmt::Display for NamespaceError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::PathMismatch { decl } => write!(
+                f,
+                "decl {} namespace+link path disagrees with the Index path",
+                decl.raw()
+            ),
+            Self::MissingNamespaceMetadata { root } => write!(
+                f,
+                "imported root {} has an Index prefix but no namespace metadata",
+                root.raw()
+            ),
+        }
+    }
+}
+impl std::error::Error for NamespaceError {}
+
+/// Lowering-boundary check (U2.1, Part C): prove the `Ir` reproduces the
+/// resolution `Index` hierarchy from `(namespace prefix + intrusive links)` for
+/// every declaration. This is the diagnostic that authorises treating the `Ir` as
+/// the post-lowering authority; it is **not** a hot-path tax — call it once at the
+/// lowering boundary, not per hash.
+///
+/// # Errors
+/// [`NamespaceError::MissingNamespaceMetadata`] when an imported root lacks its
+/// prefix (an incomplete `Ir`); [`NamespaceError::PathMismatch`] on any other
+/// disagreement (corrupt metadata, malformed links).
+pub fn validate_namespace_roots(ir: &Ir, idx: &Index) -> Result<(), NamespaceError> {
+    let n = ir.decl_nodes.len();
+    let idx_paths = build_did_to_path(idx, n);
+    let link_paths = build_did_to_path_from_ir(ir);
+    for i in 0..n {
+        if let (Some(ip), Some(lp)) = (&idx_paths[i], &link_paths[i]) {
+            if ip.0 != lp.0 {
+                let did = DeclId::new(i);
+                let p = ir.decl_nodes[i].parent;
+                let is_root = p.is_none()
+                    || (p.0 < n
+                        && !matches!(ir.decl_nodes[p.0].kind, DeclKind::Node | DeclKind::Edge));
+                if is_root && ir.namespace_prefix(did).is_none() && ip.0.len() > lp.0.len() {
+                    return Err(NamespaceError::MissingNamespaceMetadata { root: did });
+                }
+                return Err(NamespaceError::PathMismatch { decl: did });
+            }
+        }
+    }
+    Ok(())
+}
+
+// -----------------------------
+//  U2.2 derived path index (Ir -> path view)
+// -----------------------------
+
+/// A path lookup structure **derived** from the `Ir` (links + `namespace_roots`),
+/// for post-lowering consumers (pretty-print, queries) that need paths. It is a
+/// derived view, not serialized canonical state: build it explicitly, own it at
+/// the call site, and rebuild on `Ir` mutation (a future mutable IR must
+/// document its invalidation point). There is no hidden cache, lock, or
+/// automatic per-lookup rebuild.
+pub struct DerivedPathIndex {
+    by_path: Vec<(PathKey, DeclId)>, // sorted by path, then DeclId
+    did_to_path: Vec<Option<PathKey>>,
+}
+
+/// Building a [`DerivedPathIndex`] failed. Ids-only, deterministic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PathIndexError {
+    /// Two declarations resolve to the same canonical path.
+    DuplicatePath { first: DeclId, second: DeclId },
+}
+
+impl core::fmt::Display for PathIndexError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::DuplicatePath { first, second } => write!(
+                f,
+                "decls {} and {} share a canonical path",
+                first.raw(),
+                second.raw()
+            ),
+        }
+    }
+}
+impl std::error::Error for PathIndexError {}
+
+impl DerivedPathIndex {
+    /// Number of named (Node/Edge) declarations with a path.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.by_path.len()
+    }
+    /// True when no named declaration has a path.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.by_path.is_empty()
+    }
+    /// The canonical path of a declaration, or `None` for an arc / out-of-range id.
+    #[must_use]
+    pub fn path_of(&self, d: DeclId) -> Option<&PathKey> {
+        self.did_to_path.get(d.raw())?.as_ref()
+    }
+    /// Iterate `(path, DeclId)` in deterministic path order.
+    pub fn iter(&self) -> impl Iterator<Item = (&PathKey, DeclId)> {
+        self.by_path.iter().map(|(p, d)| (p, *d))
+    }
+    /// The declaration at an exact path, if any (binary search).
+    #[must_use]
+    pub fn decl_of(&self, path: &[crate::common::ids::SymId]) -> Option<DeclId> {
+        self.by_path
+            .binary_search_by(|(p, _)| p.0.as_slice().cmp(path))
+            .ok()
+            .map(|i| self.by_path[i].1)
+    }
+    /// The per-declaration path table (DeclId-indexed), for consumers that want it.
+    #[must_use]
+    pub fn did_to_path(&self) -> &[Option<PathKey>] {
+        &self.did_to_path
+    }
+}
+
+/// Build a [`DerivedPathIndex`] from the `Ir` — the U2.2 replacement for reading
+/// paths off the (now non-authoritative) resolution `Index`.
+///
+/// # Errors
+/// [`PathIndexError::DuplicatePath`] if two declarations resolve to the same
+/// canonical path (a malformed hierarchy).
+pub fn build_path_index(ir: &Ir) -> Result<DerivedPathIndex, PathIndexError> {
+    let did_to_path = build_did_to_path_from_ir(ir);
+    let mut by_path: Vec<(PathKey, DeclId)> = did_to_path
+        .iter()
+        .enumerate()
+        .filter_map(|(i, p)| p.as_ref().map(|pk| (pk.clone(), DeclId::new(i))))
+        .collect();
+    by_path.sort_by(|a, b| a.0.0.cmp(&b.0.0).then_with(|| a.1.raw().cmp(&b.1.raw())));
+    for w in by_path.windows(2) {
+        if w[0].0.0 == w[1].0.0 {
+            return Err(PathIndexError::DuplicatePath {
+                first: w[0].1,
+                second: w[1].1,
+            });
+        }
+    }
+    Ok(DerivedPathIndex {
+        by_path,
+        did_to_path,
+    })
 }

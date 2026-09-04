@@ -171,17 +171,19 @@ fn mapping_pointing_at_a_foreign_record_returns_none_rather_than_the_wrong_recor
     // declaration. This is the case that would otherwise be a silent wrong
     // answer rather than a visible absence.
     let mut t = fixture();
-    let d0 = DeclId::new(0);
     let foreign = t.ir.as_node(DeclId::new(1)).expect("decl 1 is a node");
-    t.ir.decl_to_node[d0.raw()] = Some(foreign);
+    // A fresh, unbound declaration force-bound to decl 1's node record: the slot
+    // is representable, but the record's backlink names decl 1, not this decl.
+    let dx = t.fresh_decl(DeclKind::Node);
+    t.ir.bind_node_decl(dx, foreign).unwrap();
 
     assert_eq!(
-        t.ir.as_node(d0),
+        t.ir.as_node(dx),
         Some(foreign),
         "the raw mapping still reports the foreign id"
     );
     assert!(
-        t.ir.node_for_decl(d0).is_none(),
+        t.ir.node_for_decl(dx).is_none(),
         "the checked accessor must refuse a record whose backlink names another declaration"
     );
 }
@@ -189,10 +191,16 @@ fn mapping_pointing_at_a_foreign_record_returns_none_rather_than_the_wrong_recor
 #[test]
 fn mapping_pointing_out_of_range_returns_none_and_does_not_panic() {
     let mut t = fixture();
-    let d0 = DeclId::new(0);
-    t.ir.decl_to_node[d0.raw()] = Some(NodeId::new(HUGE));
-    assert!(t.ir.node_for_decl(d0).is_none());
-    assert!(t.ir.node(NodeId::new(HUGE)).is_none());
+    // In-domain but past the node table: encodes and stores, yet resolves to no
+    // record. A fresh decl avoids the no-conflict guard on an already-bound slot.
+    let dx = t.fresh_decl(DeclKind::Node);
+    let out_of_table = NodeId::new(t.ir.nodes.len() + 64);
+    t.ir.bind_node_decl(dx, out_of_table).unwrap();
+    assert!(t.ir.node_for_decl(dx).is_none());
+    assert!(t.ir.node(out_of_table).is_none());
+    // Beyond the 62-bit dispatch domain the binding is refused at encode time,
+    // never silently truncated or stored.
+    assert!(t.ir.bind_node_decl(dx, NodeId::new(HUGE)).is_err());
 }
 
 // ---------------------------------------------------------------------------
@@ -398,12 +406,12 @@ fn arc_for_decl_checks_presence_only_and_agrees_with_as_arc() {
 #[test]
 fn node_and_edge_for_decl_validate_the_backlink_but_as_node_does_not() {
     let mut t = fixture();
-    let d0 = DeclId::new(0);
     let foreign = t.ir.as_node(DeclId::new(1)).expect("decl 1 is a node");
-    t.ir.decl_to_node[d0.raw()] = Some(foreign);
+    let dx = t.fresh_decl(DeclKind::Node);
+    t.ir.bind_node_decl(dx, foreign).unwrap();
 
     // map-only contract: reports the mapping verbatim
-    assert_eq!(t.ir.as_node(d0), Some(foreign));
+    assert_eq!(t.ir.as_node(dx), Some(foreign));
     // checked-composite contract: refuses it
-    assert!(t.ir.node_for_decl(d0).is_none());
+    assert!(t.ir.node_for_decl(dx).is_none());
 }

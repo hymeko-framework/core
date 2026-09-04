@@ -1,0 +1,14 @@
+%% Decl-dispatch compaction: before/after storage + the encoding. pdf waived (no TeX engine).
+graph TD
+  subgraph BEFORE["BEFORE — 48 B/decl"]
+    A1[decl_to_node: Vec&lt;Option&lt;NodeId&gt;&gt; 16B]
+    A2[decl_to_edge: Vec&lt;Option&lt;EdgeId&gt;&gt; 16B]
+    A3[decl_to_arc: Vec&lt;Option&lt;HyperArcId&gt;&gt; 16B]
+  end
+  subgraph AFTER["AFTER — 8 B/decl (option D)"]
+    B1["decl_to_record: Vec&lt;u64&gt; 8B<br/>0 = NONE<br/>(kind&lt;&lt;62) | (raw+1)"]
+    K[decl_nodes[d].kind<br/>coherence-checked == slot tag]
+  end
+  BEFORE ==>|6x reduction, lookup faster| AFTER
+  B1 -->|as_node/as_edge/as_arc<br/>single load, tag-checked| ACC[accessor API total/Option]
+  K -.->|invariant agreement| B1

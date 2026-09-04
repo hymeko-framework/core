@@ -116,7 +116,7 @@ fn synthetic_chain_depths_are_traversable_and_hashable() {
         }
 
         // Canonical hash: this is the recursive path.
-        let h = canonical_program_hash(CanonHashCfg::default(), &t.idx, &t.ir, &t.it);
+        let h = canonical_program_hash(CanonHashCfg::default(), &t.ir, &t.it);
 
         // Semantic oracle at the same depth.
         let form = crate::unified_ir::support::oracle::semantic_form(
@@ -151,7 +151,7 @@ fn synthetic_wide_hierarchy_is_traversable_and_hashable() {
     let refs: Vec<_> = kids.iter().take(64).map(|&d| (d, S::Plus)).collect();
     t.arc(e, &refs);
 
-    let h = canonical_program_hash(CanonHashCfg::default(), &t.idx, &t.ir, &t.it);
+    let h = canonical_program_hash(CanonHashCfg::default(), &t.ir, &t.it);
     eprintln!(
         "[depth] wide hierarchy: decls={} depth=2 branching=2000 hash_prefix={:02x}{:02x}",
         t.ir.decl_nodes.len(),
@@ -173,7 +173,7 @@ fn synthetic_high_cardinality_edge_is_hashable() {
     let refs: Vec<_> = nodes.iter().map(|&d| (d, S::Plus)).collect();
     t.arc(e, &refs);
 
-    let h = canonical_program_hash(CanonHashCfg::default(), &t.idx, &t.ir, &t.it);
+    let h = canonical_program_hash(CanonHashCfg::default(), &t.ir, &t.it);
     eprintln!(
         "[depth] high-cardinality edge: arity=1000 hash_prefix={:02x}{:02x}",
         h.0[0], h.0[1]

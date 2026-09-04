@@ -1,0 +1,38 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}\usepackage{hyperref}
+\title{Platform performance survey + MCU canonical-IR architecture}\author{Aiko Seto}
+\date{Created-at: 2026-09-01 12:35 CEDT}
+\begin{document}\maketitle
+\section*{Scope}
+Re-measure HyMeKo base operations with a unified method (cold/prepared/resident/end-to-end, A/A null,
+interleaved A/B) and produce an MCU + C/C++ architecture plan. Measurement + design only: no production
+optimisation, no MCU runtime, no new protocol, no new IR model. Two clean worktrees, no feature branch
+merged: core \texttt{feat/platform-performance-mcu-plan}@fb6b783, graph
+\texttt{feat/graph-performance-survey}@98c6a93.
+\section*{Method (\S1)}
+Phases never cross-compared. One typed time unit per table. A/A null for drift. Trustworthy prior
+reports are cited, not re-measured from scratch (CLAUDE.md); new measurement targets headline
+verification + gaps. Host: Win11, 24 cores, RTX 5080; ambient $\sim$8--14\% (borderline) so fine deltas
+are PROVISIONAL. Amaterasu reachable but has no Rust toolchain: two-host comparison NOT performed.
+\section*{Reuse (\S0 audit)}
+Existing harnesses reused, not duplicated: core \texttt{ir\_bench/ir\_stream\_bench/csr\_bench/
+interning\_bench}, wgpu \texttt{spmm/chain/arena}, the incidence \texttt{\#[ignore]} operator bench, the
+graph direct\_ir bench (extended in place to cover berge/components/dual/s-cc/batch), the webxr bench.
+Nagare's \texttt{parity\_gate} excluded (its \texttt{hymeko\_graph} path targets the retired
+\texttt{hymeko\_framework\_rust}). Duplications flagged (SparseSpec$\times$2, Steiner/sunflower cross-repo,
+CPU SpMM$\times$2) as consolidation targets, not implemented.
+\section*{Deliverables}
+Core: \texttt{reports/2026-09-01-platform-performance-survey.md}, \texttt{docs/mcu-canonical-ir-architecture.md},
+this plan dir + raw TSV. Graph: \texttt{reports/2026-09-01-direct-ir-graph-performance.md} + raw TSV.
+Summary table + ranked bottleneck list in each report.
+\section*{MCU plan (\S9--13)}
+One semantic Ir, three storage/transport profiles (MCU-RO / MCU-DYNAMIC / MCU-HOSTED). C wire view REUSES
+the existing ir\_stream envelope+section format (little-endian, no usize, digest, skippable sections --
+already satisfies the requirements). CBOR vs sectioned: sectioned snapshot wins (CBOR is dormant + a
+full-copy; adopting it would duplicate the schema). ID/numeric contract: fixed-width u32/u64 IDs, i8
+signs, explicit f32/f64, typed rejection of unsupported shapes, no silent meaning change.
+\section*{Gates / rollback}
+Both repos: fmt, clippy -D warnings, build, workspace tests, doctests, known errors visible, dependency
+tree unchanged (benchmark-only edits), production source byte-identical where only a measure-harness is
+added. Rollback: benchmark/docs only on the two feature branches; drop them; no main merged.
+\end{document}

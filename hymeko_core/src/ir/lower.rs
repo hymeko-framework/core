@@ -109,6 +109,12 @@ fn lower_node(
 
     let parent_did = parent_decl(idx, &path[..scope_len]);
     ir.decl_nodes[did.0].parent = parent_did;
+    // U2.1: an imported module's root has no in-Ir parent; record its namespace
+    // prefix (the path segments before this decl's own name) so the Ir hierarchy
+    // is complete. Empty prefixes (single-module roots) are ignored by the mutator.
+    if parent_did.is_none() && scope_len > 0 {
+        ir.record_namespace_root(did, &path[..scope_len]);
+    }
 
     let anno = resolve_anno(idx, path, &n.anno, it)?;
     ir.decl_nodes[did.0].anno = anno;
@@ -116,7 +122,8 @@ fn lower_node(
     let nid = NodeId::new(ir.nodes.len());
     let bases = resolve_node_bases(idx, path, &n.inner.bases, it)?;
     ir.nodes.push(NodeRec::new(did, bases));
-    ir.decl_to_node[did.0] = Some(nid);
+    ir.bind_node_decl(did, nid)
+        .expect("fresh node index fits the dispatch domain");
 
     if parent_did.is_some() {
         link_decl_child(ir, parent_did, did);
@@ -160,7 +167,8 @@ fn lower_arc(
         in_edge: edge_decl,
         refs,
     });
-    ir.decl_to_arc[idx_usize] = Some(aid);
+    ir.bind_arc_decl(arc_decl, aid)
+        .expect("fresh arc index fits the dispatch domain");
 
     // 6) link into edge's decl-children chain
     link_decl_child(ir, edge_decl, arc_decl);
@@ -190,6 +198,10 @@ fn lower_edge(
 
     let parent_did = parent_decl(idx, &path[..scope_len]);
     ir.decl_nodes[idx_usize].parent = parent_did;
+    // U2.1: record the import namespace prefix for an imported edge-root (see lower_node).
+    if parent_did.is_none() && scope_len > 0 {
+        ir.record_namespace_root(did, &path[..scope_len]);
+    }
 
     let anno = resolve_anno(idx, path, &e.anno, it)?;
     ir.decl_nodes[idx_usize].anno = anno;
@@ -198,7 +210,8 @@ fn lower_edge(
     let eid = EdgeId::new(ir.edges.len());
     let bases = resolve_node_bases(idx, path, &e.inner.bases, it)?;
     ir.edges.push(EdgeRec::new(did, bases));
-    ir.decl_to_edge[idx_usize] = Some(eid);
+    ir.bind_edge_decl(did, eid)
+        .expect("fresh edge index fits the dispatch domain");
 
     if parent_did.is_some() {
         link_decl_child(ir, parent_did, did);

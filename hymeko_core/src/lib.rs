@@ -44,6 +44,7 @@ pub mod resolution;
 pub mod sym_ast;
 pub mod tensor;
 pub mod util;
+pub mod webxr;
 pub mod writers;
 
 pub fn find_node<'ast, 'slice>(

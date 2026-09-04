@@ -55,7 +55,7 @@ fn fold_decl_hashes(t: &TestIr) -> [u8; 32] {
 pub fn probe(t: &mut TestIr) -> Probe {
     compute_merkle_hashes(&mut t.ir, &t.it);
     Probe {
-        v1: canonical_program_hash(CanonHashCfg::default(), &t.idx, &t.ir, &t.it),
+        v1: canonical_program_hash(CanonHashCfg::default(), &t.ir, &t.it),
         merkle: fold_decl_hashes(t),
         oracle: semantic_form(t, Ordering::Ordered),
     }

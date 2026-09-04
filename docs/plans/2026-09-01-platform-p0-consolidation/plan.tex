@@ -1,0 +1,58 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}\usepackage{hyperref}
+\title{P0 --- platform evidence \& branch consolidation}\author{Aiko Seto}
+\date{Created-at: 2026-09-01 18:15 CEDT}
+\begin{document}\maketitle
+\section*{Governance}
+\texttt{GOVERNING-STRATEGY: docs/hymeko-platform-strategy.md} · \texttt{STRATEGY-ID:
+HYMEKO-PLATFORM-2026-09-01-v1} · \texttt{ROADMAP-TASK: P0}. \\
+\texttt{APPROVED-CORE-EDIT: reconcile-core-manifest-after-hnn-relocation}.
+\textbf{plan.pdf waiver}: no TeX engine on this host (tools.yaml \texttt{on\_absent\_tool:
+document\_waiver\_in\_report}); plan.tex/.tikz/.mmd are authored compilable, plan.pdf not built.
+\section*{Scope}
+Consolidate the already-proven core (incidence + WebXR + performance/MCU) and graph (direct-Ir +
+performance) feature branches onto their mains as a verified baseline, and reconcile CORE.YAML after the
+\texttt{hymeko\_hnn} relocation. Integration / governance / V\&V / docs only. \textbf{No} new algorithm,
+storage, transaction, GPU, MCU, or WebXR feature (mission §6 forbidden list).
+\section*{Refs (verified)}
+Core: base main \texttt{70b4f36}; promote to the p0 tip built on perf \texttt{584b9eb}
+(which contains webxr \texttt{fb6b783} and incidence \texttt{70b4f36} history). Evidence-only, NOT merged:
+generational-arenas \texttt{093eab3}. Graph: base main \texttt{5078980}; promote to graph-perf
+\texttt{cbaadd4} (which contains direct-Ir \texttt{98c6a93}).
+\section*{Ancestry / remote-race gate (all PASS at plan time)}
+70b4f36 anc 584b9eb; fb6b783 in 584b9eb; 5078980 anc cbaadd4; 98c6a93 in cbaadd4. Immediately before each
+push, re-read the exact expected old remote SHA; on ANY drift or non-fast-forward: HARD STOP (no rebase,
+no force, no merge of unrelated history).
+\section*{Commit / push order}
+Core, on new branch \texttt{feat/platform-p0-consolidation} (from 584b9eb):
+(1) \texttt{docs(strategy): establish canonical platform roadmap} (the 5 hash-verified artifacts);
+(2) \texttt{chore(governance): reconcile core manifest after HNN relocation} (CORE.YAML only; token in
+footer); (3) \texttt{docs(platform): record P0 consolidation verification} (P0 report). Push the branch,
+verify by \texttt{ls-remote}, then \textbf{fast-forward} core main to it (normal FF push, no force/merge).
+Graph: fast-forward graph main to \texttt{cbaadd4} (no new content commit). Verify HEAD == remote main in
+both repos.
+\section*{Strategy hash manifest}
+See \texttt{strategy-hash-manifest.txt}; the five artifacts are copied byte-identically from the dirty
+user checkout (sha256 verified) and no other untracked file is committed.
+\section*{V\&V matrix}
+Core (p0 tip): fmt; clippy --workspace --all-targets -D warnings; check; build all-targets; test
+--workspace --no-fail-fast; doctests; the WebXR module; incidence index + sparse operator tests; canonical
+hash + namespace/hierarchy KATs; ir\_stream validator/assembler tests; bench \texttt{--list}/smoke (no new
+numbers). Counts before/after; the historical 57/58 drift established (run?) and left untouched. Coverage
+via cargo llvm-cov if present (workspace/webxr/incidence/touched), else cite the existing artefact as a
+waiver. Graph: fmt; clippy -D warnings; check/build; test --no-fail-fast; doctests; direct-Ir + malformed
++ serial/Rayon parity; \texttt{direct\_ir\_bench --list}. Invariant greps: uses \texttt{hymeko\_core::ir::Ir};
+no own canonical hypergraph model; standard path materialises no clique/2-section; flat-star/clique are
+controls only; index built once + reused; signs/weights/slot-order/duplicates preserved.
+\section*{Fault-injection (no mutant committed; hash-verified restore after each)}
+Prove existing tests catch: bad \texttt{(arc,slot)}, target mismatch, missing/duplicate coordinate,
+dangling incidence target, WebXR cycle/cardinality/invalid-numeric, graph serial/Rayon divergence, wire
+offset/length overflow, and an omitted-module/bench target.
+\section*{Rollback}
+Additive on the two feature branches; if any gate fails or a remote race occurs, do NOT promote --- drop
+the p0 branch, leave both mains at their current SHAs. No production Rust changed; CORE.YAML edit is
+revertible in one commit.
+\section*{HARD STOP conditions}
+Any ref mismatch; a non-fast-forward promotion; a new regression not explained by an identified
+pre-existing failure; a forbidden change (§6); a remote race; a user-owned dirty file touched.
+\end{document}

@@ -1,0 +1,44 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}\usepackage{hyperref}
+\title{WebXR semantic contract completion (PoW-0 finish)}\author{Aiko Seto}
+\date{Created-at: 2026-09-01 11:55 CEDT · ETA $\approx$4--6 h (2 vocab + demo + src validator + full test matrix + V\&V/bench/docs)}
+\begin{document}\maketitle
+\section*{Scope}
+Complete the WebXR \emph{semantic} contract on branch \texttt{feat/webxr-semantic-pow0} (no main merge).
+Semantic only: no JS/WASM/session/renderer/DTO/second scene graph/asset loader/runtime handles in Ir;
+no new crate; no parser-grammar or Ir-layout change. Canonical truth = \texttt{hymeko\_core::ir::Ir}.
+\section*{Architecture (meta\_spatial + meta\_webxr, one canonical Ir)}
+\texttt{meta\_spatial.hymeko}: general renderer-independent spatial semantics --- kinds
+(scene, spatial\_frame, spatial\_entity, visual\_asset, appearance, semantic\_anchor, affordance, action,
+input\_role) and relation \texttt{@}-hyperedges (placement, parent\_frame, appearance\_binding, anchoring,
+interaction, effect); pose = numeric lists \texttt{position[x,y,z]} / \texttt{orientation[x,y,z,w]} /
+\texttt{scale[sx,sy,sz]}; contract: meters, quaternion xyzw, right-handed, +X right/+Y up/-Z forward.
+\texttt{meta\_webxr.hymeko}: imports meta\_spatial; session modes (inline/immersive-vr/immersive-ar),
+reference spaces (viewer/local/local-floor/bounded-floor/unbounded), capabilities
+(hit-test/hand-tracking/dom-overlay stable; anchors/layers draft) as required/optional/runtime-reported,
+input roles, WebXR action verbs. Not a second model: both lower into the one Ir; no bridge.
+\section*{Affected files}
+New: \texttt{data/webxr/\{meta\_spatial,meta\_webxr,webxr\_hypergraph\_demo\}.hymeko};
+\texttt{hymeko\_core/src/webxr/\{mod,validate\}.rs} (production validator); \texttt{hymeko\_core/tests/webxr/*}
+(rewritten: positive/negative/metamorphic/fault matrix); \texttt{docs/webxr-semantic-model.md}.
+Removed: PoW-0 \texttt{webxr\_vocabulary.hymeko}, \texttt{webxr\_scene\_demo.hymeko}, PoW-0 test validator.
+Edited: \texttt{src/lib.rs} (\texttt{pub mod webxr;}); \texttt{tests/mod.rs}; corpus golden (net fixture delta).
+\section*{CORE.YAML items touched}
+\texttt{src/**} (\texttt{lockdown: full}) --- a NEW \texttt{webxr} module, read-only over the Ir, no
+layout/grammar change (authorised by the token). \texttt{data/**} (locked) --- superseded PoW-0 files
+replaced by 3 new fixtures. \texttt{tests/**}, \texttt{docs/**} allowlisted.
+\section*{Validator (production, over \&Ir + \&Interner)}
+Accessor-based (\texttt{ir::access}); cycle-safe (visited-set/budget on frame-parent + anchor walks);
+bounded $O(\text{decls}+\text{incidences})$; per-family error variants holding canonical IDs, no
+panic/unwrap. Checks: one session mode; one primary reference space; required$\cap$optional capability
+disjoint; every entity's frame exists; frame hierarchy acyclic; position 3 finite / orientation 4 finite
+non-zero-normalizable / scale 3 finite positive; placement + interaction + anchoring role cardinality;
+asset URI is a string; no dangling ref; no runtime-handle field; capability/action from the known set.
+\section*{Tests / V\&V / rollback}
+Positive + negative (one fault per fixture; NaN/Inf and dangling via hand-built Ir since source cannot
+express them) + metamorphic + fault-mutant (each mutant caught by a named test, none committed). Gates:
+fmt, clippy \texttt{-D warnings} (workspace/all-targets), build, full workspace test, doctest, 57/58 drift
+untouched, touched-line coverage 100\%, per-requirement traceability (NOT\_IMPLEMENTED for runtime/endpoint).
+Semantic compile/validation benchmark (parse+lowering vs validator; 100/1e4/1e5 entities; linear).
+Rollback: additive on the feature branch; drop it. Core main untouched, not merged.
+\end{document}

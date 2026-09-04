@@ -1,0 +1,9 @@
+% Decl-dispatch compaction encoding. Standalone-compilable with \usepackage{tikz}. pdf not built (no TeX engine).
+\begin{tikzpicture}[font=\small,box/.style={draw,minimum height=0.7cm},node distance=0.15cm]
+  \node[box,fill=blue!8,minimum width=11cm] (u) {decl\_to\_record[d] : u64 (8 bytes)};
+  \node[box,fill=orange!12,minimum width=2cm] (k) at (-4.5,-1.2) {bits 63..62\kind tag};
+  \node[box,fill=green!12,minimum width=8cm] (i) at (1.5,-1.2) {bits 61..0\record index + 1  (0 whole-word = NONE)};
+  \draw[->] (u.south) -- (k.north); \draw[->] (u.south) -- (i.north);
+  \node[align=left] at (0,-2.6) {\scriptsize kind tag: Node=0 Edge=1 HyperArc=2 ~|~ checked: raw+1 $<2^{62}$ (no truncation)\
+    \scriptsize as\_node(d): let r=slot[d]; (r!=0 \&\& r$>>$62==Node) ? Some(NodeId::new((r\&MASK)-1)) : None};
+\end{tikzpicture}

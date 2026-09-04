@@ -19,7 +19,7 @@ use crate::unified_ir::support::oracle::{
 };
 
 fn hash(t: &TestIr) -> HashId {
-    canonical_program_hash(CanonHashCfg::default(), &t.idx, &t.ir, &t.it)
+    canonical_program_hash(CanonHashCfg::default(), &t.ir, &t.it)
 }
 
 /// One comparison, reported in full so a failure is diagnosable from the
@@ -253,33 +253,24 @@ fn c5_dense_id_assignment_does_not_affect_the_hash() {
 /// not the history itself. The editor-side case belongs in a
 /// `transformation` test and is recorded as such in the M0.5 report.
 #[test]
-fn c6_simulated_remove_readd_residue() {
-    // "Never deleted": three nodes in order.
+fn c6_dense_id_shift_does_not_change_the_hash() {
+    // Same program, edge declared first so survivors land at different dense
+    // DeclIds. U2.2: the Ir is the hash authority, so the old "remove from the
+    // Index only" tombstone trick is invalid (a decl left in the links is a real
+    // declaration). Dense-ID invariance is tested honestly via insertion order.
     let mut a = TestIr::new();
     let a1 = a.node(&["h", "keep1"], hymeko::common::ids::DeclId::NONE);
     let a2 = a.node(&["h", "keep2"], hymeko::common::ids::DeclId::NONE);
     let ae = a.edge(&["h", "e"], hymeko::common::ids::DeclId::NONE);
     a.arc(ae, &[(a1, S::Plus), (a2, S::Plus)]);
 
-    // "Churned": a doomed decl occupied index 0, survivors landed later.
     let mut b = TestIr::new();
-    b.node(&["h", "doomed"], hymeko::common::ids::DeclId::NONE);
+    let be = b.edge(&["h", "e"], hymeko::common::ids::DeclId::NONE);
     let b1 = b.node(&["h", "keep1"], hymeko::common::ids::DeclId::NONE);
     let b2 = b.node(&["h", "keep2"], hymeko::common::ids::DeclId::NONE);
-    let be = b.edge(&["h", "e"], hymeko::common::ids::DeclId::NONE);
     b.arc(be, &[(b1, S::Plus), (b2, S::Plus)]);
-    // Simulate the removal: drop it from the index so it is not a live
-    // declaration. The arena slot stays occupied, exactly as a tombstone would.
-    let doomed_key = b
-        .idx
-        .by_path
-        .iter()
-        .find(|(pk, _)| pk.0.len() == 2 && b.it.resolve(pk.0[1]) == "doomed")
-        .map(|(pk, _)| pk.clone())
-        .expect("doomed present");
-    b.idx.by_path.remove(&doomed_key);
 
-    assert_invariant("C6 simulated remove/re-add residue", &a, &b);
+    assert_invariant("C6 dense-id shift (edge-first insertion)", &a, &b);
 }
 
 /// Case 9 — serde round trip.
@@ -359,7 +350,7 @@ fn c10_reconstruction_without_semantic_change() {
 /// If this test ever fails, the hash started reading `DeclNode.parent` and the
 /// migration's assumptions about hierarchy change.
 #[test]
-fn intrusive_parent_links_do_not_affect_the_canonical_hash() {
+fn intrusive_parent_links_now_determine_the_canonical_hash() {
     let mut a = TestIr::new();
     let root = a.node(&["t"], hymeko::common::ids::DeclId::NONE);
     let x = a.node(&["t", "x"], root);
@@ -379,15 +370,14 @@ fn intrusive_parent_links_do_not_affect_the_canonical_hash() {
         intrusive_hierarchy_form(&b),
         "fixture error: the intrusive hierarchies were meant to differ"
     );
-    assert_eq!(
+    assert_ne!(
         hash(&a),
         hash(&b),
-        "canonical hash became sensitive to DeclNode.parent — the audit's \
-         finding that the skeleton is built from Index path prefixes no longer \
-         holds, and the migration must be revisited"
+        "U2.2: the canonical hash now reads DeclNode.parent (the Ir links are the 
+         authority); differing intrusive hierarchies must produce different hashes"
     );
     eprintln!(
-        "[intrusive-parent] hash identical despite differing intrusive hierarchy \
-         — confirms the hash reads Index paths, not DeclNode.parent"
+        "[intrusive-parent] hash differs with the intrusive hierarchy 
+         â confirms the hash reads the Ir links, not the Index"
     );
 }

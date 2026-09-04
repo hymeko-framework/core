@@ -136,7 +136,7 @@ mod basic_transformation_tests {
         );
 
         // Root must be a node in IR
-        let _root_nid = ir.decl_to_node[did_root.raw()].expect("Root not lowered as node");
+        let _root_nid = ir.as_node(did_root).expect("Root not lowered as node");
 
         // first_child points to A, and A->B->C via next_sibling
         assert_eq!(
@@ -240,7 +240,7 @@ mod basic_transformation_tests {
         );
 
         // Root must be a node in IR
-        let _root_nid = ir.decl_to_node[did_root.raw()].expect("Root not lowered as node");
+        let _root_nid = ir.as_node(did_root).expect("Root not lowered as node");
 
         // first_child points to Root.A, and Root.A->Root.B->Root.C via next_sibling
         assert_eq!(
@@ -249,9 +249,9 @@ mod basic_transformation_tests {
             "Root.first_child should be Root.A"
         );
 
-        let root_a_nid = ir.decl_to_node[did_root_a.raw()].expect("Root.A not lowered as node");
-        let _root_b_nid = ir.decl_to_node[did_root_b.raw()].expect("Root.B not lowered as node");
-        let _root_c_nid = ir.decl_to_node[did_root_c.raw()].expect("Root.C not lowered as node");
+        let root_a_nid = ir.as_node(did_root_a).expect("Root.A not lowered as node");
+        let _root_b_nid = ir.as_node(did_root_b).expect("Root.B not lowered as node");
+        let _root_c_nid = ir.as_node(did_root_c).expect("Root.C not lowered as node");
 
         assert_eq!(
             ir.next_sibling(did_root_a),
@@ -277,12 +277,15 @@ mod basic_transformation_tests {
             "Root.A.first_child should be Root.A.A"
         );
 
-        let root_a_a_nid =
-            ir.decl_to_node[did_root_a_a.raw()].expect("Root.A.A not lowered as node");
-        let root_a_b_nid =
-            ir.decl_to_node[did_root_a_b.raw()].expect("Root.A.B not lowered as node");
-        let root_a_c_nid =
-            ir.decl_to_node[did_root_a_c.raw()].expect("Root.A.C not lowered as node");
+        let root_a_a_nid = ir
+            .as_node(did_root_a_a)
+            .expect("Root.A.A not lowered as node");
+        let root_a_b_nid = ir
+            .as_node(did_root_a_b)
+            .expect("Root.A.B not lowered as node");
+        let root_a_c_nid = ir
+            .as_node(did_root_a_c)
+            .expect("Root.A.C not lowered as node");
         assert_ne!(root_a_a_nid, root_a_b_nid);
         assert_ne!(root_a_b_nid, root_a_c_nid);
 
@@ -363,8 +366,9 @@ mod basic_transformation_tests {
         );
 
         // 2) Downcast: Arc decl -> ArcId -> ArcRec
-        let arc_id =
-            ir.decl_to_arc[arc_decl.raw()].expect("arc decl should map to ArcId via decl_to_arc");
+        let arc_id = ir
+            .as_arc(arc_decl)
+            .expect("arc decl should map to ArcId via decl_to_arc");
         let arc = &ir.arcs[arc_id.raw()];
 
         // Arc decl konzisztencia (ArcRec-ben nincs `decl`, ezért mappinget tesztelünk)

@@ -21,7 +21,7 @@ pub struct DeclNode {
     pub anno: AnnoR,
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone)]
 pub struct Ir {
     pub meta: Option<Meta>,
     pub doc_hash: Option<HashId>,
@@ -35,10 +35,241 @@ pub struct Ir {
     pub edges: Vec<EdgeRec>, // EdgeId indexel
     pub arcs: Vec<ArcRec>,   // ArcId indexel
 
-    // DeclId -> NodeId/EdgeId leképzés (gyors jump)
-    pub decl_to_node: Vec<Option<NodeId>>,
-    pub decl_to_edge: Vec<Option<EdgeId>>,
-    pub decl_to_arc: Vec<Option<HyperArcId>>,
+    // Compact declaration dispatch (option D, 2026-08-31): one 8-byte slot per
+    // decl replaces the former three `Vec<Option<Id>>` maps (48 B/decl -> 8 B/decl).
+    // Storage is PRIVATE; the public read contract is the accessor API
+    // (`as_node`/`as_edge`/`as_arc`, `node_for_decl`/..., `contains_*`); writes go
+    // through the crate-private typed mutators `bind_{node,edge,arc}_decl`. See the
+    // `dispatch` module for the checked encoding. The legacy three-map serde wire is
+    // preserved byte-for-byte by the manual `Serialize`/`Deserialize` impls below.
+    pub(crate) decl_to_record: Vec<u64>,
+
+    // Canonical namespace roots (U2.1, 2026-08-31): the import namespace prefix
+    // lowering applies to each imported module's root declarations -- the one piece
+    // of the hierarchy the intrusive links do not encode (an imported root has
+    // `parent == NONE`), and which the v1 canonical hash embeds via the path.
+    // Stored so the `Ir` is a complete post-lowering authority.
+    //
+    // Invariant: sorted ascending by `DeclId`; each `DeclId` is a live link-root;
+    // prefixes are non-empty (single-module roots absent -> zero cost). Storage is
+    // PRIVATE; reads via `namespace_prefix`, writes via `record_namespace_root`.
+    pub(crate) namespace_roots: Vec<(DeclId, Box<[SymId]>)>,
+}
+
+/// Checked encode/decode for the compact declaration-dispatch slot (option D).
+///
+/// A slot is a `u64`: `0` means NONE; otherwise the top two bits carry the
+/// [`DeclKind`] tag (`Node=0`, `Edge=1`, `HyperArc=2`; `3` is reserved/invalid) and
+/// the low 62 bits carry `raw_record_index + 1` (so `0` stays reserved for NONE).
+/// Every conversion is checked: an index that does not fit the 62-bit domain, a
+/// reserved tag, or a `u64`->`usize` overflow is a typed [`DispatchError`] — never a
+/// silent truncation, and never `unsafe`.
+pub mod dispatch {
+    use super::DeclKind;
+
+    pub(crate) const NONE: u64 = 0;
+    const TAG_SHIFT: u32 = 62;
+    const INDEX_MASK: u64 = (1u64 << TAG_SHIFT) - 1; // low 62 bits
+    pub(crate) const TAG_NODE: u64 = 0;
+    pub(crate) const TAG_EDGE: u64 = 1;
+    pub(crate) const TAG_ARC: u64 = 2;
+    pub(crate) const TAG_RESERVED: u64 = 3;
+
+    /// A declaration-dispatch slot could not be encoded or decoded. Ids-only,
+    /// bounded numeric metadata; deterministic.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum DispatchError {
+        /// A record index does not fit the 62-bit dispatch index domain.
+        IndexOverflow { index: usize },
+        /// A slot carries the reserved (invalid) tag `3`.
+        ReservedTag { slot: u64 },
+        /// A non-NONE slot whose index field is `0` (i.e. `raw+1 == 0`): malformed.
+        MalformedZeroIndex { slot: u64 },
+        /// A slot's decoded `u64` index did not fit `usize` on this target.
+        UsizeOverflow { value: u64 },
+    }
+
+    impl core::fmt::Display for DispatchError {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            match self {
+                Self::IndexOverflow { index } => {
+                    write!(f, "record index {index} exceeds the 62-bit dispatch domain")
+                }
+                Self::ReservedTag { slot } => {
+                    write!(f, "dispatch slot {slot:#x} carries the reserved tag")
+                }
+                Self::MalformedZeroIndex { slot } => {
+                    write!(
+                        f,
+                        "dispatch slot {slot:#x} has a non-NONE tag but a zero index"
+                    )
+                }
+                Self::UsizeOverflow { value } => {
+                    write!(
+                        f,
+                        "dispatch index {value} does not fit usize on this target"
+                    )
+                }
+            }
+        }
+    }
+    impl std::error::Error for DispatchError {}
+
+    #[inline(always)]
+    pub(crate) const fn tag_of(kind: DeclKind) -> u64 {
+        match kind {
+            DeclKind::Node => TAG_NODE,
+            DeclKind::Edge => TAG_EDGE,
+            DeclKind::HyperArc => TAG_ARC,
+        }
+    }
+
+    /// Checked encode `(kind, raw index) -> slot`. `Err` on 62-bit index overflow.
+    #[inline]
+    pub(crate) fn encode(kind: DeclKind, index: usize) -> Result<u64, DispatchError> {
+        let bumped = (index as u64)
+            .checked_add(1)
+            .ok_or(DispatchError::IndexOverflow { index })?;
+        if bumped > INDEX_MASK {
+            return Err(DispatchError::IndexOverflow { index });
+        }
+        Ok((tag_of(kind) << TAG_SHIFT) | bumped)
+    }
+
+    /// Fully checked decode `slot -> Option<(tag, raw index)>`. `None` slot -> `Ok(None)`.
+    /// Reserved tag / malformed-zero-index / usize overflow -> typed `Err`. Used on the
+    /// validation/deserialize paths.
+    #[inline]
+    pub(crate) fn decode_checked(slot: u64) -> Result<Option<(u64, usize)>, DispatchError> {
+        if slot == NONE {
+            return Ok(None);
+        }
+        let tag = slot >> TAG_SHIFT;
+        if tag == TAG_RESERVED {
+            return Err(DispatchError::ReservedTag { slot });
+        }
+        let bumped = slot & INDEX_MASK;
+        if bumped == 0 {
+            return Err(DispatchError::MalformedZeroIndex { slot });
+        }
+        let value = bumped - 1;
+        let index = usize::try_from(value).map_err(|_| DispatchError::UsizeOverflow { value })?;
+        Ok(Some((tag, index)))
+    }
+
+    /// Hot-path decode for one expected tag on a coherence-validated `Ir`: total,
+    /// allocation-free, single load. Returns the raw index iff the slot is non-NONE
+    /// and carries `want_tag`; otherwise `None`. Well-formedness (tag != reserved,
+    /// index representable) is guaranteed by construction (checked `encode`) and by
+    /// the coherence validator, so this path needs no error arm. On a 64-bit target
+    /// `usize == u64`, so the mask-and-subtract is lossless.
+    #[inline(always)]
+    pub(crate) fn decode_tag(slot: u64, want_tag: u64) -> Option<usize> {
+        if slot != NONE && (slot >> TAG_SHIFT) == want_tag {
+            // low 62 bits hold raw+1 >= 1 for a well-formed slot.
+            Some(((slot & INDEX_MASK) - 1) as usize)
+        } else {
+            None
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn none_slot_decodes_to_absence() {
+            assert_eq!(NONE, 0);
+            assert_eq!(decode_checked(NONE), Ok(None));
+            assert_eq!(decode_tag(NONE, TAG_NODE), None);
+            assert_eq!(decode_tag(NONE, TAG_EDGE), None);
+            assert_eq!(decode_tag(NONE, TAG_ARC), None);
+        }
+
+        #[test]
+        fn encode_zero_index_sets_only_the_tag_bit_plus_one() {
+            assert_eq!(encode(DeclKind::Node, 0), Ok(1));
+            assert_eq!(encode(DeclKind::Edge, 0), Ok((TAG_EDGE << TAG_SHIFT) | 1));
+            assert_eq!(
+                encode(DeclKind::HyperArc, 0),
+                Ok((TAG_ARC << TAG_SHIFT) | 1)
+            );
+        }
+
+        #[test]
+        fn encode_decode_round_trips_each_kind() {
+            for &(k, tag) in &[
+                (DeclKind::Node, TAG_NODE),
+                (DeclKind::Edge, TAG_EDGE),
+                (DeclKind::HyperArc, TAG_ARC),
+            ] {
+                for &i in &[0usize, 1, 2, 63, 64, 65, 1000, 1_000_000] {
+                    let slot = encode(k, i).expect("in-domain index encodes");
+                    assert_eq!(decode_checked(slot), Ok(Some((tag, i))));
+                    assert_eq!(decode_tag(slot, tag), Some(i));
+                    let other = (tag + 1) % 3; // a different, valid tag
+                    assert_eq!(decode_tag(slot, other), None);
+                }
+            }
+        }
+
+        #[test]
+        fn max_representable_index_encodes_and_overflow_is_rejected() {
+            let max_index = (INDEX_MASK - 1) as usize; // raw+1 == INDEX_MASK
+            let slot = encode(DeclKind::Node, max_index).expect("max index fits");
+            assert_eq!(slot & INDEX_MASK, INDEX_MASK);
+            assert_eq!(decode_checked(slot), Ok(Some((TAG_NODE, max_index))));
+            let over = max_index + 1;
+            assert_eq!(
+                encode(DeclKind::Node, over),
+                Err(DispatchError::IndexOverflow { index: over })
+            );
+            assert_eq!(
+                encode(DeclKind::Edge, usize::MAX),
+                Err(DispatchError::IndexOverflow { index: usize::MAX })
+            );
+        }
+
+        #[test]
+        fn reserved_tag_is_always_an_error_but_never_a_false_hit() {
+            let slot = (TAG_RESERVED << TAG_SHIFT) | 1;
+            assert_eq!(
+                decode_checked(slot),
+                Err(DispatchError::ReservedTag { slot })
+            );
+            assert_eq!(decode_tag(slot, TAG_NODE), None);
+            assert_eq!(decode_tag(slot, TAG_EDGE), None);
+            assert_eq!(decode_tag(slot, TAG_ARC), None);
+        }
+
+        #[test]
+        fn non_none_zero_index_is_malformed() {
+            let slot = TAG_EDGE << TAG_SHIFT; // tag set, index bits zero, != NONE
+            assert_ne!(slot, NONE);
+            assert_eq!(
+                decode_checked(slot),
+                Err(DispatchError::MalformedZeroIndex { slot })
+            );
+        }
+
+        #[test]
+        fn every_dispatch_error_formats_nonempty() {
+            let errs = [
+                DispatchError::IndexOverflow { index: 9 },
+                DispatchError::ReservedTag {
+                    slot: (TAG_RESERVED << TAG_SHIFT) | 1,
+                },
+                DispatchError::MalformedZeroIndex {
+                    slot: TAG_EDGE << TAG_SHIFT,
+                },
+                DispatchError::UsizeOverflow { value: u64::MAX },
+            ];
+            for e in errs {
+                assert!(!e.to_string().is_empty());
+                assert!(!format!("{e:?}").is_empty());
+            }
+        }
+    }
 }
 
 impl Ir {
@@ -47,6 +278,45 @@ impl Ir {
             meta: Some(meta),
             ..Default::default()
         }
+    }
+
+    /// Record an imported module's namespace prefix for a root declaration (U2.1).
+    ///
+    /// Crate-private construction seam, called by lowering while the resolution
+    /// `Index` is still available. `prefix` is the namespace segments applied
+    /// before the root's own name; empty prefixes (single-module roots) are not
+    /// recorded. Lowering visits declarations in ascending `DeclId`, so entries
+    /// are appended in order and the sorted invariant holds (asserted in debug).
+    ///
+    /// # Preconditions
+    /// `root` is a live link-root (its `parent` is `NONE` or a non-Node/Edge).
+    /// # Postconditions
+    /// On a non-empty `prefix`, `namespace_prefix(root)` returns it thereafter.
+    pub(crate) fn record_namespace_root(&mut self, root: DeclId, prefix: &[SymId]) {
+        if prefix.is_empty() {
+            return;
+        }
+        debug_assert!(
+            self.namespace_roots
+                .last()
+                .is_none_or(|(d, _)| d.raw() < root.raw()),
+            "namespace roots must be recorded in ascending DeclId order"
+        );
+        self.namespace_roots
+            .push((root, prefix.to_vec().into_boxed_slice()));
+    }
+
+    /// The import namespace prefix of a root declaration, or `None` for a
+    /// single-module (unprefixed) root.
+    ///
+    /// Total read-only accessor; `O(log R)` over the namespace-root table
+    /// (`R` = number of imported roots), no allocation, no `HashMap`.
+    #[must_use]
+    pub fn namespace_prefix(&self, root: DeclId) -> Option<&[SymId]> {
+        self.namespace_roots
+            .binary_search_by(|(d, _)| d.raw().cmp(&root.raw()))
+            .ok()
+            .map(|i| &*self.namespace_roots[i].1)
     }
 
     // M2a.1: no explicit `is_none()` guard on the Option-returning lookups.
@@ -117,15 +387,77 @@ impl Ir {
 
     #[inline]
     pub fn as_node(&self, d: DeclId) -> Option<NodeId> {
-        self.decl_to_node.get(d.raw()).copied().flatten()
+        dispatch::decode_tag(*self.decl_to_record.get(d.raw())?, dispatch::TAG_NODE)
+            .map(NodeId::new)
     }
     #[inline]
     pub fn as_edge(&self, d: DeclId) -> Option<EdgeId> {
-        self.decl_to_edge.get(d.raw()).copied().flatten()
+        dispatch::decode_tag(*self.decl_to_record.get(d.raw())?, dispatch::TAG_EDGE)
+            .map(EdgeId::new)
     }
     #[inline]
     pub fn as_arc(&self, d: DeclId) -> Option<HyperArcId> {
-        self.decl_to_arc.get(d.raw()).copied().flatten()
+        dispatch::decode_tag(*self.decl_to_record.get(d.raw())?, dispatch::TAG_ARC)
+            .map(HyperArcId::new)
+    }
+
+    /// Append a declaration to the arena and its (NONE) dispatch slot, returning its
+    /// `DeclId`. The construction seam for callers that build an `Ir` by hand (the
+    /// dispatch storage is private); pair with `bind_*_decl` to bind the record.
+    #[inline]
+    pub fn push_decl(&mut self, node: DeclNode) -> DeclId {
+        let id = DeclId::new(self.decl_nodes.len());
+        self.decl_nodes.push(node);
+        self.decl_to_record.push(dispatch::NONE);
+        id
+    }
+
+    /// Crate-private typed binding: `decl (kind Node) -> node record`. Checks the
+    /// declaration kind, checks the index is representable (checked encode), and
+    /// refuses a second, *different* binding. On any error the slot is left exactly
+    /// as it was (no half-written state).
+    #[inline]
+    pub fn bind_node_decl(
+        &mut self,
+        d: DeclId,
+        nid: NodeId,
+    ) -> Result<(), dispatch::DispatchError> {
+        self.bind_decl(d, DeclKind::Node, nid.raw())
+    }
+    #[inline]
+    pub fn bind_edge_decl(
+        &mut self,
+        d: DeclId,
+        eid: EdgeId,
+    ) -> Result<(), dispatch::DispatchError> {
+        self.bind_decl(d, DeclKind::Edge, eid.raw())
+    }
+    #[inline]
+    pub fn bind_arc_decl(
+        &mut self,
+        d: DeclId,
+        aid: HyperArcId,
+    ) -> Result<(), dispatch::DispatchError> {
+        self.bind_decl(d, DeclKind::HyperArc, aid.raw())
+    }
+
+    /// Shared checked binder. Encodes first (so an index overflow aborts before any
+    /// write), then refuses overwriting an existing slot with a *different* value.
+    fn bind_decl(
+        &mut self,
+        d: DeclId,
+        kind: DeclKind,
+        index: usize,
+    ) -> Result<(), dispatch::DispatchError> {
+        let slot = dispatch::encode(kind, index)?; // checked; no partial state on Err
+        let cur = self.decl_to_record[d.raw()];
+        debug_assert!(
+            cur == dispatch::NONE || cur == slot,
+            "conflicting re-binding of decl {} : {cur:#x} -> {slot:#x}",
+            d.raw()
+        );
+        self.decl_to_record[d.raw()] = slot;
+        Ok(())
     }
 
     pub fn preallocate_from_index(&mut self, total_named_decls: usize) {
@@ -140,9 +472,8 @@ impl Ir {
         };
         // Allocate exact capacity for Nodes and Edges
         self.decl_nodes.resize(total_named_decls, default_node);
-        self.decl_to_node.resize(total_named_decls, None);
-        self.decl_to_edge.resize(total_named_decls, None);
-        self.decl_to_arc.resize(total_named_decls, None);
+        self.decl_to_record
+            .resize(total_named_decls, dispatch::NONE);
         self.decl_hash.resize(total_named_decls, None);
     }
 
@@ -157,9 +488,7 @@ impl Ir {
             next_sibling: DeclId::NONE,
             anno: AnnoR::default(),
         });
-        self.decl_to_node.push(None);
-        self.decl_to_edge.push(None);
-        self.decl_to_arc.push(None);
+        self.decl_to_record.push(dispatch::NONE);
         self.decl_hash.push(None);
         id
     }
@@ -270,4 +599,381 @@ pub enum ValueR {
 pub struct AnnoR {
     pub tags: Vec<SymId>,
     pub value: Option<ValueR>,
+}
+
+// ============================================================================
+// Serde boundary adapter (2026-08-31): keep the legacy three-map wire byte-for-byte
+// while the in-memory `Ir` stores only the compact `decl_to_record`. Serialize is
+// manual and BORROWED — the large fields (`decl_nodes`, `nodes`, `edges`, `arcs`,
+// meta, hashes) are serialized by reference and never cloned; only the three legacy
+// `Vec<Option<Id>>` maps are reconstructed temporarily (the sole compatibility
+// allocation). Deserialize reads the legacy three-map wire and is fail-closed:
+// every structural inconsistency is a typed error, never a silent reinterpretation.
+// ============================================================================
+
+use serde::de::Error as _;
+use serde::ser::SerializeStruct as _;
+
+/// Fail-closed decode error when compacting the legacy three-map serde wire into the
+/// single `decl_to_record`. Ids-only, bounded, deterministic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IrDecodeError {
+    /// The three legacy maps do not all share the `decl_nodes` length.
+    InvalidMapLength {
+        decl_nodes: usize,
+        node: usize,
+        edge: usize,
+        arc: usize,
+    },
+    /// The same declaration is bound in more than one legacy map.
+    MultipleBindings { decl: DeclId },
+    /// A declaration's legacy binding does not match its `DeclKind`.
+    KindMismatch { decl: DeclId, kind: DeclKind },
+    /// A bound record index is outside its concrete table.
+    RecordOutOfRange { decl: DeclId },
+    /// The bound record's `decl` back-pointer does not point back to `decl`.
+    WrongBacklink { decl: DeclId },
+    /// The record index did not fit the compact 62-bit dispatch domain.
+    DispatchEncode(dispatch::DispatchError),
+    /// Namespace metadata carries a schema version this build does not understand.
+    UnknownNamespaceSchema { schema: u16 },
+    /// A namespace root's `DeclId` is outside `decl_nodes`.
+    NamespaceRootOutOfRange { decl: DeclId },
+    /// The same declaration appears twice in the namespace-root table.
+    DuplicateNamespaceRoot { decl: DeclId },
+    /// A namespace root carries an empty prefix (single-module roots must be absent).
+    EmptyNamespacePrefix { decl: DeclId },
+    /// The namespace-root table is not sorted ascending by `DeclId`.
+    UnsortedNamespaceRoots,
+}
+
+impl core::fmt::Display for IrDecodeError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::InvalidMapLength {
+                decl_nodes,
+                node,
+                edge,
+                arc,
+            } => write!(
+                f,
+                "legacy map length mismatch: decl_nodes={decl_nodes} node={node} edge={edge} arc={arc}"
+            ),
+            Self::MultipleBindings { decl } => {
+                write!(
+                    f,
+                    "decl {} is bound in more than one legacy map",
+                    decl.raw()
+                )
+            }
+            Self::KindMismatch { decl, kind } => {
+                write!(
+                    f,
+                    "decl {} legacy binding disagrees with kind {kind:?}",
+                    decl.raw()
+                )
+            }
+            Self::RecordOutOfRange { decl } => {
+                write!(f, "decl {} bound to an out-of-range record", decl.raw())
+            }
+            Self::WrongBacklink { decl } => {
+                write!(f, "decl {} record back-pointer does not match", decl.raw())
+            }
+            Self::DispatchEncode(e) => write!(f, "dispatch encode failed: {e:?}"),
+            Self::UnknownNamespaceSchema { schema } => {
+                write!(f, "unknown namespace metadata schema version {schema}")
+            }
+            Self::NamespaceRootOutOfRange { decl } => {
+                write!(f, "namespace root decl {} is out of range", decl.raw())
+            }
+            Self::DuplicateNamespaceRoot { decl } => {
+                write!(
+                    f,
+                    "namespace root decl {} appears more than once",
+                    decl.raw()
+                )
+            }
+            Self::EmptyNamespacePrefix { decl } => {
+                write!(f, "namespace root decl {} has an empty prefix", decl.raw())
+            }
+            Self::UnsortedNamespaceRoots => {
+                write!(f, "namespace-root table is not sorted by DeclId")
+            }
+        }
+    }
+}
+impl std::error::Error for IrDecodeError {}
+
+/// Wire schema version for the canonical namespace-root metadata (U2.1).
+const NAMESPACE_SCHEMA: u16 = 1;
+
+/// Borrowed serialize view of the namespace-root table (no clone of the prefixes).
+#[derive(Serialize)]
+struct NamespaceWireRef<'a> {
+    schema: u16,
+    roots: &'a [(DeclId, Box<[SymId]>)],
+}
+
+impl Serialize for Ir {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        // Reconstruct the three legacy maps for the wire -- the ONLY compat allocation.
+        let n = self.decl_to_record.len();
+        let mut d2n: Vec<Option<NodeId>> = vec![None; n];
+        let mut d2e: Vec<Option<EdgeId>> = vec![None; n];
+        let mut d2a: Vec<Option<HyperArcId>> = vec![None; n];
+        for (d, &slot) in self.decl_to_record.iter().enumerate() {
+            if let Some((tag, idx)) =
+                dispatch::decode_checked(slot).map_err(serde::ser::Error::custom)?
+            {
+                match tag {
+                    dispatch::TAG_NODE => d2n[d] = Some(NodeId::new(idx)),
+                    dispatch::TAG_EDGE => d2e[d] = Some(EdgeId::new(idx)),
+                    dispatch::TAG_ARC => d2a[d] = Some(HyperArcId::new(idx)),
+                    _ => return Err(serde::ser::Error::custom("reserved dispatch tag")),
+                }
+            }
+        }
+        // Field order/names identical to the former derived form. With no namespace
+        // metadata (single-module) the wire keeps exactly the legacy 11 fields ->
+        // byte-identical to the pre-U2.1 form (and the frozen serde KAT).
+        let has_ns = !self.namespace_roots.is_empty();
+        let mut st = s.serialize_struct("Ir", if has_ns { 12 } else { 11 })?;
+        st.serialize_field("meta", &self.meta)?;
+        st.serialize_field("doc_hash", &self.doc_hash)?;
+        st.serialize_field("decl_hash", &self.decl_hash)?;
+        st.serialize_field("arc_hash", &self.arc_hash)?;
+        st.serialize_field("decl_nodes", &self.decl_nodes)?;
+        st.serialize_field("nodes", &self.nodes)?;
+        st.serialize_field("edges", &self.edges)?;
+        st.serialize_field("arcs", &self.arcs)?;
+        st.serialize_field("decl_to_node", &d2n)?;
+        st.serialize_field("decl_to_edge", &d2e)?;
+        st.serialize_field("decl_to_arc", &d2a)?;
+        if has_ns {
+            st.serialize_field(
+                "namespace_roots",
+                &NamespaceWireRef {
+                    schema: NAMESPACE_SCHEMA,
+                    roots: &self.namespace_roots,
+                },
+            )?;
+        }
+        st.end()
+    }
+}
+
+/// Owned shadow of the namespace metadata read from the wire.
+#[derive(Deserialize)]
+struct NamespaceWire {
+    schema: u16,
+    roots: Vec<(DeclId, Vec<SymId>)>,
+}
+
+/// Owned shadow with the legacy layout, used only to read the wire before compacting.
+#[derive(Deserialize)]
+struct IrWire {
+    meta: Option<Meta>,
+    doc_hash: Option<HashId>,
+    decl_hash: Vec<Option<HashId>>,
+    arc_hash: Vec<Option<HashId>>,
+    decl_nodes: Vec<DeclNode>,
+    nodes: Vec<NodeRec>,
+    edges: Vec<EdgeRec>,
+    arcs: Vec<ArcRec>,
+    decl_to_node: Vec<Option<NodeId>>,
+    decl_to_edge: Vec<Option<EdgeId>>,
+    decl_to_arc: Vec<Option<HyperArcId>>,
+    #[serde(default)]
+    namespace_roots: Option<NamespaceWire>,
+}
+
+impl Ir {
+    /// Fail-closed compaction of the legacy three-map wire into the compact form.
+    fn try_from_wire(w: IrWire) -> Result<Self, IrDecodeError> {
+        let n = w.decl_nodes.len();
+        if w.decl_to_node.len() != n || w.decl_to_edge.len() != n || w.decl_to_arc.len() != n {
+            return Err(IrDecodeError::InvalidMapLength {
+                decl_nodes: n,
+                node: w.decl_to_node.len(),
+                edge: w.decl_to_edge.len(),
+                arc: w.decl_to_arc.len(),
+            });
+        }
+        let mut decl_to_record = vec![dispatch::NONE; n];
+        for d in 0..n {
+            let did = DeclId::new(d);
+            let (nn, ee, aa) = (w.decl_to_node[d], w.decl_to_edge[d], w.decl_to_arc[d]);
+            let count =
+                usize::from(nn.is_some()) + usize::from(ee.is_some()) + usize::from(aa.is_some());
+            if count > 1 {
+                return Err(IrDecodeError::MultipleBindings { decl: did });
+            }
+            let kind = w.decl_nodes[d].kind;
+            let bound = match (kind, nn, ee, aa) {
+                (DeclKind::Node, Some(nid), None, None) => {
+                    if nid.raw() >= w.nodes.len() {
+                        return Err(IrDecodeError::RecordOutOfRange { decl: did });
+                    }
+                    if w.nodes[nid.raw()].decl != did {
+                        return Err(IrDecodeError::WrongBacklink { decl: did });
+                    }
+                    Some((DeclKind::Node, nid.raw()))
+                }
+                (DeclKind::Edge, None, Some(eid), None) => {
+                    if eid.raw() >= w.edges.len() {
+                        return Err(IrDecodeError::RecordOutOfRange { decl: did });
+                    }
+                    if w.edges[eid.raw()].decl != did {
+                        return Err(IrDecodeError::WrongBacklink { decl: did });
+                    }
+                    Some((DeclKind::Edge, eid.raw()))
+                }
+                (DeclKind::HyperArc, None, None, Some(aid)) => {
+                    if aid.raw() >= w.arcs.len() {
+                        return Err(IrDecodeError::RecordOutOfRange { decl: did });
+                    }
+                    // ArcRec carries no `decl` back-pointer; range is the invariant here.
+                    Some((DeclKind::HyperArc, aid.raw()))
+                }
+                (_, None, None, None) => None, // permitted partial/malformed test states
+                _ => return Err(IrDecodeError::KindMismatch { decl: did, kind }),
+            };
+            if let Some((k, idx)) = bound {
+                decl_to_record[d] =
+                    dispatch::encode(k, idx).map_err(IrDecodeError::DispatchEncode)?;
+            }
+        }
+        let namespace_roots = match w.namespace_roots {
+            None => Vec::new(),
+            Some(nw) => {
+                if nw.schema != NAMESPACE_SCHEMA {
+                    return Err(IrDecodeError::UnknownNamespaceSchema { schema: nw.schema });
+                }
+                let mut out: Vec<(DeclId, Box<[SymId]>)> = Vec::with_capacity(nw.roots.len());
+                let mut prev: Option<usize> = None;
+                for (root, prefix) in nw.roots {
+                    if root.raw() >= n {
+                        return Err(IrDecodeError::NamespaceRootOutOfRange { decl: root });
+                    }
+                    if prefix.is_empty() {
+                        return Err(IrDecodeError::EmptyNamespacePrefix { decl: root });
+                    }
+                    match prev {
+                        Some(pp) if root.raw() == pp => {
+                            return Err(IrDecodeError::DuplicateNamespaceRoot { decl: root });
+                        }
+                        Some(pp) if root.raw() < pp => {
+                            return Err(IrDecodeError::UnsortedNamespaceRoots);
+                        }
+                        _ => {}
+                    }
+                    prev = Some(root.raw());
+                    out.push((root, prefix.into_boxed_slice()));
+                }
+                out
+            }
+        };
+        Ok(Ir {
+            meta: w.meta,
+            doc_hash: w.doc_hash,
+            decl_hash: w.decl_hash,
+            arc_hash: w.arc_hash,
+            decl_nodes: w.decl_nodes,
+            nodes: w.nodes,
+            edges: w.edges,
+            arcs: w.arcs,
+            decl_to_record,
+            namespace_roots,
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for Ir {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let wire = IrWire::deserialize(d)?;
+        Ir::try_from_wire(wire).map_err(D::Error::custom)
+    }
+}
+
+#[cfg(test)]
+mod compaction_coverage {
+    use super::*;
+    use crate::common::ids::{DeclId, NodeId, SymId};
+
+    fn one_node_ir() -> Ir {
+        let mut ir = Ir::default();
+        let d = ir.push_decl(DeclNode {
+            kind: DeclKind::Node,
+            name: SymId::new(0),
+            parent: DeclId::NONE,
+            first_child: DeclId::NONE,
+            last_child: DeclId::NONE,
+            next_sibling: DeclId::NONE,
+            anno: AnnoR::default(),
+        });
+        ir.decl_hash.push(None);
+        ir.nodes.push(NodeRec::new(d, Vec::new()));
+        ir.bind_node_decl(d, NodeId::new(0)).unwrap();
+        ir
+    }
+
+    #[test]
+    fn every_ir_decode_error_formats_nonempty() {
+        let errs = [
+            IrDecodeError::InvalidMapLength {
+                decl_nodes: 3,
+                node: 2,
+                edge: 3,
+                arc: 3,
+            },
+            IrDecodeError::MultipleBindings {
+                decl: DeclId::new(1),
+            },
+            IrDecodeError::KindMismatch {
+                decl: DeclId::new(1),
+                kind: DeclKind::Node,
+            },
+            IrDecodeError::RecordOutOfRange {
+                decl: DeclId::new(1),
+            },
+            IrDecodeError::WrongBacklink {
+                decl: DeclId::new(1),
+            },
+            IrDecodeError::DispatchEncode(dispatch::DispatchError::IndexOverflow { index: 1 }),
+        ];
+        for e in errs {
+            assert!(!e.to_string().is_empty());
+            assert!(!format!("{e:?}").is_empty());
+        }
+    }
+
+    #[test]
+    fn a_reserved_dispatch_slot_is_rejected_by_coherence_and_serialize() {
+        let mut ir = one_node_ir();
+        // A reserved-tag slot is unreachable through the public mutators; inject
+        // it directly to exercise the fail-closed paths.
+        ir.decl_to_record[0] = (dispatch::TAG_RESERVED << 62) | 1;
+
+        // Coherence flags it rather than silently accepting.
+        let idx = crate::resolution::resolve::Index::new();
+        let it = crate::resolution::interner::Interner::new();
+        let report = crate::ir::coherence::validate_hierarchy_index_coherence(
+            &ir,
+            &idx,
+            &it,
+            crate::ir::coherence::CoherenceLimits::default(),
+        )
+        .expect_err("reserved slot must be reported");
+        assert!(
+            report.findings.iter().any(|f| matches!(
+                f,
+                crate::ir::coherence::Finding::ReservedDispatchSlot { .. }
+            )),
+            "{:?}",
+            report.findings
+        );
+
+        // Serialization is fail-closed: the reserved slot cannot reach the wire.
+        assert!(serde_json::to_string(&ir).is_err());
+    }
 }

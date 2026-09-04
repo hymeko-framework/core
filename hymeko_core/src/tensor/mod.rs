@@ -9,6 +9,9 @@ mod decomposition;
 pub mod representations;
 #[cfg(feature = "ipc")]
 pub mod shared_state;
+/// Deterministic sparse-CSR workload generator (benchmark/test support; see module docs).
+#[doc(hidden)]
+pub mod sparse_workload;
 pub mod tensor_convert;
 pub mod tensor_val;
 pub mod util;

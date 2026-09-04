@@ -1,0 +1,10 @@
+%% U2.1 explicit canonical namespace roots
+flowchart TD
+    A["Part A: audit — ns=alias||name single SymId; corpus 0/1 segment, zero multi-seg"] --> B["Part B: Ir.namespace_roots Vec<(DeclId, Box<[SymId]>)>, private, sorted, only imported roots"]
+    B --> C["Part C: lower_node/lower_edge record (root, prefix) from Index; validate_namespace_roots boundary check"]
+    C --> D["Part D: serde — versioned field, skipped when empty (single-module byte-identical); fail-closed typed errors"]
+    D --> E{"Part E: link-hash prepends prefix — 96/96 bit-identical?"}
+    E -- "yes (was 35/61)" --> G["Part G: lowering +0.38% (within noise); metadata O(imports); production hash unchanged"]
+    E -- "no" --> STOP["HARD STOP"]
+    G --> H["V&V: 8 fault tests, serde roundtrip, frozen KATs; gates green"]
+    H --> PUSH["commits; push feat/core-ir-namespace-roots; never merge main"]

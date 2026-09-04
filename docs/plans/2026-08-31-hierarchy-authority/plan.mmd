@@ -1,0 +1,14 @@
+%% U2 canonical hierarchy authority — migration flow
+flowchart TD
+    A["Part A: audit — Index read only in build_did_to_path + build_skeleton_forest"] --> B["Part B: freeze oracle (5 KATs + 96-corpus digest + writer, green @67771c9)"]
+    B --> D1["add link-derived build_did_to_path_from_ir + skeleton_from_ir (parent field)"]
+    D1 --> DIFF{"differential oracle (test-only):<br/>link-hash == Index-hash on corpus + KATs?"}
+    DIFF -- "yes (well-formed => bit-identical by construction)" --> FLIP["flip API: canonical_program_hash(cfg, ir, it); delete Index read"]
+    DIFF -- "no" --> STOP["HARD STOP (algo_version bump would be required)"]
+    FLIP --> DENSE["redesign vec_dense_permuted as genuine DeclId permutation (KAT value preserved)"]
+    FLIP --> CALL["migrate module_store.rs:263 to new signature"]
+    CALL --> E["Part E: lowering-boundary validation once; Ir authoritative; validator = diagnostic API"]
+    E --> F["Part F: direct field reads -> accessors; writes stay crate-private seam"]
+    F --> VV["Part H: V&V + 6 fault mutants + 100% touched coverage"]
+    VV --> G["Part G: A/B + A/A null bench; >=1 Index/path full-graph pass eliminated"]
+    G --> PUSH["commits 1-3; push feat/core-hierarchy-authority; never merge main"]

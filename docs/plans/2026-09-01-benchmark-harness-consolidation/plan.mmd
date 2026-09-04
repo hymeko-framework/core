@@ -1,0 +1,39 @@
+%% P1 benchmark-harness consolidation --- commit/verify sequence (two branches, no promotion)
+sequenceDiagram
+    autonumber
+    participant CB as core-p1-bench<br/>(feat/benchmark-harness-consolidation @2ebb833)
+    participant GL as graph-p1-lint<br/>(feat/p1-lint-cleanup @cbaadd4)
+    participant V as V&V gates
+    participant R as origin (feature branches only)
+
+    Note over CB: §3 baseline: KAT freeze on OLD sparse_fixture.rs
+    CB->>V: cargo test sparse_workload_kat (old #[path] include)
+    V-->>CB: green -> golden BLAKE3 digests pinned
+    CB->>CB: commit 1 test(bench): freeze shared sparse workload identity
+
+    Note over CB: §4 move to owner + rewire consumers
+    CB->>CB: add src/tensor/sparse_workload.rs (#[doc(hidden)] pub)
+    CB->>CB: del benches/sparse_fixture.rs; csr_bench imports owner
+    CB->>CB: wgpu/src/testing.rs: del dup block -> pub use owner
+    CB->>CB: rebind KAT to hymeko::tensor::sparse_workload
+    CB->>V: fmt / clippy -D warnings / test --all-features / doctests / bench --no-run
+    V-->>CB: green + KAT digests identical (bit-identity proven)
+    CB->>CB: commit 2 refactor(bench): consolidate deterministic sparse workloads<br/>(footer APPROVED-CORE-EDIT)
+
+    Note over CB: §7 mutation sweep (no mutant committed; hash-verified restore)
+    CB->>V: 7 mutants -> each caught by a named test
+    V-->>CB: all caught; sources restored sha-identical
+    CB->>CB: commit 3 docs(bench): verify harness consolidation
+
+    Note over GL: §5 pgraph lint (behaviour-neutral)
+    GL->>GL: pgip_io.rs next_id/next_uid -> enumerate, 1-based preserved
+    GL->>V: workspace clippy --all-features -D warnings (now green) + dump-hash + .pgip round-trip
+    V-->>GL: green; six dumps byte-identical
+    GL->>GL: commit 1 fix(pgraph): make stable SQL ids iterator-derived
+    GL->>GL: commit 2 docs(verification): record P1 lint gate
+
+    CB->>R: push feat/benchmark-harness-consolidation
+    GL->>R: push feat/p1-lint-cleanup
+    R-->>CB: ls-remote == local (verify)
+    R-->>GL: ls-remote == local (verify)
+    Note over CB,GL: NO promotion to main. HARD STOP. Do not start P2.
