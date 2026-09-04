@@ -108,3 +108,41 @@ this commit rather than discarded.
 2. Merge `hymeko/hymeko`'s `chore/contract-tooling` into `main` and re-pin. The hooks
    here point at `c9856d7`, which exists only on that branch.
 3. Roll the same split into `tensor`, the other repository with a `CLAUDE.md`.
+
+## 2026-09-04 consumer-tooling migration
+
+The provider was merged to `hymeko/hymeko` `main` at
+`78825abc2911c694bb47fc7a35b645fc970fac08`. This consumer now pins the immutable
+implementation commit
+`515f285886495fdcb5866f2ddafe1889a99757ab`, which introduces the registered
+`contract-self-check` and the role-aware hook template.
+
+The aggregate self-check remains provider-only. The consumer pre-commit carries
+the canonical `tools/contract_tools/self_check.py` guard, which is deliberately
+false here; core continues to run only the portable symbol, duplication and
+preflight gates from the installed pinned package.
+
+Canonical-clone discovery under `hymeko_framework/` found only one adopting
+consumer: core. The other checked-out repositories had none of `SYMBOLS.md`,
+`.duplication-baseline.json`, `tools/hooks/`, or `docs/agent-contract/`, so they
+were not silently converted into adopters by this upgrade.
+
+| check | result |
+|---|---|
+| provider `contract-self-check` | 8/8 registered gates passed; 134 tests passed |
+| new consumer `contract-symbols --check` | 613 symbols, exit 0; no regeneration |
+| new consumer `contract-duplication` | 403 / 7800 = baseline, exit 0 |
+| tracked vs installed hooks | pre-commit and commit-msg installed, current |
+| synthetic preflight candidate | 0.96 match against this report |
+| commit-msg without `DISCOVERY:` | blocked, exit 1 |
+| commit-msg with `DISCOVERY:` | released, exit 0 |
+| pre-commit wall time | 2.125 s cold; 2.079 s warm |
+
+The warm hook exceeds the rollout's 2 s budget by 79 ms and is therefore a
+small, measured performance defect rather than a passing claim. The synthetic
+file and both message files were removed after the end-to-end test.
+
+The earlier follow-up item 2 is closed: the tooling is now on provider `main`
+and core no longer pins the branch-only `c9856d7`. Follow-up item 1 is still
+open: provider commit `515f285` does **not** implement `contract-docs --check`,
+so the 17-file document synchronization remains banner-detectable but manual.

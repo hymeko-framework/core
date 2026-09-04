@@ -13,7 +13,7 @@
 
 set -u
 
-SPEC="git+ssh://git@192.168.1.228:2222/hymeko/hymeko.git@c9856d7"
+SPEC="git+ssh://git@192.168.1.228:2222/hymeko/hymeko.git@515f285886495fdcb5866f2ddafe1889a99757ab"
 
 MESSAGE_FILE="${1:-}"
 [ -n "$MESSAGE_FILE" ] || exit 0

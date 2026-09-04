@@ -19,7 +19,7 @@
 
 set -u
 
-SPEC="git+ssh://git@192.168.1.228:2222/hymeko/hymeko.git@c9856d7"
+SPEC="git+ssh://git@192.168.1.228:2222/hymeko/hymeko.git@515f285886495fdcb5866f2ddafe1889a99757ab"
 
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 cd "$ROOT" || exit 0
@@ -48,6 +48,17 @@ else
 fi
 
 fail=0
+
+# The aggregate self-check is provider-only. This guard is intentionally false
+# in this consumer; keeping it in the portable template prevents an accidental
+# tooling vendoring from silently turning into an unverified provider fork.
+if [ -f "$ROOT/tools/contract_tools/self_check.py" ]; then
+    if ! uv run --frozen contract-self-check --root . --staged; then
+        echo >&2
+        echo "  Contract-owned files changed and the complete self-check failed." >&2
+        fail=1
+    fi
+fi
 
 if ! gate contract-symbols --root . --check; then
     echo >&2
