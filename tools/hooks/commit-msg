@@ -1,20 +1,19 @@
 #!/bin/sh
 # Contract gate, commit-msg half. Install with tools/hooks/install.sh.
 #
-# This is where the preflight actually blocks, because this is the first hook
-# that can see the message: git passes the file as $1. `pre-commit` cannot —
-# at that point `.git/COMMIT_EDITMSG` still holds the previous commit's message,
-# so a bypass read there would match the wrong commit and fail open.
+# This is where the preflight blocks, because this is the first hook that can see
+# the message: git passes the file as $1. `pre-commit` cannot -- at that point
+# `.git/COMMIT_EDITMSG` still holds the previous commit's message, so a bypass
+# read there would match the wrong commit and fail open. Verified on git 2.55.0.
 #
 # A commit that adds a file resembling something that already exists is refused
-# until the message carries a line beginning `DISCOVERY:` — §6.6's ledger, in the
-# one place git will preserve it. The bypass is deliberately trivial to use and
-# deliberately recorded: the rule was never that a new artifact is forbidden, only
-# that the search must be visible.
-#
-# POSIX sh. Degrades to a warning rather than a block when python3 is unusable.
+# until the message carries a line beginning `DISCOVERY:` -- §6.6's ledger, in the
+# one place git will preserve it. The rule was never that a new artifact is
+# forbidden, only that the search must be visible.
 
 set -u
+
+SPEC="git+ssh://git@192.168.1.228:2222/hymeko/hymeko.git@c9856d7"
 
 MESSAGE_FILE="${1:-}"
 [ -n "$MESSAGE_FILE" ] || exit 0
@@ -22,46 +21,34 @@ MESSAGE_FILE="${1:-}"
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 cd "$ROOT" || exit 0
 
-# The hook console is not UTF-8 on Windows, and the scripts print em-dashes.
-# Without this the first blocking message a person ever sees is mojibake.
 export PYTHONIOENCODING=utf-8
 
-# Finding an interpreter is not one line. On this host `command -v python3` finds
-# the Microsoft Store shim, which answers `command -v` and then exits 49 without
-# running anything, while the real interpreter is `python3.14`. So each candidate
-# is PROBED by running it, versioned names are tried after the generic ones, and
-# CONTRACT_PYTHON overrides the lot. Without this the hooks installed cleanly and
-# silently enforced nothing — which was observed, not imagined.
-PYTHON="${CONTRACT_PYTHON:-}"
-if [ -n "$PYTHON" ] && ! "$PYTHON" -c "import sys; sys.exit(0)" >/dev/null 2>&1; then
-    echo "contract hooks: CONTRACT_PYTHON=$PYTHON does not run." >&2
-    PYTHON=""
-fi
-if [ -z "$PYTHON" ]; then
-    for candidate in python3 python py python3.14 python3.13 python3.12 python3.11; do
-        if command -v "$candidate" >/dev/null 2>&1 \
-           && "$candidate" -c "import sys; sys.exit(0)" >/dev/null 2>&1; then
-            PYTHON="$candidate"
-            break
-        fi
-    done
+if ! command -v uv >/dev/null 2>&1; then
+    echo "contract hooks: uv not found — preflight skipped, not failed." >&2
+    exit 0
 fi
 
-if [ -z "$PYTHON" ]; then
-    echo "contract hooks: no usable python3 — preflight skipped, not failed." >&2
-    exit 0
+# Prefer an installed entry point; fall back to resolving from git each call.
+# Measured: `uv tool run --from <git spec>` costs ~785 ms per invocation against
+# ~320 ms for an installed entry point, and this hook makes three calls. 2.7 s
+# versus 1.0 s decides whether a hook survives its first week.
+#   one-time:  sh tools/hooks/install.sh   (which runs `uv tool install`)
+if command -v contract-symbols >/dev/null 2>&1; then
+    gate() { "$@"; }
+else
+    gate() { uv tool run --quiet --from "$SPEC" "$@"; }
 fi
 
 set --
 while IFS= read -r path; do
-    [ -n "$path" ] && set -- "$@" "$path"
+    [ -n "$path" ] && set -- "$@" --path "$path"
 done <<ADDED
 $(git diff --cached --diff-filter=A --name-only)
 ADDED
 
 [ "$#" -gt 0 ] || exit 0
 
-if "$PYTHON" tools/preflight_new_artifact.py "$@" >/dev/null 2>&1; then
+if gate contract-preflight --root . "$@" >/dev/null 2>&1; then
     exit 0
 fi
 
@@ -70,7 +57,7 @@ if grep -qE '^[[:space:]]*DISCOVERY:' "$MESSAGE_FILE"; then
 fi
 
 echo >&2
-"$PYTHON" tools/preflight_new_artifact.py "$@" >&2
+gate contract-preflight --root . "$@" >&2
 cat >&2 <<'WHY'
 
   This commit adds a file resembling something that already exists.

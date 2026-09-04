@@ -12,6 +12,10 @@
 #
 # Copies rather than symlinks: git does not follow a symlinked hook on every
 # platform, and a hook that silently does not run is worse than none.
+#
+# The gates themselves are NOT copied into this repository. They are one
+# implementation in hymeko/hymeko, pinned by revision in the hook files; this
+# script installs that pinned version so the hooks take their fast path.
 
 set -u
 
@@ -49,6 +53,16 @@ case "$action" in
         done
         ;;
     --install|"")
+        # Install the pinned tool so the hooks take their fast path. Measured:
+        # ~320 ms per gate call installed, ~785 ms resolving from git each time,
+        # three calls per commit. Without this the hooks still work -- they fall
+        # back -- they are just slow enough to get uninstalled.
+        SPEC=$(grep -m1 '^SPEC=' "$SOURCE/pre-commit" | cut -d'"' -f2)
+        if command -v uv >/dev/null 2>&1 && [ -n "$SPEC" ]; then
+            echo "installing the pinned gates: $SPEC"
+            uv tool install --force --quiet --from "$SPEC" hymeko-contract-tools                 || echo "  (install failed; the hooks will resolve from git per call instead)" >&2
+        fi
+
         mkdir -p "$HOOKS_DIR"
         for name in $NAMES; do
             cp "$SOURCE/$name" "$HOOKS_DIR/$name"
