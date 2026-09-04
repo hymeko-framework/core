@@ -1,0 +1,3 @@
+variant	incidences	wire_bytes	baseline_peak_bytes	materialize_peak_bytes	decode_peak_bytes	materialize_increment_bytes	validation_hash_increment_bytes	decode_increment_bytes	decoded_ir_heap_bytes	decode_increment_per_ir_heap	budget_ratio_lt	global_cap_bytes	gate
+materialized_hash	1048576	51422046	56549376	151908352	303177728	95358976	151269376	246628352	94221761	2.6175	2.0	17179869184	FAIL
+streaming_hash	1048576	51422046	56553472	151928832	155906048	95375360	3977216	99352576	94221761	1.0545	2.0	17179869184	PASS

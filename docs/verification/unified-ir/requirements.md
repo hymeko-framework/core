@@ -207,16 +207,21 @@ production change; see `docs/unified-ir-single-cli.md`.
 
 ### CBOR readiness (`UIR-CBOR-01..05`)
 
-Audited read-only. **No CBOR codec exists**: `CborPayload` is
-`#[derive(Serialize, Deserialize)]` scaffolding, constructed nowhere, with no
-encoder (`UIR-CBOR-01`) and no bounded decoder (`UIR-CBOR-02`), so no semantic
-round-trip (`UIR-CBOR-03`) — all **NOT_IMPLEMENTED**. `ciborium 0.2.2` is present
-only *transitively via Criterion* (dev), not a production dependency.
-`UIR-CBOR-04/05` (**PASS** characterizations) record that the payload duplicates
-derived/cache state (`index`, `canon_hash`) and a string-table copy alongside the
-canonical `ir`, and that `root_path: PathBuf` is environment metadata, not portable
-canonical data. The proposed `APPROVED-CORE-EDIT: canonical-cbor-codec` scope is in
-`reports/2026-08-30-unified-ir-platform-conformance.md`.
+Implemented and independently validated on 2026-09-04. The public
+`encode_compiled`/`encode` facade and bounded, fail-closed `decode` facade close
+`UIR-CBOR-01/02`; the 105-program frozen corpus round-trip closes
+`UIR-CBOR-03` — all **PASS**. `ciborium 0.2.2` is now a pinned direct production
+dependency. Decode bounds the CBOR item tree before Serde allocation, rebuilds
+the interner and path index, checks IR/hierarchy/namespace coherence, recomputes
+the canonical hash, and rejects non-portable paths, indefinite items, trailing
+bytes, malformed IDs, and hostile lengths.
+
+`UIR-CBOR-04/05` remain **PASS** characterizations with their risk closed:
+schema-v1 retains duplicated derived/cache fields for compatibility, but decode
+never trusts them without reconstruction and comparison; `root_path` and import
+module keys are encoded as normalized, workspace-relative portable paths. The
+implementation record is `reports/2026-09-04-canonical-cbor-codec.md`; the
+2026-08-30 conformance report remains the historical pre-implementation baseline.
 
 ### Source emission completeness (`UIR-EMIT-01..02`)
 
@@ -230,6 +235,8 @@ tested there.
 
 ### Recomputed rates (matrix-wide, `traceability.csv`)
 
-47 PASS · 3 PARTIAL · 3 FAIL (known defects) · 13 NOT_IMPLEMENTED · 10 BLOCKED.
-The 13 NOT_IMPLEMENTED and 10 BLOCKED are honest future contracts (CBOR codec,
-stable IDs, mutation/transaction/replay), never faked to PASS.
+77 PASS · 3 PARTIAL · 3 FAIL (known defects) · 9 NOT_IMPLEMENTED · 17 BLOCKED ·
+1 FIXED · 1 PASS_WITH_REGRESSION (111 rows). The remaining future contracts
+(stable IDs, mutation/transaction/replay and related consumers) remain explicit;
+the CBOR rows moved only with executable facade, hostile-input, corpus, hash and
+memory evidence.

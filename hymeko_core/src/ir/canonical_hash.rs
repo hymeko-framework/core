@@ -48,9 +48,8 @@ pub fn canonical_program_hash(cfg: CanonHashCfg, ir: &Ir, it: &Interner) -> Hash
     let vhash = compute_subtree_hashes_with_kinds(cfg, &ir.decl_nodes, &roots, &children);
     let vtie = compute_tiebreak(cfg, &verts, &did_to_path, it);
     let prufer_bytes = prufer_from_forest(cfg, &verts, &parent, &roots, &vhash, &vtie);
-    let incidence_bytes = canonical_incidence_bytes(cfg, ir, &did_to_path, it);
     let sk = canonical_chunk_hash(cfg, *b"SKELETON", &prufer_bytes);
-    let inc = canonical_chunk_hash(cfg, *b"INCIDENC", &incidence_bytes);
+    let inc = canonical_incidence_hash(cfg, ir, &did_to_path, it);
     let mut h = blake3::Hasher::new();
     write_header(&mut h, cfg, *b"PROGRAM\0");
     h.update(&sk.0);
@@ -471,18 +470,7 @@ fn canonical_incidence_bytes(
     let _ = cfg; // flags later (weights/tags inclusion)
 
     // 1. Precompute path strings ONCE. No cloning in the loop.
-    let mut did_path_str: Vec<String> = vec![String::new(); did_to_path.len()];
-    for (i, pk) in did_to_path.iter().enumerate() {
-        if let Some(pk) = pk {
-            did_path_str[i] =
-                pk.0.iter()
-                    .map(|&sid| it.resolve(sid))
-                    .collect::<Vec<_>>()
-                    .join(".");
-        } else {
-            did_path_str[i] = format!("DeclId({})", i);
-        }
-    }
+    let did_path_str = path_strings(did_to_path, it);
 
     // 2. The Arena: One single contiguous memory block.
     let mut arena = Vec::with_capacity(ir.edges.len() * 128);
@@ -550,6 +538,85 @@ fn canonical_incidence_bytes(
         out.extend_from_slice(&arena[r.start..r.end]);
     }
     out
+}
+
+/// Hash canonical incidences without materialising a record, byte arena, and final byte stream.
+///
+/// On coherent IR each edge path is unique and arc/ref positions fit the v1 `u16` wire fields, so
+/// sorting edges by path produces exactly the previous record order. The legacy materialisation is
+/// retained as a compatibility fallback for malformed or out-of-domain inputs; the public hash has
+/// historically been total over those inputs as well.
+fn canonical_incidence_hash(
+    cfg: CanonHashCfg,
+    ir: &Ir,
+    did_to_path: &[Option<PathKey>],
+    it: &Interner,
+) -> HashId {
+    let did_path_str = path_strings(did_to_path, it);
+    let mut edges: Vec<_> = ir.edges.iter().collect();
+    edges.sort_unstable_by(|left, right| {
+        did_path_str[left.decl.raw()].cmp(&did_path_str[right.decl.raw()])
+    });
+
+    let has_duplicate_path = edges
+        .windows(2)
+        .any(|pair| did_path_str[pair[0].decl.raw()] == did_path_str[pair[1].decl.raw()]);
+    let exceeds_v1_positions = ir.edges.iter().any(|edge| {
+        edge.arcs.len() > usize::from(u16::MAX) + 1
+            || edge
+                .arcs
+                .iter()
+                .any(|arc| ir.arcs[arc.raw()].refs.len() > usize::from(u16::MAX) + 1)
+    });
+    if has_duplicate_path || exceeds_v1_positions {
+        let bytes = canonical_incidence_bytes(cfg, ir, did_to_path, it);
+        return canonical_chunk_hash(cfg, *b"INCIDENC", &bytes);
+    }
+
+    let mut hash = blake3::Hasher::new();
+    write_header(&mut hash, cfg, *b"INCIDENC");
+    for edge in edges {
+        let edge_path = &did_path_str[edge.decl.raw()];
+        for (arc_index, arc_id) in edge.arcs.iter().enumerate() {
+            let arc = &ir.arcs[arc_id.raw()];
+            for (slot, reference) in arc.refs.iter().enumerate() {
+                let (sign, target) = match reference {
+                    SignedRefR::Plus(atom) => (1i8, atom.target),
+                    SignedRefR::Minus(atom) => (-1i8, atom.target),
+                    SignedRefR::Neutral(atom) => (0i8, atom.target),
+                };
+                hash_str(&mut hash, edge_path);
+                hash.update(&(arc_index as u16).to_le_bytes());
+                hash.update(&(slot as u16).to_le_bytes());
+                hash.update(&[sign as u8]);
+                hash_str(&mut hash, &did_path_str[target.raw()]);
+            }
+        }
+    }
+    HashId(*hash.finalize().as_bytes())
+}
+
+fn path_strings(did_to_path: &[Option<PathKey>], it: &Interner) -> Vec<String> {
+    did_to_path
+        .iter()
+        .enumerate()
+        .map(|(index, path)| match path {
+            Some(path) => path
+                .0
+                .iter()
+                .map(|symbol| it.resolve(*symbol))
+                .collect::<Vec<_>>()
+                .join("."),
+            None => format!("DeclId({index})"),
+        })
+        .collect()
+}
+
+fn hash_str(hash: &mut blake3::Hasher, value: &str) {
+    let bytes = value.as_bytes();
+    let length = u16::try_from(bytes.len()).unwrap_or(u16::MAX);
+    hash.update(&length.to_le_bytes());
+    hash.update(&bytes[..usize::from(length)]);
 }
 
 fn push_str(out: &mut Vec<u8>, s: &str) {

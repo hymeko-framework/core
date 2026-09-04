@@ -1129,6 +1129,7 @@ version = "0.1.0"
 dependencies = [
  "arrow",
  "blake3",
+ "ciborium",
  "criterion",
  "env_logger",
  "iceoryx2",

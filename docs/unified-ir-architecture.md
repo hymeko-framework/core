@@ -631,6 +631,20 @@ proposed scope for that work is `APPROVED-CORE-EDIT: canonical-cbor-codec`
 the resident canonical serializations are HyMeKo text (human) and CBOR (binary,
 once wired).
 
+### Canonical CBOR implementation update — 2026-09-04
+
+The table above is retained as the historical `cebc254` audit. Its CBOR status is
+now superseded: Core exposes `encode_compiled`/`encode` and bounded `decode`, with
+`ciborium = 0.2.2` as a direct production dependency. The decoder performs an
+allocation-free definite-length preflight, reconstructs the interner and index,
+validates IDs, paths, hierarchy, namespaces and aliases, and compares a recomputed
+canonical hash before returning `DecodedCborPayload`. The public facade round-trips
+all 105 lowerable frozen-corpus programs. Transport remains byte-opaque and JSON
+remains a derived view. Evidence and limits are in
+`reports/2026-09-04-canonical-cbor-codec.md` (`UIR-CBOR-01..05`). The ownership
+model's layer 1 below is therefore text **PARTIAL**, CBOR **VERIFIED** as of this
+update; its original 2026-08-30 status wording is historical.
+
 ### CLI
 
 Target: one user-facing `hymeko` CLI with subcommands; the P-graph engine linked
