@@ -386,11 +386,13 @@ the source repo's comments show it hit the same defect. Recorded as confirmation
 that the upstream fix works here, not as an open issue. Note the hook selected
 `python3.14` while this report's manual runs used `python3.12.13`.
 
-**6. `__pycache__` is not ignored.** Running the hooks creates
-`tools/__pycache__/`, which shows as untracked. This repo's `.gitignore` has no
-`__pycache__` or `*.pyc` entry because it never had Python. Removed manually
-after each hook run during this work; it will keep reappearing. `.gitignore` is
-not in `CORE.YAML`, so this is a one-line fix — left to you.
+**6. `__pycache__` was not ignored — RESOLVED.** Running the hooks creates
+`tools/__pycache__/`, which showed as untracked. This repository's `.gitignore`
+had no `__pycache__` or `*.pyc` entry because it never had Python. Since the
+noise is a direct byproduct of the tooling this migration installed, and
+`.gitignore` is not in `CORE.YAML`, it was fixed here rather than left: two lines
+appended, verified by running `preflight_new_artifact.py` (which imports, so it
+does create the directory) and confirming `git status` stays clean.
 
 **7. `CLAUDE.md` is uncommitted and is the contract's only other copy.** Covered
 above. Not a template defect; a state to resolve before anything resets this tree.
@@ -408,10 +410,13 @@ be fixed in `hymeko/hymeko` rather than in core.
    `docs/agent-contract/`.
 2. Commit `CLAUDE.md` (724 lines). It exists in no commit in this repository.
 3. Decide the `CORE.YAML` YAML-validity fix (Conflicts #1) — needs approval.
-4. Re-freeze `KAT_CORPUS_COUNT` / `KAT_CORPUS_DIGEST` for the webxr fixture, or
-   drop the fixture. Two tests are red in the working tree until then.
-5. Raise Conflicts #2 against `hymeko/hymeko`.
-6. Decide `.gitignore` for `__pycache__` (Conflicts #6).
+4. ~~Re-freeze `KAT_CORPUS_COUNT` / `KAT_CORPUS_DIGEST`~~ — **owned by the webxr
+   work, not by this migration.** Two tests are red in the working tree until
+   that lands; the committed tree is green.
+5. ~~Raise Conflicts #2 against `hymeko/hymeko`~~ — **that is the other package,
+   handled elsewhere.** Recorded here so core has the evidence; no action from
+   this side.
+6. ~~Decide `.gitignore` for `__pycache__`~~ — done in this branch.
 
 ---
 
