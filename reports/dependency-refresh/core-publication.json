@@ -1,0 +1,13 @@
+{
+  "created_at": "2026-09-05T21:02:26.390726+02:00",
+  "remote": "ssh://git@amaterasu.local:2222/hymeko/core.git",
+  "branch": "audit/core-distributed-semantics-2026-09-05",
+  "head": "ac1131b5490734b855021f6076753417e1337cd6",
+  "verified_implementation": "1886f17a42d7a3430e4044129f81955615efd583",
+  "push_exit_code": 0,
+  "push_stdout": "To ssh://192.168.1.228:2222/hymeko/core.git\n*\tHEAD:refs/heads/audit/core-distributed-semantics-2026-09-05\t[new branch]\nDone\n",
+  "push_stderr": "remote: \nremote: Create a new pull request for 'audit/core-distributed-semantics-2026-09-05':        \nremote:   http://192.168.1.228:3000/hymeko/core/pulls/new/audit/core-distributed-semantics-2026-09-05        \nremote: \n",
+  "ls_remote": "ac1131b5490734b855021f6076753417e1337cd6\trefs/heads/audit/core-distributed-semantics-2026-09-05",
+  "authorization": "Original user task phase 11 permits feature-branch push after branch, commit list, tests and remote are shown; independent contract review found no further explicit approval condition.",
+  "main_changed": false
+}

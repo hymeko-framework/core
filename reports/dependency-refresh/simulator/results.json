@@ -1,0 +1,37 @@
+{
+  "revision": "9b155f371bdb56e430f64b52c5cb244ccd9f618e",
+  "model_ingress": {
+    "passed": 6,
+    "failed": 0,
+    "ignored": 1
+  },
+  "identities": {
+    "hymeko_core": [
+      "git+ssh://git@amaterasu.local:2222/hymeko/core.git?rev=ac1131b5490734b855021f6076753417e1337cd6#ac1131b5490734b855021f6076753417e1337cd6"
+    ],
+    "parser": [
+      "git+ssh://git@amaterasu.local:2222/hymeko/parser.git?branch=master#284c490d68232973a006bcba974279fed6f89ce8"
+    ],
+    "hymeko_dynamics": [
+      "git+ssh://git@amaterasu.local:2222/hymeko/transformation.git?rev=0dd72e3fce88fdab7adeba83ff4b73c451249d92#0dd72e3fce88fdab7adeba83ff4b73c451249d92"
+    ],
+    "hymeko_webxr": [
+      "git+ssh://git@amaterasu.local:2222/hymeko/transformation.git?rev=0dd72e3fce88fdab7adeba83ff4b73c451249d92#0dd72e3fce88fdab7adeba83ff4b73c451249d92"
+    ]
+  },
+  "resources": [
+    "resource stage=model-ingress elapsed_s=1.51 max_rss_kib=451416 exit=0",
+    "resource stage=wasm-check elapsed_s=28.17 max_rss_kib=712708 exit=0"
+  ],
+  "memory_peak_bytes": 2123407360,
+  "initial_cold_compile_memory_peak_bytes": 3622428672,
+  "exit_code": 0,
+  "oom": false,
+  "source_status": "clean",
+  "wasm_check": "PASS",
+  "limitations": [
+    "Chordex and XR remain local snapshot path dependencies.",
+    "Fixture includes need the recorded Core and Transformation source data layout.",
+    "Actual browser rendering/transport was not exercised in this dependency verification."
+  ]
+}

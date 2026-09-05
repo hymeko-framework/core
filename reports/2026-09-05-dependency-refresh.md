@@ -1,8 +1,12 @@
-# Függőségfrissítés: konkrét következő változás
+# Core és fogyasztók függőségfrissítése
 
-Created-at: 2026-09-05 20:11 +02:00. Updated-at: 2026-09-05 20:56 +02:00.
+Created-at: 2026-09-05 20:11 +02:00. Updated-at: 2026-09-05 21:58 +02:00.
 Állapot: **a jóváhagyott Core Parser-frissítés elkészült és tiszta Docker-képben
-ellenőrzött**; a fogyasztói revíziók összehangolása következik. Aktív Core: `D:/hnnwork/distributed/core`,
+ellenőrzött és feature branchen publikált**. A Graph, Transformation, Hotaru,
+Network és LSP frissítése ellenőrzött és publikált. A helyi Simulator snapshot
+ingress- és WASM-kapuja sikeres. Az egységes revíziókészlet helyi audit-tagekkel
+rögzített; a tényleges böngészős kísérlet és külön feature-ágak integrációja későbbi scope.
+Aktív Core: `D:/hnnwork/distributed/core`,
 `audit/core-distributed-semantics-2026-09-05`, alap `7186b55`. A provider frissítése
 elkészült `d02aa614`-re; [külön jelentés](2026-09-05-contract-provider-refresh.md).
 
@@ -108,7 +112,149 @@ azonosságot igazol; ez még nem a későbbi fogyasztói gráf ellenőrzése.
 
 [Végrehajtási fájlmanifest](dependency-refresh/execution-manifest.json): a
 `0c4e40a` jóváhagyás előtti alaphoz mért teljes fájllista, sorváltozás és SHA256,
-önmaga kivételével. A korábbi előkészítő manifestet nem írtam át.
+önmaga kivételével, az `ac1131b` revízió bájtjaira rögzítve. Utóellenőrzéskor
+a `docs/core-container.md` bejegyzését javítani kellett: a helyi, kevert CRLF/LF
+sorvégű fájl hashét tartalmazta a commitolt LF blob helyett. Az ellenőrzés
+igazolta a kizárólagos sorvég-normalizálást. Mind a 23 bejegyzést a commitolt
+blobokra ellenőriztem; [ellenőrzési jegyzék](dependency-refresh/manifest-verification.json).
+A korábbi előkészítő manifest történeti állapotát megőriztem.
+
+## Végrehajtott fogyasztói lépések
+
+`FINAL_CORE = ac1131b5490734b855021f6076753417e1337cd6`; kódja és lockja
+byteazonos a tiszta SDK-képben ellenőrzött `1886f17` implementációval.
+A Core feature branch publikációját a [távoli SHA-ellenőrzés](dependency-refresh/core-publication.json)
+igazolja. Az eredeti feladat 11. fázisa engedélyezte a feature push-t a branch,
+commitlista, teszteredmény és remote előzetes bemutatásával; ez megtörtént.
+
+| Fogyasztó | Tesztelt kódrevízió | Eredmény | Publikált feature HEAD |
+|---|---|---|---|
+| Graph | `ecf08d71` | 486 PASS / 6 ignored, 8 governance-check, 4 benchmark fordul | `4a59c238` |
+| Hotaru | `84f317e2` | default 156 PASS; Core-feature 171 PASS; 0 ignored | `84f317e2` |
+| Transformation | `24cfb594` | 470 PASS / 9 ignored; négy analitikus regresszió és valódi láncmodell | `0dd72e3f` |
+| Network | `669ae8d4` | 50 PASS, 0 ignored | `669ae8d4` |
+| VSCode/LSP | `a06fa73a` | 111 PASS, 0 ignored | `a06fa73a` |
+| Simulator snapshot | `9b155f37` | 6 ingress PASS / 1 diagnostic ignored, WASM check PASS | local-only repo |
+
+Graph root és külön benchmark workspace: egyetlen Core `ac1131b` és Parser
+`284c490d` forrásazonosság, ellenőrzött locked metadata. Cgroup-csúcs
+1 641 177 088 B; teszt+fordítás 53,76 s, benchmark-fordítás 19,48 s.
+[Graph publikáció](dependency-refresh/graph-publication.json).
+A saját Graph repo `reports/2026-09-05-dependency-refresh.md` jelentése és
+hash-manifestje a publikált feature branch része.
+
+Hotaru: a `hymeko-ir` feature aktiválásával három régi Core-mezőhozzáférés
+fordítási hibát adott. Az adapter a kanonikus `Ir::arc`, `Ir::as_node`,
+`Id::raw` API-ra állt át külön `84f317e2` commitban; a Core változatlan.
+A meglévő `ir_hypergraph` suite a fordított nevek, előjelek, incidencia és
+containment viselkedését ellenőrzi. Az adapter újrafutása a korábbi dependency
+fordítás gyorsítótárát használta: default 0,32 s, Core-feature 4,25 s,
+cgroup-csúcs 306 831 360 B. Ez nem tiszta fordítási benchmark.
+[Eredmények](dependency-refresh/hotaru/results.json),
+[nyers végső log](dependency-refresh/hotaru/adapter-tests.log),
+[kezdeti hiba](dependency-refresh/hotaru/tests.log),
+[publikáció](dependency-refresh/hotaru-publication.json).
+
+Minden fogyasztói teszt az elkészült SDK-képet használja Amaterasun,
+16 GiB/no-swap/6 CPU korláttal és kikapcsolt hálózattal. A Git-függőségeket
+előtte külön, szintén korlátozott konténer tölti le, ideiglenes SSH-agenttel.
+A fizikai hosthatár miatti ellenőrzési checkoutokat a lefordított közös terv
+indokolja; a fejlesztés a meglévő Windows munkafákban marad.
+
+Transformation: fixture nélkül két `articulated` teszt csak 8/24 esetig jutott.
+A SDK saját Core robotmintáinak `/core` útvonalon elérhetővé tétele után mind
+a 18 geometriai teszt átment. Az ekkor ténylegesen aktivált `many_body` láncteszt
+20/20 ismétlésben hat helyett hét módot adott; a hamis mód `1,8348688e-44 Hz`.
+A fixture nélküli korai returnök és az első, hibásan fixture nélkül indított
+ismétlés nem validációs bizonyítékok. A forrás változatlan eigensolverében
+méréssel pontos +0 a 13D lánc karakterisztikus polinomjának konstans tagja.
+A külön javítás a pontos nullgyököket választja le a meglévő iteráció előtt;
+négy fixture-független regresszió mind hibázott a javítás előtti kódon.
+A `24cfb594` korrekció után mind a négy regresszió, valamint a valódi láncmodell
+eredeti spektrumellenőrzése sikeres. Az utolsó teljes újrafutás 470 PASS / 9
+ignored, 5,32 s, cgroup-csúcs 86 106 112 B meglévő target-cache mellett.
+Egy köztes read-only mount három query fájlkiíró tesztet blokkolt; a saját
+checkout írható mountjával a teljes kapu sikeres, tiszta Git-státusszal.
+A [Transformation publikált revíziója](dependency-refresh/transformation-publication.json)
+`0dd72e3fce88fdab7adeba83ff4b73c451249d92`; a saját repó teljes jelentése,
+nyers negatív/pozitív naplói és SHA256-manifestje e revízió részei.
+A faktorizálás csak a kiszámított polinom pontos nulláira vonatkozik; a meglévő
+sűrű eigensolver kondicionálására nem állít új garanciát.
+
+Network és LSP ugyanazt a három Git-forrást használja: Core `ac1131b`,
+Transformation `0dd72e3f`, Hotaru `84f317e2`, egyetlen Parser `284c490d` mellett.
+A Network meglévő, szándékosan hibás IR-fixture-jei a Core `push_decl` és
+`bind_*_decl` publikus API-jával épülnek; a negatív elvárások megmaradtak.
+Network: 50 PASS, 29,07 s, cgroup-csúcs 1 508 237 312 B. LSP: 111 PASS,
+31,36 s, cgroup-csúcs 1 433 698 304 B. Mindkettő üres targetből induló,
+offline Docker-futás, exit 0/OOM false, tiszta source-státusz.
+[Network eredmény](dependency-refresh/network/results.json),
+[LSP eredmény](dependency-refresh/vscode-plugin/results.json),
+[Network publikáció](dependency-refresh/network-publication.json),
+[LSP publikáció](dependency-refresh/vscode-plugin-publication.json).
+
+Simulator: a Core/WebXR munkafapathok és a Core `[patch]` eltűntek a manifestből.
+Minden Core/Transformation crate a fenti azonos, publikált Git-revízióból oldódik
+fel. Registry-csomag, verzió és registry dependency-él nem változott. A már
+meglévő Chordex `4bf70d78` és XR `33bb7738` snapshot path-függőségei megmaradtak;
+ezeknek és a Simulatornak nincs remote-ja. A helyi snapshotok azonos commitjai
+Git bundle-ből kerültek az Amaterasu ellenőrzési könyvtárába.
+
+```sh
+cargo test --release --locked --offline --no-default-features --features zenoh-ingress --test model_ingress -- --nocapture
+cargo check --lib --target wasm32-unknown-unknown --no-default-features --locked --offline
+```
+
+Hat ingress-teszt PASS, köztük a tényleges, konténeren belüli Zenoh/TCP
+modellátvitel és újracsatlakozás; az egyetlen ignored a külön
+`canonical_cbor_stage_probe` időmérési diagnosztika. A WASM check PASS, három
+meglévő unused-code warninggal. A teszt öt compile-time fixture-t is beemel:
+három a Core SDK adatai, kettő az ellenőrzött Transformation WebXR-adatkönyvtára.
+A hiányzó fixture-layout miatti két kezdeti fordítási hiba megmaradt a naplókban.
+Ezek adatforrások, nem Cargo source-override-ok. A végső Git-státusz tiszta.
+
+Üres targettel az első natív fordítás 116,34 s-ig jutott, cgroup-csúcs
+3 622 428 672 B. A fixture-eket is használó ingress-kapu 1,51 s meglévő
+natív targettel; a WASM check friss targetre 28,17 s. E végső konténer
+cgroup-csúcsa 2 123 407 360 B, exit 0, OOM false. A browser render/transport
+nem része ennek a dependency-kapunak.
+[Simulator eredmény](dependency-refresh/simulator/results.json),
+[nyers log](dependency-refresh/simulator/tests.log),
+[fixture-hashek](dependency-refresh/simulator/fixture.sha256),
+[helyi snapshotok és bundle-hashek](dependency-refresh/simulator/local-snapshots.json).
+
+## Revíziózárás és audit-tagek
+
+A [gépi revíziójegyzék](dependency-refresh/revision-set.json) hét fogyasztói
+lockfájlt ellenőriz: Graph root és benchmark, Transformation, Hotaru, Network,
+LSP és Simulator. Mindegyikben egy Core `ac1131b` és egy Parser `284c490d`
+azonosság van; ahol Transformation Git-függőség szerepel, az egyetlen forrás
+`0dd72e3f`. A tagek ezt az ellenőrzött készletet rögzítik:
+
+`audit/core-consumers-2026-09-05`
+
+11 helyi annotated tag készült: Core, Graph, Transformation, Parser, Tensor,
+Hotaru, Network, VSCode/LSP, Simulator, Chordex és XR. A tag objektumai és
+peeled commitjai a revíziójegyzékben ellenőrzöttek. A Core tag az összes
+fogyasztó által használt `ac1131b` revíziót rögzíti; a későbbi összesítő
+dokumentációs commit nem változtatja az implementációt vagy a dependency-lockot.
+A tagek helyiek; a hat módosított, remote-tal rendelkező implementációs
+feature branch feltöltött és `ls-remote`-tal igazolt. Main merge és release
+nem történt. A Parser/Tensor és a változatlan snapshotok tagje nem állít
+új, teljes saját repo-szintű tesztkampányt; e dependency-készletben használt
+revíziójukat azonosítja.
+
+Az utolsó fetch 21:57-kor új Core feature-ágat talált:
+`fix/semantic-model-digest-v2` (`112a2543264e302839fd7f2cf04858fd098c8f5c`).
+Az aktív Core-ághoz képest 15 helyi és 5 bejövő commit, védett szemantikai
+és robotmodell-változásokkal. A main továbbra is `d6be4ea7`. Az új feature-ág
+és a korábban jelzett Graph P34 nincs ebben a tesztelt készletben; külön
+integrációjukat nem helyettesíti a dependency-refresh vagy az audit-tag.
+
+Rollback a saját ágakon, fogyasztótól a szolgáltató felé: Simulator `9b155f37`,
+Network `669ae8d4`, LSP `a06fa73a`; Hotaru `84f317e2` majd `c47942c`;
+Transformation `24cfb594` majd `74b5e177`; Graph `ecf08d71`; Core `1886f17`.
+Az összesítő dokumentáció és negatív/pozitív bizonyítékok külön megőrizhetők.
 
 ## Friss tulajdonosi állapot és fogyasztói sorrend
 
@@ -165,8 +311,9 @@ nem kezelhető egyszerű dependency-bumpként.
 A felhasználó kért sorrendje: friss tulajdonosok, összehangolt fogyasztók,
 ellenőrzés, utána tagek. A tagek nem bizonyítják a tesztelést, és egy helyi
 provider-SHA nem válik automatikusan a fogyasztó távoli forrásából elérhetővé.
-Push/main-merge/release nincs végrehajtva; a kiadható revíziók elérhetőségét és a
-tagneveket a konkrét, tesztelt változatsor ismeretében kell lezárni.
+A fenti végrehajtási és revíziózárási szakasz rögzíti az azóta elvégzett
+feature pushokat és helyi audit-tageket. Main merge és release továbbra sem része
+ennek a végrehajtásnak.
 
 ## Discovery
 

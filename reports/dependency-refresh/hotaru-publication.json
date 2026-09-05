@@ -1,0 +1,12 @@
+{
+  "created_at": "2026-09-05T21:34:30.272783+02:00",
+  "remote": "ssh://git@amaterasu.local:2222/hymeko/hotaru.git",
+  "branch": "audit/dependency-refresh-2026-09-05",
+  "head": "84f317e2a8f80fed65d2a2703fd246020260e749",
+  "verified_implementation": "84f317e2a8f80fed65d2a2703fd246020260e749",
+  "push_exit_code": 0,
+  "push_stdout": "To ssh://192.168.1.228:2222/hymeko/hotaru.git\n*\tHEAD:refs/heads/audit/dependency-refresh-2026-09-05\t[new branch]\nDone\n",
+  "push_stderr": "remote: \nremote: Create a new pull request for 'audit/dependency-refresh-2026-09-05':        \nremote:   http://192.168.1.228:3000/hymeko/hotaru/pulls/new/audit/dependency-refresh-2026-09-05        \nremote: \n",
+  "ls_remote": "84f317e2a8f80fed65d2a2703fd246020260e749\trefs/heads/audit/dependency-refresh-2026-09-05",
+  "main_changed": false
+}

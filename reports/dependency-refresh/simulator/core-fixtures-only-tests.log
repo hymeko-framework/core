@@ -1,0 +1,41 @@
+warning: constant `GLASS` is never used
+  --> src/electro/scene/circuit.rs:44:7
+   |
+44 | const GLASS: [f32; 4] = [0.62, 0.72, 0.86, 1.0];
+   |       ^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `COPPER` is never used
+  --> src/electro/scene/circuit.rs:46:7
+   |
+46 | const COPPER: [f32; 4] = [0.85, 0.88, 0.94, 1.0];
+   |       ^^^^^^
+
+warning: constant `NODE` is never used
+  --> src/electro/scene/circuit.rs:47:7
+   |
+47 | const NODE: [f32; 4] = [0.72, 0.80, 0.92, 1.0];
+   |       ^^^^
+
+warning: `hymeko_simulator` (lib) generated 3 warnings
+   Compiling hymeko_simulator v0.1.0 (/consumers/hymeko_simulator)
+error: couldn't read `tests/../../hymeko_framework/transformation-webxr-relocate/hymeko_webxr/data/webxr/maxwell_fiducial_demo.hymeko`: No such file or directory (os error 2)
+  --> tests/model_ingress.rs:75:9
+   |
+75 | /         include_str!(
+76 | |             "../../hymeko_framework/transformation-webxr-relocate/hymeko_webxr/data/webxr/maxwell_fiducial_demo.hymeko"
+77 | |         ),
+   | |_________^
+
+error: couldn't read `tests/../../hymeko_framework/transformation-webxr-relocate/hymeko_webxr/data/webxr/meta_spatial.hymeko`: No such file or directory (os error 2)
+  --> tests/model_ingress.rs:81:9
+   |
+81 | /         include_str!(
+82 | |             "../../hymeko_framework/transformation-webxr-relocate/hymeko_webxr/data/webxr/meta_spatial.hymeko"
+83 | |         ),
+   | |_________^
+
+error: could not compile `hymeko_simulator` (test "model_ingress") due to 2 previous errors
+Command exited with non-zero status 101
+resource stage=model-ingress elapsed_s=0.66 max_rss_kib=325844 exit=101
