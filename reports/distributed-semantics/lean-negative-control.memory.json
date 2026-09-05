@@ -1,0 +1,20 @@
+{
+    "bench":  "",
+    "executable":  "C:\\Users\\kyber\\.elan\\toolchains\\leanprover--lean4---v4.19.0\\bin\\lean.exe",
+    "executable_sha256":  "F59B0C515F65DBF96526279D77FB43152F76BDD77F5FB94F387B75139FAFE68C",
+    "arguments":  "C:\\Users\\kyber\\AppData\\Local\\Temp\\hymeko-distributed-admission-negative-20260905.lean",
+    "working_directory":  "D:\\hnnwork\\distributed\\core",
+    "filter":  "(all)",
+    "rayon_threads":  "inherited",
+    "exit_code":  1,
+    "wall_seconds":  0.949,
+    "peak_working_set_mib":  279.578,
+    "peak_paged_mib":  319.277,
+    "peak_virtual_mib":  8591.773,
+    "peak_observed":  true,
+    "poll_interval_ms":  100,
+    "cap_mib":  2048,
+    "terminated_for_cap":  false,
+    "cap_ok":  true,
+    "cap_16gb_ok":  true
+}

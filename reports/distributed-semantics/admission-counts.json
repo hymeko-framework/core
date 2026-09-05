@@ -1,0 +1,7 @@
+{
+  "passed": 3,
+  "failed": 4,
+  "ignored": 0,
+  "source": "admission-baseline.log",
+  "matplotlib": "3.6.3"
+}

@@ -388,24 +388,48 @@ One writer owns the canonical IR and produces a totally ordered stream of commit
 
 This is deliberately the weakest useful model, and it is sufficient for the stated final system — an IR stream over IPC feeding a running inference — because that has exactly one authority. It also makes every §G.5 conflict question *deferred* rather than *answered wrongly*.
 
-Guarantees: total order, deterministic replay, replicas converge bit-for-bit, and a replica can detect it is behind or forked (§G.3).
+These are **required, conditional guarantees**, not end-to-end implementation
+results. An authenticated single authority supplies an ordered commit history;
+replicas need identical initial semantic state, complete and deterministic payload
+application, gap recovery, and eventual delivery to converge. An equal version
+alone does not identify either a transaction or its resulting state. The current
+v1 structural hash does not cover full state (M0.6 below), so equality of that hash
+cannot establish bit-for-bit replica convergence or exclude every fork.
+
+**Admission order, clarified 2026-09-05.** Versions form a componentwise partial
+order. A transaction strictly dominated by the current version is superseded.
+An incomparable target requests resynchronization; it must never regress one
+component while advancing another. A delta additionally requires an exact base.
+For an established equal version, known matching transaction identity permits a
+duplicate result, known differing identity reports conflict, and unknown identity
+requires recovery without replacing the held state. A fresh assembler and a
+restored ZERO version are distinct states. These are normative rules: the audit
+in §G.6 reproduces violations in the current Rust baseline.
 
 ### G.2 Mapping `CommittedTransaction` to native `IRDelta`
 
-Phase 10B1 already delivers the transport-side machine — content-aware replay, O(1) bounded replay window, conflict detection. **It must not be rebuilt** (Phase 8 rule). What is missing is only the payload interpretation:
+Phase 10B1 delivers the transport-side machine — content-aware replay, O(1)
+bounded replay window, conflict detection. **Reuse it**; the admission defects in
+§G.3/§G.6 belong there. Its `Committed` outcome publishes staged transaction data,
+not a validated, durably installed canonical IR. Payload interpretation and
+application/publication remain separate obligations:
 
 ```
 CommittedTransaction {            →   native application
     stream_id, txn_id,            →   provenance, carried into the receipt
     kind: TransactionKind,        →   Snapshot ⇒ replace state; Delta ⇒ apply deltas
-    base_version,                 →   precondition: must equal replica's current_version
+    base_version,                 →   Delta: exact current; Snapshot: advisory
     target_version,               →   postcondition: replica's version after apply
-    digest: [u8; 32],             →   txn_digest — replay identity (already correct)
+    digest: [u8; 32],             →   txn_digest — content-aware transaction identity
     sections: Vec<StagedSection>, →   decode → Vec<IRDelta>   ← THE MISSING STEP
 }
 ```
 
-The only genuinely new work is a **section codec for the delta vocabulary** (§F.4): section kind → delta type, with the same checked-arithmetic discipline as the Phase 10A envelope, and **never** casting wire bytes to a Rust struct.
+The **section codec for the delta vocabulary** (§F.4) must map section kind to
+delta type with the checked-arithmetic discipline of the Phase 10A envelope,
+without casting bytes to a Rust struct. Application must then validate the whole
+candidate IR, publish one consistent version, and define installation failure and
+acknowledgment. The admission proof does not supply those later stages.
 
 Ordering: `sections` is a sequence, `LocalId`s are assigned in creation order (§F.2), so decoding is deterministic and the *n*-th created entity is `LocalId(n)` on every replica. The `bindings` map in the receipt then lets each replica resolve its own physical keys locally.
 
@@ -423,9 +447,25 @@ pub fn resuming_at(version: SnapshotVersion, limits: AssemblerLimits) -> Self {
 
 > A replica resuming at version *V* receives a commit targeting *V*. Is it the same transaction it already applied (a legitimate replay after reconnect), or a **different** transaction that reached the same version (a fork)? **With only the version, these are indistinguishable.**
 
-The current in-memory assembler avoids this because `current_commit_digest` is populated on the commit path — but it is `None` after every resume, which is precisely when replay is most likely.
+The in-memory commit path retains `current_commit_digest`; `resuming_at` restores
+only a version. **Reproduced on 2026-09-05:** equal-version traffic after resume
+is accepted as a new commit, including restored ZERO. A second defect accepts
+incomparable targets such as `(2,2,2,0) → (1,3,3,0)` for snapshots and
+`(2,2,2,0) → (2,1,3,0)` for deltas. Four public-API assertions fail against the
+Amaterasu Core image. The [audit](../reports/2026-09-05-distributed-semantics.md)
+retains the traces and a proposed correction, pending scoped source approval.
 
-**Required:** persist and restore the pair.
+The compatible immediate rule is conservative: retain whether a version has
+been established, independently of whether its identity is known. Equal-version
+replay without identity returns `ReplayOutsideWindow` after bounded transaction
+validation and leaves the restored version intact; a fresh empty assembler can
+still install its initial ZERO snapshot. Incomparable targets return the existing
+`IncoherentVersionBump` reason. Neither rule requires changing the public signature.
+
+**Subsequent checkpoint design:** atomically persist and restore the semantic
+state and its version, commit identity, identity-algorithm version and writer
+provenance. Persisting two digests without the corresponding state is insufficient.
+The following signature remains a proposal, not the scoped compatible correction:
 
 ```rust
 pub fn resuming_at(
@@ -436,7 +476,11 @@ pub fn resuming_at(
 ) -> Self
 ```
 
-Then on receiving a commit targeting the current version: equal `txn_digest` ⇒ `ExactDuplicate`; different ⇒ `ConflictingReplay`. `state_digest` additionally lets a replica verify it actually *holds* what it claims — catching silent local corruption that no version comparison can.
+Then, subject to framing/base/coherence checks, receiving a commit targeting the
+current version yields `ExactDuplicate` for equal `txn_digest`, and
+`ResyncRequired(ConflictingCommit)` for a different one. These are the current
+assembler outcome names. A complete, versioned `state_digest` could additionally
+validate restored state; the existing structural v1 identity cannot serve that role.
 
 **This is a signature change to a Phase 10B1 API and requires its own approval.** Recorded here, not made.
 
@@ -463,11 +507,59 @@ For the future merge analysis. Under §G.1 every operation is totally ordered, s
 
 | Class | Operations | Why |
 |---|---|---|
-| **Commutative** | `SetAnno` on *distinct* targets; `SetWeights` on distinct arcs; `AddDecl` (distinct `LocalId`s, no ordering between creations) | Disjoint footprints. Order cannot matter. |
+| **Candidate commutative** | `SetAnno` on distinct targets; `SetWeights` on distinct arcs | Requires disjoint read/write dependencies, stable addressing and no ordered side effects; distinct target names alone are insufficient. |
 | **Conditionally mergeable** | `SetAnno` on the *same* target (last-writer-wins by commit order); `SetWeights` on the same arc; `SetParent` (mergeable **only if** the result stays acyclic — a global check, not local) | Deterministic tie-break needed; `SetParent`'s condition is not locally checkable. |
 | **Conflicting** | `RemoveDecl` vs *any* operation on the target or its referrers; `AddArc` vs `RemoveDecl` of a referenced target; **`SetSign`/`SetArcRefs` vs anything changing arc arity**; `SetParent` cycles | Genuine conflicts requiring a policy decision. |
 
-**The positional hazard, stated precisely.** `SetSign { arc, ref_index, .. }` addresses a reference *by position*. Any concurrent operation changing that arc's reference count silently changes which reference is addressed — the same defect as today's `UpdateSign` versus `RemoveVertex`'s `retain` (§4.7). **Mitigation, adopted into §F.4:** `SetSign` carries the arc's expected reference count as a validation precondition, converting a silent mis-target into a rejected transaction. This is why the operation is listed as conflicting rather than conditionally mergeable.
+`AddDecl` is not unconditionally commutative: §F.2 assigns `LocalId`s in creation
+order, and ordered child/incidence slots are semantic. Independent creation needs
+an explicit identity/order refinement before a reorder can be called equivalent.
+
+**The positional hazard.** `SetSign { arc, ref_index, .. }` addresses a reference
+by position. Concurrent count changes can invalidate that address. The expected
+reference count proposed in §F.4 rejects changed arity, but does not detect a
+same-length reorder. Stable incidence identity or an exact prior-state
+precondition is still needed before claiming safe concurrent edits. The table is
+an analysis agenda, not a proved merge algebra.
+
+### G.6 Verification boundary and distributed execution — 2026-09-05
+
+[The Lean specification](verification/unified-ir/distributed-semantics.lean)
+models commit admission with a four-component version, an established-state flag,
+optional opaque identity tag and opaque payload. It proves order laws,
+non-regression under any finite replay, preservation on rejection, repeated
+transaction idempotence, stale-base/incomparable rejection and convergence after
+the same coherent snapshot strictly newer than both replicas. The last theorem
+assumes both receive that same complete snapshot; it does not prove delivery or
+equivalence between delta application and snapshot decoding.
+
+The model is checked independently of Rust. Identity and payload tags are
+independent: tag equality alone does not prove content equality in this model.
+Digest binding and BLAKE3 collision resistance are outside its claims; its payload
+token is not an implementation of `IRDelta`. See the
+[requirement mapping](verification/unified-ir/requirements.md#distributed-admission-verification--2026-09-05)
+for separate model and runtime verdicts. Sequence windows, wire validation,
+semantic application, durable crash recovery, concurrent publication and GPU
+retirement remain outside this proof.
+
+Core owns state/codec/version/admission. Chordex transports opaque bytes;
+consumer orchestration selects jobs and installs framework-produced results.
+The current Chordex CBOR channel retains at most the latest pending snapshot.
+That policy does not implement a durable job queue, delta log, installation
+acknowledgment or exactly-once computation. Retrying independent computation
+requires a stable job identity bound to input state, parameters and seed, plus
+an idempotent result-acceptance policy. These are consumer integration work,
+not reasons to duplicate the Core model in a worker.
+
+The first Amaterasu experiment should compare fixed independent work locally,
+remotely and across both workers, including transfer, serialization, memory,
+correctness and interrupted-worker recovery. Hyperedge partitioning and halo
+exchange need separate measurements (§11 of
+[the synchronization design](hypergraph-synchronization.md)). No distributed
+speedup has been measured. Algebraic reassociation of numerical reductions is
+also separate: require laws for the actual operators and numeric domain;
+IEEE floating-point addition is not exactly associative. This update introduces
+no aggregation grammar or algebraic-distributivity implementation.
 
 ---
 

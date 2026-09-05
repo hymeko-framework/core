@@ -10,3 +10,9 @@
 /reports/2026-09-05-core-amaterasu.md -text
 /docs/plans/2026-09-05-core-amaterasu/** -text
 /tools/ci/*.sh text eol=lf
+
+# Distributed admission proof and retained counterexample bytes.
+/reports/distributed-semantics/** -text
+/reports/2026-09-05-distributed-semantics.md -text
+/docs/plans/2026-09-05-distributed-semantics/** -text
+/docs/verification/unified-ir/distributed-semantics.lean text eol=lf

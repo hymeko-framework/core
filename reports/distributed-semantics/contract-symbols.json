@@ -1,0 +1,8 @@
+﻿{
+    "command":  "contract-symbols --root . --check",
+    "provider_revision":  "515f285886495fdcb5866f2ddafe1889a99757ab",
+    "exit_code":  0,
+    "output":  [
+
+               ]
+}

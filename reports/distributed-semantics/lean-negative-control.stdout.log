@@ -1,0 +1,56 @@
+C:\Users\kyber\AppData\Local\Temp\hymeko-distributed-admission-negative-20260905.lean:107:4: error: unsolved goals
+case isFalse.isFalse
+s : Replica
+t : Transaction
+h✝ : s.version.dominates t.target → t.target = s.version
+h :
+  (if t.kind = Kind.delta ∧ ¬t.base = s.version then Decision.staleBase
+    else
+      if coherent t.base t.target then
+        if t.target = s.version ∧ s.established = true then
+          match s.identity with
+          | none => Decision.unknownIdentity
+          | some identity => if identity = t.identity then Decision.duplicate else Decision.conflictingIdentity
+        else Decision.install
+      else Decision.incoherent) =
+    Decision.install
+⊢ t.target.dominates s.version
+C:\Users\kyber\AppData\Local\Temp\hymeko-distributed-admission-negative-20260905.lean:144:2: error: no goals to be solved
+C:\Users\kyber\AppData\Local\Temp\hymeko-distributed-admission-negative-20260905.lean:147:70: error: unsolved goals
+case isFalse
+s : Replica
+t : Transaction
+ht : ¬t.target.dominates s.version
+h✝ : s.version.dominates t.target → t.target = s.version
+⊢ ¬(if t.kind = Kind.delta ∧ ¬t.base = s.version then Decision.staleBase
+      else
+        if coherent t.base t.target then
+          if t.target = s.version ∧ s.established = true then
+            match s.identity with
+            | none => Decision.unknownIdentity
+            | some identity => if identity = t.identity then Decision.duplicate else Decision.conflictingIdentity
+          else Decision.install
+        else Decision.incoherent) =
+      Decision.install
+C:\Users\kyber\AppData\Local\Temp\hymeko-distributed-admission-negative-20260905.lean:189:98: error: tactic 'decide' proved that the proposition
+  decision (resume v 5) incomparable = Decision.incomparable
+is false
+'HyMeKo.Distributed.dominates_refl' depends on axioms: [propext]
+'HyMeKo.Distributed.dominates_trans' does not depend on any axioms
+'HyMeKo.Distributed.dominates_antisymm' depends on axioms: [propext, Quot.sound]
+'HyMeKo.Distributed.rejected_preserves' depends on axioms: [propext]
+'HyMeKo.Distributed.admitted_dominates' depends on axioms: [sorryAx]
+'HyMeKo.Distributed.apply_monotone' depends on axioms: [propext, sorryAx]
+'HyMeKo.Distributed.equal_established_not_installed' depends on axioms: [propext]
+'HyMeKo.Distributed.same_version_preserves' depends on axioms: [propext]
+'HyMeKo.Distributed.apply_idempotent' depends on axioms: [propext]
+'HyMeKo.Distributed.stale_delta_not_installed' depends on axioms: [propext]
+'HyMeKo.Distributed.incomparable_not_installed' depends on axioms: [propext, sorryAx]
+'HyMeKo.Distributed.replay_monotone' depends on axioms: [propext, sorryAx]
+'HyMeKo.Distributed.adjacent_replay_is_idempotent' depends on axioms: [propext]
+'HyMeKo.Distributed.newer_snapshot_installed' depends on axioms: [propext, Quot.sound]
+'HyMeKo.Distributed.replicas_converge_on_newer_snapshot' depends on axioms: [propext, Quot.sound]
+'HyMeKo.Distributed.resumed_identity_unknown' does not depend on any axioms
+'HyMeKo.Distributed.incomparable_snapshot_rejected' depends on axioms: [sorryAx]
+'HyMeKo.Distributed.fresh_zero_bootstrap' does not depend on any axioms
+'HyMeKo.Distributed.restored_zero_not_bootstrap' does not depend on any axioms

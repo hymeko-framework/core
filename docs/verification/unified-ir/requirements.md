@@ -240,3 +240,47 @@ tested there.
 (stable IDs, mutation/transaction/replay and related consumers) remain explicit;
 the CBOR rows moved only with executable facade, hostile-input, corpus, hash and
 memory evidence.
+
+## Distributed admission verification — 2026-09-05
+
+This update is scoped to the existing Core `ir_stream` admission boundary.
+It does not change the historical matrix-wide totals above or promote the
+`UIR-DYN-*` native mutation/publication requirements to PASS. The distinct
+[Lean specification](distributed-semantics.lean) is a normative abstraction,
+not a translation of Rust. The [audit report](../../../reports/2026-09-05-distributed-semantics.md)
+and [machine-readable mapping](../../../reports/distributed-semantics/traceability.tsv)
+keep **model proof**, **runtime observation** and **missing implementation** separate.
+
+| Requirement | Lean model | Actual Core baseline `4a243ed` / SDK `c935909` |
+|---|---|---|
+| `DIST-ORDER` — componentwise version order | PROVED: reflexive, transitive, antisymmetric | Existing `SnapshotVersion::dominates`; not a new exhaustive Rust proof |
+| `DIST-MONOTONE` — accepted transitions cannot regress any component | PROVED: one step and finite replay | **FAIL**: incomparable snapshot and delta each commit a regressing axis |
+| `DIST-RESUME` — an equal established version with unknown identity is not installed | PROVED | **FAIL** after `resuming_at(V)` and `resuming_at(ZERO)` |
+| `DIST-BOOTSTRAP` — a fresh assembler may install ZERO | PROVED by closed example | PASS: public-API probe |
+| `DIST-STALE` — a delta with a different base does not install | PROVED | PASS: public-API stale-base probe |
+| `DIST-PRESERVE` — rejection leaves modeled held state unchanged | PROVED | PARTIAL: checked version/digest observations only; no actual IR application in this probe |
+| `DIST-IDEMPOTENT` — applying the same transaction twice preserves the once-applied state | PROVED, including adjacent duplicate elimination in a list | Not independently revalidated here; prior assembler tests do not close full-state application |
+| `DIST-SNAPSHOT` — same coherent snapshot strictly newer than both replicas yields equal modeled state | PROVED under these explicit premises | PARTIAL: one resumed assembler advances; no full-state two-replica run |
+| `DIST-BINDING` — transaction identity authenticates every relevant payload bit | NOT MODELED: identity/payload tags are independent | Not established by this proof or seven probes; cryptographic assumptions remain explicit |
+| `DIST-INSTALL` — complete semantic application, durable atomic publication and installation acknowledgment | NOT MODELED | NOT_IMPLEMENTED as an end-to-end integration path here |
+| `DIST-LIVE` — eventual delivery, worker recovery and distributed progress | NOT MODELED | NOT_RUN: transport/scheduler experiment remains a follow-up |
+
+The 19 named Lean theorems are checked with installed Lean 4.19.0 and `Std`,
+without added dependencies. The axiom audit lists only the standard `propext`
+and `Quot.sound` where used; there is no project-declared axiom or admitted proof.
+State idempotence does not guarantee a duplicate *outcome*: a retried advancing
+delta may return stale-base while preserving state. Snapshot convergence does
+not prove snapshot/delta equivalence, delivery, or resolution of two divergent
+replicas already at the same target version.
+
+`Nat` components abstract the ordering of bounded `u64` versions without modeling
+increment/overflow. Whole-transaction admission abstracts away wire and sequence
+validation, staging limits and reset handling. The payload token is not a decoded
+canonical IR. Equal structural v1 hashes are insufficient as full-state equality
+evidence. Numerical associativity/distributivity and hyperedge partition exchange
+are separate obligations, with no new algebra or grammar approved by this update.
+
+The proposed compatible Rust correction and regression/rollback plan are
+reviewable in the report; the required scoped Core edit token remains pending.
+Until it is applied and the same failing cases pass, these runtime FAIL rows
+remain open.
