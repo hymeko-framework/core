@@ -12,3 +12,4 @@ pub mod identity;
 pub mod ids;
 pub mod incidence;
 pub mod namespace_faults;
+pub mod semantic_digest;

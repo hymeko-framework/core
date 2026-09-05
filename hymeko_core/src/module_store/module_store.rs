@@ -1,5 +1,6 @@
 use crate::common::ids::SymId;
 use crate::ir::hash::HashId;
+#[allow(deprecated)]
 use crate::ir::hash_pass::compute_merkle_hashes;
 use crate::ir::ir::Ir;
 use crate::ir::lower::lower_program_to_ir;
@@ -259,6 +260,14 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
         let mut ir = lower_program_to_ir(&root_ast, &imported, &idx, &mut self.it)
             .map_err(|e| ModuleLoadError::Parse(format!("lower failed: {e:?}")))?;
 
+        // AMBIGUOUS CONSUMER, DELIBERATELY NOT MIGRATED (semantic-model-digest-v2, 2026-09-05).
+        // `Ir::decl_hash` is a serialized field: `Ir`'s serde impl writes it and both
+        // `ir::coherence` and the CBOR validator check its LENGTH. Nothing checks its values, and
+        // no consumer has been shown to use them as an identity. Changing what this call stores is
+        // therefore a wire-content change with no established consumer contract, so it is left
+        // exactly as it was and classified `ambiguous -> blocked`. The sound identity is
+        // `ir::semantic_digest::semantic_model_digest_v2`, which is pure and writes nothing.
+        #[allow(deprecated)]
         compute_merkle_hashes(&mut ir, &self.it);
 
         let cfg = crate::ir::canonical_hash::CanonHashCfg {
