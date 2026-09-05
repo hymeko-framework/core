@@ -1,9 +1,9 @@
 [
   {
     "path": "reports/2026-09-05-platform-audit.md",
-    "bytes": 49313,
-    "lines": 388,
-    "sha256": "b93bfe92c532985eeac7730c6a854250bae1f899f1273b05fb855d1229e7b260"
+    "bytes": 49811,
+    "lines": 390,
+    "sha256": "7ac8b69fe38f37e09b73043a0db79a0011ee5f3e486b741a83576680687a13bf"
   },
   {
     "path": "docs/plans/2026-09-05-platform-audit/plan.mmd",
@@ -13,15 +13,15 @@
   },
   {
     "path": "docs/plans/2026-09-05-platform-audit/plan.pdf",
-    "bytes": 128255,
+    "bytes": 129018,
     "lines": null,
-    "sha256": "d71fba64ac5c1d6f9bd03b46a7f45f3a15f03fc40920bc903e8d06ffd44fc092"
+    "sha256": "e2ca8b83d96ceae50c24090a1dc39c3ac6a0f4c884a3ce119bd3a3d03ddd1b73"
   },
   {
     "path": "docs/plans/2026-09-05-platform-audit/plan.tex",
-    "bytes": 15568,
-    "lines": 134,
-    "sha256": "06e03e1f85f6f0d1dd8e373c8f4ec3669a1e04881c29829af704c298e475e5f0"
+    "bytes": 16154,
+    "lines": 142,
+    "sha256": "b8bef34f8175ab40f068015743e962e52c9636b3cc37f825dec2bc48ba634277"
   },
   {
     "path": "docs/plans/2026-09-05-platform-audit/plan.tikz",

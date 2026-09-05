@@ -126,6 +126,14 @@ CUDA: reuse prototype, one mathematical CSR contract, no new IR. Record setup/H2
 C/C++: prefer Rust decode-backed opaque C ABI only if a consumer is identified; no new native model or schema and no automatic dual implementation.
 Chordex vs Axon matrix covers charter, transport, Zenoh, dependency/runtime, QoS/backpressure, reconnect/replay/latest, ordering/duplicates, payload limits, access control, metrics and tests. Channel: existing \texttt{hymeko/model/ir/cbor/v1}; payload opaque canonical CBOR. Ordering is receiver callback arrival order, with one authorized producer per model topic; no invented sequence or timestamp. Full acceptance requires Core encode, actual local pub/sub, Core decode, Transformation projection and deterministic scene assertions, plus malformed/limit/reconnect tests.
 \section{Risks, rollback and acceptance}
+\paragraph{Evidence byte identity.}
+Extend the existing root .gitattributes only for this dated plan, this report and
+reports/platform-audit: disable text normalization so committed raw logs and
+manifest SHA256 bytes match across operating systems. Package the 3022 existing
+Criterion JSON files in a verified ZIP; keep unpacked local copies ignored.
+Verify every archived member and every committed artifact against the manifest.
+No product source attributes, dependency or provider changes. This corrects a
+measured CRLF/LF mismatch in 121 artifacts during final Git-blob verification.
 Worst inputs: million-incidence Core fixture, high-arity duplicate signed incidences, combinatorial Berge output, 256 MiB decoder limit and unbounded subscriber queues. Preserve output caps and never run unbounded enumeration. No benchmark output-shape change disguised as speedup. Existing stale docs, moving branch dependencies, vendor requirements and pending user changes block public reproducibility until resolved.
 Rollback: task-owned feature commits and evidence only; discard/revert own changes by named path if necessary, never alter user stash, worktree or remote branches. Protected fixes require exact file list, invariant/test/rollback and one proposed approval token.
 Acceptance: evidence-backed audit; historical Core values reproduced or explicitly not comparable; Graph/Transformation baselines; measured WGPU changes or justified deferral; CUDA results or runnable Kato package; C decision; Chordex decision; actual end-to-end proof or precise verified blocker; no duplicate IR/codec/WebXR; tested changes; release-readiness assessment across API/ABI/wire/docs/CI/reproducibility/fuzzing/licensing/packaging/semver. Unrun cells never pass by implication.
