@@ -1,0 +1,16 @@
+    Finished `release` profile [optimized] target(s) in 0.13s
+     Running tests/session.rs (target/release/deps/session-46d115c834754250)
+
+running 9 tests
+test test_arena_dropped_with_work_in_flight ... ok
+test test_empty_session_submits_cleanly ... ok
+test test_in_flight_submission_is_reclaimed_by_a_later_poll ... ok
+test test_intra_session_reuse_is_ordered_correctly ... ok
+test test_mixed_scope_operations_in_one_session ... ok
+test test_sequential_sessions_keep_accounting_consistent ... ok
+test test_session_dropped_without_submit_frees_pending_immediately ... ok
+test test_state_is_clean_after_submit ... ok
+test test_two_open_sessions_disable_same_session_reuse ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.26s
+

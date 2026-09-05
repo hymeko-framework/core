@@ -18,6 +18,10 @@ even if its declared branch has advanced.
 Start from a clean clone at the intended revision, or extract `git archive` of
 that exact revision on Amaterasu. Record the revision and archive SHA256 when
 using an archive. Do not copy a Windows worktree's `.git` pointer to Linux.
+For an archive produced on Windows, use `git -c core.autocrlf=false archive`
+and verify its file hashes against Git blobs; otherwise checkout conversion
+can introduce CRLF even when the stored sources use LF. The recorded final
+Core build uses a clean Linux Git clone transferred through a Git bundle.
 
 Create a dedicated builder; these commands do not select or replace the host's
 other builders. Choose a unique builder name if this one already exists.

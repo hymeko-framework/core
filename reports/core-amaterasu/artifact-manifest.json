@@ -1,0 +1,542 @@
+[
+  {
+    "path": ".dockerignore",
+    "bytes": 307,
+    "lines": 20,
+    "sha256": "a61092f311be40707a2b706e5699e069f91735d8ad4f6b5807c54ba23a42a8fe",
+    "change": "added",
+    "lines_added": 20,
+    "lines_removed": 0
+  },
+  {
+    "path": ".gitattributes",
+    "bytes": 423,
+    "lines": 12,
+    "sha256": "deb2ed1f9feff131b358577135cca9e99aa82fe8b9617598c5a6c5201751f09e",
+    "change": "modified",
+    "lines_added": 6,
+    "lines_removed": 0
+  },
+  {
+    "path": "docs/core-container.md",
+    "bytes": 8067,
+    "lines": 152,
+    "sha256": "845409b05470f94d233fb61444e3d73a8e68dda16a4fb6b5d84dac563431b863",
+    "change": "added",
+    "lines_added": 152,
+    "lines_removed": 0
+  },
+  {
+    "path": "docs/plans/2026-09-05-core-amaterasu/plan.mmd",
+    "bytes": 415,
+    "lines": 8,
+    "sha256": "cbbfb8b60c79ddcc77036197d73f15da3a000ece3be6a27aebb647921830811f",
+    "change": "added",
+    "lines_added": 8,
+    "lines_removed": 0
+  },
+  {
+    "path": "docs/plans/2026-09-05-core-amaterasu/plan.pdf",
+    "bytes": 149595,
+    "lines": null,
+    "sha256": "12253437ec72b5a095211d934f00f57c11c87f594c22df8434d79762003c07e1",
+    "change": "added",
+    "lines_added": null,
+    "lines_removed": null
+  },
+  {
+    "path": "docs/plans/2026-09-05-core-amaterasu/plan.tex",
+    "bytes": 6623,
+    "lines": 99,
+    "sha256": "72a204b725eec65c78f131daa868bf70a40302c8f8a288a92d76170d98bbdf17",
+    "change": "added",
+    "lines_added": 99,
+    "lines_removed": 0
+  },
+  {
+    "path": "docs/plans/2026-09-05-core-amaterasu/plan.tikz",
+    "bytes": 726,
+    "lines": 11,
+    "sha256": "7e37ad13fee05a05c1b84dd29d0293291e210f4145d57bd80355dbf809e322bc",
+    "change": "added",
+    "lines_added": 11,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/2026-09-05-core-amaterasu.md",
+    "bytes": 14273,
+    "lines": 221,
+    "sha256": "2b8ab9873578a359d482ec0d6f4d7aab1e7b3b0bb591286cda726450f3cb055d",
+    "change": "added",
+    "lines_added": 221,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/builder-inspect.json",
+    "bytes": 8346,
+    "lines": 205,
+    "sha256": "8b8a02b578a21e21848b69472fb8f57b2d919be8b9d0031a7d3719732534a165",
+    "change": "added",
+    "lines_added": 205,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/clean-clone.log",
+    "bytes": 650,
+    "lines": 13,
+    "sha256": "cff2f66e40dda77c4491666e1af867a75d94c673d4b8c0117918e3ebf6fbe38d",
+    "change": "added",
+    "lines_added": 13,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/contract-duplication-final.log",
+    "bytes": 200,
+    "lines": 3,
+    "sha256": "0cc92ded67014d8899c5118b90246ccc329f2c6496814c94d9693ba3e97e9f2e",
+    "change": "added",
+    "lines_added": 3,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/contract-symbols-final.log",
+    "bytes": 15,
+    "lines": 1,
+    "sha256": "f9d655a1a817c30bd98bc7df9b7b5af413d1b0fa9e989f10fefa0aa0400d37f6",
+    "change": "added",
+    "lines_added": 1,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/contract-symbols.log",
+    "bytes": 62,
+    "lines": 1,
+    "sha256": "ca98cd5e4fba609c7429311b7d7ea795a3c82acd079a27158c0f6ad2f06290fe",
+    "change": "added",
+    "lines_added": 1,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/core-egl-image.json",
+    "bytes": 4864,
+    "lines": 72,
+    "sha256": "f8ed8117ebe67bac0a9698e31728004ef8917e5bacb4d9a0deaa2d6f8421bcfa",
+    "change": "added",
+    "lines_added": 72,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/cpu-clean-final.json",
+    "bytes": 9556,
+    "lines": 219,
+    "sha256": "80ad16f6ed7fc8e186ed1255f52d783d97ad9709b0c8083a6b9f1a4bd184a004",
+    "change": "added",
+    "lines_added": 219,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/cpu-clean-volume.log",
+    "bytes": 155,
+    "lines": 3,
+    "sha256": "e90954db21a28ec1db4bc320e044b6bf50a683e5d46b0b7ed978d9041391ee4b",
+    "change": "added",
+    "lines_added": 3,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/cpu-clean.log",
+    "bytes": 51707,
+    "lines": 924,
+    "sha256": "3d2b9b806c1a3c96fda707b66b8855edfc98d0215406344f91e6e23006da8fee",
+    "change": "added",
+    "lines_added": 924,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/cpu-container-final.json",
+    "bytes": 9208,
+    "lines": 220,
+    "sha256": "ed3c20ad9f111e33dd34aa0db6cef0d4cf909db1ca2c856651205de04efbd3e5",
+    "change": "added",
+    "lines_added": 220,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/cpu-container-start.json",
+    "bytes": 9366,
+    "lines": 220,
+    "sha256": "4bcb3449838cec72342ce1f9e3216f72fcb2739f3715f250fa2ea977ec6c3a00",
+    "change": "added",
+    "lines_added": 220,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/cpu-first.log",
+    "bytes": 51637,
+    "lines": 924,
+    "sha256": "de1fd43daebbcfa16174f81922b8e85ca6b4f54f4d2612cd55157fcce6026b91",
+    "change": "added",
+    "lines_added": 924,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/egl-control-container.json",
+    "bytes": 10700,
+    "lines": 236,
+    "sha256": "1d2b8c981b786a3a842c5f009ae3778ec57e7e54a8837445d4e5233248601620",
+    "change": "added",
+    "lines_added": 236,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/egl-control.log",
+    "bytes": 8270,
+    "lines": 151,
+    "sha256": "5b540ab0f6a67bc31be9e18d3381d215b62361321c7884be51ada857fb9bf432",
+    "change": "added",
+    "lines_added": 151,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/final-image-controls.log",
+    "bytes": 490,
+    "lines": 12,
+    "sha256": "8db5cbac11eafb3b9713ebf88f3e274e1e6d1931ee688c8c077b1f257c8b6a4c",
+    "change": "added",
+    "lines_added": 12,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/final-source-check.log",
+    "bytes": 180,
+    "lines": 3,
+    "sha256": "ab674b2734acc98df134a677f43dede13ae06cb254531d5e8ea665f1331280bf",
+    "change": "added",
+    "lines_added": 3,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/gpu-clean-final.json",
+    "bytes": 10973,
+    "lines": 235,
+    "sha256": "639724ad5e915c3256f036ca11a9e72e3e7ba0d3a42e678cf16f01d305174fe5",
+    "change": "added",
+    "lines_added": 235,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/gpu-clean.log",
+    "bytes": 29806,
+    "lines": 619,
+    "sha256": "a96e8908757d99d3f102526ee5c0f03d7f0b4f6811262ce7e8339befc1167541",
+    "change": "added",
+    "lines_added": 619,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/gpu-egl-final.json",
+    "bytes": 10784,
+    "lines": 235,
+    "sha256": "924656babd494059183c124847e1288cc4dadc483ba517c3933ad0461bd8aec1",
+    "change": "added",
+    "lines_added": 235,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/gpu-egl.log",
+    "bytes": 8605,
+    "lines": 149,
+    "sha256": "0dd2118b55c7b66043f2e07519476c41e23e218afa8f1d7b3211ce1b28944f61",
+    "change": "added",
+    "lines_added": 149,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/gpu-no-vulkan.log",
+    "bytes": 53874,
+    "lines": 590,
+    "sha256": "178e9082c8737b01a532a8fe22a3b187a3117629d7a98b69a17104fbe1f8d78a",
+    "change": "added",
+    "lines_added": 590,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/gpu-serial-all-container.json",
+    "bytes": 10955,
+    "lines": 235,
+    "sha256": "263eef2007884e7d51bff6e9e9018e994dd308e0035619c0e6c063eb8d49cae8",
+    "change": "added",
+    "lines_added": 235,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/gpu-serial-all.log",
+    "bytes": 27571,
+    "lines": 552,
+    "sha256": "b6896f7acb3bac9d4f3778fcb0dd833c7adab89f69f5a90b352b261fc04b0c59",
+    "change": "added",
+    "lines_added": 552,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/gpu-session-serial-container.json",
+    "bytes": 10217,
+    "lines": 235,
+    "sha256": "2cf53e35844190ed9dbebbedb0dd58179918f3c5b1a2412ceec646b243429503",
+    "change": "added",
+    "lines_added": 235,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/gpu-session-serial.log",
+    "bytes": 775,
+    "lines": 16,
+    "sha256": "4abd575956e23eddbc299578aa0be82201dc1127b4400d532f43eb4999108b50",
+    "change": "added",
+    "lines_added": 16,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/gpu-session-stall-peak.txt",
+    "bytes": 10,
+    "lines": 1,
+    "sha256": "3649e528bfc04ffbf8fe15225bacd92820eb0bb24e3d22f350e627d2f5f66905",
+    "change": "added",
+    "lines_added": 1,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/gpu-session-stall-top.log",
+    "bytes": 1960,
+    "lines": 6,
+    "sha256": "4e864e1112ac9dc5464150ba4ded21f5f21ffb1ea25d5c84ec8dfac39fe34942",
+    "change": "added",
+    "lines_added": 6,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/host-environment.log",
+    "bytes": 21067,
+    "lines": 116,
+    "sha256": "ccb2b5addeec35efc883d0aa898f0e1ffdd4a4ed0560be0044c65d604e139191",
+    "change": "added",
+    "lines_added": 116,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/image-build.json",
+    "bytes": 1982,
+    "lines": 66,
+    "sha256": "3feff621f0830d79555441103eea57668d4d71b6c93e23bf40e3fd483920bfa1",
+    "change": "added",
+    "lines_added": 66,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/image-build.log",
+    "bytes": 16151,
+    "lines": 379,
+    "sha256": "50acb7a2ecea00df8d45b40905258b8fb2bef575b6c02c92a5eab5b9738d6532",
+    "change": "added",
+    "lines_added": 379,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/image-egl.json",
+    "bytes": 1978,
+    "lines": 66,
+    "sha256": "4170ef9585119b6a6852abb9e7ebcbc3a55d0da1599c0aff98061b4c616a97aa",
+    "change": "added",
+    "lines_added": 66,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/image-egl.log",
+    "bytes": 23769,
+    "lines": 498,
+    "sha256": "d7fd29b9b06a435e3471ce11ec1de366d1800d40ffd8b462208fe64b4cacdfbc",
+    "change": "added",
+    "lines_added": 498,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/image-final-build.json",
+    "bytes": 1983,
+    "lines": 66,
+    "sha256": "58922e5dd1b9f783377efa8997d12656817ac9a984a1b9941ffdc001c7f81d3c",
+    "change": "added",
+    "lines_added": 66,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/image-final-build.log",
+    "bytes": 14040,
+    "lines": 340,
+    "sha256": "2af2c9a6ceee388b613fbb81025e55da21ac0ba127f6812c2cadf7e635439fac",
+    "change": "added",
+    "lines_added": 340,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/image-final-inspect.json",
+    "bytes": 4869,
+    "lines": 72,
+    "sha256": "6d8ae8100f067e51df1b7e86f8bcf3a6ab8adcc9a24d6ff04ed3183ab062d1bc",
+    "change": "added",
+    "lines_added": 72,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/lock-provenance.log",
+    "bytes": 221,
+    "lines": 3,
+    "sha256": "ec38f5a22fb351cc9093250ac51fb3841918549f2465ea4bd1dc8be7f36fa89a",
+    "change": "added",
+    "lines_added": 3,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/plot_resources.py",
+    "bytes": 1702,
+    "lines": 36,
+    "sha256": "86b0fa5b8384721a68e610e0addef95f73c58213b9df6706c02ff3d196ea0736",
+    "change": "added",
+    "lines_added": 36,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/provider-archive-verification.log",
+    "bytes": 181,
+    "lines": 4,
+    "sha256": "1435ecd7e3c8e9a97c940a6868ca67ef891a32643ea7205961aef73ac2f62752",
+    "change": "added",
+    "lines_added": 4,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/provider-lf-build.json",
+    "bytes": 1548,
+    "lines": 52,
+    "sha256": "c090dfb1da746dca02f189083a93dabb59fcc72889365f254dfbadf9bcb467e7",
+    "change": "added",
+    "lines_added": 52,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/provider-lf-build.log",
+    "bytes": 3458,
+    "lines": 99,
+    "sha256": "edd8b362e723e7705d5f9fd72c22944636a3eaa26a10aca4b8bf19caa3af9d6b",
+    "change": "added",
+    "lines_added": 99,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/provider-lf-image.json",
+    "bytes": 4595,
+    "lines": 67,
+    "sha256": "861cfa0ab90ce4e87b740fc185877bef65006d8f893f966c18187c48abfbc834",
+    "change": "added",
+    "lines_added": 67,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/provider-lf-source-hashes.log",
+    "bytes": 578,
+    "lines": 4,
+    "sha256": "5859068121cd905a0ccdfa0ab20dc07fc101b85e0dc3799294f2bbc98e94c22a",
+    "change": "added",
+    "lines_added": 4,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/services-final.log",
+    "bytes": 228,
+    "lines": 7,
+    "sha256": "bfe0b02bb1b5aaa385220925bd4038f705e44e5f09c17045be1f590cc6242b77",
+    "change": "added",
+    "lines_added": 7,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/summary.json",
+    "bytes": 3488,
+    "lines": 113,
+    "sha256": "a800e8ddaae3b9db8345f03da7ef88ba9ec9c2039062d0c28516e4995d7b5761",
+    "change": "added",
+    "lines_added": 113,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/verification-controls.log",
+    "bytes": 614,
+    "lines": 16,
+    "sha256": "d5f688f576bf5b45d0e10e604bdb469a196dffd68a4c2567f442df7f7b88639e",
+    "change": "added",
+    "lines_added": 16,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/verification-resources.png",
+    "bytes": 83489,
+    "lines": null,
+    "sha256": "a8ae9e3101360cce78c166ad67266bf77033bdc53ce700ece5fc93657bb89c2a",
+    "change": "added",
+    "lines_added": null,
+    "lines_removed": null
+  },
+  {
+    "path": "reports/core-amaterasu/verification-resources.svg",
+    "bytes": 59425,
+    "lines": 2076,
+    "sha256": "e69bb004f302abcd7021aa1fda963b514fd4d61f3a55e99a40065300aff9e860",
+    "change": "added",
+    "lines_added": 2076,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/vulkan-diagnosis.log",
+    "bytes": 2171,
+    "lines": 37,
+    "sha256": "6706b9e4f9e290512329df85ec17e2caf19899039b20fdcb168c52696c88b595",
+    "change": "added",
+    "lines_added": 37,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/vulkan-dlopen.log",
+    "bytes": 31439,
+    "lines": 611,
+    "sha256": "adbaa6898d97d20f0c0770621601ef04d08b926c1b233abcf9af125740c4872e",
+    "change": "added",
+    "lines_added": 611,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/core-amaterasu/vulkan-loader.log",
+    "bytes": 17740,
+    "lines": 272,
+    "sha256": "9ecccfa9182888b912de7c18d9173c768ae4fe9d808ae129d5b74df425a47c65",
+    "change": "added",
+    "lines_added": 272,
+    "lines_removed": 0
+  },
+  {
+    "path": "tools/ci/Dockerfile",
+    "bytes": 1637,
+    "lines": 40,
+    "sha256": "95a1de68c2a47e2e253cea7b4463f2aee35bdc363da99fe750ff6dccf1a96ec6",
+    "change": "added",
+    "lines_added": 40,
+    "lines_removed": 0
+  },
+  {
+    "path": "tools/ci/core.sh",
+    "bytes": 2809,
+    "lines": 77,
+    "sha256": "3fa4c92059fd7459b53302ca66c1b82a29f9624b8f5d40618379c830dee28a64",
+    "change": "added",
+    "lines_added": 77,
+    "lines_removed": 0
+  }
+]

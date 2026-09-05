@@ -1,0 +1,72 @@
+[
+    {
+        "Id": "sha256:05e0242c646ef0a944e637a00d1da83ceaaaa422abfb9ab62655ded1b82522ad",
+        "RepoTags": [
+            "hymeko-core:20260905-egl"
+        ],
+        "RepoDigests": [],
+        "Comment": "buildkit.dockerfile.v0",
+        "Created": "2026-09-05T12:02:30.452745208Z",
+        "Config": {
+            "Env": [
+                "PATH=/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "RUSTUP_HOME=/usr/local/rustup",
+                "CARGO_HOME=/usr/local/cargo",
+                "RUST_VERSION=1.97.1",
+                "CARGO_BUILD_JOBS=6",
+                "RAYON_NUM_THREADS=6",
+                "CARGO_TERM_COLOR=never",
+                "CARGO_NET_GIT_FETCH_WITH_CLI=true",
+                "CARGO_NET_OFFLINE=true"
+            ],
+            "Entrypoint": [
+                "/usr/local/bin/hymeko-core-check"
+            ],
+            "Cmd": [
+                "all"
+            ],
+            "WorkingDir": "/workspace/core",
+            "Labels": {
+                "org.opencontainers.image.revision": "69a5ec947b610a9ccc683d3f8d761d19d30c5b47-plus-container-working",
+                "org.opencontainers.image.source": "https://github.com/rust-lang/docker-rust",
+                "org.opencontainers.image.title": "HyMeKo Core SDK and verification"
+            },
+            "ArgsEscaped": true
+        },
+        "Architecture": "amd64",
+        "Os": "linux",
+        "Size": 1819789978,
+        "GraphDriver": {
+            "Data": {
+                "LowerDir": "/var/lib/docker/overlay2/0a775cc764d511927e0d94c5b33b53d0c8309510ea1898afb79a2857a582db0e/diff:/var/lib/docker/overlay2/f2ede9489b702c22f9372e7c788e5f8b358860518c20dc2e4d04f855cb4881ec/diff:/var/lib/docker/overlay2/6660ed4bb50f9d77926e5db47d6d10c2cc1c68214cf3a2f67ec11fd39451689f/diff:/var/lib/docker/overlay2/c0ce3788a523814893edb8dd5290437957389588cdfd90cd45a0c970931fb348/diff:/var/lib/docker/overlay2/dd15f4be7c7e06cbaee128d5c1574037d340409df3f29a722d6a323a1a1d26c0/diff:/var/lib/docker/overlay2/c2f5b9b87db5489942c91f0dc01caca0de4e9b9df261ea5fef47899cd5d43a2e/diff:/var/lib/docker/overlay2/dfccd2416059a5845ea8ecc2e55cf313b9a38e48f23cbe5d4c2d8c4113c8450d/diff:/var/lib/docker/overlay2/f962c81294ad2e4acc64f33c6aa4828627cf865bca3d5a955f512bd7cd573b1b/diff:/var/lib/docker/overlay2/8037a0cd7cf9258d67ceaf5e7dbf22ebd54f9d0f1f1a45d8b26adc69b34284cf/diff:/var/lib/docker/overlay2/88eedcc0941867d5bf6fe4e01a29a8b96c8159e89b8de4b608744b7148789f45/diff:/var/lib/docker/overlay2/6e88d459bd6344e10673316e71fbfe1234d7c1f3f010e2b3f11442bfaa02735c/diff:/var/lib/docker/overlay2/98e5ef19e9b6c4d1114149d1f6b7a9995f6c49874142ac31c94e10a90201f76b/diff:/var/lib/docker/overlay2/30a62c2f6b8a09608e05f94f9b3121359c5b382297719a58f0164bb89f0f99a5/diff:/var/lib/docker/overlay2/7a4227fa5961f88e6bb891349783d44beb9553a5faf7a73e62a6debfb42edb8c/diff",
+                "MergedDir": "/var/lib/docker/overlay2/437f7e6889b037dab0acca8f2593ab5f571208002e6ec962bae1fac23fcb0bb0/merged",
+                "UpperDir": "/var/lib/docker/overlay2/437f7e6889b037dab0acca8f2593ab5f571208002e6ec962bae1fac23fcb0bb0/diff",
+                "WorkDir": "/var/lib/docker/overlay2/437f7e6889b037dab0acca8f2593ab5f571208002e6ec962bae1fac23fcb0bb0/work"
+            },
+            "Name": "overlay2"
+        },
+        "RootFS": {
+            "Type": "layers",
+            "Layers": [
+                "sha256:63ecca237e30aca8ae79232ae01dddab7d8b42302f654f343f7cc7ddae60d57c",
+                "sha256:e62aadfda549a23e76f5bb43a9a5c652f9e7312aba9edf5c1411f7d0aed54eed",
+                "sha256:3acdb7d9b7ebcd7f62d99a996099a57b8367821f4d9a3f4b52239934425a7b98",
+                "sha256:b33c96ad984974239102a1fe15e6427a3510f13aa320227b371c10bb40063356",
+                "sha256:0bfd9a65e13cc2726159178398201f52cd4e5bd1c187584f6953c839438af7d5",
+                "sha256:e4e56b3c02ed94842f6f1eeee88ee3dce97aeb8ad04c62afd75c7b3728c2ca5e",
+                "sha256:0b89b1396b2423cb2bac517d83d30f4e3157de9c681cde509f998e45e074fc44",
+                "sha256:f8c524172f7b5cd9180f8c62f24f460bfe087e0610b7f4768d0aaf8285486528",
+                "sha256:31a36b920a0ba0c222d03b23660b76479f020ee3848ca389e648b5998ebb28c7",
+                "sha256:f1aeed7d396fe47f544d08e335c919a4087200e72e49c5ce5a7af43b1e79b237",
+                "sha256:490357e4319afd8cebe5d3e94c19854d45ec9c2f9767dff1b72f395893e1ddea",
+                "sha256:4b868bffe4412b42124448664ab06d0e76c0dd21b58d0af153f938763abe184f",
+                "sha256:bc84acb351186e896768f7e4295ec6ea904de14e5a4a8fe3dc6dc5da0a92c804",
+                "sha256:0a6b06fa46073eae99cfbfba1b43d2f9bd7223c0fb953c929cb2f6f155c78313",
+                "sha256:72312c43894de9dff9874a335dfdc389d5dcf3e3be7465d79017d456386a0fe9"
+            ]
+        },
+        "Metadata": {
+            "LastTagTime": "0001-01-01T00:00:00Z"
+        }
+    }
+]

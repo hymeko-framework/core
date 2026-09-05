@@ -1,0 +1,13 @@
+Cloning into '/home/kyberszittya/hymeko-core-amaterasu-20260905/clean/core'...
+c935909ec97bcb01e9dafd52d64227ee9df81e4b
+8dfe43c52f9d8a42217c35a2bbf6e9843e05f4b4ea938d9286e827cffbb9dcc7  Cargo.lock
+e510f88f92724b3dc7cf5a31bbe50a299b34abb66c14201d57e54e024caf242b  /home/kyberszittya/hymeko-core-amaterasu-20260905/core-c935909.bundle
+20	0	.dockerignore
+6	0	.gitattributes
+148	0	docs/core-container.md
+8	0	docs/plans/2026-09-05-core-amaterasu/plan.mmd
+-	-	docs/plans/2026-09-05-core-amaterasu/plan.pdf
+99	0	docs/plans/2026-09-05-core-amaterasu/plan.tex
+11	0	docs/plans/2026-09-05-core-amaterasu/plan.tikz
+40	0	tools/ci/Dockerfile
+77	0	tools/ci/core.sh
