@@ -1,0 +1,9 @@
+git apply --check: PASS (no application)
+Rustfmt stdin parse/format: PASS (not compilation)
+55	0	CORE.YAML
+20	0	hymeko_core/src/ir/hash_pass.rs
+2	0	hymeko_core/src/ir/mod.rs
+420	0	hymeko_core/src/ir/semantic_digest.rs
+9	0	hymeko_core/src/module_store/module_store.rs
+1	0	hymeko_core/tests/unified_ir/verification/mod.rs
+705	0	hymeko_core/tests/unified_ir/verification/semantic_digest.rs

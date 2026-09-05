@@ -32,3 +32,10 @@
 /reports/dependency-refresh/** -text
 /reports/2026-09-05-dependency-refresh.md -text
 /docs/plans/2026-09-05-dependency-refresh/** -text
+
+# Review-only semantic digest correction and approval evidence.
+/reports/semantic-digest-correction/** -text
+/reports/2026-09-06-semantic-digest-correction.md -text
+/docs/plans/2026-09-06-semantic-digest-correction/** -text
+# Unified diffs intentionally retain a single-space prefix on blank context lines.
+/reports/semantic-digest-correction/*.patch whitespace=-blank-at-eol

@@ -1,0 +1,152 @@
+// Proposed controls beyond the four already reproduced audit requirements.
+// These use the existing test builder and production CBOR facade only.
+#[test]
+fn v2_anonymous_placeholder_is_independent_of_interner_allocation() {
+    let build = |preintern: bool| {
+        let mut t = TestIr::new();
+        if preintern {
+            t.it.intern("unrelated-first-symbol");
+        }
+        let root = t.node(&["m"], DeclId::NONE);
+        let a = t.node(&["m", "a"], root);
+        let b = t.node(&["m", "b"], root);
+        let edge = t.edge(&["m", "e"], root);
+        let arc = t.arc(edge, &[(a, S::Plus), (b, S::Minus)]);
+        let declaration = t.ir.push_anonymous_arc();
+        t.ir.decl_nodes[declaration.raw()].parent = edge;
+        t.ir.bind_arc_decl(declaration, arc).unwrap();
+        for child in [a, b, edge] {
+            link(&mut t, root, child);
+        }
+        link(&mut t, edge, declaration);
+        (t, declaration)
+    };
+    let ((left, ld), (right, rd)) = (build(false), build(true));
+    assert_ne!(
+        left.it.resolve(left.ir.decl_nodes[ld.raw()].name),
+        right.it.resolve(right.ir.decl_nodes[rd.raw()].name)
+    );
+    assert_eq!(v2(&left), v2(&right));
+}
+
+#[test]
+fn v2_distinguishes_sharing_of_identical_arc_payloads() {
+    let build = |repeat_first: bool| {
+        let mut t = TestIr::new();
+        let root = t.node(&["m"], DeclId::NONE);
+        let a = t.node(&["m", "a"], root);
+        let b = t.node(&["m", "b"], root);
+        let edge = t.edge(&["m", "e"], root);
+        let first = t.arc(edge, &[(a, S::Plus), (b, S::Minus)]);
+        let second = t.arc(edge, &[(a, S::Plus), (b, S::Minus)]);
+        let eid = t.ir.as_edge(edge).unwrap();
+        t.ir.edges[eid.raw()].arcs = if repeat_first {
+            vec![first, first, second]
+        } else {
+            vec![first, second, second]
+        };
+        for child in [a, b, edge] {
+            link(&mut t, root, child);
+        }
+        t
+    };
+    let (left, right) = (build(true), build(false));
+    assert_eq!(left.ir.arcs[0].refs, left.ir.arcs[1].refs);
+    assert_eq!(left.ir.arcs[0].refs, right.ir.arcs[0].refs);
+    assert_ne!(left.ir.edges[0].arcs, right.ir.edges[0].arcs);
+    assert_ne!(v2(&left), v2(&right));
+}
+
+#[test]
+fn v2_fallback_keeps_orphan_arc_payload_and_idempotence() {
+    let mut left = program(None);
+    let mut right = program(None);
+    left.ir.edges[0].arcs.clear();
+    right.ir.edges[0].arcs.clear();
+    right.ir.arcs[0].refs[0] = plain(S::Plus, B);
+    assert_changed(&left.ir, &right.ir, "orphan arc target");
+    assert_ne!(v2(&left), v2(&right));
+    assert_eq!(v2(&left), v2(&left));
+    assert_eq!(v2(&right), v2(&right));
+    assert_ne!(v2(&left), v2(&program(None)), "membership remains semantic");
+}
+
+#[test]
+fn v2_values_remain_distinct_across_former_depth_boundary() {
+    for depth in [0, 1, 63, 64, 65, 128, 256] {
+        let nested = |leaf| (0..depth).fold(ValueR::Num(leaf), |v, _| ValueR::List(vec![v]));
+        let left = program(Some(nested(1.0)));
+        let right = program(Some(nested(2.0)));
+        assert_changed(&left.ir, &right.ir, "nested leaf");
+        assert_ne!(v2(&left), v2(&right), "depth {depth}");
+    }
+}
+
+fn unbound_record_fixture(kind: hymeko::ir::ir::DeclKind, to_a: bool) -> TestIr {
+    use hymeko::ir::ir::{DeclKind, EdgeRec, NodeRec};
+    let mut t = TestIr::new();
+    let root = t.node(&["m"], DeclId::NONE);
+    let a = t.node(&["m", "a"], root);
+    let b = t.node(&["m", "b"], root);
+    let unbound = t.decl(&["m", "unbound"], kind, root);
+    let bases = vec![plain(S::Plus, if to_a { a } else { b })];
+    match kind {
+        DeclKind::Node => t.ir.nodes.push(NodeRec::new(unbound, bases)),
+        DeclKind::Edge => t.ir.edges.push(EdgeRec::new(unbound, bases)),
+        DeclKind::HyperArc => panic!("this fixture constructs a node or edge"),
+    }
+    assert!(t.ir.as_node(unbound).is_none());
+    assert!(t.ir.as_edge(unbound).is_none());
+    for child in [a, b, unbound] {
+        link(&mut t, root, child);
+    }
+    t
+}
+
+fn assert_cbor_valid_record_fixture(t: &TestIr) {
+    let bytes = hymeko::writers::cbor_writer::encode("model.hymeko", &t.ir, &t.idx, &t.it, &[])
+        .expect("unbound concrete record is accepted by the Core encoder");
+    hymeko::writers::cbor_writer::decode(&bytes, &hymeko::ir_stream::DecodeLimits::DEFAULT)
+        .expect("unbound concrete record is accepted by the Core decoder");
+}
+
+#[test]
+fn v2_covers_validated_unbound_node_record() {
+    let left = unbound_record_fixture(hymeko::ir::ir::DeclKind::Node, true);
+    let right = unbound_record_fixture(hymeko::ir::ir::DeclKind::Node, false);
+    assert_cbor_valid_record_fixture(&left);
+    assert_cbor_valid_record_fixture(&right);
+    assert_ne!(
+        left.ir.nodes.last().unwrap().bases,
+        right.ir.nodes.last().unwrap().bases
+    );
+    assert_ne!(v2(&left), v2(&right));
+}
+
+#[test]
+fn v2_covers_validated_unbound_edge_record() {
+    let left = unbound_record_fixture(hymeko::ir::ir::DeclKind::Edge, true);
+    let right = unbound_record_fixture(hymeko::ir::ir::DeclKind::Edge, false);
+    assert_cbor_valid_record_fixture(&left);
+    assert_cbor_valid_record_fixture(&right);
+    assert_ne!(
+        left.ir.edges.last().unwrap().bases,
+        right.ir.edges.last().unwrap().bases
+    );
+    assert_ne!(v2(&left), v2(&right));
+}
+
+#[test]
+fn v2_fallback_handles_unbound_and_aliased_anonymous_declarations() {
+    let mut unbound = program(None);
+    unbound.ir.push_anonymous_arc();
+    assert_eq!(v2(&unbound), v2(&unbound));
+    let mut aliased = program(None);
+    let second = aliased.ir.push_anonymous_arc();
+    aliased
+        .ir
+        .bind_arc_decl(second, hymeko::common::ids::HyperArcId::new(0))
+        .unwrap();
+    assert_eq!(v2(&aliased), v2(&aliased));
+    assert_ne!(v2(&unbound), v2(&aliased), "the binding is observable");
+}
