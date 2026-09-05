@@ -1,0 +1,20 @@
+{
+    "bench":  "",
+    "executable":  "D:\\hnnwork\\platform-audit\\core\\target\\release\\deps\\spmm_bench-332b0f039af0f53a.exe",
+    "executable_sha256":  "3C8C86A1DB5FE3AABFE0BA8DB53AAAB886A8C96427CCE9E71904955863DE4249",
+    "arguments":  "--bench \"spmm_gpu_resident/E_reused_single_wait/medium/fd32$\"",
+    "working_directory":  "D:\\hnnwork\\platform-audit\\core",
+    "filter":  "(all)",
+    "rayon_threads":  24,
+    "exit_code":  0,
+    "wall_seconds":  12.12,
+    "peak_working_set_mib":  632.41,
+    "peak_paged_mib":  1240.754,
+    "peak_virtual_mib":  7036.695,
+    "peak_observed":  true,
+    "poll_interval_ms":  100,
+    "cap_mib":  16384,
+    "terminated_for_cap":  false,
+    "cap_ok":  true,
+    "cap_16gb_ok":  true
+}

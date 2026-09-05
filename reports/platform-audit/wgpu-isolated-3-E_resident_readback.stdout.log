@@ -1,0 +1,8 @@
+spmm_gpu_resident/E_resident_readback/medium/fd32
+                        time:   [2.8138 ms 2.9031 ms 2.9929 ms]
+                        thrpt:  [8.5521 Gelem/s 8.8168 Gelem/s 9.0966 Gelem/s]
+                 change:
+                        time:   [−0.9348% +10.280% +22.197%] (p = 0.07 > 0.05)
+                        thrpt:  [−18.165% −9.3216% +0.9437%]
+                        No change in performance detected.
+

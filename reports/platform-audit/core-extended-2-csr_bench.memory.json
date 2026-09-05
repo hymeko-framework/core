@@ -1,0 +1,20 @@
+{
+    "bench":  "csr_bench",
+    "executable":  "D:\\hnnwork\\platform-audit\\core\\target\\release\\deps\\csr_bench-9d9078c148c72879.exe",
+    "executable_sha256":  "088E690629CBF66299A57AC64529F547C3EEE8829EEE35D4B11BFAFEDED0407E",
+    "arguments":  "--bench \"csr_spmm_paths/(serial|parallel)/nnz16k/fd32\"",
+    "working_directory":  "D:\\hnnwork\\platform-audit\\core",
+    "filter":  "csr_spmm_paths/(serial|parallel)/nnz16k/fd32",
+    "rayon_threads":  24,
+    "exit_code":  0,
+    "wall_seconds":  17.462,
+    "peak_working_set_mib":  95.074,
+    "peak_paged_mib":  122.012,
+    "peak_virtual_mib":  4271.234,
+    "peak_observed":  true,
+    "poll_interval_ms":  100,
+    "cap_mib":  16384,
+    "terminated_for_cap":  false,
+    "cap_ok":  true,
+    "cap_16gb_ok":  true
+}

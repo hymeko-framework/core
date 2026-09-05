@@ -1,0 +1,1352 @@
+﻿[
+    {
+        "repository":  "hymeko_simulator",
+        "path":  ".cargo/config.toml",
+        "sha256":  "AA48CC37F21BFC2FD0589CE39BCA08A3EC2535E16D19E639A8191A1651BDDD2E",
+        "bytes":  325
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  ".duplication-baseline.json",
+        "sha256":  "75255DFCA8767199BAF51AB07BB075663522C442D68438ABFAF412C071EA401F",
+        "bytes":  1070
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  ".gitattributes",
+        "sha256":  "385AABB139902C732CC822FF949B55D32F5649C06E69758375696B89AEA31DAB",
+        "bytes":  548
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  ".gitignore",
+        "sha256":  "068D96F508D3BCB0154969E5C0D02827DFD682E9C2A1A9D1FD17D5C377C60834",
+        "bytes":  179
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "Cargo.toml",
+        "sha256":  "1FA2BAE22704AB1FBAEB440FC33957DC5E2FC617C54A8FF2274926A3AC922A33",
+        "bytes":  5954
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "docs/usage.md",
+        "sha256":  "F50B6789E681FAC2D6BD76531EA3A4E7C2A9A3715F41053A693FF88EC34587BC",
+        "bytes":  17584
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "examples/capture_cradle.json",
+        "sha256":  "266753EE43AB4568795521AA0684EC0E42AB52BE799AB35D71A0DD5113D78DE0",
+        "bytes":  3540
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "examples/coin_delivery.gif",
+        "sha256":  "A0A80FF45F12173A6374D469F8B126BD34DBE65F7A5311DC454E538984E75E2C",
+        "bytes":  129909
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "examples/coin_delivery.json",
+        "sha256":  "A162E6B5F96271C44E6CE62A86FC0907CFE727E630353B66FEF2585120DB79AF",
+        "bytes":  136213
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "examples/coin_home.png",
+        "sha256":  "8656A960577B69FC001BCBAF1836D21E17D8C33A5B345DCC527258DE532F1FA3",
+        "bytes":  96512
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "examples/hymeko_scene.png",
+        "sha256":  "D625C2ECF0669E84EFBD54D800E0B8D0D1C23BA6E7584153E05A1E935B9BFD55",
+        "bytes":  58609
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "hymeko/coin_control.hymeko",
+        "sha256":  "0371B10257C16999FC7C2FFD4D0408044E4448B0D3D77BAC6E9217C34DA81004",
+        "bytes":  2735
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "hymeko/coin_delivery.hymeko",
+        "sha256":  "F1F863DBF807FF92FD42A4E552456A63D6FC17DCE50DC3A528D5FD5DCC519AAA",
+        "bytes":  3003
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "hymeko/coin_home_scene.hymeko",
+        "sha256":  "C020AE65E5921B995B073C7FE204E92326E9F468715EBE2F4DA454B2EE340057",
+        "bytes":  2890
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "hymeko/demo_electromagnetics.hymeko",
+        "sha256":  "49D60A9F90913BA1C081672C23017367477BE2362BE4EF92EBC65E16EFCB0050",
+        "bytes":  3141
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "hymeko/demo_hydrogen.hymeko",
+        "sha256":  "8A7B1CBC575F370C43EDC34FA5097FA95E44724BBCB48F24C2F493C9FCE7CC32",
+        "bytes":  7352
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "hymeko/demo_robotics.hymeko",
+        "sha256":  "853121F8E86E5AFB238B02F95E951707FA3372FE205A85571D10075436BCFDD7",
+        "bytes":  3941
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "hymeko/demo_robots.hymeko",
+        "sha256":  "81BD0E6830CA50B5527E8ADF9DE5D3F0A588533DEA31A1FF0ED2FB63FA2D7F5B",
+        "bytes":  6221
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "hymeko/double_pendulum.hymeko",
+        "sha256":  "1F4317DCBDDAEEC069A63EA2322BC926A8D13F1C84B5622691B8D049C9D4956E",
+        "bytes":  1444
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "hymeko/example_scene.hymeko",
+        "sha256":  "564BA75D64A5143909A85C59F6643E2913A9FB562176A722F040BAC12DF1703D",
+        "bytes":  2476
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "hymeko/meta_application.hymeko",
+        "sha256":  "D1DCF2EA7788466FBFF878BEC40A020CEF6E0BBA6048BF87D8486BE2A0F9497A",
+        "bytes":  1070
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "hymeko/meta_demo.hymeko",
+        "sha256":  "85A6AB560C64EB15375D2AF0279E7BE8804D3184682CAD9BBCF10D7875CF2930",
+        "bytes":  2075
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "hymeko/meta_scene.hymeko",
+        "sha256":  "D2C6EBABEE99B7FB761D2B416698860626418798112DD329833FEF9B45AB21B5",
+        "bytes":  390
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "hymeko/meta_ui.hymeko",
+        "sha256":  "77BFB4F1544036DFEBBAB6A68E9E46D6197E55AD6CB7C7F537E9077615C18C7C",
+        "bytes":  372
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "LICENSE",
+        "sha256":  "6283588D2379F825F15B0876EC20BB40F5DBAD9001287722695E31FF0A78F1EE",
+        "bytes":  1090
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "python/emit_reach.py",
+        "sha256":  "07B7AE7B675C5A5E4CFB5B8DD846F9A2A23D96718DCCE0882F8EEE64084EDB62",
+        "bytes":  4794
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "python/emit_run.py",
+        "sha256":  "19ED7A9DF3A398DFC4740DC18D75B996F8498D83A33D343C9E26EB50B2F9F9FF",
+        "bytes":  3240
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "python/hymeko_sim_emit.py",
+        "sha256":  "FE78E6696840465400FD21971D97DC992D1067750EFECDA0B8D489DE38AAD44F",
+        "bytes":  4467
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "python/playback_gif.py",
+        "sha256":  "AA17CF3272CB443A5358E9E12F1FE99411FB123D03C3EDF2E74D7184E5522071",
+        "bytes":  2066
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "python/tests/test_emit.py",
+        "sha256":  "C8980AD1164183024010369DE9161B0047C07749CB56A009925FA55CF2EE7B9B",
+        "bytes":  3799
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "README.md",
+        "sha256":  "2ED85EC887F192EB2CFC9CB2E9461E73B5840390CD0B0CC152ECD3F57520084A",
+        "bytes":  5149
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "reports/2026-08-30-surface-shading.md",
+        "sha256":  "ADA893AF367A3C9D5F0D1DB275938B6D10A984764287091F09BEF4FD1F163DA1",
+        "bytes":  11336
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "reports/2026-08-30-surface-shading/all.png",
+        "sha256":  "8A1CE50976E3086424D15AF02121E950295053917C0BD00C56C542B89875A13B",
+        "bytes":  325733
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "reports/2026-08-30-surface-shading/anisotropic.png",
+        "sha256":  "0E1EAB4D85669B18080E8A13C469AEA5EE69D9D369CBE61A539B30C948DB7F8E",
+        "bytes":  72254
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "reports/2026-08-30-surface-shading/bump.png",
+        "sha256":  "CCAD739372D7ACD3F8C20A1483CA32B79DF9B2DC8A219D5C876FA533D6D6B86E",
+        "bytes":  221534
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "reports/2026-08-30-surface-shading/off.png",
+        "sha256":  "763A6197816B227478DF3803551F15367AE164FCBBBCF04E1A1FCE8CC9881200",
+        "bytes":  74023
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "reports/2026-08-30-surface-shading/procedural.png",
+        "sha256":  "43F0A1C805A5D48DB12D89BA3351AFE68C25175837CF1E14E0AF80B2037E2837",
+        "bytes":  311398
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "reports/2026-08-30-surface-shading/reflective.png",
+        "sha256":  "191CFC51F776C68682B2A9D52A8081B6D7DA59E2E28A153528A5F2E0401B0083",
+        "bytes":  75164
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "reports/2026-08-30-surface-shading/shadows.png",
+        "sha256":  "33C955F0885BD1DB7B0E991DBA072E047CE973E739EBDA20D77DAF5CEDEBB7A3",
+        "bytes":  97966
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "reports/2026-08-31-indirect-light.md",
+        "sha256":  "757E2016D60ACD93A3678A637B10151A4B068516DDB5121BB56DE7CF17231F5A",
+        "bytes":  10370
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "reports/2026-08-31-indirect-light/ao-map.png",
+        "sha256":  "98782502BD04347B4F50CD965C84B8FF5B775F380D83226F626CB662C4918B36",
+        "bytes":  31744
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "reports/2026-08-31-indirect-light/contact.png",
+        "sha256":  "7C9243DD3F0B572A02BC21C1C7ABC2A075B7178BED53C707ECB6ACBEF285A38F",
+        "bytes":  36589
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "reports/2026-08-31-indirect-light/elevated.png",
+        "sha256":  "B7CEB0D23086E4EF042042C074DDABA10CDE8E8DCB89283D9CEE7467BE0329C2",
+        "bytes":  17313
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "reports/2026-08-31-indirect-light/full.png",
+        "sha256":  "684798531D1A848DD01DE29AD08E8E746352321C92F7522A75535C1AD6CE7267",
+        "bytes":  93152
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "reports/2026-08-31-indirect-light/plain.png",
+        "sha256":  "48DE5A5411A7697015670DD8A9D98B5600E1BB3F3DCE92E6CE0F20E29AC93D0F",
+        "bytes":  58938
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "reports/2026-09-04-contract-tooling.md",
+        "sha256":  "7A8B40DC176B160063867C0F4BA0F49FE9014BE6FB93D5702382E9D17577DF57",
+        "bytes":  15247
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "SCHEMA.md",
+        "sha256":  "275BA19A0B922130F8966906CF2CBF5C3872E6B2BB00440A0A2907F131FB137F",
+        "bytes":  6987
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/app.rs",
+        "sha256":  "E075518776BD1A144E4E40A2C23279CCACB888BEFF10515A8552D59F89445358",
+        "bytes":  17223
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/application.rs",
+        "sha256":  "30013B6FDC8BE272553048164A818FA09B9FDD3E76E29B36455C1E93D8242CC0",
+        "bytes":  4264
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/bin/view.rs",
+        "sha256":  "403D17EE8DBF84B77DE5C73EDB607D7AB10810778A443B7365CACC9F89386E23",
+        "bytes":  4070
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/cli.rs",
+        "sha256":  "0A35654894F5D10C46D31A9574911E97383A57B9AB71260A937EC722B70DF518",
+        "bytes":  5464
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/dynamics.rs",
+        "sha256":  "E134D761A42E7E893BD0F94491D4166E0FA6A83424086E7FFD1177487E1AA10D",
+        "bytes":  26686
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/electro/mod.rs",
+        "sha256":  "5502869A5D425B5318389FF28399EDE38FF368389D21C03479E52F6CB07C2654",
+        "bytes":  813
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/electro/port_hamiltonian.rs",
+        "sha256":  "8CD08167D398A225ADD39F2E8C4C754D320ABCBA8AC1AE76E402923815D7CDFB",
+        "bytes":  22901
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/electro/port_hamiltonian/tests.rs",
+        "sha256":  "28ACA4D3EBA53F2B944807067CDE08563DE62B7E5971B9C2891D9DAF91D213FC",
+        "bytes":  21346
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/electro/scene.rs",
+        "sha256":  "D9F9D805B9A6F8C8203842179DA9EF0823BABE254489EDA777EC4E3810974496",
+        "bytes":  20342
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/electro/scene/annotations.rs",
+        "sha256":  "5C88EF902E425910BD3FCBD0E0B574A9129D3A522960AAC399EED4D242558218",
+        "bytes":  13351
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/electro/scene/builders.rs",
+        "sha256":  "9062F3DA6CABB873655AE3959F0A7F3808C97B6A74A05033856BC3AB994CD9AB",
+        "bytes":  30432
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/electro/scene/calculations.rs",
+        "sha256":  "8DF4ED518C1D8759F9B9241C26ADAA96173FD88B7A1F9397BF4A61E98DAD0F95",
+        "bytes":  14612
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/electro/scene/circuit.rs",
+        "sha256":  "A0079F42668A7B8869E3378DF41E8EA604ED17C1E3D0762308DC4D6D9132A41A",
+        "bytes":  31789
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/electro/scene/surfaces.rs",
+        "sha256":  "0FCB5C98CB8B4A8862F556852840993487F7E4E3FD09E2709CEE3C5DAEE01A1D",
+        "bytes":  17097
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/electro/scene/tests.rs",
+        "sha256":  "DB0491416B215E9267A8EAF8A48A4D736936DEE8247A42B4B7D9871B7B26AB4A",
+        "bytes":  6650
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/field.rs",
+        "sha256":  "80928219997756C13FB1BC1537A50285A3F897666686A93E1C8DF9DBF9914AE8",
+        "bytes":  7869
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/host.rs",
+        "sha256":  "296365D11843C2B3E29028464E0692A23251D0296A37CF10C18BB56ED549D7A6",
+        "bytes":  8083
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/hymeko_scene.rs",
+        "sha256":  "7773FFA46CED3144162D8FA7E6C5C5F3E6FB9765796F3B07A195783D375D1931",
+        "bytes":  7799
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/lib.rs",
+        "sha256":  "C34DBBB2040B93EEF8B925F38C39BC1BD6171F0BD7BC1EFAD595FF56707E0D36",
+        "bytes":  1935
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/main.rs",
+        "sha256":  "97970E5C96DD3167284F76F9397516092ED30706D5E95E7FD1D966CFDAC044E6",
+        "bytes":  4091
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/mesh.rs",
+        "sha256":  "5F81FD0D5AC162C0EE69BD5981205305D7A6D36B5868E8D3ABA081F684ECE547",
+        "bytes":  7845
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/mode.rs",
+        "sha256":  "D456BBA708936B8C14F1F16A36E2F6691001D7E3A8809E2C5B97605DE318A481",
+        "bytes":  51552
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/model_ingress.rs",
+        "sha256":  "E8DE94D39B3C37A6B567600129F787CBCBEB0ED9812012B8FA7E2530D0D4FA70",
+        "bytes":  4273
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/native.rs",
+        "sha256":  "D47BC898A44ACAE8CEB5D61A8FD7DCD3734B735022006CFFABD4755A6CC33A1E",
+        "bytes":  22940
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/overlay.rs",
+        "sha256":  "84DE548075553672216F711DA04BD5C48A8CA73298DC3E3D8E813D72E94CDF99",
+        "bytes":  2965
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/pick.rs",
+        "sha256":  "E3D0C92BE97F354B79E2DA8E46424E75B2FF4A5D6C0313B503F604F92ECDF656",
+        "bytes":  9843
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/quantum.rs",
+        "sha256":  "97712F9648057C338AE0A891A6186140B0F34EC4DE7E34C6B3803224F505478A",
+        "bytes":  31179
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/quantum_surface.rs",
+        "sha256":  "782B54369217C2257C71794F36D35C88911FCF587AB3556E5E88F36821231820",
+        "bytes":  18196
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/render.rs",
+        "sha256":  "C4A9ABBF2B095178C649D5B6F3F560BDE2DB2A6CC51E42897444C94FA2AC86F9",
+        "bytes":  92334
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/robot.rs",
+        "sha256":  "C2F16611208967A9728E18FA6343FEDB61D49E20432BFAD792B1841CA0B8D490",
+        "bytes":  18289
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/runtime.rs",
+        "sha256":  "B1D654A1EB64B1218E7A4F26C74C71D9D3342537FE25625255BAB490681E36A2",
+        "bytes":  9044
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/runtime/tests.rs",
+        "sha256":  "6777B957BEFFBD8A4C662E0B45C97966E6DAD93597C6D67EA0D36F7955B75D1C",
+        "bytes":  2169
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/scene.rs",
+        "sha256":  "FA525741E8509F032A7A88A9EAA0C7FFA54C876608793E35B9E29639560D0BCD",
+        "bytes":  13792
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/scene_desc.rs",
+        "sha256":  "FF6DB153A3703DE3DDF8115C67796C5795498A4101347B02CFD805F30796FDF2",
+        "bytes":  10762
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/scene_view.rs",
+        "sha256":  "68870425EFCF8B1205B7C34D66088914D65D067A067BEECFC7DE8A3A20C1B007",
+        "bytes":  28872
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/sensors.rs",
+        "sha256":  "F426271821891B2B5B2256CD7E2DD7B07FF78BE36205B59096F0C02B2BDE2650",
+        "bytes":  7100
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/sensors/tests.rs",
+        "sha256":  "AF5B5959BCF8708DBAE78DF20B3A8AFCF103DDAD870A56FD127910ACF5D062EB",
+        "bytes":  2048
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/shader.wgsl",
+        "sha256":  "3FFB408F4A0BF5C665FBDF9ADF5A7EF24F21D759B2647868717769771A7D0821",
+        "bytes":  37387
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/source.rs",
+        "sha256":  "2DAA84B654149819FA64DBFBF8A9358FAD7884938007DEF1E8A6C5F31AFE9B28",
+        "bytes":  1667
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/spatial.rs",
+        "sha256":  "EB424BD04F81CB6825716393946CE51C832C0AB1B4B8201B7885FE8A7A37D4B4",
+        "bytes":  13345
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/spatial/tests.rs",
+        "sha256":  "7CCF605E8F1A2FB2BDFE180F5FF39EB156BD6B0F0A296FB5FF37BCA41AD0E113",
+        "bytes":  4613
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/ui.rs",
+        "sha256":  "EC27FC22C57DF40190C289136BDD6E320D19BFD5CAF0933F4650389AF46435ED",
+        "bytes":  6520
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "src/web.rs",
+        "sha256":  "E7E3A84170A33DDB561E351AF74C6F180BADC73B0D65811E728CA81599B3066C",
+        "bytes":  67203
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "SYMBOLS.md",
+        "sha256":  "E4AD325880F81EF943053A36E7D97E839B9B8DD5490D57AEE513CFC2AD0379D7",
+        "bytes":  11509
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tests/anchors.rs",
+        "sha256":  "D5D207FE2A1B73ACA114BDA8C5EDBCDCBFFA96796EB4F620E8061E795E316AA9",
+        "bytes":  7628
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tests/app.rs",
+        "sha256":  "C7D98631429AD296F271A52EEEAD65AFDF808C544DE8DF37751B2B007DEA9314",
+        "bytes":  3921
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tests/cli.rs",
+        "sha256":  "677957C45BB9E11210CF1B480BF3A3617EB3B1CB59029CDD620DEF4907333618",
+        "bytes":  5725
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tests/declared_port_hamiltonian.rs",
+        "sha256":  "B323E3847908DF07D19157D68060E3B6355A15510DFC977EABF407059FF37F9B",
+        "bytes":  15435
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tests/dynamics.rs",
+        "sha256":  "B67B36DE4544AD58C6FBBBF8CC2A1508F8E94F323176C8A8AF9C60E23047B43F",
+        "bytes":  24762
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tests/fiducial_overlay.rs",
+        "sha256":  "131399D273D998370ED88A0280804FC9B4E4A06067E16C65E5ED6DB6A3394C0F",
+        "bytes":  932
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tests/host.rs",
+        "sha256":  "259B37F70BDB322485222682B00041C9C058F98173115FF2D6CEC9B0D3872995",
+        "bytes":  1932
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tests/hymeko_scene.rs",
+        "sha256":  "8DB739716776B742F9F5A2F60F80AD6219A6151AC008EB3F55D748A95EDAB173",
+        "bytes":  5278
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tests/hymeko_scene_ir.rs",
+        "sha256":  "503A33B1C19F0313E55041D5F84E0713A7FF75AE8E402B59A0E832657646030D",
+        "bytes":  7381
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tests/lighting.rs",
+        "sha256":  "FE326A8005D5F0BA55B9B33CF6F486499731A515CB4389908057AFB05E0275CB",
+        "bytes":  9728
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tests/mode.rs",
+        "sha256":  "E5E18C130B2E4C68B1A7CDABB56752F1C51E92C26F39F5BF143958D3D730648E",
+        "bytes":  16389
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tests/model_ingress.rs",
+        "sha256":  "659A4DECE707BD9F250293313823567E80A0B7A86DC57C2A74244E277C44DCE5",
+        "bytes":  4210
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tests/pick_geometry.rs",
+        "sha256":  "B489AE154027BE73CBA0857A025530ABA42D2CEB7EA33A9E6D968D117E0AC905",
+        "bytes":  7247
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tests/quantum_drive.rs",
+        "sha256":  "A556AE7822B2BE2989A9C55282EF15EE7926F550E1AE595D50C8ADB40FFA28AC",
+        "bytes":  12018
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tests/readout.rs",
+        "sha256":  "9EA99D01F0B0532942D99D35E851780A5CD0FD7232515260969B9FB32EBA7B10",
+        "bytes":  8268
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tests/render_into_formats.rs",
+        "sha256":  "F6A7AFB66BC01DF69590E56818C50A31A790834963F0816B07C4D3CC78DE39B4",
+        "bytes":  10401
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tests/resistor_bands.rs",
+        "sha256":  "2482BDB7708B4103BB6534417D02C56F92DCE96D49B4F87FA4E383B7DAADA38B",
+        "bytes":  3019
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tests/robot.rs",
+        "sha256":  "D9E095E44C9F7180E34AAD4F11375C69CE4576E51DFC866679FBB68DA12B4BBE",
+        "bytes":  11253
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tests/runtime_binding.rs",
+        "sha256":  "0A6900F07F060650B61FD602EB8DDFB714BBBDF6550F6C17139940C80FF15AA8",
+        "bytes":  2133
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tests/shader_uniformity.rs",
+        "sha256":  "1228FD91952EA367B1AB42E9371422AFCD080ECBAE5DB4D459A85E9D7F5099EC",
+        "bytes":  3676
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tests/smoke.rs",
+        "sha256":  "061BDEF5F11EF6F1C08A5B4109C713998FC463CC2A19AA70B8D5A2880F43E6EB",
+        "bytes":  21453
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tests/ui.rs",
+        "sha256":  "B7DB8003636C21C33854A688CC66BE0D136B51CD03E1744184E767D2C8327C0B",
+        "bytes":  3225
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tooling/ci/duplication-gate.yml",
+        "sha256":  "67DD48F6D0715F021238741459CC9A596D1B98640B1ADF2931D9FB3C86A2DFD6",
+        "bytes":  4295
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tooling/duplication_baseline.py",
+        "sha256":  "19168934FA10DD0224241ABB9FF46327998E3C7E3C61C98DE4142586DAFC7B8D",
+        "bytes":  12288
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tooling/gen_symbols.py",
+        "sha256":  "2038EB144FAB967B56EFAB56E4AA7D23F16147858138002F87694FC481875546",
+        "bytes":  25734
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tooling/hooks/commit-msg",
+        "sha256":  "6BE105BACCF6DD92EE5E8660F4129A36480F74BFEE8CF64A89C681C8A2D80633",
+        "bytes":  1689
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tooling/hooks/install.sh",
+        "sha256":  "0D846EA6902AEB96FCD2C4B7E4382712A7CF8F802DFCE579249946A47C676EE8",
+        "bytes":  2071
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tooling/hooks/pre-commit",
+        "sha256":  "0B5E23F6BCF738CCD417EBF2B7C8ECDB9CBEFF6E502A19024DE0C06AAABE436C",
+        "bytes":  4745
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tooling/preflight_new_artifact.py",
+        "sha256":  "B40CFAAB3D90F854DE5238635C5698844250507C6F8A21A807C38530970661EA",
+        "bytes":  17214
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tooling/tests/conftest.py",
+        "sha256":  "C7E310F16B579DF9F83CF5EB264B62FAB94F493BC01BA82394F1F2CC16D6B5A2",
+        "bytes":  1067
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tooling/tests/fixtures/empty/.gitkeep",
+        "sha256":  "116A7D6BAC1A80C1C3A5CD966A337CAFB3ED47877C46A1026E610A1F109DBBE6",
+        "bytes":  55
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tooling/tests/fixtures/mixed/Cargo.toml",
+        "sha256":  "D0EC7C5AFB2B37709C326340418748FC2A27DC9BB3A9C49F39B272366C98D12F",
+        "bytes":  49
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tooling/tests/fixtures/mixed/include/engine.h",
+        "sha256":  "1DF01A5721CE5434AAFF8321F3AE688A3FB2CA893BEFCBF3FD6129AA47175418",
+        "bytes":  416
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tooling/tests/fixtures/mixed/include/engine_impl.c",
+        "sha256":  "0D8FB25AB38E6AF14C6142092F07F44F83D74FCFFF20900E8442DC331A514574",
+        "bytes":  121
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tooling/tests/fixtures/mixed/src/lib.rs",
+        "sha256":  "AAB8C63F1793849C19CDB0A7478A921AC79ADE9193C8271D7505694B4CC2CBF7",
+        "bytes":  124
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tooling/tests/fixtures/mixed/tools/helper.py",
+        "sha256":  "869A978A851EB85126680E5B9ABBF585ED243BB2C08B6DF657CEB7BA45C28530",
+        "bytes":  87
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tooling/tests/fixtures/no_charter/Cargo.toml",
+        "sha256":  "548A4728A6D3FCEE41D0F156C6D64CB25CCB9432148E74E7F87C4E082BA18222",
+        "bytes":  49
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tooling/tests/fixtures/no_charter/src/lib.rs",
+        "sha256":  "7B5839CC34CF15ED14FE0063598FDB117037579F71C5457E64271B167B7F23E0",
+        "bytes":  86
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tooling/tests/fixtures/python_only/pkg/__init__.py",
+        "sha256":  "7F25769D49D2B92910C775AF465A01918B2553E9E707DF35A15720BC3C6EF916",
+        "bytes":  115
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tooling/tests/fixtures/python_only/pkg/plain.py",
+        "sha256":  "0E7D1E3D3AB0A9FEDB3B8543192C3BF9ED16C60D83AD5540DB89FC1CFF61A862",
+        "bytes":  199
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tooling/tests/fixtures/python_only/pkg/reservoir.py",
+        "sha256":  "C657CF5CF0093FBB1F6A8F35E5FEA9CCF8623DE2A15110D083082C1169631BDB",
+        "bytes":  550
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tooling/tests/fixtures/python_only/pyproject.toml",
+        "sha256":  "1EC998A7486283F8A512175593D7F9C17FF42D73ED10A41FAFC0B91355FA448C",
+        "bytes":  49
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tooling/tests/fixtures/rust_only/Cargo.toml",
+        "sha256":  "B728212B3E3CCE85AB0948869AF5E094D972365D969B36587D466B634F4E82A9",
+        "bytes":  68
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tooling/tests/fixtures/rust_only/src/lib.rs",
+        "sha256":  "A57AA243AB001D2C1910FD4C206FD7B84C246B505674E9F968E3B371D0CFA225",
+        "bytes":  970
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tooling/tests/fixtures/rust_only/src/tests.rs",
+        "sha256":  "748F16BF7B14F22D4F1FBDC2EBED240017D22302448FC17B72D6C362A57DD9F5",
+        "bytes":  121
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tooling/tests/test_duplication_baseline.py",
+        "sha256":  "9E69613A772ED22052C437FEB7E2CC1C7B077CA417F7CB90C28D1CA588E2618C",
+        "bytes":  4596
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tooling/tests/test_gen_symbols.py",
+        "sha256":  "58F6FB97423FDFEE11272DA50028C282A7C855BCC961FAACEC1A0DA28070436A",
+        "bytes":  11093
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "tooling/tests/test_preflight.py",
+        "sha256":  "6E9E2A4C356B2B3F73D290FFE530F96D88D594C865CC00037A32060742272FEF",
+        "bytes":  12946
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "transforms/app_records/queries.hymeko",
+        "sha256":  "FE8AA26868C0EFFC8831D9BDAC558F61F35C4C3A9A8806B363B5624F97019E19",
+        "bytes":  369
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "transforms/app_records/template.txt",
+        "sha256":  "CCD939DD10BE00A938347F0C3533C4A7911B885803209944906B706C1F11F193",
+        "bytes":  371
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "transforms/scene_records/queries.hymeko",
+        "sha256":  "0A34F47924A98391CFE32BB29603B990C9CEF10BB1F4362CA94A9D39E2DF5634",
+        "bytes":  68
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "transforms/scene_records/template.txt",
+        "sha256":  "3FDE3188237D1E4561A2803C8104FDCEB06BEB8F365B0FDB063FDD26DDDC5B51",
+        "bytes":  267
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "transforms/ui_records/queries.hymeko",
+        "sha256":  "FE45EF83F3879B1303BFED93E92A0B2222D0E2FA36C6D01EABC4EED19EB6C800",
+        "bytes":  64
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "transforms/ui_records/template.txt",
+        "sha256":  "BDC5E1AAB4A4B231C121AB8E28143418A65048D2981CF1BEC8E836B32248D911",
+        "bytes":  130
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web/.gitignore",
+        "sha256":  "1E1DA2DD8B20F043E48BE1209CD0C830656202C812A315C95050B9FDDE3E21CE",
+        "bytes":  35
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web/build.sh",
+        "sha256":  "7F9D3820DAA8E09F4EA787CB42F0DAC91417060C8B0E6F2A87C5C26A395B46A4",
+        "bytes":  1485
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web/capture.html",
+        "sha256":  "610C78ED3CFAB7832ED92BFBFB041F36660A2B58E24D5252BA5434E52CB8E9E6",
+        "bytes":  32811
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web/chain.html",
+        "sha256":  "8F365A048A62AB2920D68E388EEB2B50FC072B72440F963728DFF3BB7860D626",
+        "bytes":  87341
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web/check_frame.py",
+        "sha256":  "75BD6AC27BFBF968B143B30D5CEB2EBC115E0629EFBC3BD8DF19681D8F9007B3",
+        "bytes":  9464
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web/check_labels.py",
+        "sha256":  "A7D593E7707710BF907E6BD990A219C61270E2B58694D939B836FF329382AFEE",
+        "bytes":  10487
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web/circuit.html",
+        "sha256":  "2CA4CCC4161086AA390703DC981EEF7C9D061D2A44574B3D029FDEC9EE2F7D02",
+        "bytes":  89779
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web/index.html",
+        "sha256":  "72ACE652B2C3C185053846EE2252ECD8B5EE7AE2CC613FF183583E101B6E2A14",
+        "bytes":  86918
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web/make_pages.py",
+        "sha256":  "B367FA76C5222546D84C2CF296363F8079FEAF3C0F20B73091DBD354459E1D59",
+        "bytes":  3055
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web/README.md",
+        "sha256":  "24317B548C18ADC2323495DB889DF8BC4C7DD50136950064A9E9785AEB4622CC",
+        "bytes":  5387
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web/trace_capture.html",
+        "sha256":  "15D94178AF87123346DAB2BD586BFF59473FEC8D33EAC61BA91A5ADA009B1BD9",
+        "bytes":  32106
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web/tracked.html",
+        "sha256":  "91C9E091275108010FBBB33B3799C4D79F7A3DC56E5E048E408D2C7659320C05",
+        "bytes":  93047
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web/viewer.js",
+        "sha256":  "9EBC087A49D8A831EA290BFDE8E299E4FE2C51E8126478EB5E99BAE7DB4AF4BE",
+        "bytes":  39454
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web/viewer.tmpl.html",
+        "sha256":  "0C48A95DCF155ABFEEEACC758EA93EA45BC06FED30460458A37A2C4B10461A11",
+        "bytes":  10996
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web/zenoh-ingress.mjs",
+        "sha256":  "4F13E569D8D8DD42D5EDF9E5A7457EF2CF3A5490216E021538954086A7E02BB4",
+        "bytes":  6748
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web/zenoh-ingress.test.mjs",
+        "sha256":  "BF7593F77D8493E0F6203C5BE44882A8D9EEF2D2408580AE068ECDDCCFEB829B",
+        "bytes":  6937
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web-next/.gitignore",
+        "sha256":  "9D143C1A523F3FBE45111DD25402C8972C4FCCF673B4E111FEA6A600CAE03BB3",
+        "bytes":  56
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web-next/app/globals.css",
+        "sha256":  "08AA0070697D56B6CDD34043A68BD14428685FF4C056A3CBEDABF9B50035C2A8",
+        "bytes":  8467
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web-next/app/layout.tsx",
+        "sha256":  "7EFF6064C9CA3F39E8E5E913FB863F6E81F725E230BC55EE2A61AF230249788D",
+        "bytes":  497
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web-next/app/page.tsx",
+        "sha256":  "E16289B9762988207A07207DCBC2F198FFD505C0B8D3586EB16A0F3AAF1ED711",
+        "bytes":  358
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web-next/components/HymekoViewer.tsx",
+        "sha256":  "F9B720D3EC440352121485A0D58D26B4F270E55D6F1AECFC8EEE56035A85BFC3",
+        "bytes":  19798
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web-next/eslint.config.mjs",
+        "sha256":  "40D315CC009F0B10581401688BF41A092EF49B9E65C4429F2FD7727084EE6443",
+        "bytes":  301
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web-next/next.config.ts",
+        "sha256":  "E34A1C384289253FD4C46E94F70A11321405A268BAD526B36533C2397A07B637",
+        "bytes":  287
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web-next/next-env.d.ts",
+        "sha256":  "1862AC4BBBC5192D4BF562161DF66EA547ED3E67173100656AB606AE9797DB2B",
+        "bytes":  288
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web-next/package.json",
+        "sha256":  "927438492692A262CBBF9D6CD866865D10471E2B9197264DBEC93024D2BC0E5A",
+        "bytes":  845
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web-next/package-lock.json",
+        "sha256":  "28576235159237F67C9D9322D1E821F2E0ED87EAE37E218A0DACF8DD21A1F60A",
+        "bytes":  219366
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web-next/README.md",
+        "sha256":  "78F9083EACB2EA6F8CB5A5FBC7385B2BDBDB9234218E472C26337A4047A04BEF",
+        "bytes":  3361
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web-next/scripts/smoke-browser.mjs",
+        "sha256":  "F8A62F095FF9DD0DDFC86D8DBC5344E30D1D5F96C4D5B9A2F75B070642015C12",
+        "bytes":  8018
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web-next/scripts/sync-runtime.mjs",
+        "sha256":  "6C169C5B7A6ADF660F268EE7F7B7D13717E0BF1C645A1FC4076EF417ED404C3E",
+        "bytes":  2446
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web-next/tsconfig.json",
+        "sha256":  "6A10CC617E82D30A6C75B33E0A54309B73027680F198BAFD7BB90C1082E89B77",
+        "bytes":  764
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web-next/TUTORIAL.hu.md",
+        "sha256":  "0A9C3470CE5909C2AA70363FFF5305400F9313BFEFACA40AB125939583FA249C",
+        "bytes":  24849
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "web-next/types/runtime.d.ts",
+        "sha256":  "344C9913BEE47F5596B926F438CA3A7846FE62256E0E575592D003781B460ED2",
+        "bytes":  2785
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "scripts\\sync-mermaid.ps1",
+        "sha256":  "A5B08E35EB53EBC78C93C73DE2C16C1DE166282E5D0EAC5FBEF177331B2EDD9D",
+        "bytes":  1604
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "scripts\\build.ps1",
+        "sha256":  "F3C00268152A1F3A3AA4722FD64779ABAC1AACCC307FF048275A3323AE316821",
+        "bytes":  292
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "rust-toolchain.toml",
+        "sha256":  "2C6C06DAAE576901D5AE1824046862ED1AA59615827DE79D9C5E72F5A282183E",
+        "bytes":  69
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "README.md",
+        "sha256":  "6580F64BF53E6B22FF5E829EB7BD58256E741ABFC692EFF296CAA89920C0DFE6",
+        "bytes":  1241
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "include\\chordex.h",
+        "sha256":  "76F45AF5AAB84FA13A9867E32A767246710D35AE46401097B414C1D31F779469",
+        "bytes":  938
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "docs\\hymeko-zenoh-contract.md",
+        "sha256":  "35C554CFD8B1BF960A2BA84D321FA0310A63B65C0197DD54AE7B4E402746E945",
+        "bytes":  1960
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "docs\\drafts\\README.md",
+        "sha256":  "7789F9468C6ABE4C9A422D5C78ABC8AC21389C49F24D2F5F39E87AFAB500BD85",
+        "bytes":  1721
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "docs\\drafts\\architecture\\decisions\\001-owner-language.md",
+        "sha256":  "A7489271C2A8EA22A30D0C6EFA60E23AF44774DED3F26EFA13B16492CD3B4E12",
+        "bytes":  1647
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "docs\\drafts\\architecture\\decisions\\000-template.md",
+        "sha256":  "5004C9ACA07C4815B72B3BB0B07A681D16AEFC2DCAF307BBD26503BC447ABF65",
+        "bytes":  413
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "docs\\drafts\\architecture\\06-ecosystem-dots.md",
+        "sha256":  "606BEE187B35E005B9B929598E84758705143123EB7B3AF4F9699B60F88DF99E",
+        "bytes":  7126
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "docs\\drafts\\architecture\\05-runtime-data-flow.md",
+        "sha256":  "80962A03243385CB572946FE0EC2104B54CB27663ED1759E895BE7D436DB9570",
+        "bytes":  1601
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "docs\\drafts\\architecture\\04-repo-and-build.md",
+        "sha256":  "EB58ADE95265EF48995259C924242675CCABD1BD3226F08327B895D1087E4CC6",
+        "bytes":  1746
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "docs\\drafts\\architecture\\03-ffi-boundary.md",
+        "sha256":  "4E313435CB55A1C7140B37007D0F3EC0264D61F8BBD1170F2A2736AF8318188D",
+        "bytes":  2314
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "docs\\drafts\\architecture\\02-language-split.md",
+        "sha256":  "83586AAD526CFBEADBA9B9FE0B8F6B88C06108A7DC705BE9B6F744313DB8CB1B",
+        "bytes":  1948
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "docs\\drafts\\architecture\\01-system-context.md",
+        "sha256":  "94FA8D1CBC9F3D1BE0933725884EA006964DD9B19FC47D972C006B149B0304DF",
+        "bytes":  2074
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "docs\\drafts\\architecture\\00-overview.md",
+        "sha256":  "1038ED39B310692DBF32A44B14C0B24A3877CF1DA91CD42E4E6310EC62C1A099",
+        "bytes":  2884
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "docs\\diagrams\\README.md",
+        "sha256":  "C6ECE0D1672C84C403D71579DBEB8085910BF5CA533E62939668CC5C72A0E8D0",
+        "bytes":  1702
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "docs\\diagrams\\ecosystem-dots.mmd",
+        "sha256":  "F995444E6D94952BF46FD67503BCE7075931903E5ACC6FEF2700F7DC580A76DB",
+        "bytes":  1861
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "crates\\chordex-transport\\tests\\transport.rs",
+        "sha256":  "D4EAC5D86B26E1545D6C483F7D1295522C48F1370584F41CD629D5AF1CB78D0F",
+        "bytes":  12116
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "crates\\chordex-transport\\src\\zenoh_backend.rs",
+        "sha256":  "CD7A011123EFB97E5F27DC2F378351D551A586FB078BF0D32DFDB94F41D439C9",
+        "bytes":  5864
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "crates\\chordex-transport\\src\\sensor_msgs.rs",
+        "sha256":  "63A1B5CC68B666847239E3FCB29474500A8B9369A28A0E241AEEC0312FF3F8DE",
+        "bytes":  2837
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "crates\\chordex-transport\\src\\perception_msgs.rs",
+        "sha256":  "503F777EEA5E0B5394CFEEF164DB058B33447C4797C6C5B7DBC41F2C99B35DB9",
+        "bytes":  3766
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "crates\\chordex-transport\\src\\message.rs",
+        "sha256":  "33837F55F776BC3EE2E9AF53AF8E7168BD16532E6ADD3B057A52600862B4C51E",
+        "bytes":  2844
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "crates\\chordex-transport\\src\\lib.rs",
+        "sha256":  "E73BCD5BFDACFBB549A0380C4C3C4B0C5F3C419FFAFD5BFB4E593CD5F36EB372",
+        "bytes":  9937
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "crates\\chordex-transport\\examples\\sensor_stream.rs",
+        "sha256":  "F27AAC3726B8452C86C6F9528F3B6F844058903408882B91C74767BF122D0AD7",
+        "bytes":  4173
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "crates\\chordex-transport\\Cargo.toml",
+        "sha256":  "8457A87F6C53FBD166BF236C30DDD7197CA9A0FBACCE8F65273B853A503A0462",
+        "bytes":  840
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "crates\\chordex-core\\src\\lib.rs",
+        "sha256":  "18B8E25784C6BF6C3FFBE2A3C11F18AC298C458132C2BF67DB18E8E8F17A16D6",
+        "bytes":  326
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "crates\\chordex-core\\src\\latin.rs",
+        "sha256":  "73E9726EC37BD87B0C7332667B9E79947D48576A2E88F6557E70BFE354036B6E",
+        "bytes":  2644
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "crates\\chordex-core\\src\\ffi.rs",
+        "sha256":  "A1838E3B1974D06567AC44C95C21D3B38CE9F21AAE9AFB1E276A65F7104825B5",
+        "bytes":  3832
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "crates\\chordex-core\\src\\error.rs",
+        "sha256":  "D49B774021786DD80ED3A7B35DFA1B44F02162FCC7783C7E08D9BDAD67470F42",
+        "bytes":  622
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "crates\\chordex-core\\src\\chord.rs",
+        "sha256":  "6DF8F2AB8FD80BB09EDC81FC09CBDE2A3388853871779A45519C470BCDF54C8F",
+        "bytes":  2582
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "crates\\chordex-core\\src\\analyze.rs",
+        "sha256":  "393204BEAF35EE3189ADE0D5EFB488F390F33CC788B8D79D84F049C9F3AB2693",
+        "bytes":  437
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "crates\\chordex-core\\Cargo.toml",
+        "sha256":  "DB4781B10EE4C2B0BF84FCF71F5576283B869E6A7DAE90A3F1FFF7F8429B0E14",
+        "bytes":  272
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "crates\\chordex-cli\\src\\main.rs",
+        "sha256":  "C790549D372D61C986201291B8EF668835DAEC7B77426BA52290B6B04D47B7AF",
+        "bytes":  855
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "crates\\chordex-cli\\Cargo.toml",
+        "sha256":  "0EEDBED1DCB62C055212972EF6EA7131E0C301D76652FF30058CE34F192D7E97",
+        "bytes":  292
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "Cargo.toml",
+        "sha256":  "E1BA887ED4ECEB3AB0B7E45721C17D0A5DD714D0E75A45D46AF77DE0F053902E",
+        "bytes":  377
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  "Cargo.lock",
+        "sha256":  "39FC84B65406F544A9F8CB973E2F143458A9CB174C32EB9D98420F500EF1CDC6",
+        "bytes":  105071
+    },
+    {
+        "repository":  "soma_chordex",
+        "path":  ".gitignore",
+        "sha256":  "28CF0E4C0E78588DC852A0AA4AFEFBC8C2D117E70978F83761731A90D7A40985",
+        "bytes":  86
+    },
+    {
+        "repository":  "xr",
+        "path":  ".gitignore",
+        "sha256":  "6096D8EA6DF2332A6A03C5F4F1108DA11BC0718DB62E9EBFBAAD2F3438C4EF32",
+        "bytes":  21
+    },
+    {
+        "repository":  "xr",
+        "path":  "Cargo.toml",
+        "sha256":  "91E6515D4F35E0CBD44361242447D77AFC4B1C42DDE582C97249A701CAA07F52",
+        "bytes":  476
+    },
+    {
+        "repository":  "xr",
+        "path":  "hymeko_xr/Cargo.toml",
+        "sha256":  "238C9D1EF04CE33C5FEC71C83709E69CE3FA424A8AC3207D9F358031C3F5F05A",
+        "bytes":  352
+    },
+    {
+        "repository":  "xr",
+        "path":  "hymeko_xr/src/lib.rs",
+        "sha256":  "672556AB2E39F63BD528384B33527DD9462EE7B95EAAE44BEF0B0E6B7E6B48A7",
+        "bytes":  13121
+    },
+    {
+        "repository":  "xr",
+        "path":  "LICENSE",
+        "sha256":  "6283588D2379F825F15B0876EC20BB40F5DBAD9001287722695E31FF0A78F1EE",
+        "bytes":  1090
+    },
+    {
+        "repository":  "xr",
+        "path":  "README.md",
+        "sha256":  "FA9368A1DFDFBF3E7484356AE40E0A5503AFB6579AB91C68447BDB7BFC98F763",
+        "bytes":  7361
+    },
+    {
+        "repository":  "xr",
+        "path":  "web/availability.html",
+        "sha256":  "DA5387DF6E5690E7A412DB59370061DA0189439A6DDD90B207CE1F1B302F0062",
+        "bytes":  3391
+    },
+    {
+        "repository":  "xr",
+        "path":  "web/session.mjs",
+        "sha256":  "C7EB510A2A35E333EE6D7784AEB24A5F6149952D04B0FA9A09FC4ED8C7D0B209",
+        "bytes":  7934
+    },
+    {
+        "repository":  "xr",
+        "path":  "web/session.test.mjs",
+        "sha256":  "873B3720B2A3ADE94B1BD0BE0585D0E6E538558D23A5478AFEBC5DE90BD0CBA2",
+        "bytes":  4909
+    },
+    {
+        "repository":  "hymeko_simulator",
+        "path":  "Cargo.lock",
+        "sha256":  "E71116DDBA598B5C3DD09D8E97C7D0D1DEF39CFAC63D8F2FCBBDB9ACAFD8E440",
+        "bytes":  114601
+    }
+]

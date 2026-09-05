@@ -1,0 +1,20 @@
+﻿ARGS=--bogus EXIT=2
+unknown option or missing value: --bogus
+ARGS=--bx 0 EXIT=2
+invalid positive u32 for --bx: 0
+ARGS=--rows 0 EXIT=2
+invalid positive u32 for --rows: 0
+ARGS=--fd -1 EXIT=2
+invalid positive u32 for --fd: -1
+ARGS=--rows 4294967296 EXIT=2
+invalid positive u32 for --rows: 4294967296
+ARGS=--rows foo EXIT=2
+invalid positive u32 for --rows: foo
+ARGS=--rows EXIT=2
+unknown option or missing value: --rows
+ARGS=--bx 1024 --by 1024 EXIT=2
+workload exceeds checked index, workgroup or 8 GiB payload budget
+ARGS=--rows 4294967295 --deg 8 EXIT=2
+workload exceeds checked index, workgroup or 8 GiB payload budget
+ARGS=--rows 600000 --by 8 EXIT=2
+workload exceeds device launch dimensions

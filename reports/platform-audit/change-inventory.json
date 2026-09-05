@@ -1,0 +1,178 @@
+[
+  {
+    "repository": "core",
+    "path": "D:/hnnwork/platform-audit/core",
+    "base": "0a34a976457fdc775abe180295ab0ac70598a89f",
+    "head": "ca98469243a0c5281d32062f294ed939d89b4536",
+    "branch": "audit/platform-2026-09-05",
+    "commits": [
+      "ca98469243a0c5281d32062f294ed939d89b4536 fix(dev): supervise benchmark processes with logged working-set limits",
+      "8940c5cb0cedaf0b4420554fb3b672704617d5f1 fix(cuda): bound prototype inputs and separate verified timing spans",
+      "063bb3300c2dcd7cff9a37265ed9e87bc7782f2e bench(wgpu): verify and compare bounded resident readback lifecycles"
+    ],
+    "files": [
+      {
+        "path": "SYMBOLS.md",
+        "added": "2",
+        "removed": "4",
+        "sha256": "5a3d885d121f3b7dc64145d81391d0277a632a4d729a731c9010c46e7977d1e2"
+      },
+      {
+        "path": "hymeko_wgpu/benches/spmm_bench.rs",
+        "added": "89",
+        "removed": "11",
+        "sha256": "62e414447249955254e85fb34730f3dd62f403b808f55e146c6a0bf14500aef4"
+      },
+      {
+        "path": "hymeko_wgpu/tests/spmm.rs",
+        "added": "73",
+        "removed": "10",
+        "sha256": "99ffe464258f72c97fe552dd4a46d71af06b176995de7607db7caee25046b950"
+      },
+      {
+        "path": "scripts/dev/measure_peak_memory.ps1",
+        "added": "102",
+        "removed": "127",
+        "sha256": "2acadc53ec65b318d9f3be9539861e08e9f924724c2e5dae909c404bf8252f2e"
+      },
+      {
+        "path": "tools/cuda_prototype/spmm_prototype.cu",
+        "added": "125",
+        "removed": "22",
+        "sha256": "da94bd53472f53497e5d517a1f6881599eb5b8b524a659aa1b915ce898a7f714"
+      }
+    ]
+  },
+  {
+    "repository": "graph",
+    "path": "D:/hnnwork/platform-audit/graph",
+    "base": "b234c4871807dc255854cc4b50d1458547dca7d3",
+    "head": "25e8c9f25e0ba0001de1609d873bf6b53c34a9c4",
+    "branch": "audit/platform-2026-09-05",
+    "commits": [
+      "25e8c9f25e0ba0001de1609d873bf6b53c34a9c4 fix(graph): preserve directed slots and optimal consistent A-star paths"
+    ],
+    "files": [
+      {
+        "path": "SYMBOLS.md",
+        "added": "539",
+        "removed": "0",
+        "sha256": "4b366c8d5b3046263dd222d57308b856a75da931af757857f5942ad02bb66906"
+      },
+      {
+        "path": "hymeko_graph/src/direct_ir/informed.rs",
+        "added": "30",
+        "removed": "29",
+        "sha256": "f22eefd2e57a85831b9e0a419a1fb6fc886de29d7dde1c6bc82306ae83ad50b5"
+      },
+      {
+        "path": "hymeko_graph/tests/informed_search_vv.rs",
+        "added": "150",
+        "removed": "16",
+        "sha256": "fb655ee1f5a65a9d557f587d8e4cd1bb4997af7fd0138910268dc90c2215b1cb"
+      }
+    ]
+  },
+  {
+    "repository": "transformation",
+    "path": "D:/hnnwork/platform-audit/transformation",
+    "base": "4298cfca0ed12a734f0792b33d434f47b165b4fe",
+    "head": "1d7b813b95564d7d0ed1585298634430593a70fd",
+    "branch": "audit/platform-2026-09-05",
+    "commits": [
+      "1d7b813b95564d7d0ed1585298634430593a70fd test: make variant fixtures and debug panic checks profile portable"
+    ],
+    "files": [
+      {
+        "path": "hymeko_dynamics/tests/common/mod.rs",
+        "added": "4",
+        "removed": "1",
+        "sha256": "48c1d653ffd600df5197a4e02aabea8db5f04c67598d190a0b389f06deb5f111"
+      },
+      {
+        "path": "hymeko_formats/src/binary_graph.rs",
+        "added": "2",
+        "removed": "0",
+        "sha256": "908790dec90403d69f01eb1f7cacb2a2a1068d9421c3c2d9add31038f1128d54"
+      }
+    ]
+  },
+  {
+    "repository": "chordex",
+    "path": "D:/hnnwork/platform-audit/integration/work/soma_chordex",
+    "base": "50fff3788121862b0b0b8a73fbd30310b27082f8",
+    "head": "4bf70d78fc4b42ee574913c2beba0bf4737aa523",
+    "branch": "audit/platform-2026-09-05",
+    "commits": [
+      "4bf70d78fc4b42ee574913c2beba0bf4737aa523 feat(transport): bound canonical model snapshots with latest mailbox metrics"
+    ],
+    "files": [
+      {
+        "path": "crates/chordex-transport/src/lib.rs",
+        "added": "4",
+        "removed": "0",
+        "sha256": "5b3ece8d97b97c31549fc421d8c0e4e61e77a54d8e70e65a2855cfca62e98d97"
+      },
+      {
+        "path": "crates/chordex-transport/src/zenoh_backend.rs",
+        "added": "178",
+        "removed": "12",
+        "sha256": "05b6d2039bce84de1a5064dd3878efd1cc025ca00471429aa35f594d47b8e3e7"
+      },
+      {
+        "path": "docs/hymeko-zenoh-contract.md",
+        "added": "47",
+        "removed": "0",
+        "sha256": "068a29a712cf4837b68db05930016682a74bbb16ab9994741740239561ab6403"
+      }
+    ]
+  },
+  {
+    "repository": "simulator",
+    "path": "D:/hnnwork/platform-audit/integration/work/hymeko_simulator",
+    "base": "2eddbde8f8e833912ed6b18c95b56b70d6f523f4",
+    "head": "2139aa491be8ff685a712ce0092e527c87df2a12",
+    "branch": "audit/platform-2026-09-05",
+    "commits": [
+      "2139aa491be8ff685a712ce0092e527c87df2a12 feat(ingress): validate snapshot dedup and prove canonical CBOR over TCP"
+    ],
+    "files": [
+      {
+        "path": "Cargo.lock",
+        "added": "2490",
+        "removed": "43",
+        "sha256": "90d3aa9729349006d9050d80a2312707db191b1e9fa1f47fbebc183410e02677"
+      },
+      {
+        "path": "Cargo.toml",
+        "added": "5",
+        "removed": "0",
+        "sha256": "37cdb6367feb2962cac372d485d8f1bb3fa745370b5bbf6e088b9f689e12d8eb"
+      },
+      {
+        "path": "SYMBOLS.md",
+        "added": "79",
+        "removed": "4",
+        "sha256": "c862a92e75d768608b399f001c61d9609be93dc46b0431ca582ee948297cd7e5"
+      },
+      {
+        "path": "src/model_ingress.rs",
+        "added": "24",
+        "removed": "1",
+        "sha256": "6aa15f1446389079cbc5a53e0af40a6de75b1045503733392acc93ceb4d1090e"
+      },
+      {
+        "path": "src/web.rs",
+        "added": "25",
+        "removed": "5",
+        "sha256": "c55d741c01a761220d7d9ac3c77099621290ed64fc35f903145840691ff0aa87"
+      },
+      {
+        "path": "tests/model_ingress.rs",
+        "added": "375",
+        "removed": "23",
+        "sha256": "09cb7073216966d8f5fe83c3dc04939ecf6b7f7173c8ec74fc8e8bcd4616690d"
+      }
+    ]
+  }
+]

@@ -1,0 +1,20 @@
+{
+    "bench":  "",
+    "executable":  "D:\\hnnwork\\platform-audit\\core\\target\\release\\examples\\phase7_probe.exe",
+    "executable_sha256":  "0374B51635BFC661AB8389EEC45398C83E0799DF07B7D38B01AC80B096C13A3E",
+    "arguments":  "--part b",
+    "working_directory":  "D:\\hnnwork\\platform-audit\\core",
+    "filter":  "(all)",
+    "rayon_threads":  24,
+    "exit_code":  0,
+    "wall_seconds":  37.541,
+    "peak_working_set_mib":  653.07,
+    "peak_paged_mib":  1237.297,
+    "peak_virtual_mib":  6913.824,
+    "peak_observed":  true,
+    "poll_interval_ms":  100,
+    "cap_mib":  16384,
+    "terminated_for_cap":  false,
+    "cap_ok":  true,
+    "cap_16gb_ok":  true
+}

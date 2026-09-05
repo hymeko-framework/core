@@ -1,0 +1,20 @@
+{
+    "bench":  "",
+    "executable":  "C:\\Users\\kyber\\AppData\\Roaming\\uv\\python\\cpython-3.14.7-windows-x86_64-none\\python.exe",
+    "executable_sha256":  "6BF492976E3A0CBB10695171D7F11897C4935BA93BC078B3BC3BE52861D78ECC",
+    "arguments":  "-c \"import time; data=bytearray(64*1024*1024); time.sleep(3)\"",
+    "working_directory":  "D:\\hnnwork\\platform-audit\\core",
+    "filter":  "(all)",
+    "rayon_threads":  "inherited",
+    "exit_code":  -1,
+    "wall_seconds":  0.263,
+    "peak_working_set_mib":  75.074,
+    "peak_paged_mib":  71.973,
+    "peak_virtual_mib":  4228.539,
+    "peak_observed":  true,
+    "poll_interval_ms":  100,
+    "cap_mib":  32,
+    "terminated_for_cap":  true,
+    "cap_ok":  false,
+    "cap_16gb_ok":  true
+}

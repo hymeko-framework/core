@@ -1,0 +1,20 @@
+{
+    "bench":  "",
+    "executable":  "D:\\hnnwork\\platform-audit\\core\\reports\\platform-audit\\spmm_prototype.exe",
+    "executable_sha256":  "7A1A6131EF934B748E28A9B72C7426EA31CC344E444CABF131BDC09948803CB1",
+    "arguments":  "--rows 200000 --deg 32 --fd 32 --irregular --bench",
+    "working_directory":  "D:\\hnnwork\\platform-audit\\core",
+    "filter":  "(all)",
+    "rayon_threads":  24,
+    "exit_code":  0,
+    "wall_seconds":  0.863,
+    "peak_working_set_mib":  265.402,
+    "peak_paged_mib":  559.578,
+    "peak_virtual_mib":  103194.648,
+    "peak_observed":  true,
+    "poll_interval_ms":  100,
+    "cap_mib":  16384,
+    "terminated_for_cap":  false,
+    "cap_ok":  true,
+    "cap_16gb_ok":  true
+}

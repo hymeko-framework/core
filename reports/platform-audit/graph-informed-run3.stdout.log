@@ -1,0 +1,24 @@
+
+running 1 test
+
+=== informed Berge search benchmark (us; median-of-9 warm; single-host PROVISIONAL) ===
+
+-- grid 200x200, goal d cells right of start, unit cost: expanded-state reduction is the headline --
+    d |    Dijk us  Dijk exp |   A*L1 us  A*L1 exp    L1 x |   A*L2 us  A*L2 exp    L2 x
+   20 |       46.6       802 |       1.6        21   38.2x |       1.6        21   38.2x
+   40 |      238.0      3202 |       3.4        41   78.1x |       3.3        41   78.1x
+   80 |     1190.9     11931 |       7.2        81  147.3x |       6.7        81  147.3x
+
+-- window (arity 5, unit): Dijkstra-vs-BFS baseline; A*(Zero) overhead check --
+        m      nnz |     BFS us |    Dijk us |       cost
+     1000     4980 |       14.4 |       35.2 |        250
+    10000    49980 |      191.6 |      416.3 |       2500
+   100000   499980 |     7184.9 |    10136.3 |      25000
+
+-- untouched direct_ir op (regression guard): warm reachable_nodes --
+reachable_nodes m=200000 arity5: 13341.1 us (compare to graph perf report baseline)
+
+test bench_informed_berge_search ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.55s
+

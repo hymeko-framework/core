@@ -1,0 +1,20 @@
+{
+    "bench":  "",
+    "executable":  "D:\\hnnwork\\platform-audit\\core\\target\\release\\deps\\mod-771547210a436102.exe",
+    "executable_sha256":  "B1EF33F832860E4EED5DB7993D63E6A0E980461EABED7D2AFA25CC5B395DBD19",
+    "arguments":  "unified_ir::validation::cbor_roundtrip::canonical_cbor_memory_decode --exact --ignored --nocapture",
+    "working_directory":  "D:\\hnnwork\\platform-audit\\core",
+    "filter":  "(all)",
+    "rayon_threads":  24,
+    "exit_code":  0,
+    "wall_seconds":  0.704,
+    "peak_working_set_mib":  148.758,
+    "peak_paged_mib":  146.82,
+    "peak_virtual_mib":  4297.074,
+    "peak_observed":  true,
+    "poll_interval_ms":  100,
+    "cap_mib":  16384,
+    "terminated_for_cap":  false,
+    "cap_ok":  true,
+    "cap_16gb_ok":  true
+}
