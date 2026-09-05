@@ -1,0 +1,338 @@
+[
+  {
+    "path": ".claude/settings.json",
+    "change": "added",
+    "bytes": 1654,
+    "sha256": "539ce128133bed3af75145423611a923d45773f721cd7fb3ee42ae541d373832",
+    "lines_added": 31,
+    "lines_removed": 0
+  },
+  {
+    "path": ".gitattributes",
+    "change": "modified",
+    "bytes": 1150,
+    "sha256": "f605233c7d4fa42aaf4c1f745d5dcb794ab63e3c0a5204875efdc7319e2ae3eb",
+    "lines_added": 6,
+    "lines_removed": 0
+  },
+  {
+    "path": ".github/workflows/duplication-gate.yml",
+    "change": "modified",
+    "bytes": 2176,
+    "sha256": "845c91f1213053636938bdb850c1330e304c4752be3f6c47fb4addc74c7daa69",
+    "lines_added": 2,
+    "lines_removed": 2
+  },
+  {
+    "path": "AGENTS.md",
+    "change": "added",
+    "bytes": 1843,
+    "sha256": "d4336ff0eebb530d81a8383742b21779b70e5bee1931b1680690c88cdc5ced03",
+    "lines_added": 31,
+    "lines_removed": 0
+  },
+  {
+    "path": "CLAUDE.md",
+    "change": "modified",
+    "bytes": 15521,
+    "sha256": "abbb10269926d93937148c610f05b37037ecf1cffca16badd338675796c0f7a2",
+    "lines_added": 87,
+    "lines_removed": 27
+  },
+  {
+    "path": "docs/agent-contract/README.md",
+    "change": "modified",
+    "bytes": 2889,
+    "sha256": "1ed57c45b126ad3415727e04073cb2629abb074b2040b9decfcd4e7d8c0acd1c",
+    "lines_added": 47,
+    "lines_removed": 37
+  },
+  {
+    "path": "docs/agent-contract/repo/toolchain.md",
+    "change": "modified",
+    "bytes": 6321,
+    "sha256": "760294a28721d2a28126744155f9055d9222dd06ab7081e1c6c8e449ca51a93e",
+    "lines_added": 1,
+    "lines_removed": 1
+  },
+  {
+    "path": "docs/plans/2026-09-05-contract-provider-refresh/plan.mmd",
+    "change": "added",
+    "bytes": 305,
+    "sha256": "7ceb00dcd8ec0bce7b39d07138d4420035150db676bfb1b7fd9dcb5ddad8d2e3",
+    "lines_added": 9,
+    "lines_removed": 0
+  },
+  {
+    "path": "docs/plans/2026-09-05-contract-provider-refresh/plan.pdf",
+    "change": "added",
+    "bytes": 138602,
+    "sha256": "1c0b318eb52434d38e668e5f5a72ada867d2b055022377d285461ef47330faf4",
+    "lines_added": null,
+    "lines_removed": null
+  },
+  {
+    "path": "docs/plans/2026-09-05-contract-provider-refresh/plan.tex",
+    "change": "added",
+    "bytes": 4446,
+    "sha256": "e9875fbc5b0158fa74c42ff6b1de4e13bd48403e12ad8a47b3a1fa2a767d8f8f",
+    "lines_added": 72,
+    "lines_removed": 0
+  },
+  {
+    "path": "docs/plans/2026-09-05-contract-provider-refresh/plan.tikz",
+    "change": "added",
+    "bytes": 540,
+    "sha256": "46a99524c03d2a55b6e62d0a43b53a2baecfb36989dd619d5e4d7ba7209d1a10",
+    "lines_added": 9,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/2026-09-05-contract-provider-refresh.md",
+    "change": "added",
+    "bytes": 7904,
+    "sha256": "38fd4abbb44267698f694161216ca87ed27b03d718a2c70525c27b2ae3416155",
+    "lines_added": 122,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/duplication-direct.memory.json",
+    "change": "added",
+    "bytes": 740,
+    "sha256": "8d7d4c221b3316586a7fccba4e88d6d8ec8bed2d53978d00064a546934b80592",
+    "lines_added": 20,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/duplication-direct.stderr.log",
+    "change": "added",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lines_added": 0,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/duplication-direct.stdout.log",
+    "change": "added",
+    "bytes": 160,
+    "sha256": "89adbdfba1cc13d105dd1160f72afddef63a32d49e0f2cefaa79761cf8cebb79",
+    "lines_added": 2,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/duplication.memory.json",
+    "change": "added",
+    "bytes": 734,
+    "sha256": "cbf20249fd5b7f4dfed7d41a815597ab57a52c28e2c2539d1d0b0b28a10573f7",
+    "lines_added": 20,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/duplication.stderr.log",
+    "change": "added",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lines_added": 0,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/duplication.stdout.log",
+    "change": "added",
+    "bytes": 160,
+    "sha256": "89adbdfba1cc13d105dd1160f72afddef63a32d49e0f2cefaa79761cf8cebb79",
+    "lines_added": 2,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/final-verification.json",
+    "change": "added",
+    "bytes": 35139,
+    "sha256": "cabfea66f548cf145784393e2c0b1807f2899a0b11fe317764d570246dc10abe",
+    "lines_added": 129,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/hook-status.log",
+    "change": "added",
+    "bytes": 64,
+    "sha256": "e4f38f750db7a6d0678885b3854db402d253c98047fd40f5d75f9466bf99f1e7",
+    "lines_added": 2,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/missing-discovery.stderr.log",
+    "change": "added",
+    "bytes": 5902,
+    "sha256": "111771364c0a5473af60c8131711ac11e1cf4d94b89ceb266a9345836ea98ae7",
+    "lines_added": 96,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/missing-discovery.stdout.log",
+    "change": "added",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lines_added": 0,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/persona-invalid.stderr.log",
+    "change": "added",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lines_added": 0,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/persona-invalid.stdout.log",
+    "change": "added",
+    "bytes": 155,
+    "sha256": "b2d507a349e9d86c50da34e2b24df8774e9024e6968bb957448a611c1f78e9bf",
+    "lines_added": 1,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/persona-loop-guard.stderr.log",
+    "change": "added",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lines_added": 0,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/persona-loop-guard.stdout.log",
+    "change": "added",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lines_added": 0,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/persona-valid.stderr.log",
+    "change": "added",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lines_added": 0,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/persona-valid.stdout.log",
+    "change": "added",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lines_added": 0,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/plan-build.log",
+    "change": "added",
+    "bytes": 10350,
+    "sha256": "f12ea30e55ca2b94c9ff1cacb0666a3af0a28e94395a5d4ca9274bd9a1cecdc5",
+    "lines_added": 189,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/pre-commit.stderr.log",
+    "change": "added",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lines_added": 0,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/pre-commit.stdout.log",
+    "change": "added",
+    "bytes": 5693,
+    "sha256": "6534fe7db64322fa1c240e81df7bc901e66b0f3884fdc4b381747c8d44f89047",
+    "lines_added": 89,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/symbols-direct.memory.json",
+    "change": "added",
+    "bytes": 750,
+    "sha256": "bbe33423c7ed698b7f16d0593ccf8f327818c672b8bb2df647b16c4907b7060d",
+    "lines_added": 20,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/symbols-direct.stderr.log",
+    "change": "added",
+    "bytes": 265,
+    "sha256": "84c5f0c51919d0b9046f79e51a6ff9746163b5e1f0abbb6e0a755a23132b2556",
+    "lines_added": 5,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/symbols-direct.stdout.log",
+    "change": "added",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lines_added": 0,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/symbols.memory.json",
+    "change": "added",
+    "bytes": 744,
+    "sha256": "a9749e9cf1e930e3dfbc5c8a3787e6bf9be02ba22cb451bf44ee464cfa6f5353",
+    "lines_added": 20,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/symbols.stderr.log",
+    "change": "added",
+    "bytes": 265,
+    "sha256": "84c5f0c51919d0b9046f79e51a6ff9746163b5e1f0abbb6e0a755a23132b2556",
+    "lines_added": 5,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/symbols.stdout.log",
+    "change": "added",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lines_added": 0,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/verification.json",
+    "change": "added",
+    "bytes": 1605,
+    "sha256": "5a9f8321ff73a05c6e1ef46da813cf9b869144c4b0bee9171b409a40e80ab94b",
+    "lines_added": 63,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/with-discovery.stderr.log",
+    "change": "added",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lines_added": 0,
+    "lines_removed": 0
+  },
+  {
+    "path": "reports/contract-provider-refresh/with-discovery.stdout.log",
+    "change": "added",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lines_added": 0,
+    "lines_removed": 0
+  },
+  {
+    "path": "tools/hooks/commit-msg",
+    "change": "modified",
+    "bytes": 2489,
+    "sha256": "6d6181d7be54d7b99630759dad30bf74f56e36662ef3f3163128b07dc094235d",
+    "lines_added": 1,
+    "lines_removed": 1
+  },
+  {
+    "path": "tools/hooks/pre-commit",
+    "change": "modified",
+    "bytes": 3748,
+    "sha256": "60e4155acd2428c2140ca14432481624b2fcd0bdfe1ce4b82c34d91b1f5d35cb",
+    "lines_added": 1,
+    "lines_removed": 1
+  }
+]

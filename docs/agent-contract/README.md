@@ -1,46 +1,56 @@
-# The agent contract
+# Core's shared-contract adoption
 
-An operating contract for agents working in this ecosystem, split out of a single
-724-line `CLAUDE.md` so that a reader can open the part that governs the work in
-front of them instead of all of it. That was the whole point: a 724-line file does
-not get read.
+Core consumes `hymeko/hymeko` at provider revision
+`d02aa614bc06a348dbcbe3936dcd3b9285b8bdeb` (2026-09-05). Shared instructions and
+implementations stay in the provider; Core carries entry points, pins and its
+project-specific rules.
 
-**The universal half is synced from `hymeko/hymeko` @ `ff0c013`, not authored here.**
-`global.md`, `modules/` and `incidents/` each carry the source revision in their first
-line — edit them upstream and re-sync. `repo/` is this repository's own, because §1,
-§4, §10 and §11 describe *this* project.
+Use sibling checkouts named `core` and `hymeko`. The active rules are
+[`global.md`](../../../hymeko/docs/agent-contract/global.md) and its subject
+modules. Resolve a missing sibling before source edits; do not fall back to the
+historical copies here. Fetch relevant remotes and inspect local changes and
+ahead/behind status before synchronizing either checkout.
 
-Start at [`../../CLAUDE.md`](../../CLAUDE.md). It is the only file read first: the
-persona, the non-negotiables, this repository's own rules, and a pointer to
-everything here. Nothing in this directory restates it.
+Codex starts with root [`AGENTS.md`](../../AGENTS.md), requiring actual reads of
+[`CLAUDE.md`](../../CLAUDE.md), shared global rules and applicable modules.
+Claude Code imports `AGENTS.md` and the sibling global rules from `CLAUDE.md`.
+A Markdown link alone does not load instructions.
 
+The [provider reader guide](../../../hymeko/docs/agent-contract/README.md) gives
+the activation procedure. In a fresh Claude Code session, accept the external
+import/project trust and inspect `/memory`, `/status` and `/hooks`. Expected
+imports here: `AGENTS.md` and `../hymeko/docs/agent-contract/global.md`. Project
+settings supply the deterministic persona command and semantic Stop check.
+Codex file validation cannot establish a separate Claude session's trust decision.
+In a fresh Codex session, verify its loaded root `AGENTS.md` and subsequent
+mandatory shared-file reads.
+
+Portable gates resolve the provider revision in `tools/hooks/pre-commit` and
+`tools/hooks/commit-msg`:
+
+```sh
+sh tools/hooks/install.sh
+sh tools/hooks/install.sh --status
+contract-symbols --root . --check
+contract-duplication --root .
 ```
-CLAUDE.md                  persona, non-negotiables, this repo, the module list
-docs/agent-contract/
-  global.md                §0 the order of work; the nine principles in full
-  modules/
-    10-discovery.md        §0.1 §0.2 §6.1 §6.6 §6.7  — search, ownership, ledger, gate
-    20-testing.md          §3   — layers, coverage, determinism, benchmarks, metrics
-    30-code-health.md      §5 §6.2–§6.5 §7 §8  — layout, complexity, lint, errors,
-                                anti-patterns, patterns, contracts
-    40-observability.md    §3   — never run blind
-    50-reporting.md        §2 §9 — the plan bundle, the report, graphical output
-    60-hpc.md              §6.5 #16 — cluster array sizing
-  incidents/               what the dated rules cost, kept out of the rules
-  repo/                    §4 §10 §11 — this repository's own
-```
 
-What moved where, and what was deliberately not dropped, is in
-`reports/2026-09-04-contract-split.md`.
+Compare installed hooks before replacement and reconcile foreign logic. Git
+worktrees share the repository's hook directory. The installed-entry-point fast
+path is shared across repositories too: another installation can change its tool
+revision. Verify installation provenance on upgrades, or use the explicit pinned
+`uv tool run --from` commands in the report. Hook file equality alone does not
+verify the installed tool version.
 
-**The numbering is the original.** Modules keep `§6.1`, `§6.5 #16`, `§9` as headings
-rather than renumbering, so a citation written in a report before this split still
-resolves. That is why a module's internal ordering looks arbitrary — `10-discovery.md`
-runs §0.1, §0.2, §6.1, §6.6, §6.7 — and why each module opens with a contents line.
+Core does not run the provider-only `contract-self-check`; the hook retains its
+provider-source guard. The workflow template uses the same pin, but a tracked
+workflow does not prove an active Gitea runner.
 
-**A module is binding.** It is not background reading. The root file carries the three
-gates you must not have to open a module to discover; everything else is read when its
-subject comes up, before the work rather than after it.
+`repo/` stays Core-owned: resource budgets, toolchain and HyMeKo authoring. Local
+`global.md`, `modules/` and `incidents/` are historical snapshots of provider
+`ff0c013`, retained for dated report citations. Do not edit or re-sync them as a
+competing current contract. Section numbers keep their original meaning upstream.
 
-**The incidents are not rules.** They are the dated cases the rules came from, moved
-out so that a rule reads as a rule. A module that cites one links to it.
+See [the adoption report](../../reports/2026-09-05-contract-provider-refresh.md)
+for verification and limits. `reports/2026-09-04-contract-split.md` records the
+historical extraction.

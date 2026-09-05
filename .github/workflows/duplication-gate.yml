@@ -19,8 +19,8 @@ on:
     branches: [main]
 
 env:
-  # hymeko/hymeko @ c9856d7 — grammar-based extraction, type-2 duplication.
-  CONTRACT_TOOLS: "git+ssh://git@192.168.1.228:2222/hymeko/hymeko.git@c9856d7"
+  # hymeko/hymeko @ d02aa614bc06a348dbcbe3936dcd3b9285b8bdeb — grammar-based extraction, type-2 duplication.
+  CONTRACT_TOOLS: "git+ssh://git@192.168.1.228:2222/hymeko/hymeko.git@d02aa614bc06a348dbcbe3936dcd3b9285b8bdeb"
 
 jobs:
   contract:

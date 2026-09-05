@@ -1,0 +1,96 @@
+
+preflight — 614 symbol(s) from rebuilt from source, 1102 tracked file(s), threshold 0.65
+
+  .claude/settings.json   (path; matched as: settings)
+    no candidates — creation is authorised by this check
+
+  AGENTS.md   (path; matched as: agents)
+    no candidates — creation is authorised by this check
+
+  docs/plans/2026-09-05-contract-provider-refresh/plan.mmd   (path; matched as: plan, 2026 09 05 contract provider refresh plan)
+    1.00  file   plan.mmd   docs/plans/2026-08-24-compute-framework/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-24-cpu-optimization/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-28-ir-stream-wire-codec/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-28-unified-ir-m2a/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-28-unified-ir-phase0/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-29-unified-ir-m2b-vv/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-30-dense-view-index-boundary/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-30-m2c-seal-canonical-ids/plan.mmd
+    … and 89 more
+
+  docs/plans/2026-09-05-contract-provider-refresh/plan.pdf   (path; matched as: plan, 2026 09 05 contract provider refresh plan)
+    1.00  file   plan.mmd   docs/plans/2026-08-24-compute-framework/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-24-cpu-optimization/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-28-ir-stream-wire-codec/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-28-unified-ir-m2a/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-28-unified-ir-phase0/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-29-unified-ir-m2b-vv/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-30-dense-view-index-boundary/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-30-m2c-seal-canonical-ids/plan.mmd
+    … and 89 more
+
+  docs/plans/2026-09-05-contract-provider-refresh/plan.tex   (path; matched as: plan, 2026 09 05 contract provider refresh plan)
+    1.00  file   plan.mmd   docs/plans/2026-08-24-compute-framework/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-24-cpu-optimization/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-28-ir-stream-wire-codec/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-28-unified-ir-m2a/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-28-unified-ir-phase0/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-29-unified-ir-m2b-vv/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-30-dense-view-index-boundary/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-30-m2c-seal-canonical-ids/plan.mmd
+    … and 89 more
+
+  docs/plans/2026-09-05-contract-provider-refresh/plan.tikz   (path; matched as: plan, 2026 09 05 contract provider refresh plan)
+    1.00  file   plan.mmd   docs/plans/2026-08-24-compute-framework/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-24-cpu-optimization/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-28-ir-stream-wire-codec/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-28-unified-ir-m2a/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-28-unified-ir-phase0/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-29-unified-ir-m2b-vv/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-30-dense-view-index-boundary/plan.mmd
+    1.00  file   plan.mmd   docs/plans/2026-08-30-m2c-seal-canonical-ids/plan.mmd
+    … and 89 more
+
+  reports/contract-provider-refresh/duplication.memory.json   (path; matched as: duplication memory)
+    0.75  file   duplication-inventory.md   docs/plans/2026-09-01-benchmark-harness-consolidation/duplication-inventory.md
+
+  reports/contract-provider-refresh/duplication.stderr.log   (path; matched as: duplication stderr)
+    0.75  file   duplication.stdout.log   reports/contract-provider-refresh/duplication.stdout.log
+
+  reports/contract-provider-refresh/duplication.stdout.log   (path; matched as: duplication stdout)
+    0.75  file   duplication.stderr.log   reports/contract-provider-refresh/duplication.stderr.log
+
+  reports/contract-provider-refresh/plan-build.log   (path; matched as: plan build)
+    1.00  file   plan-build.log   reports/distributed-admission-fix/plan-build.log
+    1.00  file   plan-build.log   reports/distributed-semantics/plan-build.log
+    0.86  file   build.sh   tools/cuda_prototype/build.sh
+    0.86  symbol build   hymeko_core/src/tensor/sparse_workload.rs
+    0.86  symbol build   hymeko_wgpu/src/backend.rs
+    0.86  symbol build   hymeko_wgpu/src/testing.rs
+    0.83  file   plan.mmd   docs/plans/2026-08-24-compute-framework/plan.mmd
+    0.83  file   plan.mmd   docs/plans/2026-08-24-cpu-optimization/plan.mmd
+    … and 91 more
+
+  reports/contract-provider-refresh/symbols.memory.json   (path; matched as: symbols memory)
+    0.89  file   SYMBOLS.md   SYMBOLS.md
+
+  reports/contract-provider-refresh/symbols.stderr.log   (path; matched as: symbols stderr)
+    0.89  file   SYMBOLS.md   SYMBOLS.md
+    0.69  file   symbols.stdout.log   reports/contract-provider-refresh/symbols.stdout.log
+
+  reports/contract-provider-refresh/symbols.stdout.log   (path; matched as: symbols stdout)
+    0.89  file   SYMBOLS.md   SYMBOLS.md
+    0.69  file   symbols.stderr.log   reports/contract-provider-refresh/symbols.stderr.log
+
+Candidates exist. Extend one, or record in the ledger which you rejected and why.
+
+  This commit adds a file resembling something that already exists.
+
+  Extend the existing one, or record the search in the commit message — a line
+  beginning DISCOVERY: naming what you rejected and why. One sentence. "Not
+  quite the same" is not a reason; name the differing invariant, owner or
+  contract (§6.6).
+
+    DISCOVERY: rejected hymeko_pgraph because it owns the P-graph schema, and
+    this is the hypergraph lowering that consumes it.
+

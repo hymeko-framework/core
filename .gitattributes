@@ -21,3 +21,9 @@
 /reports/distributed-admission-fix/** -text
 /reports/2026-09-05-distributed-admission-fix.md -text
 /docs/plans/2026-09-05-distributed-admission-fix/** -text
+
+# Shared-contract consumer migration evidence.
+/reports/contract-provider-refresh/** -text
+/reports/2026-09-05-contract-provider-refresh.md -text
+/docs/plans/2026-09-05-contract-provider-refresh/** -text
+/tools/hooks/* text eol=lf
