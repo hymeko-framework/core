@@ -1,0 +1,346 @@
+#0 building with "hymeko-core-amaterasu-20260905" instance using docker-container driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.68kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/rust:1.97.1-bookworm@sha256:408fe88047cef61a2087653b0c5255fa51c0f2d6d94ddedd7a2562a9b91a46f6
+#2 ...
+
+#3 [auth] library/rust:pull token for registry-1.docker.io
+#3 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/rust:1.97.1-bookworm@sha256:408fe88047cef61a2087653b0c5255fa51c0f2d6d94ddedd7a2562a9b91a46f6
+#2 DONE 0.8s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 349B done
+#4 DONE 0.0s
+
+#5 [toolchain 1/3] FROM docker.io/library/rust:1.97.1-bookworm@sha256:408fe88047cef61a2087653b0c5255fa51c0f2d6d94ddedd7a2562a9b91a46f6
+#5 resolve docker.io/library/rust:1.97.1-bookworm@sha256:408fe88047cef61a2087653b0c5255fa51c0f2d6d94ddedd7a2562a9b91a46f6 done
+#5 DONE 0.0s
+
+#6 [internal] load build context
+#6 transferring context: 100.32kB 0.0s done
+#6 DONE 0.0s
+
+#7 [toolchain 2/3] RUN rustup component add rustfmt clippy     && apt-get update     && apt-get install --no-install-recommends -y time libvulkan1 libegl1     && rm -rf /var/lib/apt/lists/*
+#7 CACHED
+
+#8 [toolchain 3/3] WORKDIR /workspace/core
+#8 CACHED
+
+#9 [dependencies 1/4] COPY Cargo.toml Cargo.lock ./
+#9 DONE 0.0s
+
+#10 [dependencies 2/4] COPY hymeko_core ./hymeko_core
+#10 DONE 0.0s
+
+#11 [dependencies 3/4] COPY hymeko_wgpu ./hymeko_wgpu
+#11 DONE 0.0s
+
+#12 [dependencies 4/4] RUN --mount=type=ssh,required=true     --mount=type=secret,id=known_hosts,target=/etc/ssh/ssh_known_hosts,required=true     GIT_SSH_COMMAND='ssh -o BatchMode=yes -o StrictHostKeyChecking=yes'     cargo fetch --locked --target x86_64-unknown-linux-gnu
+#12 0.098     Updating crates.io index
+#12 0.098     Updating git repository `ssh://git@amaterasu.local:2222/hymeko/parser.git`
+#12 0.358 From ssh://amaterasu.local:2222/hymeko/parser
+#12 0.358  * [new branch]      master     -> origin/master
+#12 0.358  * [new ref]                    -> origin/HEAD
+#12 4.034  Downloading crates ...
+#12 4.252   Downloaded lexical-write-integer v1.0.6
+#12 4.266   Downloaded ryu v1.0.23
+#12 4.273   Downloaded simdutf8 v0.1.5
+#12 4.302   Downloaded rustc_version v0.4.1
+#12 4.308   Downloaded anstyle v1.0.14
+#12 4.315   Downloaded naga-types v30.0.1
+#12 4.318   Downloaded utf8parse v0.2.2
+#12 4.321   Downloaded itoa v1.0.18
+#12 4.327   Downloaded anstream v1.0.0
+#12 4.338   Downloaded string_cache v0.9.0
+#12 4.344   Downloaded wgpu-naga-bridge v30.0.1
+#12 4.352   Downloaded env_filter v2.0.0
+#12 4.367   Downloaded cfg-if v1.0.4
+#12 4.370   Downloaded document-features v0.2.12
+#12 4.380   Downloaded wgpu-core-deps-windows-linux-android v30.0.1
+#12 4.388   Downloaded rustc-hash v1.1.0
+#12 4.400   Downloaded cpufeatures v0.3.0
+#12 4.403   Downloaded rustc-hash v2.1.3
+#12 4.409   Downloaded flatbuffers v25.12.19
+#12 4.413   Downloaded csv-core v0.1.13
+#12 4.415   Downloaded alloca v0.4.0
+#12 4.418   Downloaded atoi v2.0.0
+#12 4.420   Downloaded static_assertions v1.1.0
+#12 4.423   Downloaded raw-window-handle v0.6.2
+#12 4.427   Downloaded lexical-core v1.0.6
+#12 4.446   Downloaded scopeguard v1.2.0
+#12 4.450   Downloaded profiling v1.0.18
+#12 4.457   Downloaded cfg_aliases v0.2.2
+#12 4.459   Downloaded renderdoc-sys v1.1.0
+#12 4.468   Downloaded equivalent v1.0.2
+#12 4.478   Downloaded unicode-xid v0.2.6
+#12 4.483   Downloaded tiny-fn v0.1.9
+#12 4.495   Downloaded generic-array v0.14.7
+#12 4.505   Downloaded lock_api v0.4.14
+#12 4.510   Downloaded autocfg v1.5.1
+#12 4.525   Downloaded either v1.18.0
+#12 4.528   Downloaded zmij v1.0.23
+#12 4.531   Downloaded rawpointer v0.2.1
+#12 4.534   Downloaded crossbeam-deque v0.8.7
+#12 4.537   Downloaded quote v1.0.47
+#12 4.542   Downloaded libloading v0.8.9
+#12 4.547   Downloaded nalgebra-macros v0.3.0
+#12 4.549   Downloaded bytemuck_derive v1.12.0
+#12 4.552   Downloaded iceoryx2-bb-elementary-traits v0.8.1
+#12 4.555   Downloaded lalrpop-util v0.23.1
+#12 4.557   Downloaded block-buffer v0.10.4
+#12 4.558   Downloaded ascii-canvas v4.0.0
+#12 4.560   Downloaded thiserror-impl v2.0.20
+#12 4.563   Downloaded lexical-parse-integer v1.0.6
+#12 4.566   Downloaded arrow-csv v58.4.0
+#12 4.568   Downloaded semver v1.0.28
+#12 4.572   Downloaded smallvec v1.15.2
+#12 4.574   Downloaded iceoryx2-bb-memory v0.8.1
+#12 4.576   Downloaded approx v0.5.1
+#12 4.579   Downloaded iceoryx2-pal-concurrency-sync v0.8.1
+#12 4.582   Downloaded same-file v1.0.6
+#12 4.594   Downloaded env_logger v0.11.11
+#12 4.601   Downloaded presser v0.3.1
+#12 4.607   Downloaded iceoryx2-bb-system-types v0.8.1
+#12 4.610   Downloaded enum-iterator-derive v1.5.0
+#12 4.614   Downloaded iceoryx2-pal-configuration v0.8.1
+#12 4.616   Downloaded sha1_smol v1.0.1
+#12 4.620   Downloaded cast v0.3.0
+#12 4.637   Downloaded foldhash v0.2.0
+#12 4.639   Downloaded arrayvec v0.7.8
+#12 4.643   Downloaded once_cell v1.21.4
+#12 4.648   Downloaded crossbeam-epoch v0.9.20
+#12 4.652   Downloaded term v1.2.1
+#12 4.659   Downloaded ordered-float v5.5.0
+#12 4.662   Downloaded spirv v0.4.0+sdk-1.4.341.0
+#12 4.664   Downloaded parking_lot_core v0.9.12
+#12 4.666   Downloaded bit-vec v0.9.1
+#12 4.668   Downloaded thiserror v2.0.20
+#12 4.676   Downloaded keccak v0.1.6
+#12 4.677   Downloaded iceoryx2-bb-elementary v0.8.1
+#12 4.679   Downloaded anstyle-query v1.1.5
+#12 4.681   Downloaded bit-set v0.10.0
+#12 4.682   Downloaded unicode-ident v1.0.24
+#12 4.685   Downloaded pico-args v0.5.0
+#12 4.687   Downloaded arrow-arith v58.4.0
+#12 4.688   Downloaded parking_lot v0.12.5
+#12 4.691   Downloaded bitflags v2.13.1
+#12 4.696   Downloaded enum-iterator v2.3.0
+#12 4.697   Downloaded serde_spanned v1.1.1
+#12 4.698   Downloaded cobs v0.3.0
+#12 4.702   Downloaded iceoryx2-log v0.8.1
+#12 4.702   Downloaded iceoryx2-pal-os-api v0.8.1
+#12 4.704   Downloaded iceoryx2-loggers v0.8.1
+#12 4.707   Downloaded toml_datetime v0.7.5+spec-1.1.0
+#12 4.709   Downloaded const-random-macro v0.1.16
+#12 4.719   Downloaded page_size v0.6.0
+#12 4.720   Downloaded ciborium-io v0.2.2
+#12 4.724   Downloaded crossbeam-utils v0.8.22
+#12 4.731   Downloaded walkdir v2.5.0
+#12 4.733   Downloaded toml_parser v1.1.3+spec-1.1.0
+#12 4.735   Downloaded cexpr v0.6.0
+#12 4.746   Downloaded litrs v1.0.0
+#12 4.750   Downloaded proc-macro2 v1.0.107
+#12 4.756   Downloaded crunchy v0.2.4
+#12 4.773   Downloaded half v2.7.1
+#12 4.776   Downloaded gpu-allocator v0.28.0
+#12 4.779   Downloaded log v0.4.33
+#12 4.782   Downloaded allocator-api2 v0.2.21
+#12 4.792   Downloaded rayon-core v1.13.0
+#12 4.796   Downloaded shlex v2.0.1
+#12 4.801   Downloaded iceoryx2-bb-derive-macros v0.8.1
+#12 4.804   Downloaded num-traits v0.2.19
+#12 4.808   Downloaded const-random v0.1.18
+#12 4.809   Downloaded serde_derive v1.0.229
+#12 4.813   Downloaded bytemuck v1.25.2
+#12 4.816   Downloaded serde_core v1.0.229
+#12 4.829   Downloaded toml_writer v1.1.2+spec-1.1.0
+#12 4.833   Downloaded postcard v1.1.3
+#12 4.836   Downloaded codespan-reporting v0.13.1
+#12 4.845   Downloaded siphasher v1.0.3
+#12 4.855   Downloaded iceoryx2-bb-lock-free v0.8.1
+#12 4.861   Downloaded base64 v0.22.1
+#12 4.869   Downloaded phf_shared v0.13.1
+#12 4.875   Downloaded clang-sys v1.9.1
+#12 4.894   Downloaded new_debug_unreachable v1.0.6
+#12 4.895   Downloaded crypto-common v0.1.7
+#12 4.925   Downloaded precomputed-hash v0.1.1
+#12 4.933   Downloaded lexical-util v1.0.7
+#12 4.946   Downloaded version_check v0.9.5
+#12 4.948   Downloaded toml v0.9.12+spec-1.1.0
+#12 4.962   Downloaded clap_lex v1.1.0
+#12 4.984   Downloaded iceoryx2-log-types v0.8.1
+#12 4.987   Downloaded indexmap v2.14.0
+#12 4.995   Downloaded serde v1.0.229
+#12 5.002   Downloaded is_terminal_polyfill v1.70.2
+#12 5.004   Downloaded lexical-write-float v1.0.6
+#12 5.011   Downloaded prettyplease v0.2.37
+#12 5.032   Downloaded cc v1.4.4
+#12 5.037   Downloaded zerocopy-derive v0.8.56
+#12 5.052   Downloaded iceoryx2-cal v0.8.1
+#12 5.063   Downloaded minimal-lexical v0.2.1
+#12 5.086   Downloaded memchr v2.8.3
+#12 5.092   Downloaded arrow-cast v58.4.0
+#12 5.117   Downloaded hashbrown v0.16.1
+#12 5.133   Downloaded wgpu-types v30.0.1
+#12 5.151   Downloaded arrow-ipc v58.4.0
+#12 5.156   Downloaded embedded-io v0.6.1
+#12 5.164   Downloaded libm v0.2.16
+#12 5.185   Downloaded iceoryx2-bb-concurrency v0.8.1
+#12 5.186   Downloaded hashbrown v0.17.1
+#12 5.192   Downloaded serde_json v1.0.151
+#12 5.201   Downloaded embedded-io v0.4.0
+#12 5.203   Downloaded iceoryx2-pal-posix v0.8.1
+#12 5.220   Downloaded itertools v0.13.0
+#12 5.227   Downloaded tinytemplate v1.2.1
+#12 5.229   Downloaded fixedbitset v0.5.7
+#12 5.231   Downloaded bit-set v0.9.1
+#12 5.233   Downloaded criterion-plot v0.8.2
+#12 5.235   Downloaded rayon v1.12.0
+#12 5.246   Downloaded anes v0.1.6
+#12 5.249   Downloaded ena v0.14.4
+#12 5.255   Downloaded ciborium-ll v0.2.2
+#12 5.288   Downloaded tiny-keccak v2.0.2
+#12 5.291   Downloaded num-integer v0.1.47
+#12 5.293   Downloaded iceoryx2 v0.8.1
+#12 5.302   Downloaded iceoryx2-bb-posix v0.8.1
+#12 5.310   Downloaded lexical-parse-float v1.0.6
+#12 5.315   Downloaded colorchoice v1.0.5
+#12 5.316   Downloaded aho-corasick v1.1.5
+#12 5.323   Downloaded winnow v0.7.15
+#12 5.334   Downloaded wgpu v30.0.1
+#12 5.351   Downloaded winnow v1.0.4
+#12 5.362   Downloaded num-rational v0.4.2
+#12 5.363   Downloaded anstyle-parse v1.0.0
+#12 5.370   Downloaded lalrpop v0.23.1
+#12 5.420   Downloaded foldhash v0.1.5
+#12 5.423   Downloaded bindgen v0.72.1
+#12 5.434   Downloaded unicode-width v0.2.2
+#12 5.440   Downloaded zerocopy v0.8.56
+#12 5.495   Downloaded lazy_static v1.5.0
+#12 5.518   Downloaded paste v1.0.15
+#12 5.523   Downloaded syn v2.0.119
+#12 5.534   Downloaded regex-syntax v0.8.11
+#12 5.543   Downloaded syn v3.0.3
+#12 5.554   Downloaded constant_time_eq v0.4.2
+#12 5.568   Downloaded wgpu-core v30.0.1
+#12 5.624   Downloaded ash v0.38.0+1.3.281
+#12 5.641   Downloaded wgpu-hal v30.0.1
+#12 5.662   Downloaded shlex v1.3.0
+#12 5.664   Downloaded glob v0.3.4
+#12 5.669   Downloaded iceoryx2-bb-linux v0.8.1
+#12 5.705   Downloaded num-complex v0.4.6
+#12 5.707   Downloaded find-msvc-tools v0.1.11
+#12 5.741   Downloaded getrandom v0.2.17
+#12 5.748   Downloaded regex-automata v0.4.18
+#12 5.844   Downloaded naga v30.0.1
+#12 5.877   Downloaded csv v1.4.0
+#12 5.898   Downloaded libc v0.2.189
+#12 5.948   Downloaded oorandom v11.1.5
+#12 5.949   Downloaded iana-time-zone v0.1.65
+#12 5.953   Downloaded ciborium v0.2.2
+#12 5.955   Downloaded ahash v0.8.12
+#12 5.958   Downloaded digest v0.10.7
+#12 6.120   Downloaded iceoryx2-bb-container v0.8.1
+#12 6.157   Downloaded arrow-data v58.4.0
+#12 6.164   Downloaded matrixmultiply v0.3.11
+#12 6.172   Downloaded simba v0.9.1
+#12 6.194   Downloaded arrow-row v58.4.0
+#12 6.235   Downloaded getrandom v0.3.4
+#12 6.324   Downloaded arrow-string v58.4.0
+#12 6.439   Downloaded spin v0.9.9
+#12 6.444   Downloaded bytes v1.12.1
+#12 6.545   Downloaded clap v4.6.6
+#12 6.629   Downloaded arrow-ord v58.4.0
+#12 6.699   Downloaded nalgebra-sparse v0.11.0
+#12 6.720   Downloaded arrow-json v58.4.0
+#12 6.778   Downloaded arrow-select v58.4.0
+#12 6.786   Downloaded safe_arch v0.7.4
+#12 6.920   Downloaded arrow-buffer v58.4.0
+#12 6.948   Downloaded num-bigint v0.4.8
+#12 6.958   Downloaded arrow v58.4.0
+#12 6.970   Downloaded wide v0.7.33
+#12 6.999   Downloaded typenum v1.20.1
+#12 7.006   Downloaded arrow-schema v58.4.0
+#12 7.069   Downloaded nom v7.1.3
+#12 7.190   Downloaded glam v0.14.0
+#12 7.208   Downloaded glam v0.15.2
+#12 7.225   Downloaded glam v0.16.0
+#12 7.240   Downloaded glam v0.17.3
+#12 7.252   Downloaded hashbrown v0.15.5
+#12 7.293   Downloaded glam v0.19.0
+#12 7.314   Downloaded glam v0.18.0
+#12 7.327   Downloaded criterion v0.8.2
+#12 7.338   Downloaded regex v1.13.1
+#12 7.374   Downloaded clap_builder v4.6.6
+#12 7.394   Downloaded glam v0.20.5
+#12 7.468   Downloaded itertools v0.14.0
+#12 7.655   Downloaded blake3 v1.8.7
+#12 7.683   Downloaded glam v0.23.0
+#12 7.705   Downloaded chrono v0.4.45
+#12 7.732   Downloaded glam v0.22.0
+#12 7.755   Downloaded glam v0.21.3
+#12 7.840   Downloaded arrow-array v58.4.0
+#12 7.885   Downloaded glam v0.24.2
+#12 7.990   Downloaded glam v0.25.0
+#12 8.021   Downloaded glam v0.27.0
+#12 8.048   Downloaded nalgebra v0.34.2
+#12 8.076   Downloaded glam v0.28.0
+#12 8.208   Downloaded glam v0.29.3
+#12 8.437   Downloaded glam v0.30.10
+#12 8.467   Downloaded petgraph v0.8.3
+#12 8.489   Downloaded glam v0.32.1
+#12 8.520   Downloaded sha3 v0.10.9
+#12 8.525   Downloaded glam v0.31.1
+#12 DONE 9.5s
+
+#13 [verify 1/4] COPY data ./data
+#13 DONE 0.1s
+
+#14 [verify 2/4] COPY README.md LICENSE ./
+#14 DONE 0.0s
+
+#15 [verify 3/4] COPY tools/ci/core.sh /usr/local/bin/hymeko-core-check
+#15 DONE 0.0s
+
+#16 [verify 4/4] RUN sed -i 's/\r$//' /usr/local/bin/hymeko-core-check     && chmod +x /usr/local/bin/hymeko-core-check
+#16 DONE 0.1s
+
+#17 exporting to docker image format
+#17 exporting layers
+#17 exporting layers 4.4s done
+#17 exporting manifest sha256:6dfe346a75a547958f6c1047d7b945a11d6241770d332b3a0ba67b413e8bee68 done
+#17 exporting config sha256:c825ade5a9b80d45648ef5175398707cffe5b028b251015d69c39b9abc8a1308 done
+#17 sending tarball
+#17 ...
+
+#18 importing to docker
+#18 loading layer 9d52f12f2311 18.52kB / 18.52kB
+#18 loading layer 573bac0e99b6 32.77kB / 253.03kB
+#18 loading layer 1d03ffdcfe83 32.77kB / 142.48kB
+#18 loading layer ce2c5bbee3a4 557.06kB / 53.35MB
+#18 loading layer ce2c5bbee3a4 38.99MB / 53.35MB 2.1s
+#18 loading layer d065fd13d5e8 32.77kB / 107.55kB
+#18 loading layer 9d52f12f2311 18.52kB / 18.52kB 3.9s done
+#18 loading layer a6df59e9c520 1.57kB / 1.57kB
+#18 loading layer e93511d50f82 1.29kB / 1.29kB
+#18 loading layer 620f2fa82795 1.28kB / 1.28kB
+#18 loading layer 573bac0e99b6 253.03kB / 253.03kB 3.9s done
+#18 loading layer 1d03ffdcfe83 142.48kB / 142.48kB 3.8s done
+#18 loading layer ce2c5bbee3a4 53.35MB / 53.35MB 3.8s done
+#18 loading layer d065fd13d5e8 107.55kB / 107.55kB 0.1s done
+#18 loading layer a6df59e9c520 1.57kB / 1.57kB 0.1s done
+#18 loading layer e93511d50f82 1.29kB / 1.29kB 0.1s done
+#18 loading layer 620f2fa82795 1.28kB / 1.28kB 0.1s done
+#18 DONE 3.9s
+
+#17 exporting to docker image format
+#17 sending tarball 7.2s done
+#17 DONE 11.6s
+
+#19 resolving provenance for metadata file
+#19 DONE 0.0s

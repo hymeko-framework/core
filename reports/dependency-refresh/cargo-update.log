@@ -1,0 +1,3 @@
+    Updating crates.io index
+    Updating parser v0.1.0 (ssh://git@amaterasu.local:2222/hymeko/parser.git?branch=master#e28a2051) -> #284c490d
+note: pass `--verbose` to see 23 unchanged dependencies behind latest

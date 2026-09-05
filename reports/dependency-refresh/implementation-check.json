@@ -1,0 +1,11 @@
+{
+  "created_at": "2026-09-05T20:49:34.871326+02:00",
+  "approval": "APPROVED-CORE-EDIT: core-parser-latest-revision",
+  "parser_source": "284c490d68232973a006bcba974279fed6f89ce8",
+  "exact_single_source_replacement": true,
+  "old_lock_sha256": "8dfe43c52f9d8a42217c35a2bbf6e9843e05f4b4ea938d9286e827cffbb9dcc7",
+  "new_lock_sha256": "4871f04cb0c24865c17ddf4507f83136c1c70caffeac6eaf27fc94acd075056c",
+  "local_parser_tree_exit": 0,
+  "cargo_resolver_incidental_change": "winapi-util 0.1.11 accepts windows-sys >=0.48.0, <=0.61.*; cargo update selected existing 0.48.0. Restored original 0.61.2 and cargo tree --locked --offline passed.",
+  "runtime_source_changes": []
+}
