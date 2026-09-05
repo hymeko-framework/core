@@ -137,4 +137,18 @@ quadruped: meta_kinematics.kinematics.elements, meta_kinematics.kinematics.geome
     @hip_flex_br:   meta_kinematics.kinematics.rev_joint { (+ hip_bracket_br [[ 0.0, 0.0, 0.0],       [0.0,-12.0, 0.0]], - thigh_br,     - meta_kinematics.kinematics.axes.AXIS_Y); }
     @knee_br:       meta_kinematics.kinematics.rev_joint { (+ thigh_br       [[ 0.0, 0.0, -0.10],     [0.0, 26.0, 0.0]], - shin_br,      - meta_kinematics.kinematics.axes.AXIS_Y); }
     @paw_br_j:      meta_kinematics.kinematics.fixed_joint { (+ shin_br      [[ 0.0, 0.0, -0.10],     [0.0,0.0,0.0]],   - paw_br); }
+
+    // TP scheduling groups; the physical body model remains unchanged.
+    tp_leg_fl_0: meta_kinematics.kinematics.elements.tp_axis { joint -> hip_flex_fl; lower_deg -15; upper_deg 15; }
+    tp_leg_fl_1: meta_kinematics.kinematics.elements.tp_axis { joint -> knee_fl; lower_deg -20; upper_deg 20; }
+    @tp_leg_fl: meta_kinematics.kinematics.tp_chart { (+ tp_leg_fl_0, + tp_leg_fl_1); operator "rest_acceleration"; samples 11; rank 3; cr_grid 257; }
+    tp_leg_fr_0: meta_kinematics.kinematics.elements.tp_axis { joint -> hip_flex_fr; lower_deg -15; upper_deg 15; }
+    tp_leg_fr_1: meta_kinematics.kinematics.elements.tp_axis { joint -> knee_fr; lower_deg -20; upper_deg 20; }
+    @tp_leg_fr: meta_kinematics.kinematics.tp_chart { (+ tp_leg_fr_0, + tp_leg_fr_1); operator "rest_acceleration"; samples 11; rank 3; cr_grid 257; }
+    tp_leg_bl_0: meta_kinematics.kinematics.elements.tp_axis { joint -> hip_flex_bl; lower_deg -15; upper_deg 15; }
+    tp_leg_bl_1: meta_kinematics.kinematics.elements.tp_axis { joint -> knee_bl; lower_deg -20; upper_deg 20; }
+    @tp_leg_bl: meta_kinematics.kinematics.tp_chart { (+ tp_leg_bl_0, + tp_leg_bl_1); operator "rest_acceleration"; samples 11; rank 3; cr_grid 257; }
+    tp_leg_br_0: meta_kinematics.kinematics.elements.tp_axis { joint -> hip_flex_br; lower_deg -15; upper_deg 15; }
+    tp_leg_br_1: meta_kinematics.kinematics.elements.tp_axis { joint -> knee_br; lower_deg -20; upper_deg 20; }
+    @tp_leg_br: meta_kinematics.kinematics.tp_chart { (+ tp_leg_br_0, + tp_leg_br_1); operator "rest_acceleration"; samples 11; rank 3; cr_grid 257; }
 }

@@ -1,69 +1,295 @@
-// humanoid.hymeko — a bipedal humanoid robot (pelvis + torso + head + 2 legs + 2 arms), in HyMeKo.
-//
-// Mirrors quadruped.hymeko's RL-ready pattern (hand-authored, single-DOF sagittal joints for a tractable
-// action space; the auto-generated scaling fixture scripts/scaling/fixtures/humanoid/ is 396 lines of
-// box-approx with no base joint — this is the RL model, not that). Kinematic tree:
-//
-//   world --base(+0.95 z)--> pelvis --abdomen(Y)--> torso --neck(Y)--> head
-//                              |                       |
-//                              +--hip_{l,r}(Y)--> thigh_X --knee_X(Y)--> shin_X --ankle_X(Y)--> foot_X
-//                                                      +--shoulder_{l,r}(Y)--> upper_arm_X --elbow_X(Y)--> forearm_X
-//
-// 13 revolute joints (all AXIS_Y = sagittal flex, the plane of forward walking) + a floating base. The
-// env promotes @base to a MuJoCo <freejoint> + floor (as QuadrupedGoalEnv does), so it can stand, fall,
-// and step forward. Origins are mid-link, in the parent joint's frame. Validate via `hymeko validate`.
-
-humanoid_description {
-    @"../meta_kinematics.hymeko";
-}
-
-humanoid: meta_kinematics.kinematics.elements, meta_kinematics.kinematics.geometry, meta_kinematics.kinematics.axes
-{
+// Generic 1.71 m spatial humanoid; engineering design, not an identified hardware model.
+// SI masses and COM inertias; homogeneous primitive approximations, explicit in the source.
+// 33 actuated joint coordinates + passive free base in the simulator.
+// Force-transmission hyperedges span links without changing the rigid-body parent relation.
+humanoid_description { @"../meta_kinematics.hymeko"; }
+humanoid: meta_kinematics.kinematics.elements, meta_kinematics.kinematics.geometry, meta_kinematics.kinematics.axes {
     world: meta_kinematics.kinematics.elements.frame {}
-
-    body_color [0.25, 0.45, 0.85, 1.0];
-    limb_color [0.85, 0.55, 0.20, 1.0];
-    head_color [0.90, 0.80, 0.35, 1.0];
-
-    // === Trunk: pelvis (root body) -> torso -> head ===
-    pelvis: meta_kinematics.kinematics.elements.link { mass 2.0; link_geometry: meta_kinematics.kinematics.geometry.box { dimension [0.14, 0.20, 0.10]; } visual -> link_geometry; collision -> link_geometry; color -> humanoid.body_color; origin [0.0, 0.0, 0.0]; }
-    torso:  meta_kinematics.kinematics.elements.link { mass 8.0; link_geometry: meta_kinematics.kinematics.geometry.box { dimension [0.16, 0.24, 0.22]; } visual -> link_geometry; collision -> link_geometry; color -> humanoid.body_color; origin [0.0, 0.0, 0.16]; }
-    head:   meta_kinematics.kinematics.elements.link { mass 1.2; link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.09]; } visual -> link_geometry; collision -> link_geometry; color -> humanoid.head_color; origin [0.0, 0.0, 0.10]; }
-
-    // === Legs: thigh -> shin -> foot (cylinders down; foot a box) ===
-    thigh_l: meta_kinematics.kinematics.elements.link { mass 4.0; link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.05, 0.34]; } visual -> link_geometry; collision -> link_geometry; color -> humanoid.limb_color; origin [0.0, 0.0, -0.17]; }
-    shin_l:  meta_kinematics.kinematics.elements.link { mass 3.0; link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.04, 0.34]; } visual -> link_geometry; collision -> link_geometry; color -> humanoid.limb_color; origin [0.0, 0.0, -0.17]; }
-    foot_l:  meta_kinematics.kinematics.elements.link { mass 1.0; link_geometry: meta_kinematics.kinematics.geometry.box { dimension [0.20, 0.09, 0.05]; } visual -> link_geometry; collision -> link_geometry; color -> humanoid.limb_color; origin [0.06, 0.0, -0.025]; }
-    thigh_r: meta_kinematics.kinematics.elements.link { mass 4.0; link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.05, 0.34]; } visual -> link_geometry; collision -> link_geometry; color -> humanoid.limb_color; origin [0.0, 0.0, -0.17]; }
-    shin_r:  meta_kinematics.kinematics.elements.link { mass 3.0; link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.04, 0.34]; } visual -> link_geometry; collision -> link_geometry; color -> humanoid.limb_color; origin [0.0, 0.0, -0.17]; }
-    foot_r:  meta_kinematics.kinematics.elements.link { mass 1.0; link_geometry: meta_kinematics.kinematics.geometry.box { dimension [0.20, 0.09, 0.05]; } visual -> link_geometry; collision -> link_geometry; color -> humanoid.limb_color; origin [0.06, 0.0, -0.025]; }
-
-    // === Arms: upper_arm -> forearm (cylinders down) ===
-    upper_arm_l: meta_kinematics.kinematics.elements.link { mass 2.0; link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.035, 0.28]; } visual -> link_geometry; collision -> link_geometry; color -> humanoid.limb_color; origin [0.0, 0.0, -0.14]; }
-    forearm_l:   meta_kinematics.kinematics.elements.link { mass 1.5; link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.030, 0.26]; } visual -> link_geometry; collision -> link_geometry; color -> humanoid.limb_color; origin [0.0, 0.0, -0.13]; }
-    upper_arm_r: meta_kinematics.kinematics.elements.link { mass 2.0; link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.035, 0.28]; } visual -> link_geometry; collision -> link_geometry; color -> humanoid.limb_color; origin [0.0, 0.0, -0.14]; }
-    forearm_r:   meta_kinematics.kinematics.elements.link { mass 1.5; link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.030, 0.26]; } visual -> link_geometry; collision -> link_geometry; color -> humanoid.limb_color; origin [0.0, 0.0, -0.13]; }
-
-    // === Floating base: world -> pelvis at standing height 0.95 m (env promotes to <freejoint> + floor) ===
-    @base: meta_kinematics.kinematics.conti_joint {
-        (+ world [[0.0, 0.0, 0.95], [0.0, 0.0, 0.0]], - pelvis, - meta_kinematics.kinematics.axes.AXIS_Z);
+    body_color [0.22, 0.4, 0.72, 1.0];
+    limb_color [0.82, 0.64, 0.28, 1.0];
+    joint_color [0.23, 0.25, 0.29, 1.0];
+    head_color [0.82, 0.82, 0.76, 1.0];
+    pelvis: meta_kinematics.kinematics.elements.link {
+        mass 8; origin [0, 0, 0];
+        inertia_com { xx 0.06533333333; yy 0.03973333333; zz 0.07893333333; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.box { dimension [0.2, 0.28, 0.14]; }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.body_color;
     }
+    spine_yaw_link: meta_kinematics.kinematics.elements.link {
+        mass 0.2; origin [0, 0, 0];
+        inertia_com { xx 0.00008192; yy 0.00008192; zz 0.00008192; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.032]; collision { contype 0.0; conaffinity 0.0; } }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.joint_color;
+    }
+    spine_roll_link: meta_kinematics.kinematics.elements.link {
+        mass 0.2; origin [0, 0, 0];
+        inertia_com { xx 0.00008192; yy 0.00008192; zz 0.00008192; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.032]; collision { contype 0.0; conaffinity 0.0; } }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.joint_color;
+    }
+    torso: meta_kinematics.kinematics.elements.link {
+        mass 16; origin [0, 0, 0.19];
+        inertia_com { xx 0.3674666667; yy 0.2778666667; zz 0.2186666667; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.box { dimension [0.22, 0.34, 0.4]; }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.body_color;
+    }
+    neck_yaw_link: meta_kinematics.kinematics.elements.link {
+        mass 0.15; origin [0, 0, 0];
+        inertia_com { xx 0.00006144; yy 0.00006144; zz 0.00006144; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.032]; collision { contype 0.0; conaffinity 0.0; } }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.joint_color;
+    }
+    head: meta_kinematics.kinematics.elements.link {
+        mass 4.5; origin [0, 0, 0.08];
+        inertia_com { xx 0.018; yy 0.018; zz 0.018; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.1]; }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.head_color;
+    }
+    hip_yaw_link_l: meta_kinematics.kinematics.elements.link {
+        mass 0.15; origin [0, 0, 0];
+        inertia_com { xx 0.00006144; yy 0.00006144; zz 0.00006144; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.032]; collision { contype 0.0; conaffinity 0.0; } }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.joint_color;
+    }
+    hip_roll_link_l: meta_kinematics.kinematics.elements.link {
+        mass 0.15; origin [0, 0, 0];
+        inertia_com { xx 0.00006144; yy 0.00006144; zz 0.00006144; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.032]; collision { contype 0.0; conaffinity 0.0; } }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.joint_color;
+    }
+    thigh_l: meta_kinematics.kinematics.elements.link {
+        mass 7; origin [0, 0, -0.2];
+        inertia_com { xx 0.1007270833; yy 0.1007270833; zz 0.0147875; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.065, 0.4]; }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.limb_color;
+        cylinder_mount: meta_kinematics.kinematics.elements.attachment { x -0.085; y 0; z -0.12; }
+    }
+    shin_l: meta_kinematics.kinematics.elements.link {
+        mass 4.3; origin [0, 0, -0.2];
+        inertia_com { xx 0.06024013333; yy 0.06024013333; zz 0.0058136; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.052, 0.4]; }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.limb_color;
+        knee_rod: meta_kinematics.kinematics.elements.attachment { x -0.055; y 0; z -0.16; }
+        ankle_mount: meta_kinematics.kinematics.elements.attachment { x -0.07; y 0; z -0.2; }
+    }
+    ankle_roll_link_l: meta_kinematics.kinematics.elements.link {
+        mass 0.15; origin [0, 0, 0];
+        inertia_com { xx 0.00006144; yy 0.00006144; zz 0.00006144; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.032]; collision { contype 0.0; conaffinity 0.0; } }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.joint_color;
+    }
+    foot_l: meta_kinematics.kinematics.elements.link {
+        mass 0.95; origin [0.055, 0, -0.04];
+        inertia_com { xx 0.001464583333; yy 0.004338333333; zz 0.004789583333; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.box { dimension [0.22, 0.11, 0.08]; }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.limb_color;
+        ankle_rod: meta_kinematics.kinematics.elements.attachment { x 0.11; y 0; z -0.03; }
+    }
+    toe_l: meta_kinematics.kinematics.elements.link {
+        mass 0.15; origin [0.04, 0, 0];
+        inertia_com { xx 0.0001665625; yy 0.0000953125; zz 0.00023125; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.box { dimension [0.08, 0.11, 0.035]; }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.limb_color;
+    }
+    shoulder_yaw_link_l: meta_kinematics.kinematics.elements.link {
+        mass 0.15; origin [0, 0, 0];
+        inertia_com { xx 0.00006144; yy 0.00006144; zz 0.00006144; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.032]; collision { contype 0.0; conaffinity 0.0; } }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.joint_color;
+    }
+    shoulder_roll_link_l: meta_kinematics.kinematics.elements.link {
+        mass 0.15; origin [0, 0, 0];
+        inertia_com { xx 0.00006144; yy 0.00006144; zz 0.00006144; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.032]; collision { contype 0.0; conaffinity 0.0; } }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.joint_color;
+    }
+    upper_arm_l: meta_kinematics.kinematics.elements.link {
+        mass 2.1; origin [0, 0, -0.15];
+        inertia_com { xx 0.016813125; yy 0.016813125; zz 0.00212625; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.045, 0.3]; }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.limb_color;
+        flexor_origin: meta_kinematics.kinematics.elements.attachment { x 0.065; y 0; z -0.12; }
+        extensor_origin: meta_kinematics.kinematics.elements.attachment { x -0.065; y 0; z -0.12; }
+        elbow_guide: meta_kinematics.kinematics.elements.attachment { x 0; y 0; z -0.3; radius_m 0.05; }
+        extensor_side: meta_kinematics.kinematics.elements.attachment { x -0.065; y 0; z -0.3; }
+    }
+    forearm_l: meta_kinematics.kinematics.elements.link {
+        mass 1.2; origin [0, 0, -0.13];
+        inertia_com { xx 0.0071932; yy 0.0071932; zz 0.0008664; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.038, 0.26]; }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.limb_color;
+        flexor_insertion: meta_kinematics.kinematics.elements.attachment { x 0.045; y 0; z -0.14; }
+        extensor_insertion: meta_kinematics.kinematics.elements.attachment { x -0.045; y 0; z -0.14; }
+    }
+    forearm_roll_link_l: meta_kinematics.kinematics.elements.link {
+        mass 0.1; origin [0, 0, 0];
+        inertia_com { xx 0.00004096; yy 0.00004096; zz 0.00004096; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.032]; collision { contype 0.0; conaffinity 0.0; } }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.joint_color;
+    }
+    wrist_roll_link_l: meta_kinematics.kinematics.elements.link {
+        mass 0.1; origin [0, 0, 0];
+        inertia_com { xx 0.00004096; yy 0.00004096; zz 0.00004096; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.032]; collision { contype 0.0; conaffinity 0.0; } }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.joint_color;
+    }
+    hand_l: meta_kinematics.kinematics.elements.link {
+        mass 0.45; origin [0, 0, -0.065];
+        inertia_com { xx 0.0009046875; yy 0.0007275; zz 0.0003646875; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.box { dimension [0.05, 0.085, 0.13]; }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.limb_color;
+    }
+    hip_yaw_link_r: meta_kinematics.kinematics.elements.link {
+        mass 0.15; origin [0, 0, 0];
+        inertia_com { xx 0.00006144; yy 0.00006144; zz 0.00006144; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.032]; collision { contype 0.0; conaffinity 0.0; } }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.joint_color;
+    }
+    hip_roll_link_r: meta_kinematics.kinematics.elements.link {
+        mass 0.15; origin [0, 0, 0];
+        inertia_com { xx 0.00006144; yy 0.00006144; zz 0.00006144; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.032]; collision { contype 0.0; conaffinity 0.0; } }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.joint_color;
+    }
+    thigh_r: meta_kinematics.kinematics.elements.link {
+        mass 7; origin [0, 0, -0.2];
+        inertia_com { xx 0.1007270833; yy 0.1007270833; zz 0.0147875; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.065, 0.4]; }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.limb_color;
+        cylinder_mount: meta_kinematics.kinematics.elements.attachment { x -0.085; y 0; z -0.12; }
+    }
+    shin_r: meta_kinematics.kinematics.elements.link {
+        mass 4.3; origin [0, 0, -0.2];
+        inertia_com { xx 0.06024013333; yy 0.06024013333; zz 0.0058136; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.052, 0.4]; }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.limb_color;
+        knee_rod: meta_kinematics.kinematics.elements.attachment { x -0.055; y 0; z -0.16; }
+        ankle_mount: meta_kinematics.kinematics.elements.attachment { x -0.07; y 0; z -0.2; }
+    }
+    ankle_roll_link_r: meta_kinematics.kinematics.elements.link {
+        mass 0.15; origin [0, 0, 0];
+        inertia_com { xx 0.00006144; yy 0.00006144; zz 0.00006144; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.032]; collision { contype 0.0; conaffinity 0.0; } }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.joint_color;
+    }
+    foot_r: meta_kinematics.kinematics.elements.link {
+        mass 0.95; origin [0.055, 0, -0.04];
+        inertia_com { xx 0.001464583333; yy 0.004338333333; zz 0.004789583333; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.box { dimension [0.22, 0.11, 0.08]; }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.limb_color;
+        ankle_rod: meta_kinematics.kinematics.elements.attachment { x 0.11; y 0; z -0.03; }
+    }
+    toe_r: meta_kinematics.kinematics.elements.link {
+        mass 0.15; origin [0.04, 0, 0];
+        inertia_com { xx 0.0001665625; yy 0.0000953125; zz 0.00023125; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.box { dimension [0.08, 0.11, 0.035]; }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.limb_color;
+    }
+    shoulder_yaw_link_r: meta_kinematics.kinematics.elements.link {
+        mass 0.15; origin [0, 0, 0];
+        inertia_com { xx 0.00006144; yy 0.00006144; zz 0.00006144; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.032]; collision { contype 0.0; conaffinity 0.0; } }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.joint_color;
+    }
+    shoulder_roll_link_r: meta_kinematics.kinematics.elements.link {
+        mass 0.15; origin [0, 0, 0];
+        inertia_com { xx 0.00006144; yy 0.00006144; zz 0.00006144; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.032]; collision { contype 0.0; conaffinity 0.0; } }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.joint_color;
+    }
+    upper_arm_r: meta_kinematics.kinematics.elements.link {
+        mass 2.1; origin [0, 0, -0.15];
+        inertia_com { xx 0.016813125; yy 0.016813125; zz 0.00212625; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.045, 0.3]; }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.limb_color;
+        flexor_origin: meta_kinematics.kinematics.elements.attachment { x 0.065; y 0; z -0.12; }
+        extensor_origin: meta_kinematics.kinematics.elements.attachment { x -0.065; y 0; z -0.12; }
+        elbow_guide: meta_kinematics.kinematics.elements.attachment { x 0; y 0; z -0.3; radius_m 0.05; }
+        extensor_side: meta_kinematics.kinematics.elements.attachment { x -0.065; y 0; z -0.3; }
+    }
+    forearm_r: meta_kinematics.kinematics.elements.link {
+        mass 1.2; origin [0, 0, -0.13];
+        inertia_com { xx 0.0071932; yy 0.0071932; zz 0.0008664; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.038, 0.26]; }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.limb_color;
+        flexor_insertion: meta_kinematics.kinematics.elements.attachment { x 0.045; y 0; z -0.14; }
+        extensor_insertion: meta_kinematics.kinematics.elements.attachment { x -0.045; y 0; z -0.14; }
+    }
+    forearm_roll_link_r: meta_kinematics.kinematics.elements.link {
+        mass 0.1; origin [0, 0, 0];
+        inertia_com { xx 0.00004096; yy 0.00004096; zz 0.00004096; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.032]; collision { contype 0.0; conaffinity 0.0; } }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.joint_color;
+    }
+    wrist_roll_link_r: meta_kinematics.kinematics.elements.link {
+        mass 0.1; origin [0, 0, 0];
+        inertia_com { xx 0.00004096; yy 0.00004096; zz 0.00004096; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.032]; collision { contype 0.0; conaffinity 0.0; } }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.joint_color;
+    }
+    hand_r: meta_kinematics.kinematics.elements.link {
+        mass 0.45; origin [0, 0, -0.065];
+        inertia_com { xx 0.0009046875; yy 0.0007275; zz 0.0003646875; xy 0.0; xz 0.0; yz 0.0; }
+        link_geometry: meta_kinematics.kinematics.geometry.box { dimension [0.05, 0.085, 0.13]; }
+        visual -> link_geometry; collision -> link_geometry; color -> humanoid.limb_color;
+    }
+    @base: meta_kinematics.kinematics.conti_joint { (+ world [[0.0, 0.0, 0.98], [0.0, 0.0, 0.0]], - pelvis, - meta_kinematics.kinematics.axes.AXIS_Z); }
+    @abdomen_yaw: meta_kinematics.kinematics.rev_joint { (+ pelvis [[0, 0, 0.1], [0.0, 0.0, 0.0]], - spine_yaw_link, - meta_kinematics.kinematics.axes.AXIS_Z); limit_lower -45; limit_upper 45; limit_effort 100; limit_velocity 5.0; }
+    @abdomen_roll: meta_kinematics.kinematics.rev_joint { (+ spine_yaw_link [[0, 0, 0], [0.0, 0.0, 0.0]], - spine_roll_link, - meta_kinematics.kinematics.axes.AXIS_X); limit_lower -25; limit_upper 25; limit_effort 100; limit_velocity 5.0; }
+    @abdomen: meta_kinematics.kinematics.rev_joint { (+ spine_roll_link [[0, 0, 0], [0.0, 0.0, 0.0]], - torso, - meta_kinematics.kinematics.axes.AXIS_Y); limit_lower -30; limit_upper 40; limit_effort 120; limit_velocity 5.0; }
+    @neck_yaw: meta_kinematics.kinematics.rev_joint { (+ torso [[0, 0, 0.45], [0.0, 0.0, 0.0]], - neck_yaw_link, - meta_kinematics.kinematics.axes.AXIS_Z); limit_lower -75; limit_upper 75; limit_effort 15; limit_velocity 5.0; }
+    @neck: meta_kinematics.kinematics.rev_joint { (+ neck_yaw_link [[0, 0, 0], [0.0, 0.0, 0.0]], - head, - meta_kinematics.kinematics.axes.AXIS_Y); limit_lower -35; limit_upper 45; limit_effort 15; limit_velocity 5.0; }
+    @hip_yaw_l: meta_kinematics.kinematics.rev_joint { (+ pelvis [[0, 0.105, -0.08], [0.0, 0.0, 0.0]], - hip_yaw_link_l, - meta_kinematics.kinematics.axes.AXIS_Z); limit_lower -45; limit_upper 45; limit_effort 100; limit_velocity 5.0; }
+    @hip_roll_l: meta_kinematics.kinematics.rev_joint { (+ hip_yaw_link_l [[0, 0, 0], [0.0, 0.0, 0.0]], - hip_roll_link_l, - meta_kinematics.kinematics.axes.AXIS_X); limit_lower -35; limit_upper 45; limit_effort 150; limit_velocity 5.0; }
+    @hip_l: meta_kinematics.kinematics.rev_joint { (+ hip_roll_link_l [[0, 0, 0], [0.0, 0.0, 0.0]], - thigh_l, - meta_kinematics.kinematics.axes.AXIS_Y); limit_lower -100; limit_upper 40; limit_effort 180; limit_velocity 5.0; }
+    @knee_l: meta_kinematics.kinematics.rev_joint { (+ thigh_l [[0, 0, -0.4], [0.0, 0.0, 0.0]], - shin_l, - meta_kinematics.kinematics.axes.AXIS_Y); limit_lower -5; limit_upper 135; limit_effort 180; limit_velocity 5.0; }
+    @ankle_roll_l: meta_kinematics.kinematics.rev_joint { (+ shin_l [[0, 0, -0.4], [0.0, 0.0, 0.0]], - ankle_roll_link_l, - meta_kinematics.kinematics.axes.AXIS_X); limit_lower -25; limit_upper 25; limit_effort 90; limit_velocity 5.0; }
+    @ankle_l: meta_kinematics.kinematics.rev_joint { (+ ankle_roll_link_l [[0, 0, -0.01], [0.0, 0.0, 0.0]], - foot_l, - meta_kinematics.kinematics.axes.AXIS_Y); limit_lower -35; limit_upper 35; limit_effort 120; limit_velocity 5.0; }
+    @toe_flex_l: meta_kinematics.kinematics.rev_joint { (+ foot_l [[0.165, 0, -0.055], [0.0, 0.0, 0.0]], - toe_l, - meta_kinematics.kinematics.axes.AXIS_Y); limit_lower -20; limit_upper 45; limit_effort 30; limit_velocity 5.0; }
+    @shoulder_yaw_l: meta_kinematics.kinematics.rev_joint { (+ torso [[0, 0.231, 0.34], [0.0, 0.0, 0.0]], - shoulder_yaw_link_l, - meta_kinematics.kinematics.axes.AXIS_Z); limit_lower -90; limit_upper 90; limit_effort 50; limit_velocity 5.0; }
+    @shoulder_roll_l: meta_kinematics.kinematics.rev_joint { (+ shoulder_yaw_link_l [[0, 0, 0], [0.0, 0.0, 0.0]], - shoulder_roll_link_l, - meta_kinematics.kinematics.axes.AXIS_X); limit_lower -100; limit_upper 100; limit_effort 65; limit_velocity 5.0; }
+    @shoulder_l: meta_kinematics.kinematics.rev_joint { (+ shoulder_roll_link_l [[0, 0, 0], [0.0, 0.0, 0.0]], - upper_arm_l, - meta_kinematics.kinematics.axes.AXIS_Y); limit_lower -160; limit_upper 60; limit_effort 65; limit_velocity 5.0; }
+    @elbow_l: meta_kinematics.kinematics.rev_joint { (+ upper_arm_l [[0, 0, -0.3], [0.0, 0.0, 0.0]], - forearm_l, - meta_kinematics.kinematics.axes.AXIS_Y); limit_lower -110; limit_upper 0; limit_effort 45; limit_velocity 5.0; }
+    @forearm_roll_l: meta_kinematics.kinematics.rev_joint { (+ forearm_l [[0, 0, -0.26], [0.0, 0.0, 0.0]], - forearm_roll_link_l, - meta_kinematics.kinematics.axes.AXIS_Z); limit_lower -90; limit_upper 90; limit_effort 12; limit_velocity 5.0; }
+    @wrist_roll_l: meta_kinematics.kinematics.rev_joint { (+ forearm_roll_link_l [[0, 0, 0], [0.0, 0.0, 0.0]], - wrist_roll_link_l, - meta_kinematics.kinematics.axes.AXIS_X); limit_lower -35; limit_upper 35; limit_effort 10; limit_velocity 5.0; }
+    @wrist_pitch_l: meta_kinematics.kinematics.rev_joint { (+ wrist_roll_link_l [[0, 0, -0.01], [0.0, 0.0, 0.0]], - hand_l, - meta_kinematics.kinematics.axes.AXIS_Y); limit_lower -70; limit_upper 70; limit_effort 10; limit_velocity 5.0; }
+    @hip_yaw_r: meta_kinematics.kinematics.rev_joint { (+ pelvis [[0, -0.105, -0.08], [0.0, 0.0, 0.0]], - hip_yaw_link_r, - meta_kinematics.kinematics.axes.AXIS_Z); limit_lower -45; limit_upper 45; limit_effort 100; limit_velocity 5.0; }
+    @hip_roll_r: meta_kinematics.kinematics.rev_joint { (+ hip_yaw_link_r [[0, 0, 0], [0.0, 0.0, 0.0]], - hip_roll_link_r, - meta_kinematics.kinematics.axes.AXIS_X); limit_lower -35; limit_upper 45; limit_effort 150; limit_velocity 5.0; }
+    @hip_r: meta_kinematics.kinematics.rev_joint { (+ hip_roll_link_r [[0, 0, 0], [0.0, 0.0, 0.0]], - thigh_r, - meta_kinematics.kinematics.axes.AXIS_Y); limit_lower -100; limit_upper 40; limit_effort 180; limit_velocity 5.0; }
+    @knee_r: meta_kinematics.kinematics.rev_joint { (+ thigh_r [[0, 0, -0.4], [0.0, 0.0, 0.0]], - shin_r, - meta_kinematics.kinematics.axes.AXIS_Y); limit_lower -5; limit_upper 135; limit_effort 180; limit_velocity 5.0; }
+    @ankle_roll_r: meta_kinematics.kinematics.rev_joint { (+ shin_r [[0, 0, -0.4], [0.0, 0.0, 0.0]], - ankle_roll_link_r, - meta_kinematics.kinematics.axes.AXIS_X); limit_lower -25; limit_upper 25; limit_effort 90; limit_velocity 5.0; }
+    @ankle_r: meta_kinematics.kinematics.rev_joint { (+ ankle_roll_link_r [[0, 0, -0.01], [0.0, 0.0, 0.0]], - foot_r, - meta_kinematics.kinematics.axes.AXIS_Y); limit_lower -35; limit_upper 35; limit_effort 120; limit_velocity 5.0; }
+    @toe_flex_r: meta_kinematics.kinematics.rev_joint { (+ foot_r [[0.165, 0, -0.055], [0.0, 0.0, 0.0]], - toe_r, - meta_kinematics.kinematics.axes.AXIS_Y); limit_lower -20; limit_upper 45; limit_effort 30; limit_velocity 5.0; }
+    @shoulder_yaw_r: meta_kinematics.kinematics.rev_joint { (+ torso [[0, -0.231, 0.34], [0.0, 0.0, 0.0]], - shoulder_yaw_link_r, - meta_kinematics.kinematics.axes.AXIS_Z); limit_lower -90; limit_upper 90; limit_effort 50; limit_velocity 5.0; }
+    @shoulder_roll_r: meta_kinematics.kinematics.rev_joint { (+ shoulder_yaw_link_r [[0, 0, 0], [0.0, 0.0, 0.0]], - shoulder_roll_link_r, - meta_kinematics.kinematics.axes.AXIS_X); limit_lower -100; limit_upper 100; limit_effort 65; limit_velocity 5.0; }
+    @shoulder_r: meta_kinematics.kinematics.rev_joint { (+ shoulder_roll_link_r [[0, 0, 0], [0.0, 0.0, 0.0]], - upper_arm_r, - meta_kinematics.kinematics.axes.AXIS_Y); limit_lower -160; limit_upper 60; limit_effort 65; limit_velocity 5.0; }
+    @elbow_r: meta_kinematics.kinematics.rev_joint { (+ upper_arm_r [[0, 0, -0.3], [0.0, 0.0, 0.0]], - forearm_r, - meta_kinematics.kinematics.axes.AXIS_Y); limit_lower -110; limit_upper 0; limit_effort 45; limit_velocity 5.0; }
+    @forearm_roll_r: meta_kinematics.kinematics.rev_joint { (+ forearm_r [[0, 0, -0.26], [0.0, 0.0, 0.0]], - forearm_roll_link_r, - meta_kinematics.kinematics.axes.AXIS_Z); limit_lower -90; limit_upper 90; limit_effort 12; limit_velocity 5.0; }
+    @wrist_roll_r: meta_kinematics.kinematics.rev_joint { (+ forearm_roll_link_r [[0, 0, 0], [0.0, 0.0, 0.0]], - wrist_roll_link_r, - meta_kinematics.kinematics.axes.AXIS_X); limit_lower -35; limit_upper 35; limit_effort 10; limit_velocity 5.0; }
+    @wrist_pitch_r: meta_kinematics.kinematics.rev_joint { (+ wrist_roll_link_r [[0, 0, -0.01], [0.0, 0.0, 0.0]], - hand_r, - meta_kinematics.kinematics.axes.AXIS_Y); limit_lower -70; limit_upper 70; limit_effort 10; limit_velocity 5.0; }
+    elbow_muscle { law "muscle"; force_n 800.0; activation_s 0.015; deactivation_s 0.05; length_min_m 0.10; length_max_m 0.48; radius_m 0.018; }
+    knee_cylinder { law "hydraulic"; area_m2 0.00045; pressure_pa 8000000.0; response_s 0.04; damping_ns_m 60.0; length_min_m 0.10; length_max_m 0.48; radius_m 0.022; }
+    ankle_cylinder { law "hydraulic"; area_m2 0.00030; pressure_pa 8000000.0; response_s 0.04; damping_ns_m 60.0; length_min_m 0.15; length_max_m 0.42; radius_m 0.018; }
+    @flexor_l: meta_kinematics.kinematics.muscle_drive { (+ upper_arm_l.flexor_origin, - forearm_l.flexor_insertion); joint -> elbow_l; parameters -> elbow_muscle; }
+    @extensor_l: meta_kinematics.kinematics.muscle_drive { (+ upper_arm_l.extensor_origin, - forearm_l.extensor_insertion); joint -> elbow_l; parameters -> elbow_muscle; wrap -> upper_arm_l.elbow_guide; side -> upper_arm_l.extensor_side; }
+    @knee_cylinder_l: meta_kinematics.kinematics.hydraulic_drive { (+ thigh_l.cylinder_mount, - shin_l.knee_rod); joint -> knee_l; parameters -> knee_cylinder; }
+    @ankle_cylinder_l: meta_kinematics.kinematics.hydraulic_drive { (+ shin_l.ankle_mount, - foot_l.ankle_rod); joint -> ankle_l; parameters -> ankle_cylinder; }
+    @flexor_r: meta_kinematics.kinematics.muscle_drive { (+ upper_arm_r.flexor_origin, - forearm_r.flexor_insertion); joint -> elbow_r; parameters -> elbow_muscle; }
+    @extensor_r: meta_kinematics.kinematics.muscle_drive { (+ upper_arm_r.extensor_origin, - forearm_r.extensor_insertion); joint -> elbow_r; parameters -> elbow_muscle; wrap -> upper_arm_r.elbow_guide; side -> upper_arm_r.extensor_side; }
+    @knee_cylinder_r: meta_kinematics.kinematics.hydraulic_drive { (+ thigh_r.cylinder_mount, - shin_r.knee_rod); joint -> knee_r; parameters -> knee_cylinder; }
+    @ankle_cylinder_r: meta_kinematics.kinematics.hydraulic_drive { (+ shin_r.ankle_mount, - foot_r.ankle_rod); joint -> ankle_r; parameters -> ankle_cylinder; }
 
-    // === Trunk joints (sagittal) ===
-    @abdomen: meta_kinematics.kinematics.rev_joint { (+ pelvis [[0.0, 0.0, 0.05], [0.0,0.0,0.0]], - torso, - meta_kinematics.kinematics.axes.AXIS_Y); }
-    @neck:    meta_kinematics.kinematics.rev_joint { (+ torso  [[0.0, 0.0, 0.24], [0.0,0.0,0.0]], - head,  - meta_kinematics.kinematics.axes.AXIS_Y); }
-
-    // === Leg joints: hip (pelvis corner -> thigh) · knee (thigh end -> shin) · ankle (shin end -> foot) ===
-    @hip_l:   meta_kinematics.kinematics.rev_joint { (+ pelvis [[0.0,  0.09, -0.05], [0.0,0.0,0.0]], - thigh_l, - meta_kinematics.kinematics.axes.AXIS_Y); }
-    @knee_l:  meta_kinematics.kinematics.rev_joint { (+ thigh_l [[0.0, 0.0, -0.34], [0.0,0.0,0.0]], - shin_l,  - meta_kinematics.kinematics.axes.AXIS_Y); }
-    @ankle_l: meta_kinematics.kinematics.rev_joint { (+ shin_l  [[0.0, 0.0, -0.34], [0.0,0.0,0.0]], - foot_l,  - meta_kinematics.kinematics.axes.AXIS_Y); }
-    @hip_r:   meta_kinematics.kinematics.rev_joint { (+ pelvis [[0.0, -0.09, -0.05], [0.0,0.0,0.0]], - thigh_r, - meta_kinematics.kinematics.axes.AXIS_Y); }
-    @knee_r:  meta_kinematics.kinematics.rev_joint { (+ thigh_r [[0.0, 0.0, -0.34], [0.0,0.0,0.0]], - shin_r,  - meta_kinematics.kinematics.axes.AXIS_Y); }
-    @ankle_r: meta_kinematics.kinematics.rev_joint { (+ shin_r  [[0.0, 0.0, -0.34], [0.0,0.0,0.0]], - foot_r,  - meta_kinematics.kinematics.axes.AXIS_Y); }
-
-    // === Arm joints: shoulder (torso -> upper_arm) · elbow (upper_arm end -> forearm) ===
-    @shoulder_l: meta_kinematics.kinematics.rev_joint { (+ torso     [[0.0,  0.16, 0.20], [0.0,0.0,0.0]], - upper_arm_l, - meta_kinematics.kinematics.axes.AXIS_Y); }
-    @elbow_l:    meta_kinematics.kinematics.rev_joint { (+ upper_arm_l [[0.0, 0.0, -0.28], [0.0,0.0,0.0]], - forearm_l,   - meta_kinematics.kinematics.axes.AXIS_Y); }
-    @shoulder_r: meta_kinematics.kinematics.rev_joint { (+ torso     [[0.0, -0.16, 0.20], [0.0,0.0,0.0]], - upper_arm_r, - meta_kinematics.kinematics.axes.AXIS_Y); }
-    @elbow_r:    meta_kinematics.kinematics.rev_joint { (+ upper_arm_r [[0.0, 0.0, -0.28], [0.0,0.0,0.0]], - forearm_r,   - meta_kinematics.kinematics.axes.AXIS_Y); }
+    // TP scheduling groups; the physical body model remains unchanged.
+    tp_leg_l_0: meta_kinematics.kinematics.elements.tp_axis { joint -> hip_l; lower_deg -20; upper_deg 20; }
+    tp_leg_l_1: meta_kinematics.kinematics.elements.tp_axis { joint -> knee_l; lower_deg 5; upper_deg 50; }
+    @tp_leg_l: meta_kinematics.kinematics.tp_chart { (+ tp_leg_l_0, + tp_leg_l_1); operator "rest_acceleration"; samples 11; rank 3; cr_grid 257; }
+    tp_leg_r_0: meta_kinematics.kinematics.elements.tp_axis { joint -> hip_r; lower_deg -20; upper_deg 20; }
+    tp_leg_r_1: meta_kinematics.kinematics.elements.tp_axis { joint -> knee_r; lower_deg 5; upper_deg 50; }
+    @tp_leg_r: meta_kinematics.kinematics.tp_chart { (+ tp_leg_r_0, + tp_leg_r_1); operator "rest_acceleration"; samples 11; rank 3; cr_grid 257; }
+    tp_arm_l_0: meta_kinematics.kinematics.elements.tp_axis { joint -> shoulder_l; lower_deg -30; upper_deg 0; }
+    tp_arm_l_1: meta_kinematics.kinematics.elements.tp_axis { joint -> elbow_l; lower_deg -90; upper_deg -10; }
+    @tp_arm_l: meta_kinematics.kinematics.tp_chart { (+ tp_arm_l_0, + tp_arm_l_1); operator "rest_acceleration"; samples 11; rank 3; cr_grid 257; }
+    tp_arm_r_0: meta_kinematics.kinematics.elements.tp_axis { joint -> shoulder_r; lower_deg -30; upper_deg 0; }
+    tp_arm_r_1: meta_kinematics.kinematics.elements.tp_axis { joint -> elbow_r; lower_deg -90; upper_deg -10; }
+    @tp_arm_r: meta_kinematics.kinematics.tp_chart { (+ tp_arm_r_0, + tp_arm_r_1); operator "rest_acceleration"; samples 11; rank 3; cr_grid 257; }
 }
