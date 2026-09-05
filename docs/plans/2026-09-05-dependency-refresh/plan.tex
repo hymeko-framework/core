@@ -148,5 +148,45 @@ reported portable until every referenced revision is reachable at its configured
 source and verification succeeds without task-local overrides. Tag only the tested
 revision set after the user's requested order; do not invent a release version,
 publish tags, merge main or push unpublished revisions without the needed scope.
+\paragraph{Remaining branches audit, 2026-09-06 00:22 +02:00.}
+The user now requests inspection of the excluded branches. Reuse this plan and
+the central dependency report. Fresh refs: Core audit 89d221f versus semantic
+digest 112a254 (16/5 commits); Graph audit 4a59c23 versus P34 83774b8 (4/49).
+Git merge-tree may write unreachable objects but must not change a working tree,
+index or branch. Core's conflict-free result includes portable ID serialization
+and three robotics commits; inspect these separately from the seven-file digest
+commit. Graph has four textual conflicts and needs semantic reconciliation.
+No protected implementation edit, dependency update, integration commit or tag
+is authorized by this diagnostic step. The earlier slug-specific approvals do
+not cover a new digest implementation or wire change.
+
+Use existing incoming tests before extending the test-only diagnostic surface.
+Discriminate deep-value truncation and declaration/arc renumbering with minimal
+counterexamples; retain expected failures. A further coverage control changes
+an edge-owned ArcRec target without a separate HyperArc declaration; require
+both CBOR encode/decode acceptance and a changed V1 structure hash before
+asserting that V2 must differ. Check the corpus-golden attribution
+by running the same test binary with incoming and audit data trees: changing
+fixtures must not be misreported as a hash-algorithm change. No frozen hash is
+updated. Incoming branch tests are diagnostic evidence, not merged-suite results.
+
+Reuse Amaterasu's existing clean/core object store and Core SDK image 1886f17.
+Transfer a scoped Git bundle into the existing dependency-refresh directory,
+fetch its objects without checkout, and extract the incoming committed source
+only inside a disposable bounded container. This is a physical-host verification
+copy, not a new implementation worktree. Preserve all existing checkouts, images
+and tags. Mount the shared Cargo cache and reuse an appropriate Core target
+cache; 16 GiB memory, no extra swap, six CPUs, offline test execution. Add no
+dependencies. Archive the exact test-only patch, source refs, raw output,
+container exit and memory peak under reports/dependency-refresh; retire the
+temporary source with the stopped diagnostic container after task acceptance.
+
+ETA: 10--15 minutes, based on the previous 84-second cold Core gate plus focused
+rebuild and report preparation. No performance claim or full benchmark rerun.
+Acceptance is an evidence-backed integration order, exact conflicting files,
+protected scope, invariants, focused and full future gates, and rollback.
+Rollback of this audit is limited to its documentation/evidence additions;
+actual integration, if later approved, uses separate thematic commits and keeps
+the current tested consumer revision set available unchanged.
 \input{plan.tikz}
 \end{document}
