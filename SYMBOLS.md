@@ -13,13 +13,15 @@ Extracted by grammar -- tree-sitter for Rust and C++, `ast` for Python -- so tha
 `pub(crate)`, a `pub fn` inside a private `mod`, and a `def` written inside a
 docstring are all excluded for a stated reason rather than by luck.
 
-**3 package(s), 614 public symbol(s).**
+**5 package(s), 614 public symbol(s).**
 
-## core (rust)
+## docs (rust)
 
-- **Root:** `.`
-- **Manifest:** `Cargo.toml`
-- **Charter:** The HyMeKo semantic core — a standalone cargo workspace.
+- **Root:** `docs`
+- **Manifest:** none -- inferred from sources
+- **Charter:** <no charter>
+
+_No public symbols._
 
 ## hymeko_core (rust)
 
@@ -669,3 +671,21 @@ docstring are all excluded for a stated reason rather than by luck.
 - `write` — `hymeko_wgpu/src/profiling.rs`
 - `write_tensor` — `hymeko_wgpu/src/resources.rs`
 - `zeroed_tensor` — `hymeko_wgpu/src/resources.rs`
+
+## reports (python)
+
+- **Root:** `reports`
+- **Manifest:** none -- inferred from sources
+- **Charter:** <no charter>
+
+### classes
+
+- `AuditSummary` — `reports/platform-audit/summarize.py`
+
+## reports (rust)
+
+- **Root:** `reports`
+- **Manifest:** none -- inferred from sources
+- **Charter:** <no charter>
+
+_No public symbols._

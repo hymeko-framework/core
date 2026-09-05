@@ -248,18 +248,18 @@ It does not change the historical matrix-wide totals above or promote the
 `UIR-DYN-*` native mutation/publication requirements to PASS. The distinct
 [Lean specification](distributed-semantics.lean) is a normative abstraction,
 not a translation of Rust. The [audit report](../../../reports/2026-09-05-distributed-semantics.md)
-and [machine-readable mapping](../../../reports/distributed-semantics/traceability.tsv)
+and [baseline mapping](../../../reports/distributed-semantics/traceability.tsv)
 keep **model proof**, **runtime observation** and **missing implementation** separate.
 
-| Requirement | Lean model | Actual Core baseline `4a243ed` / SDK `c935909` |
+| Requirement | Lean model | Actual Core correction `8a0c49d` |
 |---|---|---|
 | `DIST-ORDER` — componentwise version order | PROVED: reflexive, transitive, antisymmetric | Existing `SnapshotVersion::dominates`; not a new exhaustive Rust proof |
-| `DIST-MONOTONE` — accepted transitions cannot regress any component | PROVED: one step and finite replay | **FAIL**: incomparable snapshot and delta each commit a regressing axis |
-| `DIST-RESUME` — an equal established version with unknown identity is not installed | PROVED | **FAIL** after `resuming_at(V)` and `resuming_at(ZERO)` |
+| `DIST-MONOTONE` — accepted transitions cannot regress any component | PROVED: one step and finite replay | PASS: former snapshot/delta regression cases now return exact `IncoherentVersionBump` without state change |
+| `DIST-RESUME` — an equal established version with unknown identity is not installed | PROVED | PASS after `resuming_at(V)`, `resuming_at(ZERO)` and resync reset |
 | `DIST-BOOTSTRAP` — a fresh assembler may install ZERO | PROVED by closed example | PASS: public-API probe |
 | `DIST-STALE` — a delta with a different base does not install | PROVED | PASS: public-API stale-base probe |
 | `DIST-PRESERVE` — rejection leaves modeled held state unchanged | PROVED | PARTIAL: checked version/digest observations only; no actual IR application in this probe |
-| `DIST-IDEMPOTENT` — applying the same transaction twice preserves the once-applied state | PROVED, including adjacent duplicate elimination in a list | Not independently revalidated here; prior assembler tests do not close full-state application |
+| `DIST-IDEMPOTENT` — applying the same transaction twice preserves the once-applied state | PROVED, including adjacent duplicate elimination in a list | PARTIAL: known-identity replay after reset and the existing assembler suite pass; full semantic-state application remains outside this boundary |
 | `DIST-SNAPSHOT` — same coherent snapshot strictly newer than both replicas yields equal modeled state | PROVED under these explicit premises | PARTIAL: one resumed assembler advances; no full-state two-replica run |
 | `DIST-BINDING` — transaction identity authenticates every relevant payload bit | NOT MODELED: identity/payload tags are independent | Not established by this proof or seven probes; cryptographic assumptions remain explicit |
 | `DIST-INSTALL` — complete semantic application, durable atomic publication and installation acknowledgment | NOT MODELED | NOT_IMPLEMENTED as an end-to-end integration path here |
@@ -280,7 +280,14 @@ canonical IR. Equal structural v1 hashes are insufficient as full-state equality
 evidence. Numerical associativity/distributivity and hyperedge partition exchange
 are separate obligations, with no new algebra or grammar approved by this update.
 
-The proposed compatible Rust correction and regression/rollback plan are
-reviewable in the report; the required scoped Core edit token remains pending.
-Until it is applied and the same failing cases pass, these runtime FAIL rows
-remain open.
+The user approved `APPROVED-CORE-EDIT: distributed-admission-monotone-resume`.
+Correction `8a0c49d` changes the existing assembler, with no public-signature,
+wire, dependency or fixture change. All nine regression cases pass on Amaterasu;
+the original seven retain their expected outcomes. The test source moved from
+the audit directory into `hymeko_core/tests/ir_stream_admission.rs` and is
+registered in the existing harness. The old source and FAIL evidence remain
+available at audit commit `1befefb`; they are not rewritten as historical PASS.
+[Current report](../../../reports/2026-09-05-distributed-admission-fix.md) and
+[current mapping](../../../reports/distributed-admission-fix/traceability.tsv)
+record observed conformance. Rust PASS here means the named checks passed; it
+does not turn the abstract Lean proof into a whole-implementation refinement proof.

@@ -404,7 +404,8 @@ For an established equal version, known matching transaction identity permits a
 duplicate result, known differing identity reports conflict, and unknown identity
 requires recovery without replacing the held state. A fresh assembler and a
 restored ZERO version are distinct states. These are normative rules: the audit
-in §G.6 reproduces violations in the current Rust baseline.
+in §G.6 reproduces violations in the pre-fix baseline; correction `8a0c49d`
+implements these rules with focused public-API regressions.
 
 ### G.2 Mapping `CommittedTransaction` to native `IRDelta`
 
@@ -453,7 +454,9 @@ is accepted as a new commit, including restored ZERO. A second defect accepts
 incomparable targets such as `(2,2,2,0) → (1,3,3,0)` for snapshots and
 `(2,2,2,0) → (2,1,3,0)` for deltas. Four public-API assertions fail against the
 Amaterasu Core image. The [audit](../reports/2026-09-05-distributed-semantics.md)
-retains the traces and a proposed correction, pending scoped source approval.
+retains the pre-fix traces. The approved correction `8a0c49d` is implemented and
+the same four failures now pass, alongside five compatibility/retention checks.
+See the [correction report](../reports/2026-09-05-distributed-admission-fix.md).
 
 The compatible immediate rule is conservative: retain whether a version has
 been established, independently of whether its identity is known. Equal-version

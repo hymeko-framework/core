@@ -28,9 +28,11 @@ synchronization as hypothetical extensions.
 **2026-09-05 update:** the existing [Core specification, Part G](unified-ir-architecture.md#part-g--distributed-updates)
 and [Lean admission model](verification/unified-ir/distributed-semantics.lean)
 now separate normative safety from Rust conformance. The model passes kernel
-checking; the current Amaterasu Rust baseline passes three of seven admission
-probes and fails four. The compatible correction is proposed, awaiting scoped
-Core-source approval. [Evidence and scope](../reports/2026-09-05-distributed-semantics.md).
+checking. The pre-fix Amaterasu baseline passed three of seven admission probes
+and failed four. Approved correction `8a0c49d` makes all seven pass and adds two
+reset/identity-retention regressions, also passing.
+[Baseline](../reports/2026-09-05-distributed-semantics.md) and
+[correction evidence](../reports/2026-09-05-distributed-admission-fix.md).
 
 ---
 
@@ -444,7 +446,7 @@ For an equal established version, a matching retained transaction digest permits
 digest requires `ReplayOutsideWindow`, preserving state. A fresh assembler may
 bootstrap at ZERO; restoring an already established ZERO is a different case.
 These are required semantics; the version-only resume defect is reproduced in
-the 2026-09-05 audit and its source correction is pending.
+the 2026-09-05 audit and corrected in `8a0c49d`, without changing the public API.
 
 The existing bounded replay window records content-aware message identities.
 Reusing `(stream_id, seq)` with different contents is a conflict, not a duplicate;

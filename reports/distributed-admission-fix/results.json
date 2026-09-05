@@ -1,0 +1,32 @@
+{
+  "revision": "8a0c49d4f1cf63deabaa2f15ce147508ef02f598",
+  "original_cases": [
+    "resume_equal_version_without_identity_requires_resync",
+    "incomparable_snapshot_cannot_regress_topology",
+    "incomparable_delta_cannot_regress_weights",
+    "resumed_zero_is_distinct_from_empty_bootstrap",
+    "empty_bootstrap_can_install_zero_version",
+    "dominating_snapshot_advances_a_resumed_replica",
+    "stale_delta_base_preserves_the_current_version"
+  ],
+  "baseline": {
+    "passed": 3,
+    "failed": 4
+  },
+  "corrected_original": {
+    "passed": 7,
+    "failed": 0
+  },
+  "additional_retention": {
+    "passed": 2,
+    "failed": 0
+  },
+  "full_core": {
+    "passed": 366,
+    "failed": 0,
+    "ignored": 7
+  },
+  "image_id": "sha256:64fc9b80168e1c278723cfe49272be22a545662bc5b3c46e71a2515279ab6a78",
+  "exit_code": 0,
+  "oom_killed": false
+}
