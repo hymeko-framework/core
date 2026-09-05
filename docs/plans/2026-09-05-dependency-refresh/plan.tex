@@ -1,0 +1,60 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=23mm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{hyperref}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta}
+\title{HyMeKo dependency refresh: approval boundary and sequence}
+\date{Created-at: 2026-09-05 20:11 +02:00}
+\begin{document}
+\maketitle
+\paragraph{Scope and acceptance.}
+Continue the user's latest-provider, dependency-refresh and subsequent tagging
+instructions in the existing checkouts. Core base: 7186b55. Core fetched at 20:10,
+ahead 26 / behind 0; Parser fetched at 20:09. Proposed protected scope is only
+Core Cargo.lock: parser e28a205147c48273980e63aa3338ca286974a6ed to
+284c490d68232973a006bcba974279fed6f89ce8. The latter adds only Parser's own lock;
+source and Cargo manifest are identical. Keep the existing master source identity.
+\paragraph{Authorization.}
+The original user task explicitly protects Core dependency changes and requires
+an applicable literal token. Proposed, NOT RECEIVED:
+\texttt{APPROVED-CORE-EDIT: core-parser-latest-revision}.
+Before approval produce an applicable one-line patch, never modify Core Cargo.lock.
+The existing distributed-admission token does not authorize this separate change.
+ETA: 5 minutes for the proposal; after approval 10--20 minutes for Core refresh
+and clean Docker verification, based on the measured 82-second Core suite plus
+image preparation. Broader consumer work gets measured per existing harness.
+\paragraph{Discovery and affected files.}
+Reuse Cargo's lock resolution, existing Dockerfile and tools/ci/core.sh. Core
+Cargo.toml and hymeko\_core/Cargo.toml need no changes. The proposal adds this
+quartet, reports/2026-09-05-dependency-refresh.md and
+reports/dependency-refresh/core-parser.patch plus plan-build evidence.
+Use .gitattributes for exact evidence bytes if needed.
+\paragraph{Provider to consumer continuation.}
+After testing Core, record FINAL\_CORE. Align the exact same URL and Core rev in
+Graph root Cargo.toml, Cargo.lock and benchmarks/Cargo.lock; Transformation root
+Cargo.toml/lock; Hotaru root Cargo.toml/lock; Network root Cargo.toml/lock;
+VSCode server/Cargo.toml/lock; Simulator root Cargo.toml/lock. Transformation
+and Hotaru have their own final revisions for downstream consumers. Keep one
+Parser source identity everywhere. Current Tensor is already fresh. Graph P34
+feature integration is a separate pending scope choice; do not discard the two
+platform correctness patches or merge feature code under a dependency-only scope.
+\paragraph{Tests, invariants and rollback.}
+Use cargo update with the exact Parser commit and inspect the one-line lock delta.
+Verify one Core and Parser identity with cargo tree --locked -d. Build the existing
+clean-source Core SDK on Amaterasu and run its all entry point under 16 GiB,
+no additional swap, six CPUs. Require full Core tests, nine admission regressions,
+CBOR corpus, formatting, Clippy and smoke checks; keep fixture/hash expectations.
+The Lean source is unchanged, so reuse its valid proof artifact. Check affected
+consumer tests, Graph's separate benchmark workspace, Simulator ingress and WASM
+before claiming integration. No API, IR, wire, grammar or numerical change.
+Rollback only the scoped dependency commit, retaining its previous lock revision.
+\paragraph{Publication and tags.}
+Local revision closure does not establish remote availability. Consumers cannot be
+reported portable until every referenced revision is reachable at its configured
+source and verification succeeds without task-local overrides. Tag only the tested
+revision set after the user's requested order; do not invent a release version,
+publish tags, merge main or push unpublished revisions without the needed scope.
+\input{plan.tikz}
+\end{document}

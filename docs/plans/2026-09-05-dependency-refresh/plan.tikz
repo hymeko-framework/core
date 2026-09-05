@@ -1,0 +1,10 @@
+\begin{center}
+\begin{tikzpicture}[node distance=8mm, every node/.style={draw,rounded corners,align=center,font=\small}, >={Stealth}]
+\node (a) {Core dependency token};
+\node (c) [below=of a] {Parser lock refresh and verified Core};
+\node (o) [below=of c] {Graph / Transformation / Hotaru};
+\node (u) [below=of o] {Network / LSP / Simulator integration};
+\node (t) [below=of u] {Available tested revisions, then tags};
+\draw[->] (a)--(c); \draw[->] (c)--(o); \draw[->] (o)--(u); \draw[->] (u)--(t);
+\end{tikzpicture}
+\end{center}

@@ -27,3 +27,8 @@
 /reports/2026-09-05-contract-provider-refresh.md -text
 /docs/plans/2026-09-05-contract-provider-refresh/** -text
 /tools/hooks/* text eol=lf
+
+# Dependency-refresh proposal: preserve the reviewable patch and plan.
+/reports/dependency-refresh/** -text
+/reports/2026-09-05-dependency-refresh.md -text
+/docs/plans/2026-09-05-dependency-refresh/** -text
