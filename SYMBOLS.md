@@ -15,11 +15,11 @@ docstring are all excluded for a stated reason rather than by luck.
 
 **3 package(s), 613 public symbol(s).**
 
-## core-humanoid-actuation (rust)
+## docs (rust)
 
-- **Root:** `.`
-- **Manifest:** `Cargo.toml`
-- **Charter:** The HyMeKo semantic core — a standalone cargo workspace.
+- **Root:** `docs`
+- **Manifest:** none -- inferred from sources
+- **Charter:** <no charter>
 
 _No public symbols._
 
