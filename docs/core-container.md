@@ -9,9 +9,11 @@ hardware check, because its tests can skip when no adapter is available.
 Build on Amaterasu itself. The Dockerfile pins the official Rust 1.97.1 Bookworm
 linux/amd64 image by digest. The host's Rust installation is not used. The
 `.dockerignore` allowlist excludes Git metadata, target directories, host Cargo
-configuration, vendor trees and previous reports. Keep Cargo.lock unchanged:
-`cargo fetch --locked` selects parser `e28a205147c48273980e63aa3338ca286974a6ed`,
-even if its declared branch has advanced.
+configuration, vendor trees and previous reports. Build with the selected commit's
+Cargo.lock: `cargo fetch --locked` selects parser
+`284c490d68232973a006bcba974279fed6f89ce8`, even if its declared branch advances.
+This revision refresh was approved as `core-parser-latest-revision`; preserve the
+lock during image builds and update it only through a reviewed dependency change.
 
 ## Build with bounded resources
 

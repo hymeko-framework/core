@@ -18,10 +18,12 @@ Core Cargo.lock: parser e28a205147c48273980e63aa3338ca286974a6ed to
 source and Cargo manifest are identical. Keep the existing master source identity.
 \paragraph{Authorization.}
 The original user task explicitly protects Core dependency changes and requires
-an applicable literal token. Proposed, NOT RECEIVED:
+an applicable literal token. Received in the user chat before implementation,
+at this resumed task's 2026-09-05 20:45 +02:00 startup:
 \texttt{APPROVED-CORE-EDIT: core-parser-latest-revision}.
-Before approval produce an applicable one-line patch, never modify Core Cargo.lock.
-The existing distributed-admission token does not authorize this separate change.
+The approving chat turn identifier is not exposed. The one-line patch was
+prepared and checked before approval at 0c4e40a. Record this token in the scoped
+dependency commit footer. The original distributed-admission token remains separate.
 ETA: 5 minutes for the proposal; after approval 10--20 minutes for Core refresh
 and clean Docker verification, based on the measured 82-second Core suite plus
 image preparation. Broader consumer work gets measured per existing harness.
@@ -30,6 +32,13 @@ Reuse Cargo's lock resolution, existing Dockerfile and tools/ci/core.sh. Core
 Cargo.toml and hymeko\_core/Cargo.toml need no changes. The proposal adds this
 quartet, reports/2026-09-05-dependency-refresh.md and
 reports/dependency-refresh/core-parser.patch plus plan-build evidence.
+Extend that same evidence directory with Cargo-update logs, source/bundle hashes,
+image-build metadata and logs, final container/image inspect data, dependency
+identity inventory, resource summary and a final execution artifact manifest.
+Update docs/core-container.md's Parser pin documentation. Reuse the existing
+Amaterasu clean/core checkout at 8a0c49d, updating it from a scoped Git bundle
+only after clean status and base verification. The previous image remains intact;
+the new commit gets its own image tag and a new empty target volume.
 Use .gitattributes for exact evidence bytes if needed.
 \paragraph{Provider to consumer continuation.}
 After testing Core, record FINAL\_CORE. Align the exact same URL and Core rev in
