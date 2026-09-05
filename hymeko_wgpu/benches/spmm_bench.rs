@@ -13,8 +13,10 @@
 //! | `C gpu_oneshot` | CSR upload + X upload + prepare + dispatch + readback |
 //! | `D gpu_static_csr` | CSR resident; X upload + dispatch + readback |
 //! | `E gpu_resident_readback` | CSR + X resident; dispatch + readback |
+//! | `E resident_reused_readback` | same work, retained staging and destination |
+//! | `E reused_single_wait` | compute then readback, one queue completion wait |
 //! | `F gpu_resident` | CSR + X + Y resident; encode + submit + wait only |
-//! | `pipeline_creation` | prepare() alone, cold and warm cache |
+//! | `pipeline_creation` | cold library cache (driver cache retained) and warm prepare |
 //! | `workgroup_sweep` | 8x8 / 16x8 / 16x16 at one cell |
 //!
 //! Cell G (kernel-only timestamp) is reported by `spmm_probe` rather than here;
@@ -30,7 +32,7 @@ use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_m
 
 use hymeko::tensor::representations::tensor_csr::TensorCsr;
 use hymeko_wgpu::testing::SparseSpec;
-use hymeko_wgpu::{ComputeError, WgpuBackend, WorkgroupShape};
+use hymeko_wgpu::{ComputeError, KernelId, PipelineCache, WgpuBackend, WorkgroupShape};
 
 /// Feature dimensions swept at every scale.
 const FEATURE_DIMS: [usize; 4] = [1, 8, 32, 128];
@@ -52,6 +54,10 @@ fn backend() -> Option<WgpuBackend> {
     {
         Ok(b) => {
             eprintln!("GPU: {}", b.capabilities().summary());
+            if b.capabilities().device_type == "Cpu" {
+                eprintln!("GPU cells SKIPPED: software CPU adapter; not a GPU result");
+                return None;
+            }
             eprintln!(
                 "timestamp_query: {} (period {} ns)",
                 b.capabilities().timestamp_query,
@@ -257,27 +263,60 @@ fn bench_gpu_resident(c: &mut Criterion) {
             group.throughput(Throughput::Elements((csr.nnz() * fd) as u64));
             tune(&mut group, label, fd);
 
-            // E: dispatch + readback, nothing uploaded.
+            let mut readback = backend.create_readback_workspace();
+            let submit = || {
+                let mut encoder = backend.encoder(None);
+                op.encode(&mut encoder).unwrap();
+                backend.submit(encoder)
+            };
+            submit();
+            let got = backend.read_tensor_into(&output, &mut readback).unwrap();
+            let mut expected = vec![0.0; csr.num_rows * fd];
+            csr.spmm_into_serial(&x, fd, &mut expected);
+            assert_eq!(got.len(), expected.len());
+            assert!(
+                got.iter().zip(&expected).all(|(&g, &r)| {
+                    g.is_finite() && r.is_finite() && (g - r).abs() <= 1e-5 + 1e-5 * r.abs()
+                }),
+                "resident setup must agree with the Core CPU oracle"
+            );
+            drop(expected);
+
+            // E: dispatch + readback, nothing uploaded. Verify before timing.
             group.bench_function(
                 BenchmarkId::new("E_resident_readback", cell_id(label, fd)),
                 |b| {
                     b.iter(|| {
-                        let mut enc = backend.encoder(None);
-                        op.encode(&mut enc).unwrap();
-                        let idx = backend.submit(enc);
+                        let idx = submit();
                         backend.wait(idx).unwrap();
                         black_box(backend.read_tensor(&output).unwrap())
                     });
                 },
             );
 
+            // The two variants share resident data and allocation policy.
+            // A readback submission follows compute on the same queue, so its
+            // completion also proves compute completed when the first wait is omitted.
+            for (name, wait_compute) in [
+                ("E_resident_reused_readback", true),
+                ("E_reused_single_wait", false),
+            ] {
+                group.bench_function(BenchmarkId::new(name, cell_id(label, fd)), |b| {
+                    b.iter(|| {
+                        let idx = submit();
+                        if wait_compute {
+                            backend.wait(idx).unwrap();
+                        }
+                        black_box(backend.read_tensor_into(&output, &mut readback).unwrap());
+                    });
+                });
+            }
+
             // F: encode + submit + completion only. This is the number that
             // matters for a chain of operations that never leaves the device.
             group.bench_function(BenchmarkId::new("F_resident", cell_id(label, fd)), |b| {
                 b.iter(|| {
-                    let mut enc = backend.encoder(None);
-                    op.encode(&mut enc).unwrap();
-                    let idx = backend.submit(enc);
+                    let idx = submit();
                     backend.wait(idx).unwrap();
                 });
             });
@@ -377,7 +416,9 @@ fn bench_pipeline_creation(c: &mut Criterion) {
         .prepare()
         .unwrap();
 
-    group.bench_function("prepare_warm_cache", |b| {
+    // prepare writes parameters to the queue. Complete each iteration so pending
+    // upload staging cannot accumulate throughout Criterion's adaptive batches.
+    group.bench_function("prepare_warm_cache_completed", |b| {
         b.iter(|| {
             black_box(
                 backend
@@ -388,7 +429,44 @@ fn bench_pipeline_creation(c: &mut Criterion) {
                     .output(black_box(&output))
                     .prepare()
                     .unwrap(),
-            )
+            );
+            let idx = backend.submit(backend.encoder(None));
+            backend.wait(idx).unwrap();
+        });
+    });
+
+    group.bench_function("pipeline_cold_library_cache", |b| {
+        b.iter(|| {
+            let cache = PipelineCache::new();
+            black_box(
+                cache
+                    .bundle(backend.device(), KernelId::Spmm, 16, 8)
+                    .unwrap(),
+            );
+        });
+    });
+
+    // Completed transfer spans include allocation/queue submission as named;
+    // these are host wall-time boundaries, not kernel timestamp measurements.
+    group.bench_function("upload_csr_completed", |b| {
+        b.iter(|| {
+            let uploaded = backend
+                .resources()
+                .upload_csr_from("a-upload", black_box(&csr))
+                .unwrap();
+            let idx = backend.submit(backend.encoder(None));
+            backend.wait(idx).unwrap();
+            black_box(uploaded);
+        });
+    });
+    group.bench_function("upload_input_completed", |b| {
+        b.iter(|| {
+            backend
+                .resources()
+                .write_tensor(&input, black_box(&x))
+                .unwrap();
+            let idx = backend.submit(backend.encoder(None));
+            backend.wait(idx).unwrap();
         });
     });
 

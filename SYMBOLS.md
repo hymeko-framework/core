@@ -13,15 +13,13 @@ Extracted by grammar -- tree-sitter for Rust and C++, `ast` for Python -- so tha
 `pub(crate)`, a `pub fn` inside a private `mod`, and a `def` written inside a
 docstring are all excluded for a stated reason rather than by luck.
 
-**3 package(s), 613 public symbol(s).**
+**3 package(s), 614 public symbol(s).**
 
-## core-contract-webxr-integrated (rust)
+## core (rust)
 
 - **Root:** `.`
 - **Manifest:** `Cargo.toml`
 - **Charter:** The HyMeKo semantic core — a standalone cargo workspace.
-
-_No public symbols._
 
 ## hymeko_core (rust)
 

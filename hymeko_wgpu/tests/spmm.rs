@@ -21,7 +21,7 @@ use hymeko::tensor::compute::{ComputeError, SparseCsrShape, TensorShape};
 use hymeko::tensor::representations::tensor_csr::TensorCsr;
 use hymeko_wgpu::testing::backend_or_skip;
 use hymeko_wgpu::testing::{DegreeShape, SparseSpec};
-use hymeko_wgpu::{GpuTensor, WgpuBackend, WorkgroupShape};
+use hymeko_wgpu::{GpuCsrMatrix, GpuTensor, PreparedSpmm, WgpuBackend, WorkgroupShape};
 
 const POISON: f32 = -12345.5;
 
@@ -112,15 +112,7 @@ fn run_gpu(
         .upload_tensor("y", shape.output_shape(fd), &poison)
         .expect("y alloc");
 
-    let op = backend
-        .operations()
-        .spmm()
-        .matrix(&matrix)
-        .input(&input)
-        .output(&output)
-        .workgroup(workgroup)
-        .prepare()
-        .expect("prepare");
+    let op = prepare_spmm(backend, &matrix, &input, &output, workgroup);
 
     let mut encoder = backend.encoder(Some("spmm"));
     op.encode(&mut encoder).expect("encode");
@@ -128,6 +120,24 @@ fn run_gpu(
     backend.wait(index).expect("submit");
 
     backend.read_tensor(&output).expect("readback")
+}
+
+fn prepare_spmm<'a>(
+    backend: &'a WgpuBackend,
+    matrix: &'a GpuCsrMatrix<f32>,
+    input: &'a GpuTensor<f32>,
+    output: &'a GpuTensor<f32>,
+    workgroup: WorkgroupShape,
+) -> PreparedSpmm<'a> {
+    backend
+        .operations()
+        .spmm()
+        .matrix(matrix)
+        .input(input)
+        .output(output)
+        .workgroup(workgroup)
+        .prepare()
+        .expect("prepare")
 }
 
 /// Hand-built matrix: empty row (2), duplicate column in row 3, negatives.
@@ -145,6 +155,59 @@ fn handmade() -> TensorCsr<f32> {
 // ---------------------------------------------------------------------------
 // 1-9, 18: numerical agreement
 // ---------------------------------------------------------------------------
+
+#[test]
+fn reusable_readback_waits_for_changing_resident_compute() {
+    let Some(backend) = backend_or_skip("spmm_single_wait") else {
+        return;
+    };
+    let csr = handmade();
+    let fd = 8;
+    let matrix = backend.resources().upload_csr_from("a", &csr).unwrap();
+    let input = backend
+        .resources()
+        .zeroed_tensor("x", matrix.shape().input_shape(fd))
+        .unwrap();
+    let output = backend
+        .resources()
+        .zeroed_tensor("y", matrix.shape().output_shape(fd))
+        .unwrap();
+    let op = prepare_spmm(
+        &backend,
+        &matrix,
+        &input,
+        &output,
+        WorkgroupShape::default(),
+    );
+    let mut workspace = backend.create_readback_workspace();
+    for round in 0..8 {
+        let x: Vec<_> = (0..csr.num_cols * fd)
+            .map(|i| (i as f32 - 9.0) * (round + 1) as f32)
+            .collect();
+        backend.resources().write_tensor(&input, &x).unwrap();
+        let mut encoder = backend.encoder(None);
+        op.encode(&mut encoder).unwrap();
+        backend.submit(encoder);
+        // No compute wait: readback completion must cover both ordered submissions.
+        let got = backend.read_tensor_into(&output, &mut workspace).unwrap();
+        assert_close(got, &cpu_reference(&csr, &x, fd), "single queue wait");
+        assert_eq!(workspace.staging_allocations(), 1);
+    }
+}
+
+#[test]
+fn nonfinite_inputs_preserve_cpu_classification() {
+    let Some(backend) = backend_or_skip("spmm_nonfinite") else {
+        return;
+    };
+    let csr = handmade();
+    for special in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+        let mut x = vec![1.0; csr.num_cols];
+        x[0] = special;
+        let got = run_gpu(&backend, &csr, &x, 1, WorkgroupShape::default());
+        assert_close(&got, &cpu_reference(&csr, &x, 1), "nonfinite input");
+    }
+}
 
 #[test]
 fn test_handmade_matrix_matches_cpu_across_feature_dims() {
