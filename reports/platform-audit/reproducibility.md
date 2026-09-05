@@ -128,7 +128,43 @@ the same Cargo feature resolution. Run the first normally for the three fixed
 counterexamples; its `bounded_diamond_enumeration_probe --exact --ignored --nocapture`
 produces 3 warmups + 20 samples for 2/4/8/12/16 diamonds. Each returned path has
 2d steps, with analytical 2^d full outputs, 4,096-result and 1,000,000-expansion caps.
-The second executable intentionally fails two unapproved Berge-limit counterexamples.
+The second executable failed both Berge-limit counterexamples before approval and
+passes both after Graph commit `94efe35489459bc52ae34a7d8362eea4f91abcad`.
+The original failure log is retained; `berge-budget-graph_berge_counterexamples-after.log`
+records the successful rerun against the corrected library pair.
+
+The approved continuation compares Graph `25e8c9f2` with `94efe354` using the same
+diamond source, output oracle and release dependency resolution. Build the first
+external executable against each revision, then run three supervised processes:
+
+```powershell
+foreach ($run in 1..3) {
+    $measurement = & ./scripts/dev/measure_peak_memory.ps1 `
+        -Executable "$PWD/reports/platform-audit/graph_counterexamples.exe" `
+        -ArgumentString 'bounded_diamond_enumeration_probe --exact --ignored --nocapture' `
+        -Threads 24 -LogPrefix "$PWD/reports/platform-audit/berge-budget-after-run$run"
+    if ($measurement.exit_code -ne 0) { throw "Berge run $run failed" }
+}
+```
+
+Use the `before` prefix for the old revision. Build outside the measurements;
+preserve each executable hash from its memory JSON. The five scales retain the
+4,096-result cap, analytical path counts, and exact 2d steps per emitted path.
+The targeted regression command is
+`cargo test -p hymeko_graph --test direct_ir_optional --release --locked --offline`
+from the Graph root. It gives 11 pass after the fix; the full workspace gives
+486 pass / 0 fail / 6 ignored. Fmt, Clippy and SYMBOLS pass; duplication is
+390 clones / 10015 lines against the previous 392 / 10021, using read-only
+`contract-duplication --root . --measure` without creating a Graph baseline.
+
+Run `python summarize.py` from the evidence directory to include the six new logs
+in the existing tables and `berge-budget-summary.csv`. With the already available
+Matplotlib environment, `python summarize.py --berge-budget-plot-only` produces
+the separate PNG/SVG comparison without rewriting the historical GPU/transport
+figures. The plot shows three process medians and their range, not a confidence
+interval. Small cells are sensitive to timer resolution and measured CV; the d4
+median rises by 0.20 us (13.3%), while no larger-cell median slowdown is observed
+in this bounded, sequential before/after campaign. No general speedup is claimed.
 
 ## CUDA and Kato
 

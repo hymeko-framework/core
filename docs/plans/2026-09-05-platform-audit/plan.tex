@@ -16,6 +16,33 @@ Protected Core items touched: empty. No Core dependency or IR/wire layout change
 Core \texttt{0a34a976} owns canonical Ir, compile, hash, CBOR decode/encode and generic incidence. Graph \texttt{b234c487} consumes Core and owns graph algorithms. Transformation \texttt{4298cfca} owns derived dynamics, geometry and borrowed WebXR projections; its main is stale for WebXR. Core has no WebXR production tree. Chordex owns existing byte-transparent Zenoh transport; Axon supplies deployment/bridges. Simulator owns ingress composition and presentation.
 Simulator \texttt{b7a21c7} is dirty and the named ingress files are untracked; Chordex has no Git metadata. Neither is a clean-clone baseline. Audit existing state read-only; do not recreate these implementations.
 \section{Affected files}
+\paragraph{Approved Berge budget correction, 2026-09-05 10:45 CEST.}
+The user's ``approved, continue'' reply approves the pending report proposal
+\texttt{APPROVED-CORE-EDIT: graph-berge-enumeration-budget-boundaries}.
+Edit only Graph \texttt{hymeko\_graph/src/direct\_ir/berge\_enum.rs} and
+\texttt{hymeko\_graph/tests/direct\_ir\_optional.rs} in the clean own worktree.
+Reuse the common Enumerator: a zero result cap starts stopped, after endpoint
+validation. Results and expansions stop the whole search; Depth records a pruned
+arc frontier while later branches continue. Test depth before charging the first
+unused arc, so an exact-depth leaf with no remaining arc finishes naturally.
+Global result/expansion bounds override an earlier depth marker. An unvisited arc
+frontier does not prove another feasible result exists. Do not change cycle
+identity, goal semantics, output ordering, public signatures, or dependencies.
+Baseline: exact clean Graph 25e8c9f and Core evidence 497f18b. Reuse the prior
+full-suite baseline, run current targeted tests, then run new discriminating
+tests red before the production fix. Cover zero/one/exact result caps, depth
+zero/exact/natural completion, later-branch results, global-bound precedence and
+invalid endpoints for both paths and cycles. After the fix run the targeted and
+full release suites, fmt, warning-denying Clippy, symbol and duplication checks.
+Repeat the existing bounded diamond probe three times before/after on this host;
+retain raw samples and resource limits. Extend the report-local summarizer for
+separate before/after series and render a comparison with existing Matplotlib.
+Evidence: reports/platform-audit/berge-budget-*; update the existing report,
+reproducibility notes and artifact manifest without replacing historical data.
+ETA: about 20--30 minutes from a cached build (prior full Graph tests 3.33 s),
+including counterexample design, review and packaging. Rollback: a separate local
+Graph commit on the two approved files, then its documentation commit if needed;
+preserve the earlier informed-search fix and all user worktrees. No publication.
 \paragraph{Approved Graph correction, 2026-09-05 03:07 CEST.}
 User token: \texttt{APPROVED-CORE-EDIT: graph-directed-slots-consistent-astar}.
 Additional files: Graph \texttt{hymeko\_graph/src/direct\_ir/informed.rs} and

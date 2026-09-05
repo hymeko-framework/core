@@ -1,6 +1,6 @@
 # HyMeKo platformaudit
 
-Created-at: 2026-09-05 02:57 CEST. Állapot: az engedélyezett implementáció és mérési kampány lezárva; a külön Berge-jóváhagyás függőben.
+Created-at: 2026-09-05 02:57 CEST. Állapot: az engedélyezett implementáció és mérési kampány lezárva; a külön jóváhagyott Berge-limit javítás 2026-09-05 10:57 CEST-kor helyi commitba került.
 
 A terv: ../docs/plans/2026-09-05-platform-audit/plan.tex. Saját worktree-k: D:/hnnwork/platform-audit/{core,graph,transformation}. Az eredeti munkafák módosítása tiltott. Védett Core-fájl nem változik.
 
@@ -14,7 +14,7 @@ A korábbi Core teljesítményállítások csak részben reprodukálhatók stabi
 
 1. **Magas, javítva:** directed Dijkstra eldobott egy későbbi érvényes belépést és a duplikált node incidenciájának producer slotját. Bizonyítottan admissible/consistent A* 12 költséget adott a helyes 11 helyett. Három vörös külső ellenpélda, majd három zöld regresszióteszt és teljes Graph suite a bizonyíték.
 2. **Magas, integrációban kezelve:** a `canonical_program_hash` v1 strukturális hash: skeleton + incidence. A szokásos node-attribútum `capacity: 2.0 → 3.0` változása nem változtatja meg. A hash nem teljes payloadazonosító és nem hitelesítés. A hash-alapú dedup javaslatot a diszkrimináló teszt megcáfolta; a végleges ingress **Core-validálás után pontos CBOR-byte-egyezést** használ. A Core hash/wire szerződés nem változott.
-3. **Közepes, külön jóváhagyásra vár:** Berge `max_results=0` mellett egy eredményt bocsát ki; a max-depth miatti metszés `bound=None` marad. Két külön futó ellenpélda bizonyítja. A lent megnevezett token nélkül e védett fájlok érintetlenek.
+3. **Közepes, javítva:** Berge `max_results=0` mellett korábban egy eredményt bocsátott ki; a max-depth miatti metszés `bound=None` maradt. A külön jóváhagyott javítás mindkét hibát megszünteti: a nulla keret azonnal leállít, a Depth helyi metszést jelez, és a későbbi rövid ágak megmaradnak. A két eredeti ellenpélda és a kibővített path/cycle regressziócsomag sikeres.
 4. **Közepes, javítva:** a CBOR model subscription korábban korlátlan FIFO-t épített. Most egyetlen pending snapshot, 64 MiB alapértelmezett, konfigurálható limit és megfigyelhető counters vannak. A generic sensor/source FIFO-k továbbra sem boundedek.
 5. **Közepes, mérési hiba javítva:** WGPU warm-prepare submit nélkül gyűjtött staging allocationöket; három eredeti futásban több mint 5 GiB peak working set jelent meg. A javított `prepare_warm_cache_completed` minden iterációt befejez. A régi tiszta prepare és az új completed cella eltérő időhatár, közvetlen latenciadelta nem közölhető.
 6. **Közepes, prototípusban javítva:** CUDA ismeretlen/hibás numerikus CLI argumentumot elfogadott; a kezdeti payload-guard mellett egy unclamped `reserve(rows*avg_deg)` túl nagy foglalást engedett volna. A reservation clamp, u32/payload/valós eszköz-launch limitek, benchmark előtti kötelező oracle és hibakódok javítva. A veszélyes nagy foglalást a javítás előtt nem futtattuk.
@@ -73,7 +73,7 @@ A Cargo-élek nem egyetlen soros láncot alkotnak: Graph és Transformation is k
 | Suite | Baseline pass/fail/ignored | Utána pass/fail/ignored | Összegzett tesztidő utána |
 | --- | ---: | ---: | ---: |
 | Core workspace release | 525/0/7 | 527/0/7 | 18.91 s |
-| Graph workspace release | 478/0/6 | 481/0/6 | 3.33 s |
+| Graph workspace release | 478/0/6 | 486/0/6, a Berge-folytatással | 3.30 s |
 | Transformation workspace release | 464/4/9 | 466/0/9 | 4.76 s |
 | WGPU SpMM célzott | meglévő suite baseline része | 15/0/0 | 1.80 s |
 | Chordex transport | 5/0/2 | 9/0/0, a két élő teszttel | 0.19 s |
@@ -138,7 +138,7 @@ A végleges direct survey `--test-threads 1` mellett futott; a kezdeti két pár
 | 12 | 4096 | 4096/98304 | Results | 806.60 µs |
 | 16 | 65536 | 4096/131072 | Results | 962.85 µs |
 
-Három processz, 3 warmup +20 egyedi minta/cella; minden eredményszám és minden path2d hossza ellenőrzött. d16 csonkolt, nem65536 út olcsó felsorolása. d12 pontos cap elérésekor is Results boundot ad az API. Kis cellák időfelbontás/zaj, több cella CV miatt instabil; p95/p99/variancia a CSV-ben. Rövid processz100 ms-os RSS-pollja nem megbízható tranziens maximum. A két külön zéró budget/depth ellenpélda továbbra is FAIL, jóváhagyásra vár.
+Három processz, 3 warmup +20 egyedi minta/cella; minden eredményszám és minden path2d hossza ellenőrzött. d16 csonkolt, nem65536 út olcsó felsorolása. d12 pontos cap elérésekor is Results boundot ad az API. Kis cellák időfelbontás/zaj, több cella CV miatt instabil; p95/p99/variancia a CSV-ben. Rövid processz100 ms-os RSS-pollja nem megbízható tranziens maximum. E történeti kampány alatt a két zéró budget/depth ellenpélda még FAIL volt; a lent dokumentált jóváhagyott folytatásban mindkettő PASS.
 
 ### Transformation
 
@@ -208,7 +208,7 @@ Topic:`hymeko/model/ir/cbor/v1`. A transport nem értelmezi az IR-t. A szemantik
 
 | Terület | Állapot és konkrét fennmaradó feltétel |
 | --- | --- |
-| API | Graph javított, Berge budget hibák külön scope; a hash strukturális jelentése consumerben dokumentálandó; pre-existing Transformer Batch/layout korlátok |
+| API | Graph informed-search és Berge budget hibák javítva; a hash strukturális jelentése consumerben dokumentálandó; pre-existing Transformer Batch/layout korlátok |
 | ABI | új HyMeKo C ABI nincs, stabilitása nem állítható; Chordex saját music-C API nem helyettesíti |
 | Wire | Core façade + KAT/fault/corpus a tulajdonos; új séma nem készült; hash nem minden attribútumot véd és nem sender-auth |
 | Docs | tervbundle és ownership/transport contract elkészült; korábbi általános once-per-arc/allocation-free/headline állítások helyesbítve |
@@ -219,7 +219,7 @@ Topic:`hymeko/model/ir/cbor/v1`. A transport nem értelmezi az IR-t. A szemantik
 | Packaging | belső Git/moving branch és helyi path/junction dependencyk; Chordex eredeti forrás nem verziózott; `spin 0.10.0` fresh-resolution probléma |
 | Semver | nincs release vagy tag; API/wire compatibility gate és a védett bugfixek rendezése nélkül nincs új stabilitási ígéret |
 
-Következő három legnagyobb értékű lépés: (1) jóváhagyás után a Berge budget-fix, célzott teljesítmény-/output kontrollal; (2) az elfogadott Chordex/Simulator/Core-portable-id/WebXR revíziók közös, publikálható lockolt dependency-éle és clean-clone CI-je; (3) valódi browser modell-update teszt és egy azonos inputot rögzítő Kato accelerator/transport kampány. Public release, tag, main merge vagy push nem történt.
+Következő három legnagyobb értékű lépés: (1) az elfogadott Chordex/Simulator/Core-portable-id/WebXR revíziók közös, publikálható lockolt dependency-éle és clean-clone CI-je; (2) valódi browser modell-update teszt; (3) egy azonos inputot rögzítő Kato accelerator/transport kampány. A Berge budget-fix és célzott teljesítmény-/output kontroll elkészült. Public release, tag, main merge vagy push nem történt.
 
 ## Igazolt Graph-blokkoló és jóváhagyási csomag
 
@@ -244,7 +244,7 @@ Rollback: kizárólag saját Graph feature-worktree két megnevezett fájljának
 
 Pontos további védett fájllista: Graph `hymeko_graph/src/direct_ir/berge_enum.rs`, `hymeko_graph/tests/direct_ir_optional.rs`.
 
-Javasolt token: `APPROVED-CORE-EDIT: graph-berge-enumeration-budget-boundaries`.
+A jóváhagyott csomag azonosítója: `APPROVED-CORE-EDIT: graph-berge-enumeration-budget-boundaries`. Jóváhagyási forrás: a felhasználó „jóváhagyva folytasd” válasza a függőben lévő csomagra. Ez természetes nyelvű jóváhagyás volt; nem állítjuk, hogy a felhasználó szó szerint begépelte a tokent.
 
 Technikai terv: zéró eredménykeret ellenőrzése kibocsátás előtt a path és cycle ágban; a mélységi metszés jelzése a teljes keresés leállítása nélkül. A későbbi, még kereten belüli ágak eredményei megmaradnak. Eredmény-/expansion-limit továbbra is az egész futást állítja meg, determinisztikus elsőbbséggel. A depth jelzés önmagában nem bizonyít további kibocsátható eredményt; a pruned frontier ténye dokumentált. Nincs új IR, dependencia vagy meglévő publikus függvényszignatúra-változás.
 
@@ -252,21 +252,43 @@ Invariánsok és tesztek: nulla/egy/pontos eredménykeret path és cycle esetén
 
 Rollback: csak a saját Graph worktree e két fájljának külön tematikus commitja; a már jóváhagyott informed-search javítás külön marad. Az engedélykérés oka a Graph `CORE.YAML` teljes crate-védelme; az előző token e fájlokra nem vonatkozik.
 
+### Jóváhagyott folytatás eredménye
+
+Kiindulás: tiszta Graph `25e8c9f25e0ba0001de1609d873bf6b53c34a9c4` és Core bizonyítékcsomag `497f18b`. A kódmódosítás előtt kibővített, újrafordított PDF-terv rögzítette a két fájlt, a szemantikát, a teszteket, a három előtte/utána mérést és a rollbacket. A külön Graph commit: `94efe35489459bc52ae34a7d8362eea4f91abcad`.
+
+A közös enumerátor endpoint-validálás után kezdeti Results állapotot kap nulla eredménykeretnél. A Depth ellenőrzése a már használt arcok kihagyása után, az expansion terhelése előtt történik; csak az adott ágat metszi. Későbbi Results/Expansions felülírhatja a Depth jelzést és globálisan megállít. A dokumentált Depth egy fel nem nyitott, nem használt incident arc tényét jelenti, nem további kibocsátható eredmény bizonyítékát. Természetesen lezárult frontier esetén nincs mesterséges Depth/Expansions jelzés. A publikus szignatúrák, cycle-azonosság és dependencyk megmaradtak.
+
+Tesztbizonyíték: változatlan célzott baseline **6/0/0**; kibővített tesztcsomag a termékkód javítása előtt **6/5/0**, utána **11/0/0**. Öt új teszt és a meglévő eredménykorlát-teszt kiterjesztése fedi a nulla/egy/pontos keretet, az izolált startot, a hibás endpointot és a limitelsőbbséget. A hosszú `a–b–c–d` ág után két külön `a–t` arc kézi orákuluma konkrét csúcs- és arcazonosságot is ellenőriz: depth=2 mellett két rövid path és egy kétarcú cycle marad, Depth jelzéssel. Results=1, illetve expansions=2/4 globális leállásai külön táblasorok. A független, csak olvasó correctness-review nem talált blockert.
+
+A teljes release workspace **486 pass / 0 fail / 6 ignored**, 44 tesztcél, 3.30 s összegzett tesztidő. Az eredeti külső Berge reproducer **2/0/0**, a korábbi informed-search ellenpéldák **3/0/1** (az egy ignored a külön futtatott benchmark). Fmt, warning-denying workspace/all-targets Clippy és SYMBOLS PASS. Graph token-duplication **392/10021 → 390/10015** (clone/sor), 119 fájl; nincs baseline- vagy provider-módosítás. A kezdeti új teszt fordításában téves tuple-pattern szerepelt az `InvalidStart` struct variant helyett; a külön compile-attempt log megőrzi, és ez nem termékhiba-reprodukció. Az első fmt eltérést rustfmt javította; a végső ellenőrzés sikeres.
+
+Azonos Windows host, Rust 1.97.1, optimalizált külső reproducer, változatlan forrású diamond-generátor és orákulum: verziónként három külön folyamat, cellánként 3 warmup +20 egyedi minta. A nyers logok és executable-hashek `berge-budget-before-run*` és `berge-budget-after-run*` néven maradtak meg; összegezve [CSV](platform-audit/berge-budget-summary.csv), [ábra](platform-audit/berge-budget-comparison.png), [SVG](platform-audit/berge-budget-comparison.svg).
+
+| Diamondok | Eredmények / összes lépés | Előtte három medián, µs | Utána három medián, µs |
+| ---: | ---: | --- | --- |
+| 2 | 4 / 16 | 0.70; 0.70; 0.70 | 0.80; 0.70; 0.70 |
+| 4 | 16 / 128 | 1.50; 1.50; 1.50 | 1.80; 1.70; 1.70 |
+| 8 | 256 / 4096 | 47.15; 47.15; 47.20 | 48.55; 45.35; 43.85 |
+| 12 | 4096 / 98304 | 883.05; 892.30; 878.30 | 829.50; 817.65; 917.60 |
+| 16 | 4096 / 131072 | 1075.35; 1083.10; 1068.55 | 961.35; 968.00; 970.45 |
+
+Minden output- és hosszellenőrzés PASS. A d4 cella mediánjainak mediánja 0.20 µs-mal, 13.3%-kal nőtt; ez a helyes budget-ellenőrzéssel együtt mért kis abszolút költség, és a javítás utáni CV instabilnak jelöli. A nagyobb cellák nem mutatnak mediánlassulást ebben a kontrollban; az ingadozó cellákból és a szekvenciális előtte/utána kampányból általános gyorsulási állítás nem következik. A 100 ms-os memóriafigyelés ezeknél a rövid folyamatoknál továbbra sem teljes tranziens-RSS bizonyíték; egyik futás sem érte el a 16 GiB limitet. A korábbi Criterion/GPU/transport nyers mérések változatlanok, az összesítő a hat új folyamatot hozzáadja.
+
 ## Helyi commitok
 
-A bizonyítékcsomag 1299 feldolgozott mintacsoportot és 86 memóriarekordot tartalmaz, a korábbi kontrollokkal együtt. A 3022 eredeti Criterion JSON-fájl SHA256-egyezéssel ellenőrzött [criterion-raw.zip](platform-audit/criterion-raw.zip) csomagban van; az összesítő szükség esetén visszabontja, a helyi kibontott példányok ignoráltak. [Artifact-manifest](platform-audit/artifact-manifest.json) sorolja a kért riport/terv/nyers bizonyíték fájlméreteit, sorait és SHA256 értékeit. Az executable/PDB és az 51 MB-os regenerálható target-fixture helyi buildtermék, nem Git-artifact.
+A bizonyítékcsomag 1329 feldolgozott mintacsoportot és 92 memóriarekordot tartalmaz, a korábbi kontrollokkal együtt. A 3022 eredeti Criterion JSON-fájl SHA256-egyezéssel ellenőrzött [criterion-raw.zip](platform-audit/criterion-raw.zip) csomagban van; az összesítő szükség esetén visszabontja, a helyi kibontott példányok ignoráltak. [Artifact-manifest](platform-audit/artifact-manifest.json) sorolja a kért riport/terv/nyers bizonyíték fájlméreteit, sorait és SHA256 értékeit. Az executable/PDB és az 51 MB-os regenerálható target-fixture helyi buildtermék, nem Git-artifact.
 
 Az első dokumentációs commit `cfeae63`. Végső Git-blob-ellenőrzéskor121 artifactnál CRLF/LF byte-különbséget találtunk; a root `.gitattributes` +5 soros, kizárólag e dátumozott tervre/riportcsomagra korlátozott kiegészítése megőrzi a leltározott bájtokat. A forráskód általános sorvégszabálya változatlan. A korrekció után a manifest minden tárolt artifact-hashét a Git index tartalmával is összevetjük; nem pusztán a munkafájlok létezését ellenőrizzük.
 
 A kezdeti 45–90 perces baseline-becslést a teljes snapshot-integráció, a többszörös ellenpéldák és a kiterjesztett mérési mátrix meghaladta: a terv 02:57-kor készült, az implementációs commitok 05:22-kor, a végső readback/adatellenőrzés 05:30-kor zárult. A normál mérésekben megfigyelt legnagyobb RSS a javítás előtti warm-prepare ~5.4 GiB-os folyamata; 16 GiB-os túllépést nem észleltünk. A kis mesterséges cap-teszt szándékos leállítása nem benchmarkhiba.
 
-A végső contract-gate: Core `402 clone(s), 7769 cloned line(s)` a `403/7800` baseline ellenében PASS. Graph exact b234 baseline `392/10048`, a végleges tesztharness `392/10021`; a provider nem módosult. A Graph hiányzó baseline-jára indított alapértelmezett duplication parancs automatikusan létrehozott egy fájlt; ezt a kizárólag saját worktree-ben keletkezett fájlt eltávolítottuk, a végső Graph-scan read-only `--measure`. Új küszöbbel semmi nincs elrejtve. Core/Graph SYMBOLS és a Simulator meglévő generátorának ellenőrzése PASS. A Core kezdeti indexeltérése részben worktree-névfüggő fejléc, részben korábban elavult tartalom volt; a provider továbbra is névfüggő marad.
+A végső contract-gate: Core `402 clone(s), 7769 cloned line(s)` a `403/7800` baseline ellenében PASS. Graph exact b234 baseline `392/10048`, az informed-search javítás után `392/10021`, a Berge-folytatással `390/10015`; a provider nem módosult. A Graph hiányzó baseline-jára indított alapértelmezett duplication parancs automatikusan létrehozott egy fájlt; ezt a kizárólag saját worktree-ben keletkezett fájlt eltávolítottuk, a végső Graph-scan read-only `--measure`. Új küszöbbel semmi nincs elrejtve. Core/Graph SYMBOLS és a Simulator meglévő generátorának ellenőrzése PASS. A Core kezdeti indexeltérése részben worktree-névfüggő fejléc, részben korábban elavult tartalom volt; a provider továbbra is névfüggő marad.
 
 A módosított Rust-fájlok scoped rustfmt-je PASS. A végső harness-konszolidáció után WGPU15/15 és Graph informed V&V17/17 célzott teszt újra PASS; a korábbi teljes workspace-számok külön bizonyítékok. Simulator Clippy16 diagnosztikája változatlan fájlra mutat, de emiatt az integration-test Clippy befejezése nem bizonyított. A memóriafelügyelő pozitív/negatív kontrolljai: gyermek Rayon-beállítás szülőmódosítás nélkül; exit7 és stderr a visszaadott eredményben/logban; 64 MiB-os allokáló child 32 MiB-os tesztlimitnél leállítva; regexes Criterion-filter. A wrapper `exit_code` mezőjét kell ellenőrizni, nem a .NET processzindítás által nem frissített shell `$LASTEXITCODE` értéket.
 
 Új dependency kizárólag a Simulator natív, opcionális Zenoh-feature-jében: az egyébként már Chordex által használt Zenoh1.9 konfigurációs tesztfelülete. A lock214 új package-azonosságot vesz fel, a korábbi463 verzió megmarad. Core/Graph/WGPU/Transformation dependency-felület nem változik. A Chordex64 MiB limitje és counters API-ja új publikus felület; a Core IR/wire változatlan.
 
-Az eredeti Core/Graph/Transformation/WebXR/Axon HEAD és status a végső ellenőrzésben egyezik a kiindulóval. Az eredeti Simulator közben külső változást kapott: a225 snapshotfájlból Cargo.toml, Cargo.lock és python/hymeko_sim_emit.py eltér, új overnight-robot fájlok is megjelentek. Ezeket az audit nem írta és nem állította vissza; az integráció a rögzített saját snapshoton maradt. [Végső megőrzési leltár](platform-audit/original-preservation-final.json). A hét tematikus implementációs commit helyi; release/tag/main merge/push nem történt. Rollback ezek fordított dependency-sorrendű revertje kizárólag a saját ágakon, a snapshot-alapok megőrzésével.
+Az eredeti Core/Graph/Transformation/WebXR/Axon HEAD és status a végső ellenőrzésben egyezik a kiindulóval. Az eredeti Simulator közben külső változást kapott: a225 snapshotfájlból Cargo.toml, Cargo.lock és python/hymeko_sim_emit.py eltér, új overnight-robot fájlok is megjelentek. Ezeket az audit nem írta és nem állította vissza; az integráció a rögzített saját snapshoton maradt. [Végső megőrzési leltár](platform-audit/original-preservation-final.json). A nyolc tematikus implementációs commit helyi; release/tag/main merge/push nem történt. Rollback ezek fordított dependency-sorrendű revertje kizárólag a saját ágakon, a snapshot-alapok megőrzésével.
 
 | Repo | Commit |
 | --- | --- |
@@ -274,6 +296,7 @@ Az eredeti Core/Graph/Transformation/WebXR/Axon HEAD és status a végső ellen�
 | core | `8940c5cb` fix(cuda): bound prototype inputs and separate verified timing spans |
 | core | `063bb330` bench(wgpu): verify and compare bounded resident readback lifecycles |
 | graph | `25e8c9f2` fix(graph): preserve directed slots and optimal consistent A-star paths |
+| graph | `94efe354` fix(graph): enforce zero result budgets and report local depth pruning |
 | transformation | `1d7b813b` test: make variant fixtures and debug panic checks profile portable |
 | chordex | `4bf70d78` feat(transport): bound canonical model snapshots with latest mailbox metrics |
 | simulator | `2139aa49` feat(ingress): validate snapshot dedup and prove canonical CBOR over TCP |
@@ -290,6 +313,8 @@ Branch: `audit/platform-2026-09-05`. [Full SHA / file SHA256 / diff inventory](p
 | graph | `SYMBOLS.md` | 539 | 0 |
 | graph | `hymeko_graph/src/direct_ir/informed.rs` | 30 | 29 |
 | graph | `hymeko_graph/tests/informed_search_vv.rs` | 150 | 16 |
+| graph | `hymeko_graph/src/direct_ir/berge_enum.rs` | 22 | 11 |
+| graph | `hymeko_graph/tests/direct_ir_optional.rs` | 145 | 11 |
 | transformation | `hymeko_dynamics/tests/common/mod.rs` | 4 | 1 |
 | transformation | `hymeko_formats/src/binary_graph.rs` | 2 | 0 |
 | chordex | `crates/chordex-transport/src/lib.rs` | 4 | 0 |
@@ -303,6 +328,15 @@ Branch: `audit/platform-2026-09-05`. [Full SHA / file SHA256 / diff inventory](p
 | simulator | `tests/model_ingress.rs` | 375 | 23 |
 
 ## Discovery
+
+```text
+DISCOVERY LEDGER — jóváhagyott Berge-limit javítás
+  find:    berge_enum.rs és direct_ir_optional.rs meglévő; külső reproducer és diamond-skála a korábbi auditban
+  grep:    közös Enumerator::charge_expansion és stopped; két DFS; a result-limit ellenőrzése kibocsátás után
+  symbols: EnumBudget, EnumOutcome, BudgetKind és a két enumerate_berge API a meglévő SYMBOLS.md-ben
+  read:    berge_enum.rs, direct_ir_optional.rs, direct_ir_common/mod.rs, a jelentés jóváhagyási és rollback-terve
+  verdict: EXTEND a két jóváhagyott Graph-fájlt és a meglévő audit-tervet/jelentést; a reports/platform-audit/berge-budget-* bizonyítékok a meglévő mérési segédet használják. Új IR, crate vagy publikus API nem szükséges.
+```
 
 Az alábbi ledgerblokkok a végrehajtás közben a beszélgetésben is megjelentek. A numerikus CSV/JSON/log és animációs kimenetek a kezdeti `reports/platform-audit/**` bizonyítéktervhez tartoznak.
 

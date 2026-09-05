@@ -47,9 +47,10 @@
     "repository": "graph",
     "path": "D:/hnnwork/platform-audit/graph",
     "base": "b234c4871807dc255854cc4b50d1458547dca7d3",
-    "head": "25e8c9f25e0ba0001de1609d873bf6b53c34a9c4",
+    "head": "94efe35489459bc52ae34a7d8362eea4f91abcad",
     "branch": "audit/platform-2026-09-05",
     "commits": [
+      "94efe35489459bc52ae34a7d8362eea4f91abcad fix(graph): enforce zero result budgets and report local depth pruning",
       "25e8c9f25e0ba0001de1609d873bf6b53c34a9c4 fix(graph): preserve directed slots and optimal consistent A-star paths"
     ],
     "files": [
@@ -60,10 +61,22 @@
         "sha256": "4b366c8d5b3046263dd222d57308b856a75da931af757857f5942ad02bb66906"
       },
       {
+        "path": "hymeko_graph/src/direct_ir/berge_enum.rs",
+        "added": "22",
+        "removed": "11",
+        "sha256": "dc3b00b675043dcfbfe49c66bd7012795e8b2a864486b59496b7a8e3d56552a7"
+      },
+      {
         "path": "hymeko_graph/src/direct_ir/informed.rs",
         "added": "30",
         "removed": "29",
         "sha256": "f22eefd2e57a85831b9e0a419a1fb6fc886de29d7dde1c6bc82306ae83ad50b5"
+      },
+      {
+        "path": "hymeko_graph/tests/direct_ir_optional.rs",
+        "added": "145",
+        "removed": "11",
+        "sha256": "77a20fa7b95766a23e07abd82c971f5e818e25d025c0013872856478555e4a17"
       },
       {
         "path": "hymeko_graph/tests/informed_search_vv.rs",

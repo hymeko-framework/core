@@ -78,7 +78,7 @@ class AuditSummary:
 
     def diagnostics(self) -> None:
         for run in range(1, 4):
-            for campaign in ("cuda-regular", "cuda-irregular", "transport", "wgpu-kernel", "graph-berge", "wgpu-readback"):
+            for campaign in ("cuda-regular", "cuda-irregular", "transport", "wgpu-kernel", "graph-berge", "wgpu-readback", "berge-budget-before", "berge-budget-after"):
                 path = self.root / f"{campaign}-run{run}.stdout.log"
                 groups = defaultdict(list)
                 for line in self.read(path).splitlines():
@@ -97,7 +97,7 @@ class AuditSummary:
                     elif campaign == "transport" and fields[0] == "throughput":
                         self.throughput.append(dict(run=run, scale=fields[1], transport=fields[2],
                             requests=int(fields[3]), seconds=float(fields[4]), requests_per_second=float(fields[5])))
-                    elif campaign == "graph-berge" and fields[0] == "sample":
+                    elif (campaign == "graph-berge" or campaign.startswith("berge-budget-")) and fields[0] == "sample":
                         groups[f"diamonds{fields[1]}/results{fields[3]}/steps{fields[4]}/{fields[5]}"].append(float(fields[6]))
                     elif campaign == "wgpu-kernel" and line.startswith("A\t"):
                         fields = line.split("\t")
@@ -140,6 +140,7 @@ class AuditSummary:
         self.diagnostics()
         self.write_csv(self.root / "criterion-summary.csv", [r for r in self.rows if r["sample_kind"] == "criterion_batch_average"])
         self.write_csv(self.root / "diagnostic-summary.csv", [r for r in self.rows if r["sample_kind"] != "criterion_batch_average"])
+        self.write_csv(self.root / "berge-budget-summary.csv", [r for r in self.rows if r["campaign"].startswith("berge-budget-")])
         self.write_csv(self.root / "cuda-cold-summary.csv", self.cold)
         if self.throughput:
             self.write_csv(self.root / "transport-throughput-summary.csv", self.throughput)
@@ -180,6 +181,28 @@ class AuditSummary:
 
         rows = json.loads(self.read(self.root / "campaign-summary.json"))
         lookup = {(r["campaign"], r["benchmark"]): r for r in rows}
+        if "--berge-budget-plot-only" in sys.argv:
+            fig, axis = plt.subplots(figsize=(10, 6), constrained_layout=True)
+            for campaign, label, offset in [("berge-budget-before", "Before", -.12), ("berge-budget-after", "After", .12)]:
+                cells = sorted([r for r in rows if r["campaign"] == campaign],
+                               key=lambda r: int(re.search(r"diamonds(\d+)", r["benchmark"])[1]))
+                assert len(cells) == 5 and all(r["runs"] == 3 for r in cells)
+                x = [d + offset for d in (2, 4, 8, 12, 16)]
+                y = [r["median_of_medians_us"] for r in cells]
+                bars = [[r["median_of_medians_us"] - r["min_median_us"] for r in cells],
+                        [r["max_median_us"] - r["median_of_medians_us"] for r in cells]]
+                line = axis.errorbar(x, y, yerr=bars, fmt="o-", capsize=4, label=label)
+                for position, row in zip(x, cells, strict=True):
+                    axis.scatter([position] * 3, row["medians_us"], color=line[0].get_color(), s=12)
+            axis.set(yscale="log", xticks=[2, 4, 8, 12, 16], xlabel="Chained diamonds",
+                     ylabel="Enumeration median (us)",
+                     title="Berge budget fix / same input and output oracle / 2026-09-05\n3 processes per version, 3 warmups + 20 samples per cell; bars = run median range")
+            axis.legend()
+            axis.grid(alpha=.2)
+            for suffix in ("png", "svg"):
+                fig.savefig(self.root / f"berge-budget-comparison.{suffix}", dpi=160)
+            plt.close(fig)
+            return
         fig, axes = plt.subplots(2, 2, figsize=(13, 9), constrained_layout=True)
         resident = [r for r in rows if r["campaign"] == "wgpu-final-run" and r["benchmark"].startswith("spmm_gpu_resident/")]
         for x, row in enumerate(resident):
@@ -237,7 +260,7 @@ class AuditSummary:
 
 if __name__ == "__main__":
     summary = AuditSummary(Path(__file__).resolve().parent)
-    if "--plot-only" in sys.argv:
+    if "--plot-only" in sys.argv or "--berge-budget-plot-only" in sys.argv:
         summary.plot()
     else:
         summary.write()

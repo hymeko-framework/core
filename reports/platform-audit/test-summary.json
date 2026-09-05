@@ -126,5 +126,101 @@
     "ignored": 1,
     "targets": 1,
     "sum_test_seconds": 0.0
+  },
+  {
+    "log": "berge-budget-after-run1.stdout.log",
+    "passed": 1,
+    "failed": 0,
+    "ignored": 0,
+    "targets": 1,
+    "sum_test_seconds": 0.06
+  },
+  {
+    "log": "berge-budget-after-run2.stdout.log",
+    "passed": 1,
+    "failed": 0,
+    "ignored": 0,
+    "targets": 1,
+    "sum_test_seconds": 0.06
+  },
+  {
+    "log": "berge-budget-after-run3.stdout.log",
+    "passed": 1,
+    "failed": 0,
+    "ignored": 0,
+    "targets": 1,
+    "sum_test_seconds": 0.06
+  },
+  {
+    "log": "berge-budget-baseline-tests.log",
+    "passed": 6,
+    "failed": 0,
+    "ignored": 0,
+    "targets": 1,
+    "sum_test_seconds": 0.0
+  },
+  {
+    "log": "berge-budget-before-run1.stdout.log",
+    "passed": 1,
+    "failed": 0,
+    "ignored": 0,
+    "targets": 1,
+    "sum_test_seconds": 0.06
+  },
+  {
+    "log": "berge-budget-before-run2.stdout.log",
+    "passed": 1,
+    "failed": 0,
+    "ignored": 0,
+    "targets": 1,
+    "sum_test_seconds": 0.06
+  },
+  {
+    "log": "berge-budget-before-run3.stdout.log",
+    "passed": 1,
+    "failed": 0,
+    "ignored": 0,
+    "targets": 1,
+    "sum_test_seconds": 0.06
+  },
+  {
+    "log": "berge-budget-graph_berge_counterexamples-after.log",
+    "passed": 2,
+    "failed": 0,
+    "ignored": 0,
+    "targets": 1,
+    "sum_test_seconds": 0.0
+  },
+  {
+    "log": "berge-budget-graph_counterexamples-after.log",
+    "passed": 3,
+    "failed": 0,
+    "ignored": 1,
+    "targets": 1,
+    "sum_test_seconds": 0.0
+  },
+  {
+    "log": "berge-budget-regressions-after.log",
+    "passed": 11,
+    "failed": 0,
+    "ignored": 0,
+    "targets": 1,
+    "sum_test_seconds": 0.0
+  },
+  {
+    "log": "berge-budget-regressions-before.log",
+    "passed": 6,
+    "failed": 5,
+    "ignored": 0,
+    "targets": 1,
+    "sum_test_seconds": 0.0
+  },
+  {
+    "log": "berge-budget-workspace-tests.log",
+    "passed": 486,
+    "failed": 0,
+    "ignored": 6,
+    "targets": 44,
+    "sum_test_seconds": 3.3
   }
 ]

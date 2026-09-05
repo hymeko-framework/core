@@ -1,9 +1,9 @@
 [
   {
     "path": "reports/2026-09-05-platform-audit.md",
-    "bytes": 49811,
-    "lines": 390,
-    "sha256": "7ac8b69fe38f37e09b73043a0db79a0011ee5f3e486b741a83576680687a13bf"
+    "bytes": 55441,
+    "lines": 424,
+    "sha256": "d8c14d6845407a01371a193cc3557cececdfc8226d1fbf6c2c15f314d0939031"
   },
   {
     "path": "docs/plans/2026-09-05-platform-audit/plan.mmd",
@@ -13,15 +13,15 @@
   },
   {
     "path": "docs/plans/2026-09-05-platform-audit/plan.pdf",
-    "bytes": 129018,
+    "bytes": 131977,
     "lines": null,
-    "sha256": "e2ca8b83d96ceae50c24090a1dc39c3ac6a0f4c884a3ce119bd3a3d03ddd1b73"
+    "sha256": "f40a512bb2ec6a0dec3642f51ce7af7e93f5aff9029a705d46ba07570f6b9f92"
   },
   {
     "path": "docs/plans/2026-09-05-platform-audit/plan.tex",
-    "bytes": 16154,
-    "lines": 142,
-    "sha256": "b8bef34f8175ab40f068015743e962e52c9636b3cc37f825dec2bc48ba634277"
+    "bytes": 18270,
+    "lines": 169,
+    "sha256": "589de64584dfcf7d645d193d838ba9ddb636f16da018dab3b67b14c5d7072c24"
   },
   {
     "path": "docs/plans/2026-09-05-platform-audit/plan.tikz",
@@ -37,9 +37,9 @@
   },
   {
     "path": "reports/platform-audit/campaign-summary.json",
-    "bytes": 294787,
-    "lines": 13425,
-    "sha256": "51e44608d8dc04c585254a12bce1e96e5e44544a68e809128479c570200ab937"
+    "bytes": 301654,
+    "lines": 13735,
+    "sha256": "30e1a42a22f332d1feeebdd5ac3a28ba6bfa2da689ec7340119b58ef3704aa17"
   },
   {
     "path": "reports/platform-audit/campaign.png",
@@ -235,9 +235,9 @@
   },
   {
     "path": "reports/platform-audit/change-inventory.json",
-    "bytes": 6222,
-    "lines": 178,
-    "sha256": "68a2702fc2e340b810090de3fd56d58a35b85c52ed6244d8553a9cb38684b5c8"
+    "bytes": 6777,
+    "lines": 191,
+    "sha256": "649a95757cccb052fd825e6be979e09c482a3ac36618f00b909e69529d4a9805"
   },
   {
     "path": "reports/platform-audit/chordex-after-build.log",
@@ -799,9 +799,9 @@
   },
   {
     "path": "reports/platform-audit/diagnostic-summary.csv",
-    "bytes": 225413,
-    "lines": 1198,
-    "sha256": "603740454f60e54f370da2a5d1af48461f07266b35d83dd133396bad16a7f932"
+    "bytes": 231425,
+    "lines": 1228,
+    "sha256": "47923181585ba49730f086595a2c89608c63a2ea9eb256147ef9599312519b21"
   },
   {
     "path": "reports/platform-audit/environment.json",
@@ -1309,9 +1309,9 @@
   },
   {
     "path": "reports/platform-audit/memory-summary.json",
-    "bytes": 68750,
-    "lines": 1808,
-    "sha256": "4ebe4edae5db657de62889b2f0fd1ce26cdf70754e754ee70b23d507656c5e33"
+    "bytes": 73468,
+    "lines": 1934,
+    "sha256": "ac564a5c75cccd405823b1bfe738ad149961993509e2f0d2839986c847466a5c"
   },
   {
     "path": "reports/platform-audit/original-preservation-final.json",
@@ -1327,9 +1327,9 @@
   },
   {
     "path": "reports/platform-audit/reproducibility.md",
-    "bytes": 11388,
-    "lines": 196,
-    "sha256": "cbbc00341689cec81a4365608c248297f5420cd9d216059a607734432527663c"
+    "bytes": 13607,
+    "lines": 232,
+    "sha256": "2ecdda1b61408f61106903476a6b19e99ac329e11a596cbea3f3889503b8aa25"
   },
   {
     "path": "reports/platform-audit/simulator-clippy.log",
@@ -1435,15 +1435,15 @@
   },
   {
     "path": "reports/platform-audit/summarize.py",
-    "bytes": 14712,
-    "lines": 243,
-    "sha256": "e8ff2e74bfe0fa8516fa90fcae73ee1edf808f43552af6c51cd7739288bcc3e3"
+    "bytes": 16586,
+    "lines": 266,
+    "sha256": "45421aca26df0db77274e04a4e97ab190d15a39c01fa2cc3eef3b0e7d724bb54"
   },
   {
     "path": "reports/platform-audit/test-summary.json",
-    "bytes": 2480,
-    "lines": 130,
-    "sha256": "39406cbae57a4d6943592cdebd943083522d24cdec4bb1d5bb606197601dd3ed"
+    "bytes": 4483,
+    "lines": 226,
+    "sha256": "248fcae3a7df6f8a49289e5a344cd831490814b9a8d8c55a0fc476f3c98ffb96"
   },
   {
     "path": "reports/platform-audit/transformation-after.log",
@@ -2278,5 +2278,227 @@
     "bytes": 318,
     "lines": 2,
     "sha256": "148566f351e9f6462a7cf92f072e20a8e9b4f0f9eade514bc3f790471a2b49e9"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-after-run1.memory.json",
+    "bytes": 751,
+    "lines": 20,
+    "sha256": "0bb0849635d177c32075073db58280f40713b9a30ef84d1d43552c6260e931f8"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-after-run1.stderr.log",
+    "bytes": 0,
+    "lines": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-after-run1.stdout.log",
+    "bytes": 4150,
+    "lines": 107,
+    "sha256": "502a718a784d88cbda56b6d9402947d9661ef4738ffefab69b57a796de10ac38"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-after-run2.memory.json",
+    "bytes": 751,
+    "lines": 20,
+    "sha256": "9add7629a78e7e006efeff16c360566f6801697dc7cd36bb55d73e950047247e"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-after-run2.stderr.log",
+    "bytes": 0,
+    "lines": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-after-run2.stdout.log",
+    "bytes": 4150,
+    "lines": 107,
+    "sha256": "775572d0c2305694a6e3801f99d87028798c39ef54acecf40aca6f88e8355a35"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-after-run3.memory.json",
+    "bytes": 751,
+    "lines": 20,
+    "sha256": "0118afba11e00584b7843797272fe2164700720b163abeef0dc58c6c421d3e2b"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-after-run3.stderr.log",
+    "bytes": 0,
+    "lines": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-after-run3.stdout.log",
+    "bytes": 4156,
+    "lines": 107,
+    "sha256": "591762c24c7d90736401c6aee6015d17ddc6c4e0a9adc7a5a5d62201f59d8c31"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-baseline-tests.log",
+    "bytes": 2180,
+    "lines": 21,
+    "sha256": "340facfabc0ab002ef12d5e4827ba68ffb5c8deca7401644d4ea260cf5dfa0b1"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-before-run1.memory.json",
+    "bytes": 751,
+    "lines": 20,
+    "sha256": "adef1583e065ccb53aa69ff92dff80475a88b8335301eb34b9f547f1dc15ae57"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-before-run1.stderr.log",
+    "bytes": 0,
+    "lines": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-before-run1.stdout.log",
+    "bytes": 4170,
+    "lines": 107,
+    "sha256": "c9bdd12c0f2990cf4af660d0255605eb800340d18490b4d3d28a2edd7b81ec7b"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-before-run2.memory.json",
+    "bytes": 750,
+    "lines": 20,
+    "sha256": "894d91007c88fe143b25daeb3b7e15467d5b4ad07b73a08ae4ed7f4c1808f7ba"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-before-run2.stderr.log",
+    "bytes": 0,
+    "lines": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-before-run2.stdout.log",
+    "bytes": 4168,
+    "lines": 107,
+    "sha256": "2ca8a894c539ce313061ccc6a32b5ba0abc92420881cf655bab255a06b9a9c37"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-before-run3.memory.json",
+    "bytes": 751,
+    "lines": 20,
+    "sha256": "34fe8a896915897e2b36712f54ee0f83b778cb9ec72debb6441b6d7175d19e40"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-before-run3.stderr.log",
+    "bytes": 0,
+    "lines": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-before-run3.stdout.log",
+    "bytes": 4167,
+    "lines": 107,
+    "sha256": "038f86857ec0a3478a566eacb8a9e3b7839000559d7bea71273e71e81b7e6ac5"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-clippy.log",
+    "bytes": 1170,
+    "lines": 9,
+    "sha256": "84fcda7e0113da1f669e25b63d39fc78822f4de267365eaaab15ea46f949217b"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-comparison.png",
+    "bytes": 100601,
+    "lines": null,
+    "sha256": "f28100320eb6dd2695ebadd250f583a699a78b0c80d8dfd5236ca3421b898142"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-comparison.svg",
+    "bytes": 56833,
+    "lines": 1865,
+    "sha256": "6b2dfe51de9337c8e1d4e46c60837b9cc68edf388ac09dd5af23c1fe2bfd24ab"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-core-duplication.log",
+    "bytes": 318,
+    "lines": 2,
+    "sha256": "148566f351e9f6462a7cf92f072e20a8e9b4f0f9eade514bc3f790471a2b49e9"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-core-symbols.log",
+    "bytes": 0,
+    "lines": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-duplication.log",
+    "bytes": 174,
+    "lines": 1,
+    "sha256": "c0db0dd2bbc898527a9d23c0f668429459a488e4af54a0629accbb99f089ff3d"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-fmt-before-format.log",
+    "bytes": 1058,
+    "lines": 12,
+    "sha256": "52842c298d862e7ee422c52840037afa3048c8616d269eab037c77872764baeb"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-fmt.log",
+    "bytes": 0,
+    "lines": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-graph_berge_counterexamples-after.log",
+    "bytes": 1332,
+    "lines": 15,
+    "sha256": "3cd7eb8337454a6d71ecaad83d94c46850471953c87bf95bc84cc57fba841f9d"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-graph_berge_counterexamples-build.log",
+    "bytes": 0,
+    "lines": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-graph_counterexamples-after.log",
+    "bytes": 862,
+    "lines": 9,
+    "sha256": "2dd53511634d00b47d6c9d49e8568b4adac3615af6a679ee7ab4e1a7caa545b7"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-graph_counterexamples-build.log",
+    "bytes": 0,
+    "lines": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-regressions-after.log",
+    "bytes": 2748,
+    "lines": 25,
+    "sha256": "60fd2095d118fdae83130c315df4f39b86cf1281572e8de2d6424446a1f6f1c4"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-regressions-before.log",
+    "bytes": 6752,
+    "lines": 70,
+    "sha256": "010b171e63bda6210c41d27f2edd7b6786c8e523a089bdb7a167ac161548363b"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-regressions-compile-attempt.log",
+    "bytes": 4236,
+    "lines": 39,
+    "sha256": "ce6ecb0937f11bc9dfadf3b9db3c6e2701af274617290e735e568819c0c18b00"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-summary.csv",
+    "bytes": 6152,
+    "lines": 31,
+    "sha256": "41db28057a12de6baab6e66c007629bad256f13ba5c1b993468c38603099adc1"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-symbols.log",
+    "bytes": 0,
+    "lines": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "reports/platform-audit/berge-budget-workspace-tests.log",
+    "bytes": 81440,
+    "lines": 768,
+    "sha256": "f87ca9f5266a89e280a8f49e7dd7f031235ac7750ae3e240ee3c17e87436bfe5"
   }
 ]

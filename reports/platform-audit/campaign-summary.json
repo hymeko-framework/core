@@ -1,5 +1,315 @@
 [
   {
+    "campaign": "berge-budget-after",
+    "benchmark": "diamonds12/results4096/steps98304/Some(Results)",
+    "runs": 3,
+    "medians_us": [
+      829.5,
+      817.65,
+      917.5999999999999
+    ],
+    "median_of_medians_us": 829.5,
+    "min_median_us": 817.65,
+    "max_median_us": 917.5999999999999,
+    "median_relative_range": 0.12049427365883054,
+    "max_within_run_cv": 0.23940501593635796,
+    "unstable_heuristic": true,
+    "p95_us_by_run": [
+      920.17,
+      891.095,
+      1522.3100000000002
+    ],
+    "p99_us_by_run": [
+      925.794,
+      932.0589999999999,
+      1691.1819999999998
+    ],
+    "samples_per_run": [
+      20,
+      20,
+      20
+    ]
+  },
+  {
+    "campaign": "berge-budget-after",
+    "benchmark": "diamonds16/results4096/steps131072/Some(Results)",
+    "runs": 3,
+    "medians_us": [
+      961.35,
+      968.0,
+      970.45
+    ],
+    "median_of_medians_us": 968.0,
+    "min_median_us": 961.35,
+    "max_median_us": 970.45,
+    "median_relative_range": 0.009400826446281015,
+    "max_within_run_cv": 0.036216336912246315,
+    "unstable_heuristic": false,
+    "p95_us_by_run": [
+      983.1700000000001,
+      1000.875,
+      1020.55
+    ],
+    "p99_us_by_run": [
+      1007.034,
+      1002.015,
+      1022.8299999999999
+    ],
+    "samples_per_run": [
+      20,
+      20,
+      20
+    ]
+  },
+  {
+    "campaign": "berge-budget-after",
+    "benchmark": "diamonds2/results4/steps16/None",
+    "runs": 3,
+    "medians_us": [
+      0.8,
+      0.7,
+      0.7
+    ],
+    "median_of_medians_us": 0.7,
+    "min_median_us": 0.7,
+    "max_median_us": 0.8,
+    "median_relative_range": 0.142857142857143,
+    "max_within_run_cv": 2.70222782402878,
+    "unstable_heuristic": true,
+    "p95_us_by_run": [
+      4.81500000000002,
+      1.5100000000000016,
+      0.8
+    ],
+    "p99_us_by_run": [
+      26.32299999999996,
+      3.1819999999999973,
+      0.8
+    ],
+    "samples_per_run": [
+      20,
+      20,
+      20
+    ]
+  },
+  {
+    "campaign": "berge-budget-after",
+    "benchmark": "diamonds4/results16/steps128/None",
+    "runs": 3,
+    "medians_us": [
+      1.8,
+      1.7,
+      1.7
+    ],
+    "median_of_medians_us": 1.7,
+    "min_median_us": 1.7,
+    "max_median_us": 1.8,
+    "median_relative_range": 0.05882352941176476,
+    "max_within_run_cv": 0.3572804767946653,
+    "unstable_heuristic": true,
+    "p95_us_by_run": [
+      2.235000000000002,
+      1.905,
+      1.8050000000000002
+    ],
+    "p99_us_by_run": [
+      4.286999999999996,
+      1.9809999999999999,
+      1.8809999999999998
+    ],
+    "samples_per_run": [
+      20,
+      20,
+      20
+    ]
+  },
+  {
+    "campaign": "berge-budget-after",
+    "benchmark": "diamonds8/results256/steps4096/None",
+    "runs": 3,
+    "medians_us": [
+      48.55,
+      45.349999999999994,
+      43.85
+    ],
+    "median_of_medians_us": 45.349999999999994,
+    "min_median_us": 43.85,
+    "max_median_us": 48.55,
+    "median_relative_range": 0.10363836824696794,
+    "max_within_run_cv": 0.24025286391266806,
+    "unstable_heuristic": true,
+    "p95_us_by_run": [
+      64.22000000000001,
+      64.62000000000002,
+      54.16000000000002
+    ],
+    "p99_us_by_run": [
+      81.24399999999997,
+      78.60399999999997,
+      73.31199999999995
+    ],
+    "samples_per_run": [
+      20,
+      20,
+      20
+    ]
+  },
+  {
+    "campaign": "berge-budget-before",
+    "benchmark": "diamonds12/results4096/steps98304/Some(Results)",
+    "runs": 3,
+    "medians_us": [
+      883.05,
+      892.3,
+      878.3
+    ],
+    "median_of_medians_us": 883.05,
+    "min_median_us": 878.3,
+    "max_median_us": 892.3,
+    "median_relative_range": 0.01585414189456996,
+    "max_within_run_cv": 0.08117843437954082,
+    "unstable_heuristic": false,
+    "p95_us_by_run": [
+      1051.105,
+      1000.5800000000002,
+      952.5350000000001
+    ],
+    "p99_us_by_run": [
+      1063.3410000000001,
+      1137.0759999999998,
+      983.467
+    ],
+    "samples_per_run": [
+      20,
+      20,
+      20
+    ]
+  },
+  {
+    "campaign": "berge-budget-before",
+    "benchmark": "diamonds16/results4096/steps131072/Some(Results)",
+    "runs": 3,
+    "medians_us": [
+      1075.35,
+      1083.1,
+      1068.55
+    ],
+    "median_of_medians_us": 1075.35,
+    "min_median_us": 1068.55,
+    "max_median_us": 1083.1,
+    "median_relative_range": 0.01353047844887707,
+    "max_within_run_cv": 0.10262699686159238,
+    "unstable_heuristic": true,
+    "p95_us_by_run": [
+      1220.8000000000002,
+      1384.7050000000002,
+      1103.0000000000002
+    ],
+    "p99_us_by_run": [
+      1351.5199999999998,
+      1437.9809999999998,
+      1188.12
+    ],
+    "samples_per_run": [
+      20,
+      20,
+      20
+    ]
+  },
+  {
+    "campaign": "berge-budget-before",
+    "benchmark": "diamonds2/results4/steps16/None",
+    "runs": 3,
+    "medians_us": [
+      0.7,
+      0.7,
+      0.7
+    ],
+    "median_of_medians_us": 0.7,
+    "min_median_us": 0.7,
+    "max_median_us": 0.7,
+    "median_relative_range": 0.0,
+    "max_within_run_cv": 0.7390280828289738,
+    "unstable_heuristic": true,
+    "p95_us_by_run": [
+      1.4050000000000016,
+      0.8,
+      0.8
+    ],
+    "p99_us_by_run": [
+      3.000999999999997,
+      0.8,
+      0.8
+    ],
+    "samples_per_run": [
+      20,
+      20,
+      20
+    ]
+  },
+  {
+    "campaign": "berge-budget-before",
+    "benchmark": "diamonds4/results16/steps128/None",
+    "runs": 3,
+    "medians_us": [
+      1.5,
+      1.5,
+      1.5
+    ],
+    "median_of_medians_us": 1.5,
+    "min_median_us": 1.5,
+    "max_median_us": 1.5,
+    "median_relative_range": 0.0,
+    "max_within_run_cv": 0.08855999482855355,
+    "unstable_heuristic": false,
+    "p95_us_by_run": [
+      1.8050000000000002,
+      1.8050000000000002,
+      1.8
+    ],
+    "p99_us_by_run": [
+      1.8809999999999998,
+      1.8809999999999998,
+      1.8
+    ],
+    "samples_per_run": [
+      20,
+      20,
+      20
+    ]
+  },
+  {
+    "campaign": "berge-budget-before",
+    "benchmark": "diamonds8/results256/steps4096/None",
+    "runs": 3,
+    "medians_us": [
+      47.150000000000006,
+      47.150000000000006,
+      47.2
+    ],
+    "median_of_medians_us": 47.150000000000006,
+    "min_median_us": 47.150000000000006,
+    "max_median_us": 47.2,
+    "median_relative_range": 0.0010604453870625059,
+    "max_within_run_cv": 0.3284731734309557,
+    "unstable_heuristic": true,
+    "p95_us_by_run": [
+      87.235,
+      55.43000000000003,
+      55.96500000000002
+    ],
+    "p99_us_by_run": [
+      93.847,
+      81.72599999999996,
+      81.27299999999995
+    ],
+    "samples_per_run": [
+      20,
+      20,
+      20
+    ]
+  },
+  {
     "campaign": "core-extended-run",
     "benchmark": "csr_spmm_paths/parallel/nnz16k/fd32",
     "runs": 3,
