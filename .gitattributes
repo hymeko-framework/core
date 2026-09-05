@@ -4,3 +4,9 @@
 /reports/platform-audit/** -text
 /reports/2026-09-05-platform-audit.md -text
 /docs/plans/2026-09-05-platform-audit/** -text
+
+# Preserve the Core container evidence and reproducible plan bytes.
+/reports/core-amaterasu/** -text
+/reports/2026-09-05-core-amaterasu.md -text
+/docs/plans/2026-09-05-core-amaterasu/** -text
+/tools/ci/*.sh text eol=lf

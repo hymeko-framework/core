@@ -1,0 +1,20 @@
+# Only tracked build inputs belong in the Core SDK image.
+**
+!Cargo.toml
+!Cargo.lock
+!README.md
+!LICENSE
+!hymeko_core/
+!hymeko_core/**
+!hymeko_wgpu/
+!hymeko_wgpu/**
+!data/
+!data/**
+!tools/
+!tools/ci/
+!tools/ci/core.sh
+**/target
+**/.cargo
+**/.git
+**/hash_performance_runs.csv
+**/hash_performance_summary.csv

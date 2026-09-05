@@ -1,0 +1,8 @@
+flowchart TD
+    S[Clean Core revision and Cargo.lock] --> F[Pinned Rust SDK and authenticated fetch]
+    F --> C[Network-disabled Core verification]
+    C --> T[CLI and CBOR correctness, release tests, fmt, Clippy]
+    T --> E[Image identity, logs, resource peaks, report]
+    E --> D[Next: locked dependency integration and CI]
+    D --> B[Real browser model update]
+    B --> X[Consumer experiment on Amaterasu]
