@@ -33,6 +33,8 @@ kinematics {
             type "gpu_lidar";
         }
         @sensor_connection {}
+        // Rectified stereo rig incidence: + left RGB sensor, - right RGB sensor.
+        @stereo_pair {}
     }
     controllers {
         meta_controller {

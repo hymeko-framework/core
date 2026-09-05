@@ -158,4 +158,25 @@ quadruped: meta_kinematics.kinematics.elements, meta_kinematics.kinematics.geome
     tp_leg_br_0: meta_kinematics.kinematics.elements.tp_axis { joint -> hip_flex_br; lower_deg -15; upper_deg 15; }
     tp_leg_br_1: meta_kinematics.kinematics.elements.tp_axis { joint -> knee_br; lower_deg -20; upper_deg 20; }
     @tp_leg_br: meta_kinematics.kinematics.tp_chart { (+ tp_leg_br_0, + tp_leg_br_1); operator "rest_acceleration"; samples 11; rank 3; cr_grid 257; }
+
+    // Ideal rectified stereo add-on; no hardware-identification claim.
+    stereo_left: meta_kinematics.kinematics.sensors.rgb_camera {
+        camera_id 200; optical_frame "quadruped.head.left_optical";
+        width 320; height 240; fovy_deg 60; update_rate 5;
+        clip [0.02, 20.0]; position [0.15, 0.03, 0.035];
+        xy_axes [0, -1, 0, 0, 0, 1];
+    }
+    @stereo_left_mount: meta_kinematics.kinematics.sensors.sensor_connection {
+        (+ stereo_left, - head);
+    }
+    stereo_right: meta_kinematics.kinematics.sensors.rgb_camera {
+        camera_id 201; optical_frame "quadruped.head.right_optical";
+        width 320; height 240; fovy_deg 60; update_rate 5;
+        clip [0.02, 20.0]; position [0.15, -0.03, 0.035];
+        xy_axes [0, -1, 0, 0, 0, 1];
+    }
+    @stereo_right_mount: meta_kinematics.kinematics.sensors.sensor_connection {
+        (+ stereo_right, - head);
+    }
+    @head_stereo: meta_kinematics.kinematics.sensors.stereo_pair { (+ stereo_left, - stereo_right); }
 }
