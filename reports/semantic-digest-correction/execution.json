@@ -218,7 +218,13 @@
   },
   "performance_claim": false,
   "formal_proof_scope": "Existing 19 distributed-admission theorems unchanged; no digest or cryptographic proof is claimed.",
-  "publication": "pending",
+  "publication": {
+    "status": "implementation_pushed_and_remote_verified",
+    "branch": "audit/core-distributed-semantics-2026-09-05",
+    "remote": "ssh://git@amaterasu.local:2222/hymeko/core.git",
+    "verified_remote_revision": "125472ebfd16c9beaa96ffe2c1b00e145e2c15dd",
+    "verified_at": "2026-09-06T01:52:20.331848+02:00"
+  },
   "artifacts": [
     {
       "path": "docs/plans/2026-09-06-semantic-digest-correction/plan.tex",
@@ -305,5 +311,7 @@
       "sha256": "92cba9e8d6bf38579b0af5671d2c9c9ca640a32511d4b851e956f703a861fbf0",
       "bytes": 9983
     }
-  ]
+  ],
+  "implementation_revision": "125472ebfd16c9beaa96ffe2c1b00e145e2c15dd",
+  "artifact_scope": "Artifacts in implementation revision 125472ebfd16c9beaa96ffe2c1b00e145e2c15dd; execution.json excluded from self-hashing."
 }
