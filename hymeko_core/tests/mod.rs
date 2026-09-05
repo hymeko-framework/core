@@ -39,3 +39,5 @@ mod unified_ir;
 // deterministic sparse-CSR fixture (no core-src change; tests/ is allowlisted).
 #[path = "sparse_workload_kat.rs"]
 mod sparse_workload_kat;
+
+mod ir_stream_admission;

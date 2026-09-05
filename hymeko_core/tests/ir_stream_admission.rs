@@ -1,4 +1,4 @@
-//! Public-API admission requirements; compile with rustc --test against Core.
+//! Public-API admission regressions, also runnable with rustc --test against Core.
 //! Empty section tables exercise version/identity admission, not IR installation.
 use hymeko::ir_stream::{
     ApplyOutcome, AssemblerLimits, DecodeLimits, EnvelopeDraft, MessageType, ResyncReason,
@@ -153,5 +153,32 @@ fn stale_delta_base_preserves_the_current_version() {
             have: V,
             wanted: ZERO,
         }),
+    );
+}
+
+#[test]
+fn resync_does_not_turn_resumed_zero_into_bootstrap() {
+    let mut assembler = TransactionAssembler::resuming_at(ZERO, AssemblerLimits::strict());
+    assembler.reset_for_resync();
+    Producer::rejected(
+        &mut assembler,
+        MessageType::SnapshotBegin,
+        ZERO,
+        ZERO,
+        ApplyOutcome::ReplayOutsideWindow { seq: 2 },
+    );
+}
+
+#[test]
+fn known_identity_survives_resync_and_replay() {
+    let mut assembler = TransactionAssembler::new(AssemblerLimits::strict());
+    Producer::committed(&mut assembler, ZERO);
+    assembler.reset_for_resync();
+    Producer::rejected(
+        &mut assembler,
+        MessageType::SnapshotBegin,
+        ZERO,
+        ZERO,
+        ApplyOutcome::ExactDuplicate,
     );
 }
