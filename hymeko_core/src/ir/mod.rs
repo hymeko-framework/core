@@ -8,4 +8,6 @@ pub mod incidence;
 pub mod ir;
 pub mod lower;
 pub mod meta;
+// APPROVED-CORE-EDIT: semantic-model-digest-v2 (2026-09-05).
+pub mod semantic_digest;
 mod time;

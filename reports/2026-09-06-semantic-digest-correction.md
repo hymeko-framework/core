@@ -1,3 +1,191 @@
+# Core SemanticModelDigestV2 — alkalmazott és ellenőrzött javítás
+
+Created-at: 2026-09-06 00:55 +02:00. Updated-at: 2026-09-06 01:47 +02:00.
+
+A négy reprodukált digest-hiba javítva. A végleges Core-forrás Amaterasun
+**29/29 célzott tesztet és 395 teljes Core-tesztet teljesített**, hét változatlan
+ignored teszt mellett. A CBOR corpus, CLI, fmt, workspace Clippy és CBOR
+benchmark-smoke is sikeres. **A Nagare fogyasztói kapu még nem futott**: a célág
+kötelező roadmap-betöltési lánca hiányos, lásd lent.
+
+## Jóváhagyás és végrehajtási határ
+
+A felhasználó ebben a beszélgetésben, az alkalmazás előtt megadta:
+
+`APPROVED-CORE-EDIT: semantic-digest-canonical-coverage`
+
+A chat-turn azonosító nem áll rendelkezésre. A token szerepel a frissített,
+lefordított [tervben](../docs/plans/2026-09-06-semantic-digest-correction/plan.pdf),
+a `CORE.YAML` bejegyzésében és a javítócommit footerében.
+
+Alap: `f35c34fc887f706c24e449276ed59e85887f6da7`.
+Kizárólag a `112a2543264e302839fd7f2cf04858fd098c8f5c` digest-változása kerül
+be a javítással együtt, egy koherens commitban. Az eredeti import külön
+publikálása ismert hibás köztes providert eredményezne. A portable-ID és a
+robotfixture-őscommitok nem részei ennek a javításnak.
+
+## Viselkedés és megőrzött szerződések
+
+- Minden véges beágyazott érték teljes, iteratív kódolást kap; a 64-es mélységnél
+  korábban elvágott levél módosítása most megváltoztatja a digestet.
+- A névútvonal és az owner első arc-slotja adja a kanonikus identitást.
+  A deklarációk és ArcRec rekordok globális tárolási sorrendje nem része ennek.
+- Minden konkrét node-, edge- és arc-rekord tartalma bekerül, külön deklarációs
+  kötés nélkül is. A record-only ellenpéldákat a produkciós CBOR encode/decode
+  fogadja el; ezért nem lehet őket hibás bemenetként figyelmen kívül hagyni.
+- Az arc-slotok sorrendje, multiplicitása és megosztása megmarad: azonos payload
+  mellett is különbözik `[A,A,B]` és `[A,B,B]`. Az anonim névhelykitöltő kimarad.
+- Ha a kanonikus identitás előfeltételei hiányoznak, a teljes modell külön raw-ID
+  domaint használ. Ott is teljes a payload-lefedettség, de nincs átindexelési
+  invarianciaígéret. Érvénytelen symbol/record index továbbra is pánikolhat;
+  ez a modul nem új IR-validátor.
+
+A bejövő V2 publikus szignatúrái változatlanok. Schema **2**, algoritmus **2**
+(korábban 1); a régi V2 cache/plan azonosítók újraszámítandók. A strukturális V1,
+a deprecated Merkle-függvény törzse, `Ir::decl_hash`, a CBOR wire, a Parser-lock,
+a corpus-fixture-ök és a distributed admission forrása nem módosult.
+Új vagy frissített függőség nincs.
+
+A korábbi 19 Lean admission-tétel forrása byte-azonos maradt. Ez a javítás
+nem bővíti az ottani, opaque identitásokra vonatkozó bizonyítást: új formális
+digest- vagy kriptográfiai bizonyítást nem állítunk, Lean-újrafuttatás nem történt.
+
+## Végleges ellenőrzés és provenance
+
+A tesztelt forrásfa: `8a1cad6b64614a2dbff4dbe445b074eaf15b2b1c`.
+Az archívum SHA256 értéke:
+`5b62ba59ef3a808e3a1e1c9281ea317e8f54c8e3e881b33e0d4af31ecbfee0c3`.
+Az [execution.json](semantic-digest-correction/execution.json) a nyolc
+alkalmazási fájl pontos hashét, a parancsokat hordozó konténerállapotot,
+tesztpopulációkat, ignored neveket és erőforrásadatokat rögzíti.
+Az archívum az alap plusz e nyolc staged fájl; a későbbi jelentés/PDF-változás
+nem a fordított forrás része. A végső commit fájljai ezekkel ellenőrizendők.
+
+| Kapu | Eredmény | Falidő, fordítással együtt | Legnagyobb process RSS |
+|---|---|---:|---:|
+| Digest regressziók | 29 PASS, 0 FAIL | 8,25 s | 428 612 KiB |
+| Teljes Core | 395 PASS, 7 ignored | 21,62 s | 3 068 524 KiB |
+| CBOR corpus | 1 PASS | 8,29 s | 429 812 KiB |
+| CLI smoke | PASS | 3,82 s | 376 964 KiB |
+| fmt | PASS | 0,33 s | 52 952 KiB |
+| workspace/all-targets Clippy, `-D warnings` | PASS | 1,90 s | 261 732 KiB |
+| CBOR Criterion smoke | 6 encode/decode cella PASS | 4,57 s | 370 916 KiB |
+
+Forrás: [végső futási napló](semantic-digest-correction/semantic-digest-final.log),
+[konténer inspect](semantic-digest-correction/semantic-digest-final-container.json).
+SDK: `hymeko-core:1886f17a42d7a3430e4044129f81955615efd583`,
+image ID `sha256:c825ade5a9b80d45648ef5175398707cffe5b028b251015d69c39b9abc8a1308`;
+Rust/Cargo 1.97.1, Linux x86_64, release/locked/offline, hat CPU, 16 GiB limit,
+swap nélkül. A változott forrás a konténer tiszta `/tmp/core` könyvtárába került;
+az SDK image címkéje a buildkörnyezetet azonosítja, nem a javított forrást.
+Végső cgroup-csúcs: **3 300 356 096 byte (3,07 GiB)**; exit 0, OOM nélkül.
+
+Ezek diagnosztikai ellenőrzési idők, nem digest-latencia- vagy gyorsulásmérések.
+A korábbi 84 s-os Core-kapu eltérő cache-állapotú volt; a falidőket nem
+kezeljük teljesítmény-összehasonlításként. Nincs új benchmark- vagy coverage-% állítás.
+A memóriaigény `O(R + P + depth)`: P a tárolt névútvonal-szegmensek összmérete,
+ami mély névláncon négyzetes is lehet. A rekordaggregáció rendezése `O(R log R)`.
+
+## Regressziók, konszolidáció és indítási hibák
+
+A 18 incoming teszt és a négy korábbi RED-kontroll elvárása megmaradt; csak az
+explicit algoritmusverzió 1→2. Hét további kontroll teszteli a helykitöltőt,
+arc-megosztást, árva rekordokat, fallbacket és a 0/1/63/64/65/128/256 mélységeket.
+Mind a 29 tesztnév megmaradt a fixture-konszolidáció során. A közös node/edge
+fejléc a meglévő kódolókból épül, a signed atom elérése a meglévő `atom()` API-t
+használja. A tesztfájl duplikált sorai 186→0-ra csökkentek.
+
+`contract-symbols`: **619 szimbólum, PASS**, a jegyzék generált.
+`contract-duplication`: **403 clone / 7770 sor**, baseline **403 / 7800**,
+**PASS, változatlan baseline**. `git diff --check`: PASS.
+Új error-handling waiver nincs: az egyetlen `expect` előtt dokumentált
+konstruktor-invariáns garantálja az owner-slot létezését. A tesztassertionök
+nem helyettesítik a produkciós validátort.
+
+Két környezeti indítási hiba megőrizve: a `bash -lc` PATH-ja nem találta a
+`rustc`-t; a javított launcher `bash -c`. Utána a forrásból indított `core.sh`
+saját, nem executable példányát próbálta meghívni. A végső futás az SDK
+byte-azonos, executable `hymeko-core-check` belépőjét használta.
+A forrás scriptjét nem módosítottuk, kaput nem kerültünk meg. A kezdeti
+konténerek és logok a bizonyítéktárban maradtak; az első valódi futás már
+29/29-et, a következő teljes futás 395/7-et adott. A konszolidáció után a fenti
+végleges forrásra újra lefutott a teljes tervezett ellenőrzés.
+
+## Érintett fájlok és rollback
+
+| Alkalmazási fájl | Hozzáadott / törölt sor |
+|---|---:|
+| `CORE.YAML` | 55 / 0 |
+| `SYMBOLS.md` | 6 / 1 |
+| `hymeko_core/src/ir/hash_pass.rs` | 20 / 0 |
+| `hymeko_core/src/ir/mod.rs` | 2 / 0 |
+| `hymeko_core/src/ir/semantic_digest.rs` | 425 / 0 |
+| `hymeko_core/src/module_store/module_store.rs` | 9 / 0 |
+| `hymeko_core/tests/unified_ir/verification/mod.rs` | 1 / 0 |
+| `hymeko_core/tests/unified_ir/verification/semantic_digest.rs` | 678 / 0 |
+
+További változások: a meglévő terv `.tex` és `.pdf` állománya, ez a jelentés,
+valamint a `reports/semantic-digest-correction/` végrehajtási bizonyítékai.
+A korábbi review-patch és `.rs.txt` mellékletek történeti javaslatok;
+a `proposal.json` az **f35c34f javaslatcommit** állapotát és bájtjait írja le.
+A mostani végrehajtást az `execution.json` írja le.
+
+Rollback: a javítócommit célzott visszavonása helyreállítja az auditág korábbi
+Core API-ját; későbbi consumer-pinfrissítéseket előbb fordított függőségi
+sorrendben kell visszavonni. A választott algoritmushoz a V2 cache újraszámítandó.
+A korábbi audit-tagek nem mozdulnak; main merge vagy release nem történt.
+
+## Nagare fogyasztói határ
+
+A frissen ellenőrzött célref `f3660cc8f738cccc69c2a011a943ce811347815e`.
+A `merkle_digest_soundness` család 14 tesztje közül négy V2-t használ; a fixture
+a produkciós Parser/ModuleStore útján töltött `tests/hnn_data/mlp/mlp2.hymeko`.
+A célref Core/WGPU lockja még `112a254`, Graph `9655f077`, Parser `284c490d`.
+Consumer tesztet és tartós függőségfrissítést **nem hajtottunk végre**.
+
+A célág `AGENTS.md` §2 előírja a `../ROADMAPS.md` registry és mindkét canonical
+roadmap elolvasását; hiányukra kifejezetten stopot ír elő. A registry, valamint
+a `nagare-long-term-roadmap.md` és `micro-nagare-mcu-backend.md` hiányzik a
+vizsgált Windows és Amaterasu útvonalakon. Az exact `9d148a4` provider tartalma
+elérhető és elolvasott, de ez a hiányzó roadmapet nem helyettesíti. A fájlok
+helyét a felhasználótól bekértük; engedélyt a már jóváhagyott Core-javításhoz
+nem kértünk újra. Ez dokumentációs előfeltétel, nem automatikus jóváhagyási elutasítás.
+
+## Discovery
+
+```text
+DISCOVERY LEDGER — SemanticModelDigestV2
+  find:    rg --files -g '*digest*' -g '*hash*' tools reports/semantic-digest-correction hymeko_core/src hymeko_core/tests
+           -> 8 találat: a meglévő hash-modulok, tesztek és a jóváhagyott tervezet
+  grep:    rg 'semantic_model_digest_v2|semantic_declaration_hashes|build_path_index' hymeko_core/src/ir
+           -> 1 találat: canonical_hash.rs::build_path_index
+  symbols: SYMBOLS.md azonos keresés -> 1 találat: build_path_index
+  read:    hash_pass.rs, canonical_hash.rs, a jóváhagyott patch és terv
+  verdict: EXTEND a bejövő ir::semantic_digest modult a jóváhagyott javítással;
+           a V1 hash eltérő szerződését és implementációját megőrizzük.
+
+DISCOVERY LEDGER — közös rekordfejléc
+  find:    meglévő semantic_digest.rs
+  grep:    fn .*header|fn .*record.*hash|fn write_signed_refs
+           -> 3 találat: header, record_hashes, write_signed_refs
+  symbols: nincs új publikus szimbólum
+  read:    SemanticContext::record_hashes
+  verdict: EXTEND SemanticContext privát rekordfejléc-segéddel;
+           a meglévő header és write_signed_refs komponálásával.
+
+DISCOVERY LEDGER — semantic digest teszt-fixture konszolidáció
+  find:    rg --files hymeko_core/tests/unified_ir | rg 'semantic|builder|hash_coverage' -> 3 találat: semantic_digest.rs, support/builder.rs, hash_coverage.rs
+  grep:    rg -n '^fn |^struct ' hymeko_core/tests/unified_ir/verification/semantic_digest.rs -> meglévő program, link, plain, assert_changed és CBOR-fixture helperek
+  symbols: rg -n 'TestIr|semantic_digest|assert_changed' SYMBOLS.md -> 5 publikus digest-szimbólum; a privát teszthelper nincs exportálva
+  read:    semantic_digest.rs, support/builder.rs, hash_coverage.rs, modules/10-discovery.md, jóváhagyott plan.tex
+  verdict: EXTEND hymeko_core/tests/unified_ir/verification/semantic_digest.rs; közös privát fixture- és assertion-helperek a meglévő TestIr fölött, új fájl vagy publikus API nélkül.
+```
+
+## Korábbi előkészítési feljegyzés
+
+<details>
+<summary>A jóváhagyás előtti f35c34f állapot — történeti feljegyzés</summary>
+
 # Core SemanticModelDigestV2 — javítási csomag
 
 Created-at: 2026-09-06 00:55 +02:00. Updated-at: 2026-09-06 01:09 +02:00.
@@ -125,3 +313,5 @@ A korábbi Parser- és admission-tokenek nem erre a változtatásra vonatkoznak.
 A szükséges új token: `APPROVED-CORE-EDIT: semantic-digest-canonical-coverage`.
 Ez még **nem érkezett meg**, ezért védett forrás nem módosult; a patch ellenőrzése
 jóváhagyás előtt csak alkalmazhatóságot és szintaxist jelenthet, futtatott javítást nem.
+
+</details>

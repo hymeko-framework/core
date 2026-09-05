@@ -13,7 +13,7 @@ Extracted by grammar -- tree-sitter for Rust and C++, `ast` for Python -- so tha
 `pub(crate)`, a `pub fn` inside a private `mod`, and a `def` written inside a
 docstring are all excluded for a stated reason rather than by luck.
 
-**5 package(s), 614 public symbol(s).**
+**5 package(s), 619 public symbol(s).**
 
 ## docs (rust)
 
@@ -102,10 +102,12 @@ _No public symbols._
 - `NodeTag` — `hymeko_core/src/common/ids.rs`
 - `Ones` — `hymeko_core/src/tensor/conv/weight_init/weight_init.rs`
 - `PathKey` — `hymeko_core/src/common/pathkey.rs`
+- `ProgramStructureHashV1` — `hymeko_core/src/ir/semantic_digest.rs`
 - `RealParser` — `hymeko_core/src/util/real_parser.rs`
 - `RefAtomR` — `hymeko_core/src/ir/ir.rs`
 - `ScalarWeightExtractor` — `hymeko_core/src/tensor/tensor_val.rs`
 - `SectionEntry` — `hymeko_core/src/ir_stream/section.rs`
+- `SemanticModelDigestV2` — `hymeko_core/src/ir/semantic_digest.rs`
 - `SnapshotVersion` — `hymeko_core/src/ir_stream/version.rs`
 - `SparseCsrShape` — `hymeko_core/src/tensor/compute/mod.rs`
 - `SparseSpec` — `hymeko_core/src/tensor/sparse_workload.rs`
@@ -362,6 +364,7 @@ _No public symbols._
 - `preallocate_from_index` — `hymeko_core/src/ir/ir.rs`
 - `pretty_print_compiled` — `hymeko_core/src/util/pretty_print.rs`
 - `print_dense_block` — `hymeko_core/src/tensor/util.rs`
+- `program_structure_hash_v1` — `hymeko_core/src/ir/semantic_digest.rs`
 - `provider_mut` — `hymeko_core/src/module_store/module_store.rs`
 - `push` — `hymeko_core/src/tensor/representations/tensor_coo.rs`
 - `push_anonymous_arc` — `hymeko_core/src/ir/ir.rs`
@@ -395,6 +398,8 @@ _No public symbols._
 - `section` — `hymeko_core/src/ir_stream/codec.rs`
 - `sections` — `hymeko_core/src/ir_stream/assembler.rs`
 - `sections` — `hymeko_core/src/ir_stream/codec.rs`
+- `semantic_declaration_hashes` — `hymeko_core/src/ir/semantic_digest.rs`
+- `semantic_model_digest_v2` — `hymeko_core/src/ir/semantic_digest.rs`
 - `seq` — `hymeko_core/src/ir_stream/assembler.rs`
 - `seq` — `hymeko_core/src/ir_stream/envelope.rs`
 - `sign` — `hymeko_core/src/ir/ir.rs`

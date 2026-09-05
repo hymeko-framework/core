@@ -19,12 +19,10 @@ successfully at task start. The existing audit records 18 passing original
 tests and four failing identity requirements; reuse those exact negative controls.
 
 \paragraph{Approval boundary.}
-Core CORE.YAML requires a literal, slug-specific chat token. The user's request
-authorizes preparation; the token for protected application has not yet arrived.
-Proposed token: \texttt{APPROVED-CORE-EDIT: semantic-digest-canonical-coverage}.
-Prepare the patch, exact file inventory, invariants, tests and rollback first.
-Do not apply it to protected sources, including verification copies, before
-that token. After approval, quote the received token and add its commit footer.
+The user supplied the literal token in chat on 2026-09-06:
+\texttt{APPROVED-CORE-EDIT: semantic-digest-canonical-coverage}.
+Protected application and the planned verification are now authorized.
+The chat turn identifier is not available. Include the token in the commit footer.
 
 \paragraph{Owner and affected files.}
 The sole implementation owner remains Core ir::semantic\_digest. Protected
@@ -81,7 +79,9 @@ audit checkout and promote the four recorded probes into the existing test owner
 Add direct controls for anonymous placeholder/interner changes, shared identical
 arcs with [A,A,B] versus [A,B,B], orphan-record payload coverage, fallback
 idempotence, and depth-boundary values. Preserve the 18 incoming tests, updating
-only the explicit algorithm-version assertion. Check slot/sign/weight changes
+only the explicit algorithm-version assertion. Fixture setup may be consolidated
+without changing any of the 29 test names, inputs, or assertions, to satisfy the
+unchanged duplication baseline. Check slot/sign/weight changes
 remain observable and V1 unchanged. Then run the existing complete Core gate,
 CBOR corpus, admission regressions, fmt and Clippy; do not re-freeze fixture hashes.
 
@@ -90,16 +90,21 @@ with an ephemeral clean source snapshot and existing cache after approval.
 16 GiB memory, no extra swap, six CPUs, locked/offline tests. Record exact source,
 test-only deltas, command, elapsed time and RSS/cgroup peak. A substantive fix
 must pass those tests before any success claim or provider revision publication.
-Worst-case added storage is linear in declaration/record count plus an iterative
-value traversal stack; sorting costs O(R log R). No performance improvement claim.
+Worst-case storage is O(R + P + depth): R concrete/declaration records, P total
+segments retained by the existing path index, and value-list nesting depth.
+P can be quadratic for a deeply nested named chain; no linear-space claim is made
+for arbitrary hierarchies. Record sorting costs O(R log R); encoding work also
+includes all repeated target-path bytes. No performance improvement claim.
 ETA: 15--25 minutes for preparation; after approval about 10--15 minutes for
 implementation and bounded Core/consumer verification, based on the prior
 9.7-second focused rebuild and 84-second cold Core gate plus evidence handling.
 
 \paragraph{Rollback and acceptance.}
 Before approval, rollback is only removal/reversion of the proposal artifacts.
-After application use separate import/correction commits so the audit base and
-its tested consumer tags remain recoverable. Revert new downstream pins before
+Apply the reviewed combined patch in one coherent correction commit: the imported
+algorithm 1 has four known defects and must not become a published intermediate
+provider revision. The original 112a254 and proposal f35c34f preserve provenance;
+reverting the correction commit restores the audit base. Revert new downstream pins before
 reverting Core; recompute V2 caches for the selected algorithm version. Never
 move the previous audit tag. Acceptance requires all four original counterexamples
 green, new discriminating controls green, preserved V1/CBOR/admission gates and

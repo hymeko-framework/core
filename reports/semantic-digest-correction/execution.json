@@ -1,0 +1,309 @@
+{
+  "created_at": "2026-09-06T01:47:21.396514+02:00",
+  "approval_token": "APPROVED-CORE-EDIT: semantic-digest-canonical-coverage",
+  "approval_received": true,
+  "chat_turn_id": null,
+  "applied": true,
+  "compiled": true,
+  "core_verified": true,
+  "base_revision": "f35c34fc887f706c24e449276ed59e85887f6da7",
+  "incoming_digest_commit": "112a2543264e302839fd7f2cf04858fd098c8f5c",
+  "source_tree": "8a1cad6b64614a2dbff4dbe445b074eaf15b2b1c",
+  "source_archive_sha256": "5b62ba59ef3a808e3a1e1c9281ea317e8f54c8e3e881b33e0d4af31ecbfee0c3",
+  "source_files": [
+    {
+      "path": "CORE.YAML",
+      "sha256": "bbc8d39dd1cb2c95fe47207f14d15f7afd797dfddc400f1d217a7808168fa42d",
+      "bytes": 14793,
+      "lines": 299
+    },
+    {
+      "path": "SYMBOLS.md",
+      "sha256": "e7a50de8fc6bc5076f634ea14650621a44526fd676516b59603ca3940235cbab",
+      "bytes": 36540,
+      "lines": 696
+    },
+    {
+      "path": "hymeko_core/src/ir/hash_pass.rs",
+      "sha256": "c345b00f8581b779a83461c1e787607c192bb155d39e9a627fa8abb99e9c1df2",
+      "bytes": 4931,
+      "lines": 146
+    },
+    {
+      "path": "hymeko_core/src/ir/mod.rs",
+      "sha256": "6379dc9b5be7849a60cc529ff319733572710e8b6167e33857c3f8349370f653",
+      "bytes": 265,
+      "lines": 13
+    },
+    {
+      "path": "hymeko_core/src/ir/semantic_digest.rs",
+      "sha256": "3cd33eb374bb84e01c4d32cd1d999df7303fac6870961b29e826fed5f6822c41",
+      "bytes": 15318,
+      "lines": 425
+    },
+    {
+      "path": "hymeko_core/src/module_store/module_store.rs",
+      "sha256": "2509321e4d67f7189c1c64cb54e8bc2d48df962735cdddd1adb491639a655dab",
+      "bytes": 12683,
+      "lines": 350
+    },
+    {
+      "path": "hymeko_core/tests/unified_ir/verification/mod.rs",
+      "sha256": "7f28993304e58c29dcc2fcdf5dbbd79cc9ed9e73df95b38c60b987830f57d547",
+      "bytes": 357,
+      "lines": 15
+    },
+    {
+      "path": "hymeko_core/tests/unified_ir/verification/semantic_digest.rs",
+      "sha256": "f72280b49368b4a8b3d3aafd289e16cd4d71a2bd7983852cb3d34303bfb13dd9",
+      "bytes": 24734,
+      "lines": 678
+    }
+  ],
+  "preserved_paths": [
+    "Cargo.toml",
+    "Cargo.lock",
+    "hymeko_core/Cargo.toml",
+    "hymeko_core/src/ir/canonical_hash.rs",
+    "hymeko_core/src/ir_stream/assembler.rs",
+    "docs/verification/unified-ir/distributed-semantics.lean",
+    "data/**"
+  ],
+  "image": "sha256:c825ade5a9b80d45648ef5175398707cffe5b028b251015d69c39b9abc8a1308",
+  "container_id": "4860198e2cc850f3885fad3cfe2f4c52e17228e7c9e293b465d9a9f8a100b686",
+  "container_state": {
+    "Status": "exited",
+    "Running": false,
+    "Paused": false,
+    "Restarting": false,
+    "OOMKilled": false,
+    "Dead": false,
+    "Pid": 0,
+    "ExitCode": 0,
+    "Error": "",
+    "StartedAt": "2026-09-05T23:44:48.148540941Z",
+    "FinishedAt": "2026-09-05T23:45:37.335092667Z"
+  },
+  "cgroup_peak_bytes": 3300356096,
+  "stages": [
+    {
+      "stage": "digest",
+      "elapsed_s": 8.25,
+      "max_rss_kib": 428612,
+      "exit_code": 0
+    },
+    {
+      "stage": "dependencies",
+      "elapsed_s": 0.13,
+      "max_rss_kib": 65896,
+      "exit_code": 0
+    },
+    {
+      "stage": "cli",
+      "elapsed_s": 3.82,
+      "max_rss_kib": 376964,
+      "exit_code": 0
+    },
+    {
+      "stage": "cbor-corpus",
+      "elapsed_s": 8.29,
+      "max_rss_kib": 429812,
+      "exit_code": 0
+    },
+    {
+      "stage": "core-tests",
+      "elapsed_s": 21.62,
+      "max_rss_kib": 3068524,
+      "exit_code": 0
+    },
+    {
+      "stage": "format",
+      "elapsed_s": 0.33,
+      "max_rss_kib": 52952,
+      "exit_code": 0
+    },
+    {
+      "stage": "clippy",
+      "elapsed_s": 1.9,
+      "max_rss_kib": 261732,
+      "exit_code": 0
+    },
+    {
+      "stage": "cbor-bench-smoke",
+      "elapsed_s": 4.57,
+      "max_rss_kib": 370916,
+      "exit_code": 0
+    }
+  ],
+  "test_results": [
+    {
+      "passed": 29,
+      "failed": 0,
+      "ignored": 0,
+      "elapsed_s": 0.0
+    },
+    {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "elapsed_s": 0.12
+    },
+    {
+      "passed": 134,
+      "failed": 0,
+      "ignored": 1,
+      "elapsed_s": 0.04
+    },
+    {
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0,
+      "elapsed_s": 0.0
+    },
+    {
+      "passed": 254,
+      "failed": 0,
+      "ignored": 6,
+      "elapsed_s": 11.88
+    },
+    {
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "elapsed_s": 0.0
+    },
+    {
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0,
+      "elapsed_s": 0.05
+    }
+  ],
+  "core_passed": 395,
+  "core_ignored": 7,
+  "ignored_tests": [
+    "ir_stream::assembler::part_a_probe::probe_all_ten",
+    "unified_ir::validation::cbor_roundtrip::canonical_cbor_memory_decode",
+    "unified_ir::validation::cbor_roundtrip::canonical_cbor_memory_materialize_only",
+    "unified_ir::validation::cbor_roundtrip::canonical_cbor_memory_read_baseline",
+    "unified_ir::validation::cbor_roundtrip::write_canonical_cbor_memory_fixture",
+    "unified_ir::validation::corpus::bench_lowering_corpus",
+    "unified_ir::verification::incidence::bench_incidence_operator_vs_clique"
+  ],
+  "governance": {
+    "symbols": 619,
+    "clones": 403,
+    "cloned_lines": 7770,
+    "baseline_clones": 403,
+    "baseline_cloned_lines": 7800,
+    "baseline_changed": false
+  },
+  "initial_verification": {
+    "source_tree": "440944348a506f9400c14724b7214a57f2901b4b",
+    "archive_sha256": "63401bc3d2d21921fae110f9b746b0728450da55255f24fa87856335a07dbeb8",
+    "digest_passed": 29,
+    "core_passed": 395,
+    "core_ignored": 7
+  },
+  "nagare": {
+    "target_revision": "f3660cc8f738cccc69c2a011a943ce811347815e",
+    "tests_run": false,
+    "status": "blocked_missing_required_roadmaps",
+    "required_files": [
+      "../ROADMAPS.md",
+      "../nagare-integration-core-ir/docs/roadmaps/nagare-long-term-roadmap.md",
+      "../nagare-integration-core-ir/docs/roadmaps/micro-nagare-mcu-backend.md"
+    ],
+    "dependency_changes_applied": false
+  },
+  "performance_claim": false,
+  "formal_proof_scope": "Existing 19 distributed-admission theorems unchanged; no digest or cryptographic proof is claimed.",
+  "publication": "pending",
+  "artifacts": [
+    {
+      "path": "docs/plans/2026-09-06-semantic-digest-correction/plan.tex",
+      "sha256": "96aa75628acc7791723ae3ddc3eda9f6548f4f4714d322b9df1b126fbd4cc0a1",
+      "bytes": 6924
+    },
+    {
+      "path": "docs/plans/2026-09-06-semantic-digest-correction/plan.pdf",
+      "sha256": "70ade684db75b59f0e2eed16dc53a4cf5cff858b8c66af83479240d39d708fa9",
+      "bytes": 146861
+    },
+    {
+      "path": "docs/plans/2026-09-06-semantic-digest-correction/plan.tikz",
+      "sha256": "3009ac2b298723166900efa4ee3ef18eb4e6e00f8d61e933dac962ce3586f297",
+      "bytes": 535
+    },
+    {
+      "path": "docs/plans/2026-09-06-semantic-digest-correction/plan.mmd",
+      "sha256": "70647ca24178dae5d3b97da51cc3a7ee0c7edfc7dfc8745d3b5f6ae62a6f93e8",
+      "bytes": 516
+    },
+    {
+      "path": "reports/2026-09-06-semantic-digest-correction.md",
+      "sha256": "d2c6319cc29c49177665d09dd88574858aee4d13e90e92acb4c109f5cfd55fb7",
+      "bytes": 18878
+    },
+    {
+      "path": "reports/semantic-digest-correction/semantic-digest-core-all-container.json",
+      "sha256": "1ae11df49d0319a1cf274e13f845362626f99dacf5a7889cb8747ddfa6da956e",
+      "bytes": 10966
+    },
+    {
+      "path": "reports/semantic-digest-correction/semantic-digest-core-all-memory-peak.txt",
+      "sha256": "562eb78eb94bf323a60a325faf2f6d8dd6a486944b4e16e6222b84319b313c1e",
+      "bytes": 11
+    },
+    {
+      "path": "reports/semantic-digest-correction/semantic-digest-core-all.log",
+      "sha256": "03ff53ac7e0c91f2c59e5943e3a93789c19457bf8680a754c4a0a9397eabc62b",
+      "bytes": 51763
+    },
+    {
+      "path": "reports/semantic-digest-correction/semantic-digest-core-memory-peak.txt",
+      "sha256": "18d2fa632ce2e1b3aaae3e420f1e87034d20519b8e2d3b7d427b0917512551a2",
+      "bytes": 11
+    },
+    {
+      "path": "reports/semantic-digest-correction/semantic-digest-core.log",
+      "sha256": "d3944aa8e36313c174ada6252045cf5414639789972ad335a53340fed303ab2e",
+      "bytes": 13331
+    },
+    {
+      "path": "reports/semantic-digest-correction/semantic-digest-final-container.json",
+      "sha256": "e77177f341912d8a3f4af25c93442baa0ff1ab42fdf3a0d0e8ecb0d2021d7edb",
+      "bytes": 11498
+    },
+    {
+      "path": "reports/semantic-digest-correction/semantic-digest-final-memory-peak.txt",
+      "sha256": "37190dabbd9cf409e28932025c16d239d175e3a619cc81bbace3e802b63e7040",
+      "bytes": 11
+    },
+    {
+      "path": "reports/semantic-digest-correction/semantic-digest-final.log",
+      "sha256": "d3cae6ca20f5db97af0a50b60e3434207e68095f03c077b29ea229cbbe94e879",
+      "bytes": 50261
+    },
+    {
+      "path": "reports/semantic-digest-correction/semantic-digest-first-container.json",
+      "sha256": "857d9ae773e386ca54c5408bfd6e571d09aaaf286acb09058a5bb94fad5a4942",
+      "bytes": 11544
+    },
+    {
+      "path": "reports/semantic-digest-correction/semantic-digest-launch-failure.json",
+      "sha256": "4b0523e60acb2946dd137ef77694ef08c98fee863ce2dd0c72d2f59d9cb7fffe",
+      "bytes": 11516
+    },
+    {
+      "path": "reports/semantic-digest-correction/semantic-digest-launch-failure.log",
+      "sha256": "67339527559957ed5aecabea83d18af5c129d279d7c7b42ace5f29f58fa938ef",
+      "bytes": 65
+    },
+    {
+      "path": "reports/semantic-digest-correction/semantic-digest-plan-build-approved.log",
+      "sha256": "92cba9e8d6bf38579b0af5671d2c9c9ca640a32511d4b851e956f703a861fbf0",
+      "bytes": 9983
+    }
+  ]
+}
