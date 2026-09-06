@@ -1,0 +1,59 @@
+% HyMeKo Python PoW-0 — module boundary & ownership (TikZ).
+% STRATEGY-ID: HYMEKO-PLATFORM-2026-09-01-v1 · ROADMAP-TASK: PY0 · 2026-09-02.
+% Standalone: \input this into a document with \usepackage{tikz}, or wrap as below.
+\documentclass[tikz,border=6pt]{standalone}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds}
+\begin{document}
+\begin{tikzpicture}[
+  font=\small,
+  box/.style={draw,rounded corners,align=center,inner sep=4pt,minimum height=8mm},
+  own/.style={box,fill=blue!8},
+  py/.style={box,fill=green!8},
+  ext/.style={box,fill=gray!10},
+  dep/.style={-{Latex[length=2mm]},thick},
+  borrow/.style={-{Latex[length=2mm]},dashed},
+]
+% Python surface
+\node[py] (parse) {\texttt{hymeko.parse} / \texttt{hymeko.load}};
+\node[py,right=10mm of parse] (model) {\texttt{Model}\\(read-only view)};
+\node[py,below=7mm of model] (ids) {\texttt{DeclId NodeId}\\\texttt{EdgeId HyperArcId}\\(+ model token)};
+\node[py,left=10mm of ids] (arrays) {\texttt{incidence\_arrays()}\\arc-major SoA (bulk copy)};
+
+% Rust binding crate (owns Ir + Interner)
+\node[own,below=16mm of parse] (pipe) {\texttt{pipeline}: real parser\\$\to$ resolve $\to$ lower};
+\node[own,right=8mm of pipe] (ir) {\textbf{Ir} (owned)};
+\node[own,right=8mm of ir] (it) {\textbf{Interner} (owned)};
+\node[own,below=6mm of ir] (val) {coherence validate};
+\node[own,below=6mm of it] (hash) {single-model\\canonical hash};
+
+% External crates
+\node[ext,below=10mm of pipe] (parser) {crate \texttt{parser}};
+\node[ext,right=8mm of parser] (core) {crate \texttt{hymeko\_core} (\texttt{hymeko})\\\emph{full-locked; read-only use}};
+
+% edges
+\draw[dep] (parse) -- (pipe);
+\draw[dep] (pipe) -- (ir);
+\draw[dep] (pipe) -- (it);
+\draw[dep] (ir) -- (val);
+\draw[dep] (ir) -- (hash);
+\draw[borrow] (model) -- (ir) node[midway,right]{borrow};
+\draw[borrow] (model) -- (it);
+\draw[dep] (arrays) -- (ir);
+\draw[dep] (pipe) -- (parser);
+\draw[dep] (pipe) -- (core);
+\draw[dep] (ir) -- (core);
+
+% dependency-rule annotation
+\node[align=left,below=6mm of core,font=\footnotesize] (rule)
+  {Allowed: \texttt{hymeko\_python}$\to$\texttt{parser}, \texttt{hymeko\_python}$\to$\texttt{hymeko\_core}.\\
+   Forbidden: \texttt{hymeko\_core}$\to$PyO3; \texttt{parser}$\to$Python; second IR; Python DTO;\\
+   JSON intermediate; dense/star graph; mutation/transaction API.};
+
+\begin{scope}[on background layer]
+  \node[draw,dotted,rounded corners,fit=(parse)(model)(ids)(arrays),
+        label={[font=\footnotesize]above:Python (\texttt{import hymeko})}] {};
+  \node[draw,dotted,rounded corners,fit=(pipe)(ir)(it)(val)(hash),
+        label={[font=\footnotesize]above:Rust \texttt{hymeko\_python} (PyO3; GIL released on long ops)}] {};
+\end{scope}
+\end{tikzpicture}
+\end{document}

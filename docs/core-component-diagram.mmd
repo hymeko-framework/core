@@ -1,0 +1,39 @@
+%% hymeko_core component / dependency diagram (Stage 2 audit, 67771c9)
+%% Edges are internal `use crate::<module>` dependencies; leaf = foundation.
+flowchart TD
+    subgraph ext["external"]
+      PARSER["parser (AST)"]:::ext
+      BLAKE["blake3"]:::ext
+      NALG["nalgebra / -sparse"]:::ext
+      RAYON["rayon"]:::ext
+      ICE["iceoryx2 (opt)"]:::ext
+    end
+    COMMON["common<br/>ids · pathkey<br/>228 LOC"]:::found
+    IRSTREAM["ir_stream<br/>envelope·section·codec·assembler<br/>~1900 prod / 5174 total"]:::mod
+    RESOLUTION["resolution<br/>interner·resolve·const·intern<br/>1393 LOC · 1 unsafe"]:::mod
+    IR["ir<br/>ir·access·lower·coherence·hash<br/>~1200 prod · canonical_hash 541"]:::mod
+    MSTORE["module_store<br/>compile orchestration<br/>505 LOC"]:::mod
+    TENSOR["tensor<br/>COO/CSR·SpMV·decomp·compute<br/>2409 LOC · near-isolated"]:::mod
+    WRITERS["writers · util<br/>384 LOC"]:::top
+
+    PARSER --> COMMON
+    COMMON --> RESOLUTION
+    COMMON --> IRSTREAM
+    COMMON --> IR
+    RESOLUTION --> IR
+    IRSTREAM --> IR
+    BLAKE --> IR
+    IR --> MSTORE
+    RESOLUTION --> MSTORE
+    IR --> TENSOR
+    NALG --> TENSOR
+    RAYON --> TENSOR
+    ICE --> TENSOR
+    IR --> WRITERS
+    MSTORE --> WRITERS
+    TENSOR -.readback boundary.-> WGPU["hymeko_wgpu (separate crate)"]:::ext
+
+    classDef found fill:#dfe7ff,stroke:#3355aa;
+    classDef mod fill:#eef6ff,stroke:#4477bb;
+    classDef top fill:#eafbea,stroke:#44aa55;
+    classDef ext fill:#f5f5f5,stroke:#999,stroke-dasharray:3 3;

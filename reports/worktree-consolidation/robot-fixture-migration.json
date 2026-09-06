@@ -1,0 +1,23 @@
+{
+  "old_digest": "f9ab7da8b5d823fa9d55c28e78fd63bc37660a97f67852ad587a145f951cb3b5",
+  "new_digest": "8938b37b221ba015f1a52f318f8b9d9ac9aab65777ee07026916bf2b1d13dd12",
+  "lowerable_count": 102,
+  "prior_control": "reports/2026-09-05-dependency-refresh.md: A corpus-hiba kontroll?lt magyar?zata",
+  "files": [
+    {
+      "file": "data/robotics/meta_kinematics.hymeko",
+      "sha256": "4ecbe35c8307bb357d0eddf6b5735f837a96ee8c2c5888eeda3d0ce1a4852a0d",
+      "incoming_blob": "195e00c5d5b66a1e2c7d78b16a6eaa646ba71401"
+    },
+    {
+      "file": "data/robotics/robots/humanoid.hymeko",
+      "sha256": "cef176510521bfb2ae34dacf3bbb7d352bb248ea84a62fcd2deeb48c942c02be",
+      "incoming_blob": "c5cd6abc9290d01419e1a9f20f2b9e5d678da17b"
+    },
+    {
+      "file": "data/robotics/robots/quadruped.hymeko",
+      "sha256": "196f1ea5d211cb38fdb4b8482110f5e7068d23fc67945562192d9be6ebacae2a",
+      "incoming_blob": "127ae08b1d941b976492ee30b964c935a46978b5"
+    }
+  ]
+}

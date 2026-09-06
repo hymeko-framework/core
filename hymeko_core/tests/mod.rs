@@ -41,3 +41,19 @@ mod unified_ir;
 mod sparse_workload_kat;
 
 mod ir_stream_admission;
+
+// Shared incidence-test scaffolding (§6.1) used by the P2 + P2.1 suites below.
+#[path = "incidence_support.rs"]
+mod incidence_support;
+
+// P2 §4.1 isolation profile (temporary; wired here because autotests=false).
+#[path = "incidence_precompute_profile.rs"]
+mod incidence_precompute_profile;
+
+// P2.1 canonical incidence backbone: PreparedIr owned bundle + borrowed view.
+#[path = "prepared_ir_backbone.rs"]
+mod prepared_ir_backbone;
+
+// Part-2 §4 Bx profile (temporary; autotests=false).
+#[path = "bx_profile.rs"]
+mod bx_profile;

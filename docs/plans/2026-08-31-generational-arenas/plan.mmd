@@ -1,0 +1,13 @@
+%% Generational entity storage — Stage 1 decision flow
+flowchart TD
+    S0["Stage 0: promote compact dispatch to main (67771c9)"] --> INV["ID-domain inventory<br/>4 entity IDs in scope; SymId + dense/CSR/shader excluded"]
+    INV --> FACT{"Ir has deletion?"}
+    FACT -- "no: strictly append-only" --> PROTO["Prototype A/B/B'/C vs BASE<br/>append, lookup, iter, tombstone, clone, bytes"]
+    PROTO --> GATE{"valid lookup regression <= 3% ?"}
+    GATE -- "A +72..122%" --> FAIL
+    GATE -- "B +56..59% (best)" --> FAIL
+    GATE -- "B' +66..99%" --> FAIL
+    GATE -- "C +147..150%" --> FAIL["no rep meets the gate"]
+    FAIL --> DEC["Part 1.5: HARD STOP production migration<br/>push prototype + benchmark + decision"]
+    WIRE["Wire form designed + validated<br/>8B GenId, 8B Option, known-answer vectors"] --> DEC
+    DEC --> PUSH["commit + push feat/core-generational-arenas<br/>never merge to main"]

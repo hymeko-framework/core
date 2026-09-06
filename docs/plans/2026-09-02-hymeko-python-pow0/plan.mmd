@@ -1,0 +1,44 @@
+%% HyMeKo Python PoW-0 — pipeline (real parser → canonical Ir → Python model) and type view.
+%% STRATEGY-ID: HYMEKO-PLATFORM-2026-09-01-v1 · ROADMAP-TASK: PY0 · 2026-09-02.
+
+flowchart TD
+    subgraph py["Python — import hymeko"]
+        A1["hymeko.parse(source, filename)"]
+        A2["hymeko.load(path)"]
+        M["Model  (read-only)"]
+        E["Decl / Node / Edge / HyperArc / Incidence  value views"]
+        ID["DeclId / NodeId / EdgeId / HyperArcId  (+ model token)"]
+        ARR["incidence_arrays()  — arc-major SoA"]
+    end
+
+    subgraph rust["Rust — hymeko_python (PyO3, GIL released on long ops)"]
+        P["real parser (RealParser + Mem/StdFs provider)"]
+        R["ModuleStore / resolution / interner"]
+        L["lowering"]
+        IR["canonical Ir  (OWNED by Model)"]
+        IT["Interner  (OWNED by Model, for names/paths)"]
+        V["coherence validation"]
+        H["single-model canonical hash"]
+    end
+
+    A1 --> P
+    A2 --> P
+    P --> R --> L --> IR
+    R --> IT
+    IR --> V
+    V -->|ok| M
+    IR --> H
+    M -->|borrows| E
+    M --> ID
+    M --> ARR
+    E -.->|target/slot/sign/weight/anno/value/base-isa/name/path| IR
+
+    classDef forbidden fill:#fdd,stroke:#c00;
+    X1["✗ second IR / EditorIR"]:::forbidden
+    X2["✗ JSON intermediate"]:::forbidden
+    X3["✗ dense graph / materialized star"]:::forbidden
+    X4["✗ mutation/transaction API"]:::forbidden
+
+%% Error mapping (parser/lowering/validation/io/id → typed Python exceptions, never panic):
+%%   HyMeKoSyntaxError, HyMeKoResolutionError, HyMeKoLoweringError,
+%%   HyMeKoValidationError, HyMeKoIoError, HyMeKoIdError (CrossModelIdError ⊂ HyMeKoIdError)
