@@ -1,0 +1,54 @@
+\documentclass[10pt,a4paper]{article}
+\usepackage[margin=18mm]{geometry}
+\usepackage{booktabs}
+\usepackage[T1]{fontenc}
+\title{WGPU forward kernels for canonical Slice 3}
+\author{HyMeKo core/WGPU boundary}
+\date{2026-09-06}
+\begin{document}
+\maketitle
+\section{Scope}
+Extend the existing \texttt{hymeko\_wgpu} operation factory with two prepared
+forward kernels: sparse, single-head, untransported quaternion rotor attention,
+and star rotor-spike.  They are the accelerated implementations consumed by a
+Nagare plan whose model authority remains the canonical
+\texttt{hymeko\_core::Ir}.  No parser, IR, graph, training, backward, CUDA, or
+temporal-spike semantics are added here.
+
+\section{Measured owners and restrictions}
+The CPU semantic owners already exist in Nagare.  WGPU owns only independent
+WGSL execution.  Attention consumes explicit CSR derived by Nagare from the
+canonical IR, four-wide query/key/value rows, one preferred quaternion, and one
+temperature.  Rotor-spike consumes node rows, hyperedge centres, canonical
+membership rows, two projection columns, bin count, and concentration.
+
+The restricted surface is intentional.  Multi-head and frame-aware attention,
+backward, principal-plane extraction, spatial entropy and temporal membrane
+state require separate evidence and are rejected rather than approximated.
+
+\section{Implementation}
+Follow the established \texttt{HsikanBuilder}/\texttt{PreparedHsikan} pattern:
+typed builder validation, limit checks, pipeline/layout identity, uniform
+parameter buffer, sealed GPU operands, deterministic dispatch, and caller-owned
+output.  Add no raw buffer escape and no host fallback.
+
+\section{Predeclared gates}
+\begin{enumerate}
+\item CPU/WGPU full-output parity on non-vacuous irregular fixtures under
+$|g-c|\le5\cdot10^{-4}+10^{-3}|c|$.
+\item Empty attention neighbourhood produces the documented zero row; the
+double-cover sign control preserves attention output.
+\item Invalid lengths, CSR, four-wide quaternion shape, bins, projections and
+device limits are rejected before dispatch.
+\item Mutations of adjacency, preferred quaternion, concentration, incidence,
+or projection first alter the CPU result and then are detected by parity.
+\item Prepared resources can be dispatched repeatedly without host re-upload;
+the output resource identity remains caller-owned.
+\item Full core/WGPU tests, clippy and format gates pass before committing.
+\end{enumerate}
+
+\section{Stop conditions}
+Stop if the restricted kernels require changing canonical operator semantics,
+if a CPU fallback is needed to call the WGPU API, or if the bound fails at the
+first differing observable.  CUDA is not introduced by this boundary.
+\end{document}

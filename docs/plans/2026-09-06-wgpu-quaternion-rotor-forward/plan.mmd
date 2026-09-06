@@ -1,0 +1,6 @@
+flowchart LR
+  I[canonical IR-derived buffers] --> A[PreparedRotorAttention]
+  I --> S[PreparedStarRotorSpike]
+  A --> G[WGPU dispatch]
+  S --> G
+  C[CPU semantic owners] -. full-output parity .-> G

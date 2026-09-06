@@ -11,19 +11,31 @@
 pub mod activation;
 pub(crate) mod dispatch;
 pub mod hsikan;
+pub mod rotor_attention;
 pub mod spmm;
+pub mod star_rotor_spike;
 
 pub use activation::{
     ACTIVATION_INPLACE_SHADER, ACTIVATION_SHADER, ACTIVATION_WORKGROUP_SWEEP, ActivationBuilder,
     ActivationKind, DEFAULT_ACTIVATION_WORKGROUP, PreparedActivation,
 };
 pub use hsikan::{DEFAULT_HSIKAN_WORKGROUP, HSIKAN_SHADER, HsikanBuilder, PreparedHsikan};
+pub use rotor_attention::{
+    DEFAULT_ROTOR_ATTENTION_WORKGROUP, PreparedRotorAttention, ROTOR_ATTENTION_SHADER,
+    RotorAttentionBuilder,
+};
 pub use spmm::{PreparedSpmm, SPMM_SHADER, SpmmBuilder, WorkgroupShape, spmm_workgroup_for};
+pub use star_rotor_spike::{
+    DEFAULT_STAR_ROTOR_SPIKE_WORKGROUP, PreparedStarRotorSpike, STAR_ROTOR_SPIKE_SHADER,
+    StarRotorSpikeBuilder,
+};
 
 use crate::pipeline::PipelineCache;
 use activation::ActivationLimits;
 use hsikan::HsikanLimits;
+use rotor_attention::RotorAttentionLimits;
 use spmm::SpmmLimits;
+use star_rotor_spike::StarRotorSpikeLimits;
 
 /// Creates prepared operations bound to one device.
 #[derive(Clone, Copy)]
@@ -34,6 +46,8 @@ pub struct OperationFactory<'a> {
     limits: SpmmLimits,
     activation_limits: ActivationLimits,
     hsikan_limits: HsikanLimits,
+    rotor_attention_limits: RotorAttentionLimits,
+    star_rotor_spike_limits: StarRotorSpikeLimits,
 }
 
 impl<'a> OperationFactory<'a> {
@@ -63,6 +77,16 @@ impl<'a> OperationFactory<'a> {
                 max_invocations_per_workgroup,
                 max_storage_buffers_per_stage,
             },
+            rotor_attention_limits: RotorAttentionLimits {
+                max_workgroups_per_dimension,
+                max_invocations_per_workgroup,
+                max_storage_buffers_per_stage,
+            },
+            star_rotor_spike_limits: StarRotorSpikeLimits {
+                max_workgroups_per_dimension,
+                max_invocations_per_workgroup,
+                max_storage_buffers_per_stage,
+            },
         }
     }
 
@@ -82,5 +106,27 @@ impl<'a> OperationFactory<'a> {
     #[must_use]
     pub fn hsikan(&self) -> HsikanBuilder<'a> {
         HsikanBuilder::new(self.device, self.queue, self.cache, self.hsikan_limits)
+    }
+
+    /// Begin building sparse single-head quaternion rotor attention.
+    #[must_use]
+    pub fn rotor_attention(&self) -> RotorAttentionBuilder<'a> {
+        RotorAttentionBuilder::new(
+            self.device,
+            self.queue,
+            self.cache,
+            self.rotor_attention_limits,
+        )
+    }
+
+    /// Begin building a star rotor-spike orientation-code dispatch.
+    #[must_use]
+    pub fn star_rotor_spike(&self) -> StarRotorSpikeBuilder<'a> {
+        StarRotorSpikeBuilder::new(
+            self.device,
+            self.queue,
+            self.cache,
+            self.star_rotor_spike_limits,
+        )
     }
 }

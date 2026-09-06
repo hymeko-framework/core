@@ -135,9 +135,12 @@ pub use backend::{DeviceCapabilities, WgpuBackend, WgpuBackendBuilder};
 pub use completion::{CompletionTracker, SubmissionEpoch};
 pub use operations::{
     ACTIVATION_INPLACE_SHADER, ACTIVATION_SHADER, ACTIVATION_WORKGROUP_SWEEP, ActivationBuilder,
-    ActivationKind, DEFAULT_ACTIVATION_WORKGROUP, DEFAULT_HSIKAN_WORKGROUP, HSIKAN_SHADER,
-    HsikanBuilder, OperationFactory, PreparedActivation, PreparedHsikan, PreparedSpmm, SPMM_SHADER,
-    SpmmBuilder, WorkgroupShape, spmm_workgroup_for,
+    ActivationKind, DEFAULT_ACTIVATION_WORKGROUP, DEFAULT_HSIKAN_WORKGROUP,
+    DEFAULT_ROTOR_ATTENTION_WORKGROUP, DEFAULT_STAR_ROTOR_SPIKE_WORKGROUP, HSIKAN_SHADER,
+    HsikanBuilder, OperationFactory, PreparedActivation, PreparedHsikan, PreparedRotorAttention,
+    PreparedSpmm, PreparedStarRotorSpike, ROTOR_ATTENTION_SHADER, RotorAttentionBuilder,
+    SPMM_SHADER, STAR_ROTOR_SPIKE_SHADER, SpmmBuilder, StarRotorSpikeBuilder, WorkgroupShape,
+    spmm_workgroup_for,
 };
 pub use pipeline::{ActivationEntry, KernelId, LayoutId, PipelineBundle, PipelineCache};
 pub use readback::{ReadbackWorkspace, StagingStorage};
