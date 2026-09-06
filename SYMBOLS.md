@@ -13,7 +13,7 @@ Extracted by grammar -- tree-sitter for Rust and C++, `ast` for Python -- so tha
 `pub(crate)`, a `pub fn` inside a private `mod`, and a `def` written inside a
 docstring are all excluded for a stated reason rather than by luck.
 
-**5 package(s), 635 public symbol(s).**
+**5 package(s), 650 public symbol(s).**
 
 ## docs (rust)
 
@@ -104,6 +104,7 @@ _No public symbols._
 - `NodeRec` — `hymeko_core/src/ir/ir.rs`
 - `NodeTag` — `hymeko_core/src/common/ids.rs`
 - `Ones` — `hymeko_core/src/tensor/conv/weight_init/weight_init.rs`
+- `OperatorContract` — `hymeko_core/src/ir/ir.rs`
 - `PathKey` — `hymeko_core/src/common/pathkey.rs`
 - `PreparedIr` — `hymeko_core/src/ir/incidence.rs`
 - `ProgramStructureHashV1` — `hymeko_core/src/ir/semantic_digest.rs`
@@ -121,6 +122,7 @@ _No public symbols._
 - `StringTable` — `hymeko_core/src/resolution/string_table.rs`
 - `SymTag` — `hymeko_core/src/common/ids.rs`
 - `TensorBuildCfg` — `hymeko_core/src/tensor/representations/tensor_coo.rs`
+- `TensorContract` — `hymeko_core/src/ir/ir.rs`
 - `TensorCoo` — `hymeko_core/src/tensor/representations/tensor_coo.rs`
 - `TensorCsr` — `hymeko_core/src/tensor/representations/tensor_csr.rs`
 - `TensorCsrBuilder` — `hymeko_core/src/tensor/representations/tensor_csr.rs`
@@ -143,27 +145,33 @@ _No public symbols._
 - `ComputeError` — `hymeko_core/src/tensor/compute/mod.rs`
 - `ConstResolveError` — `hymeko_core/src/resolution/const_resolve.rs`
 - `CoordError` — `hymeko_core/src/ir/incidence.rs`
+- `DType` — `hymeko_core/src/ir/ir.rs`
 - `DeclKind` — `hymeko_core/src/ir/ir.rs`
 - `DegreeMode` — `hymeko_core/src/tensor/conv/traits.rs`
 - `DegreeShape` — `hymeko_core/src/tensor/sparse_workload.rs`
 - `DispatchError` — `hymeko_core/src/ir/ir.rs`
 - `ElementKind` — `hymeko_core/src/ir_stream/section.rs`
 - `ExpansionKind` — `hymeko_core/src/tensor/shared_state.rs`
+- `Extent` — `hymeko_core/src/ir/ir.rs`
 - `Finding` — `hymeko_core/src/ir/coherence.rs`
 - `GeneratorError` — `hymeko_core/src/generators.rs`
 - `HypergraphGenerator` — `hymeko_core/src/generators.rs`
 - `IncidenceError` — `hymeko_core/src/ir/incidence.rs`
 - `IrDecodeError` — `hymeko_core/src/ir/ir.rs`
 - `MessageType` — `hymeko_core/src/ir_stream/envelope.rs`
+- `ModelFacet` — `hymeko_core/src/ir/ir.rs`
+- `ModelFinding` — `hymeko_core/src/ir/coherence.rs`
 - `ModuleLoadError` — `hymeko_core/src/module_store/module_store.rs`
 - `NamespaceError` — `hymeko_core/src/ir/canonical_hash.rs`
 - `OperatorPlanError` — `hymeko_core/src/ir/incidence.rs`
 - `PathIndexError` — `hymeko_core/src/ir/canonical_hash.rs`
+- `PortDirection` — `hymeko_core/src/ir/ir.rs`
 - `ResolveError` — `hymeko_core/src/resolution/resolve.rs`
 - `ResyncReason` — `hymeko_core/src/ir_stream/assembler.rs`
 - `SectionKind` — `hymeko_core/src/ir_stream/section.rs`
 - `SignAgg` — `hymeko_core/src/tensor/aggregation.rs`
 - `SignedRefR` — `hymeko_core/src/ir/ir.rs`
+- `TensorRole` — `hymeko_core/src/ir/ir.rs`
 - `TransactionKind` — `hymeko_core/src/ir_stream/assembler.rs`
 - `ValueR` — `hymeko_core/src/ir/ir.rs`
 - `WeightAgg` — `hymeko_core/src/tensor/aggregation.rs`
@@ -236,6 +244,7 @@ _No public symbols._
 - `decl_node` — `hymeko_core/src/ir/ir.rs`
 - `decl_node_unchecked` — `hymeko_core/src/ir/ir.rs`
 - `decl_of` — `hymeko_core/src/ir/canonical_hash.rs`
+- `declares_executable_model` — `hymeko_core/src/ir/ir.rs`
 - `decls` — `hymeko_core/src/ir/access.rs`
 - `decode` — `hymeko_core/src/ir_stream/envelope.rs`
 - `decode` — `hymeko_core/src/writers/cbor_writer.rs`
@@ -310,6 +319,7 @@ _No public symbols._
 - `is_singleton` — `hymeko_core/src/ir_stream/section.rs`
 - `is_skippable` — `hymeko_core/src/ir_stream/section.rs`
 - `is_some` — `hymeko_core/src/common/ids.rs`
+- `is_unspecified` — `hymeko_core/src/ir/ir.rs`
 - `iter` — `hymeko_core/src/common/pathkey.rs`
 - `iter` — `hymeko_core/src/ir/canonical_hash.rs`
 - `iter` — `hymeko_core/src/resolution/interner.rs`
@@ -332,6 +342,8 @@ _No public symbols._
 - `lower_to_ir_with_meta` — `hymeko_core/src/ir/lower.rs`
 - `medium` — `hymeko_core/src/tensor/sparse_workload.rs`
 - `mode_k_unfold` — `hymeko_core/src/tensor/decomposition.rs`
+- `model_facet` — `hymeko_core/src/ir/ir.rs`
+- `model_facet_table_len` — `hymeko_core/src/ir/ir.rs`
 - `msg_type` — `hymeko_core/src/ir_stream/envelope.rs`
 - `n_edges` — `hymeko_core/src/generators.rs`
 - `namespace_prefix` — `hymeko_core/src/ir/ir.rs`
@@ -374,6 +386,7 @@ _No public symbols._
 - `payload_digest` — `hymeko_core/src/ir_stream/assembler.rs`
 - `payload_hash` — `hymeko_core/src/ir_stream/envelope.rs`
 - `payload_len` — `hymeko_core/src/ir_stream/envelope.rs`
+- `plain` — `hymeko_core/src/ir/ir.rs`
 - `preallocate_from_index` — `hymeko_core/src/ir/ir.rs`
 - `prepare_operator` — `hymeko_core/src/ir/incidence.rs`
 - `pretty_print_compiled` — `hymeko_core/src/util/pretty_print.rs`
@@ -416,6 +429,7 @@ _No public symbols._
 - `semantic_model_digest_v2` — `hymeko_core/src/ir/semantic_digest.rs`
 - `seq` — `hymeko_core/src/ir_stream/assembler.rs`
 - `seq` — `hymeko_core/src/ir_stream/envelope.rs`
+- `set_model_facet` — `hymeko_core/src/ir/ir.rs`
 - `sign` — `hymeko_core/src/ir/ir.rs`
 - `signed_incidence` — `hymeko_core/src/tensor/common.rs`
 - `size` — `hymeko_core/src/ir_stream/section.rs`
@@ -470,6 +484,7 @@ _No public symbols._
 - `validate_hierarchy_index_coherence` — `hymeko_core/src/ir/coherence.rs`
 - `validate_len` — `hymeko_core/src/tensor/compute/mod.rs`
 - `validate_message` — `hymeko_core/src/ir_stream/codec.rs`
+- `validate_model_contract` — `hymeko_core/src/ir/coherence.rs`
 - `validate_namespace_roots` — `hymeko_core/src/ir/canonical_hash.rs`
 - `van_der_corput` — `hymeko_core/src/tensor/conv/weight_init/weight_init_impl.rs`
 - `view` — `hymeko_core/src/ir/incidence.rs`

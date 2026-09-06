@@ -180,3 +180,42 @@ from the layering, not proven by a test.
 
 Review this boundary and authorise the core commit on a feature branch. Everything after it is
 sequenced: lock update → Nagare test fix → witness re-run and verdict update → Slice 1.
+
+## 14. Integration addendum — current `main` merged and provider gates (2026-09-06)
+
+The authorised feature was committed as `7f73745`. Before canonical integration, current
+`origin/main@92383b3` was fetched and merged into the feature branch as `0e4f1d1`; there were no
+textual merge conflicts. The merged tree exposed one genuine API-drift caller added on `main`:
+`hymeko_core/tests/incidence_support.rs` still constructed `RefAtomR` without the new direction
+axis. It now records `PortDirection::Unspecified`, preserving the legacy meaning without deriving
+direction from algebraic sign.
+
+Post-merge gates on the actual combined tree:
+
+```text
+cargo test -p hymeko_core                                  0   447 passed / 0 failed / 7 ignored
+cargo clippy -p hymeko_core --all-targets -- -D warnings  0
+cargo fmt -p hymeko_core --check                           0
+contract-symbols --check                                   0   after regenerating SYMBOLS.md
+cargo test --workspace --all-targets                       0   590 ordinary tests plus every registered Criterion target
+cargo clippy --workspace --all-targets -- -D warnings      0
+cargo fmt --all -- --check                                 0
+```
+
+The type-2 duplication gate measured `429 clone(s) / 8332 cloned lines / 198 files`, versus the
+recorded `422 / 8163 / 197`. This increase is accepted as **test-only V&V structure**, not as
+production duplication, on the following discriminating measurement: the same detector, same
+merged tree and same 60-token window, with only
+`hymeko_core/tests/unified_ir/verification/model_contract.rs` excluded, reports
+`422 / 8156 / 197`. Thus all seven added clone runs and all 176 lines they mark are induced by the
+new 30-test executable-model acceptance suite; every other merged source together is seven cloned
+lines below the old baseline. The repeated forms are the suite's independent observation-floor,
+mutation-application, rejection, round-trip and sign/direction-orthogonality assertions. Folding
+those controls into a data-driven assertion loop would make failures less local and the controls
+less independently auditable without removing a second production implementation, because none
+exists. On this written evidence the baseline may move to `429 / 8332 / 198`; no production clone
+increase is waived.
+
+After this justification was written, `contract-duplication --update` recorded the new
+`429 / 8332 / 198` evidence and an immediate ordinary gate re-run passed against it. The baseline
+was not moved before the attribution existed.
