@@ -40,3 +40,7 @@
 # Unified diffs intentionally retain a single-space prefix on blank context lines.
 /reports/semantic-digest-correction/*.patch whitespace=-blank-at-eol
 /reports/semantic-digest-correction/*.diff whitespace=-blank-at-eol
+
+# Exact distributed reference and measurement evidence.
+/reports/distributed-verification-benchmarks/** -text
+/hymeko_core/tests/ir_stream_admission_vectors.tsv text eol=lf

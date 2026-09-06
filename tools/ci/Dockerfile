@@ -15,6 +15,18 @@ ENV CARGO_BUILD_JOBS=6 \
 
 WORKDIR /workspace/core
 
+# Native compilation for the ARM64 verification runtime. QEMU is invoked
+# explicitly inside the runtime container; no host binfmt registration is needed.
+FROM toolchain AS cross-toolchain
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y gcc-aarch64-linux-gnu libc6-dev-arm64-cross qemu-user-static \
+    && rm -rf /var/lib/apt/lists/* \
+    && rustup target add aarch64-unknown-linux-gnu
+ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
+    CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc \
+    CARGO_BUILD_JOBS=4 \
+    RAYON_NUM_THREADS=4
+
 FROM toolchain AS dependencies
 COPY Cargo.toml Cargo.lock ./
 COPY hymeko_core ./hymeko_core

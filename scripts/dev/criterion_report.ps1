@@ -40,12 +40,13 @@ param(
     [string]$Compare = '',
     [string]$Filter = '',
     [string]$Csv = '',
+    [string]$CriterionRoot = '',
     [switch]$PassThru
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
-$critRoot = Join-Path $repoRoot 'target\criterion'
+$critRoot = if ($CriterionRoot) { [IO.Path]::GetFullPath($CriterionRoot) } else { Join-Path $repoRoot 'target\criterion' }
 if (-not (Test-Path $critRoot)) { throw "No Criterion data at $critRoot - run cargo bench first." }
 
 function Get-Estimates {
@@ -74,6 +75,17 @@ function Get-Estimates {
                 $elems = $null
             }
 
+            # Samples are iteration-batch means, not individual request latencies.
+            $samplePath = Join-Path $dir.FullName 'sample.json'
+            $samples = @()
+            if (Test-Path -LiteralPath $samplePath) {
+                $raw = Get-Content -LiteralPath $samplePath -Raw | ConvertFrom-Json
+                if ($raw.iters.Count -ne $raw.times.Count) { throw "Mismatched samples: $samplePath" }
+                $samples = @(for ($i = 0; $i -lt $raw.iters.Count; $i++) {
+                    if ($raw.iters[$i] -le 0) { throw "Invalid iteration count: $samplePath" }
+                    [double]$raw.times[$i] / [double]$raw.iters[$i]
+                }) | Sort-Object
+            }
             $medianNs = [double]$est.median.point_estimate
             $rows[$id] = [pscustomobject]@{
                 id          = $id
@@ -82,9 +94,22 @@ function Get-Estimates {
                 ci_hi_ns    = [double]$est.median.confidence_interval.upper_bound
                 mean_ns     = [double]$est.mean.point_estimate
                 elements    = $elems
+                sample_count = $samples.Count
+                q1_ns       = Get-Quantile $samples 0.25
+                q3_ns       = Get-Quantile $samples 0.75
+                worst_ns    = Get-Quantile $samples 1.0
             }
         }
     return $rows
+}
+
+function Get-Quantile {
+    param([double[]]$Sorted, [double]$Probability)
+    if ($Sorted.Count -eq 0) { return $null }
+    $position = ($Sorted.Count - 1) * $Probability
+    $low = [int][math]::Floor($position)
+    $high = [int][math]::Ceiling($position)
+    return $Sorted[$low] + ($Sorted[$high] - $Sorted[$low]) * ($position - $low)
 }
 
 function Format-Time {
@@ -122,6 +147,11 @@ $table = foreach ($id in ($base.Keys | Sort-Object)) {
         median     = Format-Time $b.median_ns
         ci         = '[{0} .. {1}]' -f (Format-Time $b.ci_lo_ns), (Format-Time $b.ci_hi_ns)
         throughput = Format-Throughput $b.median_ns $b.elements
+        median_ns  = $b.median_ns
+        q1_ns      = $b.q1_ns
+        q3_ns      = $b.q3_ns
+        worst_batch_mean_ns = $b.worst_ns
+        samples    = $b.sample_count
     }
 
     if ($Compare) {
