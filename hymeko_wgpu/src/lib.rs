@@ -6,6 +6,7 @@
 //! |---|---|
 //! | CSR SpMM (`spmm.wgsl`), optionally fused with an activation | implemented, tested |
 //! | elementwise activation, out-of-place and in-place | implemented, tested |
+//! | signed HSiKAN Chebyshev--Catmull-Rom inference | implemented, tested |
 //! | pipeline cache keyed on [`KernelId`], explicit encode / submit / readback | implemented, tested |
 //! | `TensorArena` buffer reuse + non-blocking completion tracking | implemented, tested |
 //! | `ReadbackWorkspace` staging + destination reuse ([`readback`]) | implemented, tested |
@@ -134,8 +135,9 @@ pub use backend::{DeviceCapabilities, WgpuBackend, WgpuBackendBuilder};
 pub use completion::{CompletionTracker, SubmissionEpoch};
 pub use operations::{
     ACTIVATION_INPLACE_SHADER, ACTIVATION_SHADER, ACTIVATION_WORKGROUP_SWEEP, ActivationBuilder,
-    ActivationKind, DEFAULT_ACTIVATION_WORKGROUP, OperationFactory, PreparedActivation,
-    PreparedSpmm, SPMM_SHADER, SpmmBuilder, WorkgroupShape, spmm_workgroup_for,
+    ActivationKind, DEFAULT_ACTIVATION_WORKGROUP, DEFAULT_HSIKAN_WORKGROUP, HSIKAN_SHADER,
+    HsikanBuilder, OperationFactory, PreparedActivation, PreparedHsikan, PreparedSpmm, SPMM_SHADER,
+    SpmmBuilder, WorkgroupShape, spmm_workgroup_for,
 };
 pub use pipeline::{ActivationEntry, KernelId, LayoutId, PipelineBundle, PipelineCache};
 pub use readback::{ReadbackWorkspace, StagingStorage};

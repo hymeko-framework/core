@@ -5,22 +5,24 @@
 //! and bind groups an operation owns. Both are borrowed from a
 //! [`crate::WgpuBackend`], which is the only thing that owns a device.
 //!
-//! One operation exists so far. The factory is introduced now — rather than in
-//! Phase 1 — because there is finally a product to manufacture; adding it
-//! earlier would have been a factory with nothing to make.
+//! The factory owns the concrete SpMM, activation and signed-HSiKAN builders;
+//! it is not a dynamic operation registry.
 
 pub mod activation;
 pub(crate) mod dispatch;
+pub mod hsikan;
 pub mod spmm;
 
 pub use activation::{
     ACTIVATION_INPLACE_SHADER, ACTIVATION_SHADER, ACTIVATION_WORKGROUP_SWEEP, ActivationBuilder,
     ActivationKind, DEFAULT_ACTIVATION_WORKGROUP, PreparedActivation,
 };
+pub use hsikan::{DEFAULT_HSIKAN_WORKGROUP, HSIKAN_SHADER, HsikanBuilder, PreparedHsikan};
 pub use spmm::{PreparedSpmm, SPMM_SHADER, SpmmBuilder, WorkgroupShape, spmm_workgroup_for};
 
 use crate::pipeline::PipelineCache;
 use activation::ActivationLimits;
+use hsikan::HsikanLimits;
 use spmm::SpmmLimits;
 
 /// Creates prepared operations bound to one device.
@@ -31,6 +33,7 @@ pub struct OperationFactory<'a> {
     cache: &'a PipelineCache,
     limits: SpmmLimits,
     activation_limits: ActivationLimits,
+    hsikan_limits: HsikanLimits,
 }
 
 impl<'a> OperationFactory<'a> {
@@ -55,6 +58,11 @@ impl<'a> OperationFactory<'a> {
                 max_workgroups_per_dimension,
                 max_invocations_per_workgroup,
             },
+            hsikan_limits: HsikanLimits {
+                max_workgroups_per_dimension,
+                max_invocations_per_workgroup,
+                max_storage_buffers_per_stage,
+            },
         }
     }
 
@@ -68,5 +76,11 @@ impl<'a> OperationFactory<'a> {
     #[must_use]
     pub fn activation(&self) -> ActivationBuilder<'a> {
         ActivationBuilder::new(self.device, self.queue, self.cache, self.activation_limits)
+    }
+
+    /// Begin building a fused signed HSiKAN inference dispatch.
+    #[must_use]
+    pub fn hsikan(&self) -> HsikanBuilder<'a> {
+        HsikanBuilder::new(self.device, self.queue, self.cache, self.hsikan_limits)
     }
 }

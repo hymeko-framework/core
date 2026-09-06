@@ -158,31 +158,30 @@ impl<'a> ResourceFactory<'a> {
         shape: TensorShape,
         data: &[f32],
     ) -> Result<GpuTensor<f32>, ComputeError> {
-        shape.validate_len("tensor data", data.len())?;
+        self.upload_pod_tensor(label, shape, data)
+    }
 
-        // An empty buffer is not a valid wgpu allocation; model an empty tensor
-        // as a 1-element placeholder so shape stays authoritative and callers
-        // need no special case. The kernels bound their loops by shape, not by
-        // buffer size, so the padding is never read.
-        let bytes: &[u8] = if data.is_empty() {
-            bytemuck::cast_slice(&[0.0f32][..])
-        } else {
-            bytemuck::cast_slice(data)
-        };
+    /// Upload an unsigned-index tensor for a typed compute operation.
+    ///
+    /// This is deliberately separate from [`Self::upload_tensor`]: an index
+    /// buffer cannot accidentally be bound where a shader expects `f32`.
+    pub fn upload_u32_tensor(
+        &self,
+        label: &str,
+        shape: TensorShape,
+        data: &[u32],
+    ) -> Result<GpuTensor<u32>, ComputeError> {
+        self.upload_pod_tensor(label, shape, data)
+    }
 
-        let buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(label),
-                contents: bytes,
-                usage: Self::STORAGE_RW,
-            });
-
-        Ok(GpuTensor {
-            buffer,
-            shape,
-            _marker: PhantomData,
-        })
+    /// Upload a signed-integer tensor for a typed compute operation.
+    pub fn upload_i32_tensor(
+        &self,
+        label: &str,
+        shape: TensorShape,
+        data: &[i32],
+    ) -> Result<GpuTensor<i32>, ComputeError> {
+        self.upload_pod_tensor(label, shape, data)
     }
 
     /// Allocate a zeroed GPU tensor of the given shape (a kernel output).
@@ -387,6 +386,40 @@ impl<'a> ResourceFactory<'a> {
 
     fn narrow(src: &[usize], what: &'static str) -> Result<Vec<u32>, ComputeError> {
         src.iter().map(|&v| try_u32(what, v)).collect()
+    }
+
+    fn upload_pod_tensor<T>(
+        &self,
+        label: &str,
+        shape: TensorShape,
+        data: &[T],
+    ) -> Result<GpuTensor<T>, ComputeError>
+    where
+        T: bytemuck::Pod + bytemuck::Zeroable,
+    {
+        shape.validate_len("tensor data", data.len())?;
+
+        // An empty buffer is not a valid wgpu allocation; model an empty tensor
+        // as a 1-element placeholder so shape stays authoritative and callers
+        // need no special case. Kernels bound loops by shape, never buffer size.
+        let zero = T::zeroed();
+        let bytes: &[u8] = if data.is_empty() {
+            bytemuck::bytes_of(&zero)
+        } else {
+            bytemuck::cast_slice(data)
+        };
+        let buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(label),
+                contents: bytes,
+                usage: Self::STORAGE_RW,
+            });
+        Ok(GpuTensor {
+            buffer,
+            shape,
+            _marker: PhantomData,
+        })
     }
 
     fn init_buffer(&self, label: &str, data: &[u32]) -> wgpu::Buffer {

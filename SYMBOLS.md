@@ -13,7 +13,7 @@ Extracted by grammar -- tree-sitter for Rust and C++, `ast` for Python -- so tha
 `pub(crate)`, a `pub fn` inside a private `mod`, and a `def` written inside a
 docstring are all excluded for a stated reason rather than by luck.
 
-**5 package(s), 650 public symbol(s).**
+**5 package(s), 670 public symbol(s).**
 
 ## docs (rust)
 
@@ -520,6 +520,7 @@ _No public symbols._
 - `GpuCsrMatrix` — `hymeko_wgpu/src/resources.rs`
 - `GpuTensor` — `hymeko_wgpu/src/resources.rs`
 - `GpuTimer` — `hymeko_wgpu/src/profiling.rs`
+- `HsikanBuilder` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `LeaseReleasedExactlyOnce` — `hymeko_wgpu/src/scope.rs`
 - `NoDerefToRawTensor` — `hymeko_wgpu/src/scope.rs`
 - `NoRawTensorAccessor` — `hymeko_wgpu/src/scope.rs`
@@ -529,6 +530,7 @@ _No public symbols._
 - `PooledOperandNeedsSession` — `hymeko_wgpu/src/scope.rs`
 - `PreparedActivation` — `hymeko_wgpu/src/operations/activation.rs`
 - `PreparedCannotOutliveOperands` — `hymeko_wgpu/src/scope.rs`
+- `PreparedHsikan` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `PreparedSpmm` — `hymeko_wgpu/src/operations/spmm.rs`
 - `ReadbackPlan` — `hymeko_wgpu/src/profiling.rs`
 - `ReadbackTiming` — `hymeko_wgpu/src/profiling.rs`
@@ -589,10 +591,13 @@ _No public symbols._
 - `device` — `hymeko_wgpu/src/backend.rs`
 - `device_bytes` — `hymeko_wgpu/src/arena.rs`
 - `dispatch_groups` — `hymeko_wgpu/src/operations/activation.rs`
+- `dispatch_groups` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `dispatch_groups` — `hymeko_wgpu/src/operations/spmm.rs`
 - `elapsed` — `hymeko_wgpu/src/profiling.rs`
 - `elements` — `hymeko_wgpu/src/operations/activation.rs`
+- `elements` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `encode` — `hymeko_wgpu/src/operations/activation.rs`
+- `encode` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `encode` — `hymeko_wgpu/src/operations/spmm.rs`
 - `encode_chain` — `hymeko_wgpu/src/testing.rs`
 - `encode_spmm_profiled` — `hymeko_wgpu/src/profiling.rs`
@@ -604,12 +609,17 @@ _No public symbols._
 - `entry_point` — `hymeko_wgpu/src/pipeline.rs`
 - `feature_dim` — `hymeko_wgpu/src/operations/spmm.rs`
 - `features` — `hymeko_wgpu/src/backend.rs`
+- `features` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `from_features` — `hymeko_wgpu/src/profiling.rs`
 - `from_parts` — `hymeko_wgpu/src/resources.rs`
 - `fused_activation` — `hymeko_wgpu/src/operations/spmm.rs`
+- `gate_bias` — `hymeko_wgpu/src/operations/hsikan.rs`
+- `gate_weight` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `get` — `hymeko_wgpu/src/completion.rs`
 - `hit_rate` — `hymeko_wgpu/src/arena.rs`
+- `hsikan` — `hymeko_wgpu/src/operations/mod.rs`
 - `in_place` — `hymeko_wgpu/src/operations/activation.rs`
+- `inner_control` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `input` — `hymeko_wgpu/src/operations/activation.rs`
 - `input` — `hymeko_wgpu/src/operations/spmm.rs`
 - `into_buffer` — `hymeko_wgpu/src/resources.rs`
@@ -620,11 +630,13 @@ _No public symbols._
 - `is_in_place` — `hymeko_wgpu/src/operations/activation.rs`
 - `is_transcendental` — `hymeko_wgpu/src/operations/activation.rs`
 - `kernel` — `hymeko_wgpu/src/operations/activation.rs`
+- `kernel` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `kernel` — `hymeko_wgpu/src/operations/spmm.rs`
 - `kind` — `hymeko_wgpu/src/backend.rs`
 - `kind` — `hymeko_wgpu/src/operations/activation.rs`
 - `label` — `hymeko_wgpu/src/backend.rs`
 - `label` — `hymeko_wgpu/src/operations/activation.rs`
+- `label` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `label` — `hymeko_wgpu/src/operations/spmm.rs`
 - `latest` — `hymeko_wgpu/src/completion.rs`
 - `layout` — `hymeko_wgpu/src/pipeline.rs`
@@ -645,7 +657,9 @@ _No public symbols._
 - `new` — `hymeko_wgpu/src/resources.rs`
 - `operations` — `hymeko_wgpu/src/backend.rs`
 - `operations_encoded` — `hymeko_wgpu/src/arena.rs`
+- `outer_control` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `output` — `hymeko_wgpu/src/operations/activation.rs`
+- `output` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `output` — `hymeko_wgpu/src/operations/spmm.rs`
 - `owns_device` — `hymeko_wgpu/src/arena.rs`
 - `pass_writes` — `hymeko_wgpu/src/profiling.rs`
@@ -658,6 +672,7 @@ _No public symbols._
 - `poll_completion` — `hymeko_wgpu/src/arena.rs`
 - `power_preference` — `hymeko_wgpu/src/backend.rs`
 - `prepare` — `hymeko_wgpu/src/operations/activation.rs`
+- `prepare` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `prepare` — `hymeko_wgpu/src/operations/spmm.rs`
 - `queue` — `hymeko_wgpu/src/backend.rs`
 - `read` — `hymeko_wgpu/src/profiling.rs`
@@ -673,6 +688,7 @@ _No public symbols._
 - `shader_name` — `hymeko_wgpu/src/pipeline.rs`
 - `shape` — `hymeko_wgpu/src/arena.rs`
 - `shape` — `hymeko_wgpu/src/resources.rs`
+- `signs` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `size_bytes` — `hymeko_wgpu/src/resources.rs`
 - `source` — `hymeko_wgpu/src/pipeline.rs`
 - `spmm` — `hymeko_wgpu/src/operations/mod.rs`
@@ -696,13 +712,17 @@ _No public symbols._
 - `trim` — `hymeko_wgpu/src/arena.rs`
 - `upload_csr` — `hymeko_wgpu/src/resources.rs`
 - `upload_csr_from` — `hymeko_wgpu/src/resources.rs`
+- `upload_i32_tensor` — `hymeko_wgpu/src/resources.rs`
 - `upload_tensor` — `hymeko_wgpu/src/resources.rs`
+- `upload_u32_tensor` — `hymeko_wgpu/src/resources.rs`
 - `usage` — `hymeko_wgpu/src/arena.rs`
 - `values` — `hymeko_wgpu/src/resources.rs`
+- `vertices` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `wait` — `hymeko_wgpu/src/backend.rs`
 - `wait_for` — `hymeko_wgpu/src/completion.rs`
 - `with_capacity` — `hymeko_wgpu/src/readback.rs`
 - `workgroup` — `hymeko_wgpu/src/operations/activation.rs`
+- `workgroup` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `workgroup` — `hymeko_wgpu/src/operations/spmm.rs`
 - `write` — `hymeko_wgpu/src/profiling.rs`
 - `write_tensor` — `hymeko_wgpu/src/resources.rs`
