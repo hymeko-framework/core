@@ -207,14 +207,89 @@
   },
   "nagare": {
     "target_revision": "f3660cc8f738cccc69c2a011a943ce811347815e",
-    "tests_run": false,
-    "status": "blocked_missing_required_roadmaps",
-    "required_files": [
+    "tests_run": true,
+    "status": "passed_focused_consumer_gate",
+    "roadmap_correction": "The roadmap bodies were already tracked at f3660cc; the prior working-tree-only absence finding was incorrectly generalized.",
+    "roadmaps": [
+      {
+        "repository": "D:/hnnwork/distributed/hymeko",
+        "revision": "25d2d2ad8ed0a6a2508545b91f3c0d5c026669a4",
+        "path": "roadmaps/ROADMAPS.md",
+        "sha256": "f2ae6b812fddf08ee9a8ea2ee8adf1ea420a3621adbe4056f887642e06a8cbeb"
+      },
+      {
+        "repository": "D:/hnnwork/nagare",
+        "revision": "f3660cc8f738cccc69c2a011a943ce811347815e",
+        "path": "docs/roadmaps/nagare-long-term-roadmap.md",
+        "sha256": "a8e93b55b325285821562bb1e3dd8dbdef7c5a8f14425cfb10a4c81a6d1e998c"
+      },
+      {
+        "repository": "D:/hnnwork/nagare",
+        "revision": "f3660cc8f738cccc69c2a011a943ce811347815e",
+        "path": "docs/roadmaps/micro-nagare-mcu-backend.md",
+        "sha256": "c120917d7ed9b4e1ca20a50426304749b6af97a6c399aecdbe22bcc60fff95e2"
+      }
+    ],
+    "resumed_at": "2026-09-06T02:12:12.283205+02:00",
+    "historical_missing_paths": [
       "../ROADMAPS.md",
       "../nagare-integration-core-ir/docs/roadmaps/nagare-long-term-roadmap.md",
       "../nagare-integration-core-ir/docs/roadmaps/micro-nagare-mcu-backend.md"
     ],
-    "dependency_changes_applied": false
+    "required_provider_revision": "9d148a4dc1941761bc97a258740c1f4afe03e5b9",
+    "passed": 14,
+    "failed": 0,
+    "ignored": 0,
+    "test_names": [
+      "a_forward_value_ref_target_does_move_the_digest",
+      "characterization_the_merkle_pass_is_not_idempotent_on_a_production_lowered_ir",
+      "annotation_tag_change_moves_the_digest",
+      "annotation_value_change_moves_the_digest",
+      "incidence_sign_change_moves_the_digest",
+      "incidence_weight_change_moves_the_digest",
+      "characterization_a_backward_value_ref_target_is_invisible_to_the_first_merkle_pass",
+      "characterization_an_incidence_target_change_is_invisible_to_the_first_merkle_pass",
+      "reference_slot_order_moves_the_digest",
+      "required_a_backward_value_ref_target_moves_the_digest",
+      "reference_atom_annotation_change_moves_the_digest",
+      "required_an_incidence_target_change_moves_the_digest",
+      "required_the_semantic_digest_ignores_a_stale_decl_hash_table",
+      "required_the_semantic_digest_is_idempotent_from_the_first_call"
+    ],
+    "command": "cargo test --release --locked --offline -p hymeko_nagare --test merkle_digest_soundness -- --nocapture",
+    "core_revision": "125472ebfd16c9beaa96ffe2c1b00e145e2c15dd",
+    "wgpu_revision": "125472ebfd16c9beaa96ffe2c1b00e145e2c15dd",
+    "graph_revision": "9655f07755e271c0f2ee4361a526b14e0205af8c",
+    "parser_revision": "284c490d68232973a006bcba974279fed6f89ce8",
+    "tensor_revision": "b1d869d24fb563ed7042f38a1272c1736fdfbea4",
+    "source_identity": "Canonical Git source IDs; local Git mirror transport only. Existing Tensor path dependencies preserved.",
+    "persistent_dependency_changes_applied": false,
+    "scratch_dependency_changes_applied": true,
+    "lock_delta": "Core and WGPU source revisions changed together from 112a254 to 125472e; 7 existing Windows-only dependency edge version references changed; package name/version multiset unchanged.",
+    "full_nagare_gate_run": false,
+    "production_source_changes": false,
+    "container_id": "96d3f8653a841203580af300cba11f1e516ce94e075999a384aef917a8b4e47c",
+    "container_state": {
+      "Status": "exited",
+      "Running": false,
+      "Paused": false,
+      "Restarting": false,
+      "OOMKilled": false,
+      "Dead": false,
+      "Pid": 0,
+      "ExitCode": 0,
+      "Error": "",
+      "StartedAt": "2026-09-06T00:20:19.510517588Z",
+      "FinishedAt": "2026-09-06T00:21:14.998423412Z"
+    },
+    "elapsed_s": 49.83,
+    "max_rss_kib": 1041416,
+    "cgroup_peak_bytes": 2998603776,
+    "completed_at": "2026-09-06T00:21:14.998423412Z",
+    "evidence_manifest": "reports/semantic-digest-correction/nagare-execution.json",
+    "evidence_manifest_sha256": "280e3c4ec9a3d4cb6481efaaaef8ea472ae290ed0e72eebe89ee1ab6d1f3bd91",
+    "consumer_evidence_artifacts_verified": 33,
+    "container_elapsed_s": 55.487906
   },
   "performance_claim": false,
   "formal_proof_scope": "Existing 19 distributed-admission theorems unchanged; no digest or cryptographic proof is claimed.",
@@ -313,5 +388,199 @@
     }
   ],
   "implementation_revision": "125472ebfd16c9beaa96ffe2c1b00e145e2c15dd",
-  "artifact_scope": "Artifacts in implementation revision 125472ebfd16c9beaa96ffe2c1b00e145e2c15dd; execution.json excluded from self-hashing."
+  "artifact_scope": "Artifacts in implementation revision 125472ebfd16c9beaa96ffe2c1b00e145e2c15dd; execution.json excluded from self-hashing.",
+  "updated_at": "2026-09-06T02:28:35.327695+02:00",
+  "consumer_artifact_scope": "Current consumer follow-up plan/report/evidence bytes in the containing Git commit; historical Core artifacts remain anchored to implementation_revision; execution.json excluded from self-hashing.",
+  "consumer_artifacts": [
+    {
+      "path": "docs/plans/2026-09-06-semantic-digest-correction/plan.tex",
+      "bytes": 8328,
+      "sha256": "4de85b4d8f49da903209a5d62ce32fc1874eddfb53d788ab5a2b262e5f336cda"
+    },
+    {
+      "path": "docs/plans/2026-09-06-semantic-digest-correction/plan.pdf",
+      "bytes": 148400,
+      "sha256": "42050ec95db7666280a367a079470a6df8491bc5691fb6c4fe624da2cae4b315"
+    },
+    {
+      "path": "reports/2026-09-06-semantic-digest-correction.md",
+      "bytes": 24437,
+      "sha256": "b96b6bf374ffa6afd12beeb92293a3c9a687b6b80d89d273093911d21bc46dd9"
+    },
+    {
+      "path": "reports/semantic-digest-correction/semantic-digest-plan-build-consumer.log",
+      "bytes": 9755,
+      "sha256": "1093e45523e061664492bd42332240f1229cbc262bb51fa01a162057fa4b47de"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-Cargo.lock.after",
+      "bytes": 109857,
+      "sha256": "8fcb8b151ff2ef792fcf00d646ae71f0b2aa3b76bef2525891bece266e4f7672"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-Cargo.lock.before",
+      "bytes": 109857,
+      "sha256": "4229bd0ceed9d0b56e114caa52a3aeea2cf3d23b52aa2aa737aab78ed6e019cd"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-command-sha256.txt",
+      "bytes": 164,
+      "sha256": "daa2636a4eafc1c0963a7178d74613fefa138eef6f00fb8aa0576a3e6bded1b6"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-container-final.json",
+      "bytes": 10676,
+      "sha256": "8767507d1eea720aba6c9ce68a36a5e8c9b657f53af67fded0e6dbe60c293e47"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-container-start.json",
+      "bytes": 10872,
+      "sha256": "28d4dbedce01bf849a1b4e428481b4aa94b7ff29d4c7f8ed6ced9447221daa77"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-core-tree-after.txt",
+      "bytes": 475,
+      "sha256": "39f0820ee2a23e8d083bd5657dc710ad50eb670b4865bb3ab53d71c8c05f6976"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-core-tree-before.txt",
+      "bytes": 475,
+      "sha256": "efc8312fc48660adfbd2e4ee364d5032ec273f7d23b6ea71a8df92cdc89a7c6e"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-execution.json",
+      "bytes": 29718,
+      "sha256": "280e3c4ec9a3d4cb6481efaaaef8ea472ae290ed0e72eebe89ee1ab6d1f3bd91"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-exit.txt",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-first-launch-container.json",
+      "bytes": 10713,
+      "sha256": "7f641030d225b3856bab04f474f749599cd58b18feabcef387322311ca73ec74"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-graph-tree-after.txt",
+      "bytes": 142,
+      "sha256": "e77d6d4ea2283a155df25ed3caacbf09565fbfc00253502b61d1e40f2df04787"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-graph-tree-before.txt",
+      "bytes": 142,
+      "sha256": "e77d6d4ea2283a155df25ed3caacbf09565fbfc00253502b61d1e40f2df04787"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-input-sha256.txt",
+      "bytes": 1468,
+      "sha256": "bb2263bfe90eef0a20d17b62743f1c78af2b5e1cf5251fdb089cf6b1b2762994"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-lock-before-test.sha256",
+      "bytes": 77,
+      "sha256": "c4974b7bac4333bd970a69beb4326fe1c24010d9b67c483d842006ab7c26e099"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-lock.diff",
+      "bytes": 2491,
+      "sha256": "adf55f779d514432b8e18eba1cfe7aec9f3b1c00e7a1b84a3a8b9d56771c9f01"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-memory-peak.txt",
+      "bytes": 11,
+      "sha256": "3b62a7b66e93bcf859a69e3006b338536781be1420983707b2c707b3a8b11ead"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-metadata-after.json",
+      "bytes": 992057,
+      "sha256": "0c14331f1af14773659eeb6c109e576a59bab7b7b0d51a2b22c4a92a74dadd8a"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-metadata-attempt-1-container.json",
+      "bytes": 10677,
+      "sha256": "158a3533439df3c082236652ab0e062297565dd68a0b209bcce13e326c1ec489"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-metadata-attempt-1-memory.txt",
+      "bytes": 9,
+      "sha256": "4166c7de87318f335c08c42f3f8c5ab8150e1fddf45ef17d3d1d44ffe0936b08"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-metadata-attempt-1.log",
+      "bytes": 3693,
+      "sha256": "e9270d3404b7946bb2df64248574144821787c08ca457a978b71e62aef3085aa"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-metadata-attempt-2-container.json",
+      "bytes": 10678,
+      "sha256": "f977a74efb77930aac70727b3fc765060e80daeeb9027bb25f3db5317ddd9ad1"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-metadata-attempt-2-memory.txt",
+      "bytes": 9,
+      "sha256": "1b2aff13bc183c84c5182a766ed3628a1baa478a2fea1ee07939ec054592e89d"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-metadata-attempt-2.log",
+      "bytes": 3693,
+      "sha256": "a7818953a3331cf197ee97d30368abbd0a95791e818ffeb6c4edb8256e8566c7"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-metadata-before.json",
+      "bytes": 992057,
+      "sha256": "e38228cb3239e5158b4e08262f3c0fa6b91811977c4a12abc182ecce0b5e1583"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-prepare.log",
+      "bytes": 368,
+      "sha256": "5afd9367d61062a6bc9c4e38f2b1225dd1e6952fbadf67fb3e49cff3771964a8"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-prepare.sh",
+      "bytes": 2378,
+      "sha256": "bab999eafa069f38f9331b273f894e4a47d2046273ffaf0fac4ac4f2d2b4370c"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-run.sh",
+      "bytes": 4379,
+      "sha256": "5c5966665942352c7205a7eb8d988e57db9997a0a6cb2bda3e07464bf16e361f"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-source-revisions.txt",
+      "bytes": 1041,
+      "sha256": "6ce91af5f273f3e867491451894eb4dd752656447f4ba2b81f6fd9e3f41caa22"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-source-status-final.txt",
+      "bytes": 380,
+      "sha256": "1ac77e14ce5e6f0364f514959b6595491d9dfc55fd614088eaabf42cb894a5f7"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-status-after-test.txt",
+      "bytes": 14,
+      "sha256": "48344525907b204983c62b09e9dd09315ba032d286aa388ef4f3507b2fba0753"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-status-before-test.txt",
+      "bytes": 14,
+      "sha256": "48344525907b204983c62b09e9dd09315ba032d286aa388ef4f3507b2fba0753"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-test.log",
+      "bytes": 10116,
+      "sha256": "297da1888e58618d55cd58d7fdcb2d3f528bac0de8f91033b4b9974fb552ca40"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-wgpu-tree-after.txt",
+      "bytes": 159,
+      "sha256": "64d0223f29c0e5941a30bd74d3a95e1192a922a45b91a1eca5e62d92b5443aea"
+    },
+    {
+      "path": "reports/semantic-digest-correction/nagare-wgpu-tree-before.txt",
+      "bytes": 159,
+      "sha256": "35d02bb2b4a728ffa69c959c7f6b1bfcac24fa09f282ba580be0d324cbaf33eb"
+    }
+  ]
 }

@@ -20,7 +20,8 @@ tests and four failing identity requirements; reuse those exact negative control
 
 \paragraph{Approval boundary.}
 The user supplied the literal token in chat on 2026-09-06:
-\texttt{APPROVED-CORE-EDIT: semantic-digest-canonical-coverage}.
+\par\noindent\texttt{APPROVED-CORE-EDIT: semantic-digest-canonical-coverage}
+\par\noindent
 Protected application and the planned verification are now authorized.
 The chat turn identifier is not available. Include the token in the commit footer.
 
@@ -73,6 +74,25 @@ uses the current infallible signature; preserve that source compatibility and
 run its existing merkle\_digest\_soundness family after Core approval and tests.
 
 \paragraph{Test and resource plan.}
+Consumer resumption, 2026-09-06 02:10 +02:00: the provider's main commit
+25d2d2a now owns \path{roadmaps/ROADMAPS.md}. Both roadmap bodies are already
+tracked in Nagare f3660cc and have been read in full. The earlier diagnosis
+mistook absent working-tree files for absent Git content; correct that record.
+Reconstruct the physical loading chain from these exact Git objects, retaining
+Nagare's required provider pin 9d148a4 without modifying its contract.
+Run the existing 14-test \path{merkle_digest_soundness} consumer family against
+Core and WGPU 125472e (source-identical audit HEAD 9da5016), Graph 9655f077,
+Parser 284c490d, and clean Tensor main b1d869d. Preserve Nagare's SSE4.1 flags
+and release profile. Resolve both Core packages to one actual Git revision in
+the verification lock; record every scratch delta. No consumer production
+source edit, whole-Nagare release claim, or persistent Nagare lock update is
+part of this focused Core acceptance gate. The existing Nagare checkout and
+its unpublished ad500ab branch remain intact. Reuse the Core report and evidence
+directory for registry/roadmap hashes, the consumer log, lock diff, metadata,
+container state, wall time and RSS. ETA for the cold consumer build is 2--5
+minutes after snapshot/cache preparation, based on the 84-second cold Core
+gate and the larger Nagare release profile. Keep progress observable.
+
 Before approval, check patch applicability and Rust syntax/formatting only;
 these are not build or correctness results. After approval, apply in the existing
 audit checkout and promote the four recorded probes into the existing test owner.

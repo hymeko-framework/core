@@ -1,12 +1,14 @@
 # Core SemanticModelDigestV2 — alkalmazott és ellenőrzött javítás
 
-Created-at: 2026-09-06 00:55 +02:00. Updated-at: 2026-09-06 01:47 +02:00.
+Created-at: 2026-09-06 00:55 +02:00. Updated-at: 2026-09-06 02:29 +02:00.
 
 A négy reprodukált digest-hiba javítva. A végleges Core-forrás Amaterasun
 **29/29 célzott tesztet és 395 teljes Core-tesztet teljesített**, hét változatlan
 ignored teszt mellett. A CBOR corpus, CLI, fmt, workspace Clippy és CBOR
-benchmark-smoke is sikeres. **A Nagare fogyasztói kapu még nem futott**: a célág
-kötelező roadmap-betöltési lánca hiányos, lásd lent.
+benchmark-smoke is sikeres. **A Nagare célzott fogyasztói kapuja is teljesült:
+14 PASS, 0 FAIL, 0 ignored**, a javított Core/WGPU `125472e` revízióval.
+A mainre feltöltött roadmap-registryt beolvastuk; a korábbi hiányjelzést
+helyesbítettük, lásd lent.
 
 ## Jóváhagyás és végrehajtási határ
 
@@ -44,7 +46,8 @@ A bejövő V2 publikus szignatúrái változatlanok. Schema **2**, algoritmus **
 (korábban 1); a régi V2 cache/plan azonosítók újraszámítandók. A strukturális V1,
 a deprecated Merkle-függvény törzse, `Ir::decl_hash`, a CBOR wire, a Parser-lock,
 a corpus-fixture-ök és a distributed admission forrása nem módosult.
-Új vagy frissített függőség nincs.
+A Core javításához új vagy frissített függőség nincs; a külön fogyasztói
+ellenőrzés ideiglenes Nagare-lockjának eltérését lent rögzítjük.
 
 A korábbi 19 Lean admission-tétel forrása byte-azonos maradt. Ez a javítás
 nem bővíti az ottani, opaque identitásokra vonatkozó bizonyítást: új formális
@@ -140,16 +143,88 @@ A korábbi audit-tagek nem mozdulnak; main merge vagy release nem történt.
 A frissen ellenőrzött célref `f3660cc8f738cccc69c2a011a943ce811347815e`.
 A `merkle_digest_soundness` család 14 tesztje közül négy V2-t használ; a fixture
 a produkciós Parser/ModuleStore útján töltött `tests/hnn_data/mlp/mlp2.hymeko`.
-A célref Core/WGPU lockja még `112a254`, Graph `9655f077`, Parser `284c490d`.
-Consumer tesztet és tartós függőségfrissítést **nem hajtottunk végre**.
+A célref eredeti Core/WGPU lockja `112a254`, Graph `9655f077`, Parser `284c490d`.
+A meglévő tesztcsaládot egy külön Amaterasu Git-snapshotban lefuttattuk;
+a helyi Nagare `ad500ab` checkout és annak publikálatlan commitja változatlan.
 
 A célág `AGENTS.md` §2 előírja a `../ROADMAPS.md` registry és mindkét canonical
-roadmap elolvasását; hiányukra kifejezetten stopot ír elő. A registry, valamint
-a `nagare-long-term-roadmap.md` és `micro-nagare-mcu-backend.md` hiányzik a
-vizsgált Windows és Amaterasu útvonalakon. Az exact `9d148a4` provider tartalma
-elérhető és elolvasott, de ez a hiányzó roadmapet nem helyettesíti. A fájlok
-helyét a felhasználótól bekértük; engedélyt a már jóváhagyott Core-javításhoz
-nem kértünk újra. Ez dokumentációs előfeltétel, nem automatikus jóváhagyási elutasítás.
+roadmap elolvasását; hiányukra kifejezetten stopot ír elő.
+
+**Helyesbítés, 2026-09-06 02:10 +02:00:** a korábbi munkafakeresés eredményét
+tévesen kiterjesztettük a Git-tartalomra. Mindkét roadmap már a változatlan
+`f3660cc` commit `docs/roadmaps/` könyvtárában is szerepel. A most feltöltött
+`hymeko/hymeko` main `25d2d2ad8ed0a6a2508545b91f3c0d5c026669a4` verziója
+`roadmaps/ROADMAPS.md` alatt ad hozzájuk verziózott registryt és pontos
+snapshot-hivatkozásokat. A `git show` mindhárom dokumentumra sikeres; mindet
+teljes egészében elolvastuk. A korábbi repószintű hiánykövetkeztetés megcáfolva.
+
+A helyi `D:/hnnwork/distributed/hymeko` tisztán fast-forwardolt erre a mainre.
+Saját provider-forrásmódosítás vagy provider-tesztújrafuttatás nem történt;
+a bejövő registry jelentése tartalmazza az upstream ellenőrzést. A Nagare
+fogyasztói környezet külön megtartja a szerződés által előírt exact `9d148a4`
+providerét, és az új registryt a saját `25d2d2a` provenienciájával tölti be.
+Ez helyreállítja a dokumentumok elérését, nem másolja vagy írja át a roadmapet.
+A Core-terv kiegészült a konkrét consumer-revíziókkal és futási korlátokkal,
+PDF-fordítása sikeres.
+
+| Fogyasztói komponens | Ellenőrzött Git-revízió |
+|---|---|
+| Nagare teszt és fixture | `f3660cc8f738cccc69c2a011a943ce811347815e` |
+| Core és WGPU | `125472ebfd16c9beaa96ffe2c1b00e145e2c15dd` |
+| Graph | `9655f07755e271c0f2ee4361a526b14e0205af8c` |
+| Parser | `284c490d68232973a006bcba974279fed6f89ce8` |
+| Tensor | `b1d869d24fb563ed7042f38a1272c1736fdfbea4` |
+
+Parancs a Nagare gyökerében:
+
+```sh
+cargo test --release --locked --offline -p hymeko_nagare --test merkle_digest_soundness -- --nocapture
+```
+
+**14 PASS, 0 FAIL, 0 ignored**. A négy V2-követelmény: első hívástól idempotencia,
+stale `decl_hash` figyelmen kívül hagyása, incidencia-cél és visszafelé mutató
+`ValueR::Ref` célváltozásának megkülönböztetése. A további tíz teszt a megőrzött
+legacy viselkedést jellemzi vagy ellenőrzi. A teljes család a változatlan
+produkciós Parser/ModuleStore-fixture-t használja, új teszt vagy forrásmódosítás nélkül.
+Ez lezárja a javítás tervezett downstream digest-kapuját; a Nagare teljes
+`scripts/check.sh` ellenőrzését és egy általános Nagare-release megfelelőségét
+nem állítja.
+
+A teszt fordítással együtt **49,83 s**, legnagyobb process RSS **1 041 416 KiB**,
+exit **0**. A meglévő SDK/cache, a Nagare SSE4.1 flagje, `debug=true` és
+`lto="thin"` release-profilja megmaradt; limit 16 GiB, hat CPU, hozzáadott swap nélkül.
+A cgroup-csúcs **2 998 603 776 byte (2,79 GiB)**; a konténer exit 0-val,
+OOM nélkül, összesen **55,49 s** után leállt. Ezek diagnosztikai adatok,
+nem teljesítmény-összehasonlítások.
+
+A scratch lockban a Core/WGPU együtt frissült `112a254`→`125472e` revízióra;
+az előtte/utána Cargo metadata és tree egy-egy Core/WGPU/Graph identitást mutat,
+Core/Graph path override nélkül. A Git-letöltés a pontos commitokat tartalmazó
+helyi mirrorokon ment át, az eredeti canonical Cargo source-ID megőrzésével.
+A Cargo emellett hét meglévő Windows-függőségi él verzióhivatkozását módosította;
+csomagverzió hozzáadás vagy eltávolítás nincs. A teljes eltérés archivált, és a
+lock hash-e a teszt előtt/után azonos. Tartós Nagare-lockfrissítés nem történt.
+Egyik Linuxra szűrt resolve gráfban sincs `windows-sys` csomópont;
+a hét Windows-él végrehajtását ez a Linux-futás nem ellenőrzi.
+
+Bizonyíték: [tesztnapló](semantic-digest-correction/nagare-test.log),
+[lock-diff](semantic-digest-correction/nagare-lock.diff),
+[végső metadata](semantic-digest-correction/nagare-metadata-after.json),
+[konténerállapot](semantic-digest-correction/nagare-container-final.json),
+[fogyasztói manifest](semantic-digest-correction/nagare-execution.json).
+A manifest mind a 33 hivatkozott artifactjának SHA256-ellenőrzése sikeres.
+Az első launcher argumentumhibája nem indított Cargo-t; két további próbában
+a Git upload-pack tulajdonosellenőrzése állította meg a metadata-lekérést,
+még teszt előtt. Ezek külön naplózva maradtak. A három pontos mirror `.git`
+útját a disposable konténer saját Git-configjában engedélyezve a kapu lefutott;
+közös Git-config vagy SSH-trust változtatására nem volt szükség.
+
+A Core produkciós forrása továbbra is byte-azonos a Gitben tesztelt `125472e`
+változattal; a korábbi 17 Core-artifact és nyolc forrás hash-ellenőrzése sikeres.
+A mostani folytatás a tervet, jelentést és consumer-bizonyítékokat bővíti.
+A generált consumer-manifest LF-sortörést használ. Az `.gitattributes` meglévő
+patch-szabályának `.diff` megfelelője megőrzi a nyers lock-diff szándékos
+kontextusszóközeit; az alkalmazási források whitespace-kapuja változatlan.
 
 ## Discovery
 
@@ -179,6 +254,16 @@ DISCOVERY LEDGER — semantic digest teszt-fixture konszolidáció
   symbols: rg -n 'TestIr|semantic_digest|assert_changed' SYMBOLS.md -> 5 publikus digest-szimbólum; a privát teszthelper nincs exportálva
   read:    semantic_digest.rs, support/builder.rs, hash_coverage.rs, modules/10-discovery.md, jóváhagyott plan.tex
   verdict: EXTEND hymeko_core/tests/unified_ir/verification/semantic_digest.rs; közös privát fixture- és assertion-helperek a meglévő TestIr fölött, új fájl vagy publikus API nélkül.
+
+DISCOVERY LEDGER — Nagare fogyasztói ellenőrzés folytatása
+  find:    git ls-tree / git show: provider 25d2d2a registry, Nagare f3660cc docs/roadmaps és tests/merkle_digest_soundness.rs
+  grep:    meglévő consumer-előkészítés és végrehajtási bizonyítékok; a 14 teszt közül 4 hívja a V2 API-t
+  symbols: nincs új produkciós vagy publikus szimbólum
+  read:    registry, mindkét roadmap, Nagare szerződés, Cargo.toml, Cargo.lock, .cargo/config.toml, meglévő tesztcsalád
+  verdict: REUSE a meglévő tesztcsaládot, SDK-t és Core-terv/jelentés tulajdonost;
+           a nagare-* mellékletek e konkrét futás pontos parancsai és bizonyítékai,
+           nem új termék- vagy CI-belépők. A korábbi Core-log eltérő fogyasztót tesztel,
+           ezért nem helyettesíti ezt a downstream eredményt.
 ```
 
 ## Korábbi előkészítési feljegyzés
