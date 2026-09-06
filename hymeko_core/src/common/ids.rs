@@ -41,8 +41,8 @@ pub type SymId = Id<SymTag>;
 /// They are the single place a future generational representation will change,
 /// and the only sanctioned raw/wire reconstruction path. Cross-domain
 /// construction is still a compile error — the phantom tag makes `DeclId`,
-/// `NodeId`, … distinct types. The serde encoding is unchanged (a bare integer),
-/// so serialized ID values remain schema-compatible.
+/// `NodeId`, … distinct types. Serde retains bare integer indices; NONE uses
+/// `u64::MAX` on every target so native and wasm32 payloads agree.
 ///
 /// # Sealed forms no longer compile (with their explicit twins)
 ///
@@ -87,10 +87,11 @@ pub type SymId = Id<SymTag>;
 // as `usize`. The former `repr(C)` comment claimed a "stable layout for serde and
 // FFI" — that was misleading: serde serializes the *value* (a bare integer, via
 // the impls in `ids_impl.rs`), not the struct layout, and `usize` is **not** a
-// stable cross-target wire format (its width is 32/64-bit host-dependent). A
-// serialized ID is a raw index for the *current in-process schema*, reconstructed
-// only through the explicit [`Id::new`] seam and validated only on lookup against
-// the owning `Ir`.
+// stable cross-target wire format (its width is 32/64-bit host-dependent). Serde
+// writes a u64 index, with u64::MAX reserved for NONE on every target. Decode
+// translates that sentinel to local NONE and rejects ordinary indices which do
+// not fit the target or collide with its sentinel. The owning Ir still validates
+// whether a representable index actually identifies a declaration.
 #[repr(transparent)]
 pub struct Id<T>(pub(crate) usize, PhantomData<T>);
 

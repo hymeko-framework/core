@@ -15,6 +15,9 @@ kinematics {
         frame: + <isa> meta_element {}
         control: + <isa> meta_element {}
         sensor: + <isa> meta_element {}
+        // A force-transmission attachment in its containing link's local frame.
+        attachment: + <isa> meta_element {}
+        tp_axis: + <isa> meta_element {}
         @control_definition {}
         @joint {
             @control {}
@@ -30,6 +33,8 @@ kinematics {
             type "gpu_lidar";
         }
         @sensor_connection {}
+        // Rectified stereo rig incidence: + left RGB sensor, - right RGB sensor.
+        @stereo_pair {}
     }
     controllers {
         meta_controller {
@@ -53,6 +58,8 @@ kinematics {
         }
     }
     @control_plugin {}
+    // Parameter-group incidence for a bounded robot tensor-product chart.
+    @tp_chart {}
     @sim_plugin {}
 
     control_attributes {
@@ -76,6 +83,11 @@ kinematics {
     @prismatic_joint: + <isa> elements.joint {
         limit -> joint_prismatic_limit;
     }
+    // Force connections may span any links; they do not add a parent to the rigid-body tree.
+    // Exactly one + attachment and one - attachment. Parameters are a named shared block.
+    @linear_drive {}
+    @muscle_drive: + <isa> linear_drive {}
+    @hydraulic_drive: + <isa> linear_drive {}
     geometry {
         box {}
         cylinder {}

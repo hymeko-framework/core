@@ -42,25 +42,25 @@ quadruped: meta_kinematics.kinematics.elements, meta_kinematics.kinematics.geome
     // === FRONT body ("torso": rounded chest; front legs + head; standing height measured here) ===
     torso: meta_kinematics.kinematics.elements.link {
         mass 1.5;
-        link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.088]; }
+        link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.088]; collision { contype 2.0; conaffinity 3.0; } }
         visual -> link_geometry; collision -> link_geometry; color -> quadruped.body_color;
         origin [0.0, 0.0, 0.0];
     }
     // === REAR body (rounded haunch; rear legs + tail), joined to the torso by the waist joint ===
     rear_body: meta_kinematics.kinematics.elements.link {
         mass 1.3;
-        link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.084]; }
+        link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.084]; collision { contype 2.0; conaffinity 3.0; } }
         visual -> link_geometry; collision -> link_geometry; color -> quadruped.body_color;
         origin [-0.10, 0.0, 0.0];      // sphere centred behind the waist → overlaps the torso into a loaf
     }
     // Mid-belly (cosmetic, fixed to the torso): bridges the chest & haunch spheres into one long dachshund loaf.
-    mid_body: meta_kinematics.kinematics.elements.link { mass 0.2; link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.082]; } visual -> link_geometry; collision -> link_geometry; color -> quadruped.body_color; origin [0.0, 0.0, 0.0]; }
+    mid_body: meta_kinematics.kinematics.elements.link { mass 0.2; link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.082]; collision { contype 0.0; conaffinity 0.0; } } visual -> link_geometry; collision -> link_geometry; color -> quadruped.body_color; origin [0.0, 0.0, 0.0]; }
 
     // === Head chain: neck(1) + head 3-axis gimbal + cosmetic face(muzzle/nose/eyes) + jaw(1) + ears(2) ===
-    neck: meta_kinematics.kinematics.elements.link { mass 0.10; link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.03, 0.06]; } visual -> link_geometry; collision -> link_geometry; color -> quadruped.body_color; origin [0.0, 0.0, 0.03]; }
-    head_gz: meta_kinematics.kinematics.elements.link { mass 0.02; link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.012]; } visual -> link_geometry; collision -> link_geometry; color -> quadruped.face_color; origin [0.0, 0.0, 0.0]; }
-    head_gy: meta_kinematics.kinematics.elements.link { mass 0.02; link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.012]; } visual -> link_geometry; collision -> link_geometry; color -> quadruped.face_color; origin [0.0, 0.0, 0.0]; }
-    head: meta_kinematics.kinematics.elements.link { mass 0.24; link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.06]; } visual -> link_geometry; collision -> link_geometry; color -> quadruped.face_color; origin [0.012, 0.0, 0.012]; }
+    neck: meta_kinematics.kinematics.elements.link { mass 0.10; link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.03, 0.06]; collision { contype 8.0; conaffinity 15.0; } } visual -> link_geometry; collision -> link_geometry; color -> quadruped.body_color; origin [0.0, 0.0, 0.03]; }
+    head_gz: meta_kinematics.kinematics.elements.link { mass 0.02; link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.012]; collision { contype 0.0; conaffinity 0.0; } } visual -> link_geometry; collision -> link_geometry; color -> quadruped.face_color; origin [0.0, 0.0, 0.0]; }
+    head_gy: meta_kinematics.kinematics.elements.link { mass 0.02; link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.012]; collision { contype 0.0; conaffinity 0.0; } } visual -> link_geometry; collision -> link_geometry; color -> quadruped.face_color; origin [0.0, 0.0, 0.0]; }
+    head: meta_kinematics.kinematics.elements.link { mass 0.24; link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.06]; collision { contype 16.0; conaffinity 23.0; } } visual -> link_geometry; collision -> link_geometry; color -> quadruped.face_color; origin [0.012, 0.0, 0.012]; }
     muzzle: meta_kinematics.kinematics.elements.link { mass 0.04; link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.028, 0.085]; } visual -> link_geometry; collision -> link_geometry; color -> quadruped.face_color; origin [0.0, 0.0, 0.042]; }
     nose: meta_kinematics.kinematics.elements.link { mass 0.005; link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.015]; } visual -> link_geometry; collision -> link_geometry; color -> quadruped.accent_color; origin [0.0, 0.0, 0.0]; }
     eye_l: meta_kinematics.kinematics.elements.link { mass 0.003; link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.015]; } visual -> link_geometry; collision -> link_geometry; color -> quadruped.eye_color; origin [0.0, 0.0, 0.0]; }
@@ -76,25 +76,32 @@ quadruped: meta_kinematics.kinematics.elements, meta_kinematics.kinematics.geome
 
     // === Leg links (per leg: big ball-joint shoulder + rounded thigh + shin + dark paw) ===
     hip_bracket_fl: meta_kinematics.kinematics.elements.link { mass 0.05; link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.05]; } visual -> link_geometry; collision -> link_geometry; color -> quadruped.joint_color; origin [0.0, 0.0, 0.0]; }
-    thigh_fl: meta_kinematics.kinematics.elements.link { mass 0.28; link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.025, 0.10]; } visual -> link_geometry; collision -> link_geometry; color -> quadruped.leg_color; origin [0.0, 0.0, -0.05]; }
+    thigh_fl: meta_kinematics.kinematics.elements.link { mass 0.28; link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.025, 0.10]; collision { contype 4.0; conaffinity 5.0; } } visual -> link_geometry; collision -> link_geometry; color -> quadruped.leg_color; origin [0.0, 0.0, -0.05]; }
     shin_fl:  meta_kinematics.kinematics.elements.link { mass 0.18; link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.016, 0.10]; } visual -> link_geometry; collision -> link_geometry; color -> quadruped.leg_color; origin [0.0, 0.0, -0.05]; }
     paw_fl: meta_kinematics.kinematics.elements.link { mass 0.03; link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.026]; } visual -> link_geometry; collision -> link_geometry; color -> quadruped.paw_color; origin [0.0, 0.0, 0.0]; }
     hip_bracket_fr: meta_kinematics.kinematics.elements.link { mass 0.05; link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.05]; } visual -> link_geometry; collision -> link_geometry; color -> quadruped.joint_color; origin [0.0, 0.0, 0.0]; }
-    thigh_fr: meta_kinematics.kinematics.elements.link { mass 0.28; link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.025, 0.10]; } visual -> link_geometry; collision -> link_geometry; color -> quadruped.leg_color; origin [0.0, 0.0, -0.05]; }
+    thigh_fr: meta_kinematics.kinematics.elements.link { mass 0.28; link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.025, 0.10]; collision { contype 4.0; conaffinity 5.0; } } visual -> link_geometry; collision -> link_geometry; color -> quadruped.leg_color; origin [0.0, 0.0, -0.05]; }
     shin_fr:  meta_kinematics.kinematics.elements.link { mass 0.18; link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.016, 0.10]; } visual -> link_geometry; collision -> link_geometry; color -> quadruped.leg_color; origin [0.0, 0.0, -0.05]; }
     paw_fr: meta_kinematics.kinematics.elements.link { mass 0.03; link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.026]; } visual -> link_geometry; collision -> link_geometry; color -> quadruped.paw_color; origin [0.0, 0.0, 0.0]; }
     hip_bracket_bl: meta_kinematics.kinematics.elements.link { mass 0.05; link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.05]; } visual -> link_geometry; collision -> link_geometry; color -> quadruped.joint_color; origin [0.0, 0.0, 0.0]; }
-    thigh_bl: meta_kinematics.kinematics.elements.link { mass 0.28; link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.025, 0.10]; } visual -> link_geometry; collision -> link_geometry; color -> quadruped.leg_color; origin [0.0, 0.0, -0.05]; }
+    thigh_bl: meta_kinematics.kinematics.elements.link { mass 0.28; link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.025, 0.10]; collision { contype 4.0; conaffinity 5.0; } } visual -> link_geometry; collision -> link_geometry; color -> quadruped.leg_color; origin [0.0, 0.0, -0.05]; }
     shin_bl:  meta_kinematics.kinematics.elements.link { mass 0.18; link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.016, 0.10]; } visual -> link_geometry; collision -> link_geometry; color -> quadruped.leg_color; origin [0.0, 0.0, -0.05]; }
     paw_bl: meta_kinematics.kinematics.elements.link { mass 0.03; link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.026]; } visual -> link_geometry; collision -> link_geometry; color -> quadruped.paw_color; origin [0.0, 0.0, 0.0]; }
     hip_bracket_br: meta_kinematics.kinematics.elements.link { mass 0.05; link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.05]; } visual -> link_geometry; collision -> link_geometry; color -> quadruped.joint_color; origin [0.0, 0.0, 0.0]; }
-    thigh_br: meta_kinematics.kinematics.elements.link { mass 0.28; link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.025, 0.10]; } visual -> link_geometry; collision -> link_geometry; color -> quadruped.leg_color; origin [0.0, 0.0, -0.05]; }
+    thigh_br: meta_kinematics.kinematics.elements.link { mass 0.28; link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.025, 0.10]; collision { contype 4.0; conaffinity 5.0; } } visual -> link_geometry; collision -> link_geometry; color -> quadruped.leg_color; origin [0.0, 0.0, -0.05]; }
     shin_br:  meta_kinematics.kinematics.elements.link { mass 0.18; link_geometry: meta_kinematics.kinematics.geometry.cylinder { dimension [0.016, 0.10]; } visual -> link_geometry; collision -> link_geometry; color -> quadruped.leg_color; origin [0.0, 0.0, -0.05]; }
     paw_br: meta_kinematics.kinematics.elements.link { mass 0.03; link_geometry: meta_kinematics.kinematics.geometry.sphere { dimension [0.026]; } visual -> link_geometry; collision -> link_geometry; color -> quadruped.paw_color; origin [0.0, 0.0, 0.0]; }
 
+    // Collision approximation: category 1 = other exposed surfaces; 2 = body shells;
+    // 4 = thighs inside hip sockets; 8 = neck; 16 = head shell. The symmetric
+    // mask rule suppresses only body-shell/thigh and neck/head shell overlaps.
+    // Head gimbals and the decorative mid-body filler are internal (mask 0/0).
+    // All exposed surfaces still collide with the ground (category 1), and
+    // thighs still collide with each other. This is not a CAD shell model.
+    // At zero joint coordinates the lowest paw surface is 4.156 mm above z=0.
     // === World fixation / base joint — DECLARED here, promoted by the env ===
     @base: meta_kinematics.kinematics.conti_joint {
-        (+ world [[0.0, 0.0, 0.25], [0.0, 0.0, 0.0]], - torso, - meta_kinematics.kinematics.axes.AXIS_Z);
+        (+ world [[0.0, 0.0, 0.275], [0.0, 0.0, 0.0]], - torso, - meta_kinematics.kinematics.axes.AXIS_Z);
     }
 
     // === Waist (1) : torso → rear_body (spine yaw) ===
@@ -137,4 +144,39 @@ quadruped: meta_kinematics.kinematics.elements, meta_kinematics.kinematics.geome
     @hip_flex_br:   meta_kinematics.kinematics.rev_joint { (+ hip_bracket_br [[ 0.0, 0.0, 0.0],       [0.0,-12.0, 0.0]], - thigh_br,     - meta_kinematics.kinematics.axes.AXIS_Y); }
     @knee_br:       meta_kinematics.kinematics.rev_joint { (+ thigh_br       [[ 0.0, 0.0, -0.10],     [0.0, 26.0, 0.0]], - shin_br,      - meta_kinematics.kinematics.axes.AXIS_Y); }
     @paw_br_j:      meta_kinematics.kinematics.fixed_joint { (+ shin_br      [[ 0.0, 0.0, -0.10],     [0.0,0.0,0.0]],   - paw_br); }
+
+    // TP scheduling groups; the physical body model remains unchanged.
+    tp_leg_fl_0: meta_kinematics.kinematics.elements.tp_axis { joint -> hip_flex_fl; lower_deg -15; upper_deg 15; }
+    tp_leg_fl_1: meta_kinematics.kinematics.elements.tp_axis { joint -> knee_fl; lower_deg -20; upper_deg 20; }
+    @tp_leg_fl: meta_kinematics.kinematics.tp_chart { (+ tp_leg_fl_0, + tp_leg_fl_1); operator "rest_acceleration"; samples 11; rank 3; cr_grid 257; }
+    tp_leg_fr_0: meta_kinematics.kinematics.elements.tp_axis { joint -> hip_flex_fr; lower_deg -15; upper_deg 15; }
+    tp_leg_fr_1: meta_kinematics.kinematics.elements.tp_axis { joint -> knee_fr; lower_deg -20; upper_deg 20; }
+    @tp_leg_fr: meta_kinematics.kinematics.tp_chart { (+ tp_leg_fr_0, + tp_leg_fr_1); operator "rest_acceleration"; samples 11; rank 3; cr_grid 257; }
+    tp_leg_bl_0: meta_kinematics.kinematics.elements.tp_axis { joint -> hip_flex_bl; lower_deg -15; upper_deg 15; }
+    tp_leg_bl_1: meta_kinematics.kinematics.elements.tp_axis { joint -> knee_bl; lower_deg -20; upper_deg 20; }
+    @tp_leg_bl: meta_kinematics.kinematics.tp_chart { (+ tp_leg_bl_0, + tp_leg_bl_1); operator "rest_acceleration"; samples 11; rank 3; cr_grid 257; }
+    tp_leg_br_0: meta_kinematics.kinematics.elements.tp_axis { joint -> hip_flex_br; lower_deg -15; upper_deg 15; }
+    tp_leg_br_1: meta_kinematics.kinematics.elements.tp_axis { joint -> knee_br; lower_deg -20; upper_deg 20; }
+    @tp_leg_br: meta_kinematics.kinematics.tp_chart { (+ tp_leg_br_0, + tp_leg_br_1); operator "rest_acceleration"; samples 11; rank 3; cr_grid 257; }
+
+    // Ideal rectified stereo add-on; no hardware-identification claim.
+    stereo_left: meta_kinematics.kinematics.sensors.rgb_camera {
+        camera_id 200; optical_frame "quadruped.head.left_optical";
+        width 320; height 240; fovy_deg 60; update_rate 5;
+        clip [0.02, 20.0]; position [0.15, 0.03, 0.035];
+        xy_axes [0, -1, 0, 0, 0, 1];
+    }
+    @stereo_left_mount: meta_kinematics.kinematics.sensors.sensor_connection {
+        (+ stereo_left, - head);
+    }
+    stereo_right: meta_kinematics.kinematics.sensors.rgb_camera {
+        camera_id 201; optical_frame "quadruped.head.right_optical";
+        width 320; height 240; fovy_deg 60; update_rate 5;
+        clip [0.02, 20.0]; position [0.15, -0.03, 0.035];
+        xy_axes [0, -1, 0, 0, 0, 1];
+    }
+    @stereo_right_mount: meta_kinematics.kinematics.sensors.sensor_connection {
+        (+ stereo_right, - head);
+    }
+    @head_stereo: meta_kinematics.kinematics.sensors.stereo_pair { (+ stereo_left, - stereo_right); }
 }

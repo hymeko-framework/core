@@ -168,12 +168,14 @@ fn corpus_digest() -> (usize, String) {
     (n, h.finalize().to_hex().to_string())
 }
 
-// Re-frozen 2026-09-04 (APPROVED-CORE-EDIT: relocate-webxr-to-transformation): the three WebXR
-// domain fixtures moved to their owner, hymeko/transformation::hymeko_webxr. No remaining fixture
-// or lowering implementation changed: 105 -> 102 is exactly the three-file ownership move, not an
-// algo_version=1 regression. The transformation crate compiles and validates the same source files.
+// Fixture-set revision 2026-09-06: the user-requested Core branch merge adopts the three
+// robotics fixtures from 9c2f87e. Count stays 102; canonical v1 code and its synthetic vectors
+// are unchanged. The controlled fixture-only swap in reports/2026-09-05-dependency-refresh.md
+// already isolated this exact f9ab7da8... -> 8938b37b... change before integration.
+// Previous revision: 2026-09-04 WebXR owner relocation, 105 -> 102 fixtures,
+// digest f9ab7da8b5d823fa9d55c28e78fd63bc37660a97f67852ad587a145f951cb3b5.
 const KAT_CORPUS_COUNT: usize = 102;
-const KAT_CORPUS_DIGEST: &str = "f9ab7da8b5d823fa9d55c28e78fd63bc37660a97f67852ad587a145f951cb3b5";
+const KAT_CORPUS_DIGEST: &str = "8938b37b221ba015f1a52f318f8b9d9ac9aab65777ee07026916bf2b1d13dd12";
 
 #[test]
 fn print_corpus_digest_for_capture() {

@@ -1,0 +1,18 @@
+% Generational entity storage — representation decision (TikZ).
+% Compile inside a tikzpicture in any standalone/beamer doc.
+\begin{tikzpicture}[font=\small,node distance=6mm,
+  box/.style={draw,rounded corners,align=center,inner sep=3pt},
+  fail/.style={box,fill=red!8},
+  pass/.style={box,fill=green!10},
+  base/.style={box,fill=blue!6}]
+  \node[base] (base) {BASE (today)\dense \texttt{Vec<Rec>}\plain index, 1 load\lookup 7.1\,ns};
+  \node[fail,right=12mm of base] (a) {A tombstone\slot 48\,B\lookup $+72..122\%$};
+  \node[fail,right=8mm of a] (b) {B SoA gen+val\lookup $+56..59\%$\(best)};
+  \node[fail,below=6mm of a] (bp) {B$'$ interleaved\lookup $+66..99\%$};
+  \node[fail,below=6mm of b] (c) {C dense+indir.\lookup $+147..150\%$};
+  \draw[->] (base)--(a); \draw[->] (base)--(b);
+  \draw[->] (base.south)--(bp); \draw[->] (base.south east)--(c);
+  \node[box,fill=yellow!15,below=14mm of base,align=left,text width=52mm] (gate)
+    {gate: valid lookup $\leq 3\%$\ \textbf{all fail} (best $+56\%$, $18\times$ over)\ $\Rightarrow$ HARD STOP, defer migration};
+  \draw[->,dashed] (b.south)|-(gate.east);
+\end{tikzpicture}
