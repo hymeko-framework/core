@@ -1,0 +1,13 @@
+{
+  "_comment": "Duplication baseline. The gate fails on an INCREASE only. Lowering these numbers is welcome and needs no ceremony; raising them needs the written justification a core edit needs. Detectors are not interchangeable and are never compared against each other -- 'tokens' is the built-in type-2 detector, 'jscpd' is the npm one.",
+  "detectors": {
+    "tokens": {
+      "cloned_lines": 7800,
+      "clones": 403,
+      "files": 182
+    }
+  },
+  "params": {
+    "window_tokens": 60
+  }
+}

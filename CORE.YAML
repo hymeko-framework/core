@@ -119,6 +119,61 @@ crates:
           - no abstraction without a concrete CPU *and* WGPU consumer
           - DType/ScalarType deliberately omitted (first GPU path is f32-explicit)
 
+      # APPROVED-CORE-EDIT: semantic-model-digest-v2 (2026-09-05, user chat)
+      - slug: semantic-model-digest-v2
+        date: 2026-09-05
+        scope: >
+          New module hymeko_core/src/ir/semantic_digest.rs owning the complete
+          semantic identity of an Ir (SemanticModelDigestV2) and the narrow
+          structural identity under its own name (ProgramStructureHashV1, a
+          delegating wrapper over the unchanged canonical_program_hash).
+          hymeko_core/src/ir/mod.rs gains the module declaration.
+          hymeko_core/src/ir/hash_pass.rs gains a #[deprecated] attribute and the
+          rustdoc recording why: compute_merkle_hashes is not idempotent (D1), is
+          blind to an incidence target change on the first pass (D2), and drops a
+          reference to an earlier-declared entity (D3). Its BODY is unchanged.
+          hymeko_core/src/module_store/module_store.rs gains a scoped
+          #[allow(deprecated)] plus the comment classifying that call site as
+          `ambiguous -> blocked`: Ir::decl_hash is a serialized field whose LENGTH
+          is validated by ir::coherence and the CBOR validator, so changing what is
+          stored there is a wire-content change with no established consumer.
+          Control matrix in
+          hymeko_core/tests/unified_ir/verification/semantic_digest.rs.
+        constraints:
+          - "canonical_program_hash v1 is not touched: no signature, no byte,
+             no algo_version, no golden vector"
+          - the deprecated pass keeps its exact behaviour; only attributes and
+            documentation are added, so no existing digest value moves
+          - "V2 is PURE: it neither reads nor writes Ir::decl_hash, which is
+             what makes it idempotent from the first call and immune to a stale
+             table"
+          - a reference contributes the target's canonical PATH, never the
+            target's partially computed digest
+          - V1 and V2 carry different domain headers and different types, so they
+            cannot be substituted for one another
+          - "algorithm 2 uses complete iterative values and full concrete-record coverage;
+             canonical owner-slot identities with whole-model raw-ID fallback"
+          - "valid symbol and bound-record indices are preconditions; malformed
+             input is not certified by the semantic digest"
+          - every mutation control proves it changed the intended IR field first
+
+      # APPROVED-CORE-EDIT: semantic-digest-canonical-coverage (2026-09-06, user chat)
+      - slug: semantic-digest-canonical-coverage
+        date: 2026-09-06
+        scope: >
+          The existing semantic_digest owner only: full declaration/node/edge/arc
+          coverage, stable owner-slot identities, whole-model canonical ordering,
+          iterative complete values and explicit raw-ID fallback domain.
+          Import the original digest module/deprecation boundary without its
+          portable-ID or robotics ancestry. Extend its existing tests and
+          regenerate SYMBOLS.md. Semantic algorithm version 1 to 2, schema 2.
+        constraints:
+          - public function signatures unchanged
+          - V1 bytes, cached IR hashes, CBOR wire and admission unchanged
+          - no dependency or fixture changes
+          - four recorded regressions and additional discriminating controls
+          - full Core and existing Nagare consumer gates before publication
+
   # `hymeko_hnn` was RELOCATED 2026-08-31 to hymeko/nagare (hymeko_nagare::hnn) and no longer
   # exists in this workspace (Cargo.toml members = [hymeko_core, hymeko_wgpu]; the directory is
   # gone). Its stale crate declaration was removed here on 2026-09-01 under
@@ -214,12 +269,11 @@ allowlist:
 # ----------------------------------------------------------------------
 approval:
   required_for:
-    - any modification to a `lockdown: full` item
-    - any modification to a `lockdown: implementation` item beyond
-      additive public API
-    - any modification to `lockdown: api` items in core crates
-    - any addition, removal, or version change of a pinned dependency
-    - any change to this file (`CORE.YAML`)
+    - "any modification to a `lockdown: full` item"
+    - "any modification to a `lockdown: implementation` item beyond additive public API"
+    - "any modification to `lockdown: api` items in core crates"
+    - "any addition, removal, or version change of a pinned dependency"
+    - "any change to this file (`CORE.YAML`)"
 
   mechanism: |
     A change may proceed only after the user replies in the chat with

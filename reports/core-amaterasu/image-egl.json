@@ -1,0 +1,66 @@
+{
+  "buildx.build.provenance": {
+    "builder": {
+      "id": ""
+    },
+    "buildType": "https://mobyproject.org/buildkit@v1",
+    "materials": [
+      {
+        "uri": "pkg:docker/rust@1.97.1-bookworm?digest=sha256:408fe88047cef61a2087653b0c5255fa51c0f2d6d94ddedd7a2562a9b91a46f6\u0026platform=linux%2Famd64",
+        "digest": {
+          "sha256": "408fe88047cef61a2087653b0c5255fa51c0f2d6d94ddedd7a2562a9b91a46f6"
+        }
+      }
+    ],
+    "invocation": {
+      "configSource": {
+        "entryPoint": "Dockerfile"
+      },
+      "parameters": {
+        "frontend": "dockerfile.v0",
+        "args": {
+          "add-hosts": "amaterasu.local=192.168.1.228",
+          "build-arg:SOURCE_REVISION": "69a5ec947b610a9ccc683d3f8d761d19d30c5b47-plus-container-working"
+        },
+        "secrets": [
+          {
+            "id": "known_hosts"
+          }
+        ],
+        "ssh": [
+          {
+            "id": "default"
+          }
+        ],
+        "locals": [
+          {
+            "name": "context"
+          },
+          {
+            "name": "dockerfile"
+          }
+        ]
+      },
+      "environment": {
+        "dockerfileVersion": "1.26.0",
+        "platform": "linux/amd64"
+      }
+    }
+  },
+  "buildx.build.ref": "hymeko-core-amaterasu-20260905/hymeko-core-amaterasu-202609050/0fkke0g6phc8pvzjyuh4xb4j1",
+  "containerimage.config.digest": "sha256:05e0242c646ef0a944e637a00d1da83ceaaaa422abfb9ab62655ded1b82522ad",
+  "containerimage.descriptor": {
+    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+    "digest": "sha256:180313022d68cf2f6d716450a4f37f7b4a8573bc5faa33726a79c6e55ae969e3",
+    "size": 3160,
+    "annotations": {
+      "org.opencontainers.image.created": "2026-09-05T12:02:34Z"
+    },
+    "platform": {
+      "architecture": "amd64",
+      "os": "linux"
+    }
+  },
+  "containerimage.digest": "sha256:180313022d68cf2f6d716450a4f37f7b4a8573bc5faa33726a79c6e55ae969e3",
+  "image.name": "docker.io/library/hymeko-core:20260905-egl"
+}

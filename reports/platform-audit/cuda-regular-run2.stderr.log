@@ -1,0 +1,2 @@
+building workload: rows=200000 cols=200000 deg=8 fd=32 uniform
+nnz = 1599965

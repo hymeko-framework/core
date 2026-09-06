@@ -1,0 +1,20 @@
+{
+    "bench":  "",
+    "executable":  "D:\\hnnwork\\platform-audit\\core\\reports\\platform-audit\\graph_counterexamples.exe",
+    "executable_sha256":  "121C40DF56C97947967899213E8468C66A2A44ABA2442E2E64AB95D23CFBE015",
+    "arguments":  "bounded_diamond_enumeration_probe --exact --ignored --nocapture",
+    "working_directory":  "D:\\hnnwork\\platform-audit\\core",
+    "filter":  "(all)",
+    "rayon_threads":  24,
+    "exit_code":  0,
+    "wall_seconds":  0.149,
+    "peak_working_set_mib":  5.203,
+    "peak_paged_mib":  4.105,
+    "peak_virtual_mib":  4152.164,
+    "peak_observed":  true,
+    "poll_interval_ms":  100,
+    "cap_mib":  16384,
+    "terminated_for_cap":  false,
+    "cap_ok":  true,
+    "cap_16gb_ok":  true
+}

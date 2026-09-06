@@ -1,0 +1,4 @@
+NVIDIA GeForce RTX 5080 Laptop GPU [Vulkan] DiscreteGpu (driver NVIDIA 610.88)
+timestamp support: PassesAndEncoders  period_ns=1  inside_encoders=true
+edge: zero-length -> 0 elements, total 0.00 us (must be 0 elements)
+edge: non-multiple chunked -> 3145733 elements, bytes_ok=true, total 8501.10 us

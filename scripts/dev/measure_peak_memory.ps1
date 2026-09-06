@@ -1,151 +1,126 @@
 <#
 .SYNOPSIS
-    Measure peak working set and peak paged memory of a benchmark process.
-
+    Measure a Criterion target or an existing executable under a working-set cap.
 .DESCRIPTION
-    CLAUDE.md Sec. 3 requires peak memory, not instantaneous, and Sec. 4 sets a 16 GB
-    cap. On Linux that cap is enforced with `systemd-run -p MemoryMax=16G`
-    against RSS; Windows has no equivalent RSS cgroup gate, so here the cap is
-    *observed and asserted* rather than kernel-enforced. This script is the
-    observation half.
-
-    It launches the target with `Start-Process -PassThru`, waits for exit, and
-    then reads `PeakWorkingSet64` / `PeakPagedMemorySize64` from the exited
-    process object. .NET caches both counters at exit, so this is a true peak
-    over the whole run - not a sampled instantaneous value that could miss the
-    high-water mark between polls.
-
-    Note on comparability: the pre-existing ~69 MiB figure on this host was
-    measured on `interning_bench`. The `csr_bench` / `hnn_bench` targets
-    allocate deliberately larger synthetic workloads, so their absolute peak is
-    higher by construction. Compare a target against ITSELF across a code
-    change; do not compare across targets.
-
-.PARAMETER Bench
-    Bench target name (e.g. csr_bench, hnn_bench, interning_bench).
-
-.PARAMETER Filter
-    Optional Criterion filter regex, to restrict which cells run.
-
-.PARAMETER Threads
-    Optional RAYON_NUM_THREADS value for the child process.
-
-.PARAMETER CargoProfile
-    Cargo profile passed through as --profile (default: bench).
-
+    Polls OS high-water counters every 100 ms and terminates the child if the
+    observed peak exceeds the cap (at most 16 GiB). This is a userspace guard,
+    not a kernel RSS quota. A peak inside the final poll window may be missed;
+    zero means no reliable observation, never a measured zero-memory process.
+    Compilation is outside the measured span. VAS is recorded, never capped.
+    LogPrefix saves stdout, stderr and metrics; otherwise output is inherited.
+    Rayon configuration applies only to the child.
 .EXAMPLE
-    .\measure_peak_memory.ps1 -Bench hnn_bench -Filter 'conv_hgnn'
-
+    .\measure_peak_memory.ps1 -Bench csr_bench -Filter csr_spmv -Threads 24
 .EXAMPLE
-    .\measure_peak_memory.ps1 -Bench csr_bench -Threads 24
+    .\measure_peak_memory.ps1 -Executable .\probe.exe -ArgumentString '--verify' -LogPrefix .\probe
 #>
-[CmdletBinding()]
+[CmdletBinding(DefaultParameterSetName = 'Bench')]
 param(
-    [Parameter(Mandatory = $true)][string]$Bench,
-    [string]$Filter = '',
+    [Parameter(Mandatory = $true, ParameterSetName = 'Bench')][string]$Bench,
+    [Parameter(ParameterSetName = 'Bench')][string]$Filter = '',
+    [Parameter(ParameterSetName = 'Bench')][string]$CargoProfile = 'bench',
+    [Parameter(Mandatory = $true, ParameterSetName = 'Program')][string]$Executable,
+    [Parameter(ParameterSetName = 'Program')][string]$ArgumentString = '',
+    [string]$WorkingDirectory = (Get-Location).Path,
     [int]$Threads = 0,
-    [string]$CargoProfile = 'bench'
+    [string]$LogPrefix = '',
+    [ValidateRange(1, 16384)][int]$MaxWorkingSetMiB = 16384
 )
-
 $ErrorActionPreference = 'Stop'
-$repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
-Push-Location $repoRoot
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$runDirectory = (Resolve-Path -LiteralPath $WorkingDirectory).Path
+if ($LogPrefix) { $LogPrefix = [IO.Path]::GetFullPath($LogPrefix) }
+if ($PSCmdlet.ParameterSetName -eq 'Bench') {
+    Push-Location $repoRoot
+    try {
+        Write-Host "Building bench target '$Bench' ..."
+        $previousPreference = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        & cargo build --locked --offline --profile $CargoProfile --bench $Bench --workspace *>&1 | Out-Null
+        $buildCode = $LASTEXITCODE
+        $ErrorActionPreference = $previousPreference
+        if ($buildCode -ne 0) { throw "cargo build failed: $buildCode" }
+        $profileDirectory = if ($CargoProfile -eq 'dev') { 'debug' } elseif ($CargoProfile -eq 'bench') { 'release' } else { $CargoProfile }
+        $benchDirectory = Join-Path $repoRoot "target\$profileDirectory\deps"
+        $exe = Get-ChildItem -LiteralPath $benchDirectory -Filter "$Bench-*.exe" |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        if (-not $exe) { throw "No executable for '$Bench'" }
+        $ArgumentString = '--bench'
+        if ($Filter) { $ArgumentString += ' "' + ($Filter -replace '(\\*)"', '$1$1\"' -replace '(\\+)$', '$1$1') + '"' }
+        $runDirectory = $repoRoot
+    } finally { Pop-Location }
+} else {
+    $exe = Get-Item -LiteralPath $Executable
+}
+$psi = New-Object System.Diagnostics.ProcessStartInfo
+$psi.FileName = $exe.FullName
+$psi.Arguments = $ArgumentString
+$psi.WorkingDirectory = $runDirectory
+$psi.UseShellExecute = $false
+$psi.CreateNoWindow = $true
+$psi.RedirectStandardOutput = [bool]$LogPrefix
+$psi.RedirectStandardError = [bool]$LogPrefix
+if ($Threads -gt 0) { $psi.EnvironmentVariables['RAYON_NUM_THREADS'] = "$Threads" }
+Write-Host "Running $($exe.Name) $ArgumentString"
+$watch = [Diagnostics.Stopwatch]::StartNew()
+$proc = [Diagnostics.Process]::Start($psi)
+$peakWs = 0L; $peakPaged = 0L; $peakVm = 0L
+$terminatedForCap = $false
+$nextProgress = 10.0
 try {
-    # Build first so compilation cost is not attributed to the measured run.
-    #
-    # Windows PowerShell 5.1 turns a native command's stderr into ErrorRecords,
-    # and cargo writes its progress there -- under $ErrorActionPreference='Stop'
-    # that aborts the script on a perfectly successful build. Drop to
-    # 'Continue' for the duration of the call and gate on $LASTEXITCODE, which
-    # is the reliable signal.
-    Write-Host "Building bench target '$Bench' ..." -ForegroundColor Cyan
-    $prevEap = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
-    & cargo build --profile $CargoProfile --bench $Bench --workspace *>&1 | Out-Null
-    $buildCode = $LASTEXITCODE
-    $ErrorActionPreference = $prevEap
-    if ($buildCode -ne 0) { throw "cargo build failed with exit code $buildCode" }
-
-    # Locate the built executable. Cargo mangles bench binaries with a hash
-    # suffix; take the newest match.
-    $benchDir = Join-Path $repoRoot "target\release\deps"
-    $exe = Get-ChildItem -Path $benchDir -Filter "$Bench-*.exe" -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTime -Descending |
-        Select-Object -First 1
-    if (-not $exe) { throw "Could not locate a built binary for bench '$Bench' under $benchDir" }
-
-    $benchArgs = @('--bench')
-    if ($Filter) { $benchArgs += $Filter }
-
-    if ($Threads -gt 0) {
-        $env:RAYON_NUM_THREADS = "$Threads"
-        Write-Host "RAYON_NUM_THREADS=$Threads" -ForegroundColor DarkGray
+    if ($LogPrefix) {
+        # Drain both pipes concurrently; large diagnostics cannot deadlock the child.
+        $stdout = $proc.StandardOutput.ReadToEndAsync()
+        $stderr = $proc.StandardError.ReadToEndAsync()
     }
-
-    Write-Host "Running $($exe.Name) $($benchArgs -join ' ') ..." -ForegroundColor Cyan
-    $sw = [System.Diagnostics.Stopwatch]::StartNew()
-
-    # NOTE: deliberately NOT Start-Process. The Process object that cmdlet
-    # hands back reports PeakWorkingSet64 = 0 whether or not -Wait is used - it
-    # is not the same object .NET populates from the OS. Starting the process
-    # through System.Diagnostics.Process directly keeps the handle we own, and
-    # the peak counters are then readable after exit (Windows keeps them alive
-    # for the process object until the handle is released).
-    $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = $exe.FullName
-    # Quote the filter: Criterion regexes routinely contain '|'.
-    $psi.Arguments = ($benchArgs | ForEach-Object { '"' + $_ + '"' }) -join ' '
-    $psi.UseShellExecute = $false
-    $psi.RedirectStandardOutput = $false
-    $psi.RedirectStandardError = $false
-
-    $proc = [System.Diagnostics.Process]::Start($psi)
-
-    # The peak counters are maintained by the OS for the lifetime of the
-    # process and become unreadable (0) once it exits, so they must be sampled
-    # while it is alive. This is NOT a sampled approximation of the peak: each
-    # read returns the OS-tracked high-water mark since process start, so
-    # reading periodically and keeping the maximum yields the true peak
-    # regardless of poll interval. Only a spike inside the final poll window
-    # could be missed, which the post-exit read below also tries to catch.
-    $peakWs = 0L; $peakPaged = 0L; $peakVm = 0L
     while (-not $proc.HasExited) {
         try {
             $proc.Refresh()
-            if ($proc.PeakWorkingSet64      -gt $peakWs)    { $peakWs    = $proc.PeakWorkingSet64 }
-            if ($proc.PeakPagedMemorySize64 -gt $peakPaged) { $peakPaged = $proc.PeakPagedMemorySize64 }
-            if ($proc.PeakVirtualMemorySize64 -gt $peakVm)  { $peakVm    = $proc.PeakVirtualMemorySize64 }
-        } catch {
-            # Process exited between HasExited and Refresh; the last sample stands.
+            $peakWs = [math]::Max($peakWs, $proc.PeakWorkingSet64)
+            $peakPaged = [math]::Max($peakPaged, $proc.PeakPagedMemorySize64)
+            $peakVm = [math]::Max($peakVm, $proc.PeakVirtualMemorySize64)
+        } catch { } # Exit races leave the last observation.
+        if ($peakWs -gt ($MaxWorkingSetMiB * 1MB) -and -not $proc.HasExited) {
+            $terminatedForCap = $true
+            $proc.Kill()
+        }
+        if ($watch.Elapsed.TotalSeconds -ge $nextProgress) {
+            Write-Host ("PROGRESS {0}: {1:N1}s, observed peak {2:N1} MiB" -f $exe.Name, $watch.Elapsed.TotalSeconds, ($peakWs / 1MB))
+            $nextProgress += 10.0
         }
         Start-Sleep -Milliseconds 100
     }
     $proc.WaitForExit()
-    $sw.Stop()
-
-    $peakWsMiB    = [math]::Round($peakWs    / 1MB, 2)
-    $peakPagedMiB = [math]::Round($peakPaged / 1MB, 2)
-    $peakVmMiB    = [math]::Round($peakVm    / 1MB, 2)
-
+    $watch.Stop()
     $result = [pscustomobject]@{
-        bench             = $Bench
-        filter            = $(if ($Filter) { $Filter } else { '(all)' })
-        rayon_threads     = $(if ($Threads -gt 0) { $Threads } else { 'default' })
-        exit_code         = $proc.ExitCode
-        wall_seconds      = [math]::Round($sw.Elapsed.TotalSeconds, 2)
-        peak_working_set_mib = $peakWsMiB
-        peak_paged_mib       = $peakPagedMiB
-        peak_virtual_mib     = $peakVmMiB
-        cap_16gb_ok          = ($peakWsMiB -lt 16384)
+        bench = $Bench
+        executable = $exe.FullName
+        executable_sha256 = (Get-FileHash -LiteralPath $exe.FullName -Algorithm SHA256).Hash
+        arguments = $ArgumentString
+        working_directory = $runDirectory
+        filter = $(if ($Filter) { $Filter } else { '(all)' })
+        rayon_threads = $(if ($Threads -gt 0) { $Threads } else { 'inherited' })
+        exit_code = $proc.ExitCode
+        wall_seconds = [math]::Round($watch.Elapsed.TotalSeconds, 3)
+        peak_working_set_mib = [math]::Round($peakWs / 1MB, 3)
+        peak_paged_mib = [math]::Round($peakPaged / 1MB, 3)
+        peak_virtual_mib = [math]::Round($peakVm / 1MB, 3)
+        peak_observed = ($peakWs -gt 0)
+        poll_interval_ms = 100
+        cap_mib = $MaxWorkingSetMiB
+        terminated_for_cap = $terminatedForCap
+        cap_ok = (-not $terminatedForCap -and $peakWs -le ($MaxWorkingSetMiB * 1MB))
+        cap_16gb_ok = ($peakWs -le 16GB)
     }
-
-    $result | Format-List
-    if (-not $result.cap_16gb_ok) {
-        throw "Peak working set $peakWsMiB MiB exceeds the CLAUDE.md Sec. 4 16 GB cap - abort and redesign, do not raise the cap."
+    if ($LogPrefix) {
+        $utf8 = New-Object Text.UTF8Encoding $false
+        [IO.File]::WriteAllText("$LogPrefix.stdout.log", $stdout.Result, $utf8)
+        [IO.File]::WriteAllText("$LogPrefix.stderr.log", $stderr.Result, $utf8)
+        [IO.File]::WriteAllText("$LogPrefix.memory.json", ($result | ConvertTo-Json), $utf8)
     }
     $result
-}
-finally {
-    Remove-Item Env:\RAYON_NUM_THREADS -ErrorAction SilentlyContinue
-    Pop-Location
+    if (-not $result.cap_ok) { throw "Working-set cap breached: $($result.peak_working_set_mib) MiB; child stopped." }
+} finally {
+    if (-not $proc.HasExited) { $proc.Kill(); $proc.WaitForExit() }
+    $proc.Dispose()
 }

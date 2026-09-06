@@ -1,0 +1,12 @@
+8dfe43c52f9d8a42217c35a2bbf6e9843e05f4b4ea938d9286e827cffbb9dcc7  Cargo.lock
+3fa4c92059fd7459b53302ca66c1b82a29f9624b8f5d40618379c830dee28a64  /usr/local/bin/hymeko-core-check
+libegl1:amd64	1.6.0-1
+libvulkan1:amd64	1.3.239.0-1
+time	1.9-0.2
+final_image_isolation=PASS
+
+[2026-09-05T12:14:11Z] stage=cli
+Command exited with non-zero status 42
+resource stage=cli elapsed_s=0.00 max_rss_kib=1516 exit=42
+resource stage=cli cgroup_container_peak_bytes=6250496
+stage_failure actual=42 expected=42

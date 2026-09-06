@@ -1,0 +1,14 @@
+GPU: NVIDIA GeForce RTX 5080 Laptop GPU [Vulkan] DiscreteGpu (driver NVIDIA 610.88)
+timestamp_query: true (period 1 ns)
+GPU: NVIDIA GeForce RTX 5080 Laptop GPU [Vulkan] DiscreteGpu (driver NVIDIA 610.88)
+timestamp_query: true (period 1 ns)
+GPU: NVIDIA GeForce RTX 5080 Laptop GPU [Vulkan] DiscreteGpu (driver NVIDIA 610.88)
+timestamp_query: true (period 1 ns)
+Benchmarking spmm_gpu_resident/E_resident_readback/medium/fd32
+Benchmarking spmm_gpu_resident/E_resident_readback/medium/fd32: Warming up for 3.0000 s
+Benchmarking spmm_gpu_resident/E_resident_readback/medium/fd32: Collecting 30 samples in estimated 5.9161 s (2325 iterations)
+Benchmarking spmm_gpu_resident/E_resident_readback/medium/fd32: Analyzing
+GPU: NVIDIA GeForce RTX 5080 Laptop GPU [Vulkan] DiscreteGpu (driver NVIDIA 610.88)
+timestamp_query: true (period 1 ns)
+GPU: NVIDIA GeForce RTX 5080 Laptop GPU [Vulkan] DiscreteGpu (driver NVIDIA 610.88)
+timestamp_query: true (period 1 ns)

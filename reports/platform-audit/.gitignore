@@ -1,0 +1,11 @@
+# Local build products and unpacked copies of the committed raw-data archive.
+*.exe
+*.pdb
+*.obj
+*.ilk
+__pycache__/
+/core-run[123]/
+/wgpu-run[123]/
+/core-extended-run[123]/
+/wgpu-final-run[123]/
+/wgpu-before-consolidation-run[123]/

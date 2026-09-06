@@ -1,0 +1,8 @@
+{
+  "hymeko_core/src/ir_stream/assembler.rs": "de5db2d94f28f6892057d08b97af8a9339af55a87bef712d482fea31135bb489",
+  "hymeko_core/tests/ir_stream_admission.rs": "3e5944d7364394dcfadffeffc1f9d2aa0bd00c581720036c002ffcabf50acb18",
+  "lean_source_sha256": "a721cbd7bf2bef3e77c084bc656810f8328d3e51e47133ddf527abb739677b6a",
+  "source_revision": "8a0c49d4f1cf63deabaa2f15ce147508ef02f598",
+  "source_base": "1befefbaab0b90e1918be533ce35db57cf540d61",
+  "unrelated_protected_diff_empty": true
+}

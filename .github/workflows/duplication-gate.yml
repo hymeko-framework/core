@@ -1,0 +1,59 @@
+# Contract gates.
+#
+# The tooling is not vendored here. It is one implementation in hymeko/hymeko,
+# run from git and pinned to a revision — three copies of a duplication detector
+# is the joke that writes itself. Re-pin deliberately: a moving pin means the
+# gate's answer changes without anyone changing anything, and the delta baseline
+# then fails for no reason.
+#
+# The duplication check is a DELTA gate. It fails on an increase against
+# .duplication-baseline.json and never on an absolute count — an absolute ceiling
+# fails on day one in any repository old enough to need one, and a gate that fails
+# on day one is switched off on day two.
+
+name: contract gates
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  # hymeko/hymeko @ d02aa614bc06a348dbcbe3936dcd3b9285b8bdeb — grammar-based extraction, type-2 duplication.
+  CONTRACT_TOOLS: "git+ssh://git@192.168.1.228:2222/hymeko/hymeko.git@d02aa614bc06a348dbcbe3936dcd3b9285b8bdeb"
+
+jobs:
+  contract:
+    name: index and duplication
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      # The index is generated from the parse tree, so a stale SYMBOLS.md means
+      # the public surface moved and nobody regenerated it. That is the only
+      # thing this can fail on: the output carries no timestamp, no absolute
+      # path and no host detail.
+      - name: SYMBOLS.md is current
+        run: uv tool run --from "$CONTRACT_TOOLS" contract-symbols --root . --check
+
+      - name: Duplication has not increased
+        run: uv tool run --from "$CONTRACT_TOOLS" contract-duplication --root .
+
+  language-gates:
+    name: per-language lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Only where the manifest exists: a repository with no Python package
+      # should not fail a Python gate.
+      - name: cargo clippy
+        run: |
+          for manifest in $(git ls-files '*/Cargo.toml' 'Cargo.toml'); do
+            echo "::group::clippy $manifest"
+            cargo clippy --manifest-path "$manifest" --all-targets -- -D warnings
+            echo "::endgroup::"
+          done

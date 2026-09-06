@@ -1,0 +1,66 @@
+{
+  "buildx.build.provenance": {
+    "builder": {
+      "id": ""
+    },
+    "buildType": "https://mobyproject.org/buildkit@v1",
+    "materials": [
+      {
+        "uri": "pkg:docker/rust@1.97.1-bookworm?digest=sha256:408fe88047cef61a2087653b0c5255fa51c0f2d6d94ddedd7a2562a9b91a46f6\u0026platform=linux%2Famd64",
+        "digest": {
+          "sha256": "408fe88047cef61a2087653b0c5255fa51c0f2d6d94ddedd7a2562a9b91a46f6"
+        }
+      }
+    ],
+    "invocation": {
+      "configSource": {
+        "entryPoint": "Dockerfile"
+      },
+      "parameters": {
+        "frontend": "dockerfile.v0",
+        "args": {
+          "add-hosts": "amaterasu.local=192.168.1.228",
+          "build-arg:SOURCE_REVISION": "8a0c49d4f1cf63deabaa2f15ce147508ef02f598"
+        },
+        "secrets": [
+          {
+            "id": "known_hosts"
+          }
+        ],
+        "ssh": [
+          {
+            "id": "default"
+          }
+        ],
+        "locals": [
+          {
+            "name": "context"
+          },
+          {
+            "name": "dockerfile"
+          }
+        ]
+      },
+      "environment": {
+        "dockerfileVersion": "1.26.0",
+        "platform": "linux/amd64"
+      }
+    }
+  },
+  "buildx.build.ref": "hymeko-core-amaterasu-20260905/hymeko-core-amaterasu-202609050/o62mvbvkt88dwo0bm4scpfjha",
+  "containerimage.config.digest": "sha256:64fc9b80168e1c278723cfe49272be22a545662bc5b3c46e71a2515279ab6a78",
+  "containerimage.descriptor": {
+    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+    "digest": "sha256:71247573e292ec850b232456d766555276d5c8fe08c6631ad3933b3bac33d983",
+    "size": 3160,
+    "annotations": {
+      "org.opencontainers.image.created": "2026-09-05T17:31:26Z"
+    },
+    "platform": {
+      "architecture": "amd64",
+      "os": "linux"
+    }
+  },
+  "containerimage.digest": "sha256:71247573e292ec850b232456d766555276d5c8fe08c6631ad3933b3bac33d983",
+  "image.name": "docker.io/library/hymeko-core:8a0c49d4f1cf63deabaa2f15ce147508ef02f598"
+}

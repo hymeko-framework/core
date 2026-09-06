@@ -1,0 +1,9 @@
+\begin{center}
+\begin{tikzpicture}[node distance=7mm,every node/.style={draw,rounded corners,align=center,font=\small},>={Stealth}]
+\node (ir) {Canonical Core Ir and Interner};
+\node (key) [below=of ir] {Path index and stable owner-slot identities};
+\node (rec) [below=of key] {Complete domain-separated record hashes};
+\node (out) [below=of rec] {DeclId-ordered diagnostic table\\Sorted whole-model digest, schema 2 / algorithm 2};
+\draw[->] (ir)--(key); \draw[->] (key)--(rec); \draw[->] (rec)--(out);
+\end{tikzpicture}
+\end{center}

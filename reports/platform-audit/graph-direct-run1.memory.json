@@ -1,0 +1,20 @@
+{
+    "bench":  "",
+    "executable":  "D:\\hnnwork\\platform-audit\\graph\\target\\release\\deps\\direct_ir_bench-3759ef58af9597f3.exe",
+    "executable_sha256":  "043B349E8C805C49E85A86AF10187B8CD5D94C697B477C2E3B993D67106E1C3B",
+    "arguments":  "--ignored --nocapture",
+    "working_directory":  "D:\\hnnwork\\platform-audit\\core",
+    "filter":  "(all)",
+    "rayon_threads":  24,
+    "exit_code":  0,
+    "wall_seconds":  2.377,
+    "peak_working_set_mib":  258.832,
+    "peak_paged_mib":  282.184,
+    "peak_virtual_mib":  4496.535,
+    "peak_observed":  true,
+    "poll_interval_ms":  100,
+    "cap_mib":  16384,
+    "terminated_for_cap":  false,
+    "cap_ok":  true,
+    "cap_16gb_ok":  true
+}

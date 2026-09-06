@@ -1,0 +1,1273 @@
+diff --git a/CORE.YAML b/CORE.YAML
+--- a/CORE.YAML
++++ b/CORE.YAML
+@@ -119,6 +119,61 @@
+           - no abstraction without a concrete CPU *and* WGPU consumer
+           - DType/ScalarType deliberately omitted (first GPU path is f32-explicit)
+ 
++      # APPROVED-CORE-EDIT: semantic-model-digest-v2 (2026-09-05, user chat)
++      - slug: semantic-model-digest-v2
++        date: 2026-09-05
++        scope: >
++          New module hymeko_core/src/ir/semantic_digest.rs owning the complete
++          semantic identity of an Ir (SemanticModelDigestV2) and the narrow
++          structural identity under its own name (ProgramStructureHashV1, a
++          delegating wrapper over the unchanged canonical_program_hash).
++          hymeko_core/src/ir/mod.rs gains the module declaration.
++          hymeko_core/src/ir/hash_pass.rs gains a #[deprecated] attribute and the
++          rustdoc recording why: compute_merkle_hashes is not idempotent (D1), is
++          blind to an incidence target change on the first pass (D2), and drops a
++          reference to an earlier-declared entity (D3). Its BODY is unchanged.
++          hymeko_core/src/module_store/module_store.rs gains a scoped
++          #[allow(deprecated)] plus the comment classifying that call site as
++          `ambiguous -> blocked`: Ir::decl_hash is a serialized field whose LENGTH
++          is validated by ir::coherence and the CBOR validator, so changing what is
++          stored there is a wire-content change with no established consumer.
++          Control matrix in
++          hymeko_core/tests/unified_ir/verification/semantic_digest.rs.
++        constraints:
++          - "canonical_program_hash v1 is not touched: no signature, no byte,
++             no algo_version, no golden vector"
++          - the deprecated pass keeps its exact behaviour; only attributes and
++            documentation are added, so no existing digest value moves
++          - "V2 is PURE: it neither reads nor writes Ir::decl_hash, which is
++             what makes it idempotent from the first call and immune to a stale
++             table"
++          - a reference contributes the target's canonical PATH, never the
++            target's partially computed digest
++          - V1 and V2 carry different domain headers and different types, so they
++            cannot be substituted for one another
++          - "algorithm 2 uses complete iterative values and full concrete-record coverage;
++             canonical owner-slot identities with whole-model raw-ID fallback"
++          - "valid symbol and bound-record indices are preconditions; malformed
++             input is not certified by the semantic digest"
++          - every mutation control proves it changed the intended IR field first
++
++      # Proposed correction: apply only after the matching literal chat approval.
++      - slug: semantic-digest-canonical-coverage
++        date: 2026-09-06
++        scope: >
++          The existing semantic_digest owner only: full declaration/node/edge/arc
++          coverage, stable owner-slot identities, whole-model canonical ordering,
++          iterative complete values and explicit raw-ID fallback domain.
++          Import the original digest module/deprecation boundary without its
++          portable-ID or robotics ancestry. Extend its existing tests and
++          regenerate SYMBOLS.md. Semantic algorithm version 1 to 2, schema 2.
++        constraints:
++          - public function signatures unchanged
++          - V1 bytes, cached IR hashes, CBOR wire and admission unchanged
++          - no dependency or fixture changes
++          - four recorded regressions and additional discriminating controls
++          - full Core and existing Nagare consumer gates before publication
++
+   # `hymeko_hnn` was RELOCATED 2026-08-31 to hymeko/nagare (hymeko_nagare::hnn) and no longer
+   # exists in this workspace (Cargo.toml members = [hymeko_core, hymeko_wgpu]; the directory is
+   # gone). Its stale crate declaration was removed here on 2026-09-01 under
+diff --git a/hymeko_core/src/ir/hash_pass.rs b/hymeko_core/src/ir/hash_pass.rs
+--- a/hymeko_core/src/ir/hash_pass.rs
++++ b/hymeko_core/src/ir/hash_pass.rs
+@@ -6,6 +6,26 @@
+ use crate::ir::hash::HashId;
+ use crate::resolution::interner::Interner;
+ 
++/// Legacy per-declaration Merkle hashes, written into [`Ir::decl_hash`].
++///
++/// # Deprecated — three measured defects make it unsound as a model identity
++///
++/// Superseded by [`crate::ir::semantic_digest::semantic_model_digest_v2`], which is pure, versioned
++/// and domain-separated. Measured 2026-09-05, reproduced by
++/// `tests/unified_ir/verification/semantic_digest.rs`:
++///
++/// * **D1** not idempotent — it reads `ir.decl_hash` while writing it, so the first call disagrees
++///   with the second and the value depends on how many times it has run;
++/// * **D2** an incidence target change is invisible to the first pass;
++/// * **D3** a reference to an earlier-declared entity folds `None` and contributes nothing.
++///
++/// Retained, unchanged, for provenance and for consumers that have not migrated. It is **not** a
++/// model identity and must not be bound to an `ExecutionPlan`.
++#[deprecated(
++    since = "0.1.0",
++    note = "unsound as a model identity (D1 non-idempotent, D2 incidence target invisible, \
++            D3 backward reference dropped); use ir::semantic_digest::semantic_model_digest_v2"
++)]
+ pub fn compute_merkle_hashes(ir: &mut Ir, interner: &Interner) {
+     let num_decls = ir.decl_nodes.len();
+ 
+diff --git a/hymeko_core/src/ir/mod.rs b/hymeko_core/src/ir/mod.rs
+--- a/hymeko_core/src/ir/mod.rs
++++ b/hymeko_core/src/ir/mod.rs
+@@ -8,4 +8,6 @@
+ pub mod ir;
+ pub mod lower;
+ pub mod meta;
++// APPROVED-CORE-EDIT: semantic-model-digest-v2 (2026-09-05).
++pub mod semantic_digest;
+ mod time;
+diff --git a/hymeko_core/src/ir/semantic_digest.rs b/hymeko_core/src/ir/semantic_digest.rs
+new file mode 100644
+--- /dev/null
++++ b/hymeko_core/src/ir/semantic_digest.rs
+@@ -0,0 +1,420 @@
++//! Semantic identity of the canonical Core IR: schema 2, algorithm 2.
++//!
++//! The structural V1 hash remains unchanged. This module additionally covers
++//! declaration annotations and every concrete node, edge and arc record,
++//! including records that have no declaration dispatch binding. Cached hashes,
++//! document provenance and derived indexes are not semantic payload.
++//!
++//! Named targets use resolved canonical paths. An anonymous arc uses its owner's
++//! path and the first position of that arc in the owner's ordered arc list.
++//! Repeated arc slots retain their identity, order and multiplicity. Anonymous
++//! declaration names are lowerer/builder placeholders and are not semantic names.
++//!
++//! Canonical mode requires unique named paths, an owner slot for every arc, and
++//! a valid, unique arc binding for every anonymous declaration. Otherwise the model
++//! uses a separate raw-ID domain, preserving payload coverage and determinism
++//! without promising invariance under storage reindexing. CBOR validity alone
++//! does not imply these stronger canonical identity conditions.
++//!
++//! Algorithm 2 replaces algorithm 1's incomplete coverage, depth truncation and
++//! storage-order dependence. Recompute cached semantic digests; the CBOR schema,
++//! structural V1 values and `Ir::decl_hash` do not change.
++//!
++//! # Preconditions
++//! Symbol and concrete-record indices must be valid for the supplied IR and
++//! interner. Canonical reindexing invariance additionally assumes a coherent
++//! named hierarchy. This module is not a malformed-IR validator.
++//! # Panics
++//! Invalid symbol or bound-record indices may panic. Bounded path construction
++//! does not make an arbitrary malformed IR valid.
++
++use blake3::Hasher;
++
++use crate::common::ids::{DeclId, HyperArcId};
++use crate::ir::canonical_hash::{
++    CanonHashCfg, DerivedPathIndex, build_path_index, canonical_program_hash,
++};
++use crate::ir::hash::HashId;
++use crate::ir::ir::{AnnoR, DeclKind, Ir, SignedRefR, ValueR};
++use crate::resolution::interner::Interner;
++
++const MAGIC: &[u8; 8] = b"HYMEKOCN";
++const DOMAIN_MODEL: &[u8; 8] = b"SEMMODEL";
++const DOMAIN_DECL: &[u8; 8] = b"SEMDECL\0";
++const DOMAIN_NODE: &[u8; 8] = b"SEMNODE\0";
++const DOMAIN_EDGE: &[u8; 8] = b"SEMEDGE\0";
++const DOMAIN_ARC: &[u8; 8] = b"SEMARC\0\0";
++
++/// Version of the intended semantic field set.
++pub const SEMANTIC_DIGEST_SCHEMA_VERSION: u16 = 2;
++/// Encoding version. Algorithm 2 corrects coverage and canonicalization defects.
++pub const SEMANTIC_DIGEST_ALGO_VERSION: u16 = 2;
++
++/// V1 structural identity: excludes annotation values and incidence weights.
++#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
++pub struct ProgramStructureHashV1(pub HashId);
++
++/// Semantic identity under the canonical/raw-ID domains documented by this module.
++#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
++pub struct SemanticModelDigestV2(pub HashId);
++
++/// Delegates to V1 unchanged, including its configuration and byte layout.
++#[must_use]
++pub fn program_structure_hash_v1(
++    cfg: CanonHashCfg,
++    ir: &Ir,
++    it: &Interner,
++) -> ProgramStructureHashV1 {
++    ProgramStructureHashV1(canonical_program_hash(cfg, ir, it))
++}
++
++/// Return one contribution per declaration, in DeclId order.
++///
++/// This diagnostic table includes each declaration's bound record, when present.
++/// Use `semantic_model_digest_v2` for whole-model coverage of unbound records.
++/// # Preconditions
++/// The module's valid-index preconditions apply.
++/// # Postconditions
++/// Pure and deterministic; neither reads nor writes the IR's cached hash tables.
++/// # Panics
++/// Invalid symbol or bound-record indices may panic.
++#[must_use]
++pub fn semantic_declaration_hashes(ir: &Ir, it: &Interner) -> Vec<HashId> {
++    let context = SemanticContext::new(ir, it);
++    let records = context.record_hashes();
++    context.declaration_hashes(&records)
++}
++
++/// Return the whole-model digest, with complete concrete-record coverage.
++///
++/// # Preconditions
++/// The module's valid-index preconditions apply. Reindexing invariance is only
++/// promised in canonical mode; raw-ID fallback is explicitly domain-separated.
++/// # Postconditions
++/// Pure, deterministic and idempotent, independent of cached hash tables.
++/// Per-kind aggregation is unordered; incidence slots, arc slots, tags, bases,
++/// weights and value lists retain their order and multiplicity.
++/// # Panics
++/// Invalid symbol or bound-record indices may panic.
++#[must_use]
++pub fn semantic_model_digest_v2(ir: &Ir, it: &Interner) -> SemanticModelDigestV2 {
++    let context = SemanticContext::new(ir, it);
++    let mut records = context.record_hashes();
++    let mut declarations = context.declaration_hashes(&records);
++    let mut h = context.header(DOMAIN_MODEL);
++    for (domain, hashes) in [
++        (DOMAIN_DECL, &mut declarations),
++        (DOMAIN_NODE, &mut records.nodes),
++        (DOMAIN_EDGE, &mut records.edges),
++        (DOMAIN_ARC, &mut records.arcs),
++    ] {
++        h.update(domain);
++        write_sorted_hashes(&mut h, hashes);
++    }
++    SemanticModelDigestV2(HashId(*h.finalize().as_bytes()))
++}
++
++#[derive(Clone, Copy, PartialEq, Eq)]
++enum TargetScheme {
++    Path,
++    DeclIdFallback,
++}
++
++impl TargetScheme {
++    const fn tag(self) -> u8 {
++        match self {
++            Self::Path => 0,
++            Self::DeclIdFallback => 1,
++        }
++    }
++}
++
++struct RecordHashes {
++    nodes: Vec<HashId>,
++    edges: Vec<HashId>,
++    arcs: Vec<HashId>,
++}
++
++/// One borrowed encoding context; it owns only reproducible derived lookup data.
++struct SemanticContext<'a> {
++    ir: &'a Ir,
++    it: &'a Interner,
++    paths: Option<DerivedPathIndex>,
++    first_owner_slots: Vec<Option<usize>>,
++    scheme: TargetScheme,
++}
++
++impl<'a> SemanticContext<'a> {
++    fn new(ir: &'a Ir, it: &'a Interner) -> Self {
++        let paths = build_path_index(ir).ok();
++        let mut first_owner_slots = vec![None; ir.arcs.len()];
++        // Use the owner's actual dispatch binding, never an orphan EdgeRec that
++        // happens to carry the same declaration backlink.
++        for (ei, edge) in ir.edges.iter().enumerate() {
++            if ir.as_edge(edge.decl).map(|id| id.raw()) != Some(ei) {
++                continue;
++            }
++            for (position, aid) in edge.arcs.iter().enumerate() {
++                if ir
++                    .arcs
++                    .get(aid.raw())
++                    .is_some_and(|a| a.in_edge == edge.decl)
++                {
++                    first_owner_slots[aid.raw()].get_or_insert(position);
++                }
++            }
++        }
++        let mut canonical = paths.is_some() && first_owner_slots.iter().all(Option::is_some);
++        let mut declared = vec![false; ir.arcs.len()];
++        for (di, declaration) in ir.decl_nodes.iter().enumerate() {
++            if declaration.kind != DeclKind::HyperArc {
++                continue;
++            }
++            match ir
++                .as_arc(DeclId::new(di))
++                .and_then(|a| declared.get_mut(a.raw()))
++            {
++                Some(seen) if !*seen => *seen = true,
++                _ => canonical = false,
++            }
++        }
++        Self {
++            ir,
++            it,
++            paths,
++            first_owner_slots,
++            scheme: if canonical {
++                TargetScheme::Path
++            } else {
++                TargetScheme::DeclIdFallback
++            },
++        }
++    }
++
++    fn header(&self, domain: &[u8; 8]) -> Hasher {
++        let mut h = Hasher::new();
++        h.update(MAGIC);
++        h.update(domain);
++        h.update(&SEMANTIC_DIGEST_SCHEMA_VERSION.to_le_bytes());
++        h.update(&SEMANTIC_DIGEST_ALGO_VERSION.to_le_bytes());
++        h.update(&[self.scheme.tag()]);
++        h
++    }
++
++    fn record_hashes(&self) -> RecordHashes {
++        let arcs = self
++            .ir
++            .arcs
++            .iter()
++            .enumerate()
++            .map(|(ai, arc)| {
++                let mut h = self.header(DOMAIN_ARC);
++                self.write_arc_identity(&mut h, HyperArcId::new(ai));
++                self.write_target(&mut h, arc.in_edge);
++                self.write_anno(&mut h, &arc.anno);
++                self.write_signed_refs(&mut h, &arc.refs);
++                HashId(*h.finalize().as_bytes())
++            })
++            .collect::<Vec<_>>();
++        let nodes = self
++            .ir
++            .nodes
++            .iter()
++            .map(|node| {
++                let mut h = self.header(DOMAIN_NODE);
++                self.write_target(&mut h, node.decl);
++                self.write_signed_refs(&mut h, &node.bases);
++                HashId(*h.finalize().as_bytes())
++            })
++            .collect();
++        let edges = self
++            .ir
++            .edges
++            .iter()
++            .map(|edge| {
++                let mut h = self.header(DOMAIN_EDGE);
++                self.write_target(&mut h, edge.decl);
++                self.write_signed_refs(&mut h, &edge.bases);
++                write_len(&mut h, edge.arcs.len());
++                for aid in &edge.arcs {
++                    // Each arc hash includes its identity, so identical payloads do
++                    // not erase sharing such as [A,A,B] versus [A,B,B].
++                    h.update(&arcs[aid.raw()].0);
++                }
++                HashId(*h.finalize().as_bytes())
++            })
++            .collect();
++        RecordHashes { nodes, edges, arcs }
++    }
++
++    fn declaration_hashes(&self, records: &RecordHashes) -> Vec<HashId> {
++        self.ir
++            .decl_nodes
++            .iter()
++            .enumerate()
++            .map(|(di, declaration)| {
++                let d = DeclId::new(di);
++                let mut h = self.header(DOMAIN_DECL);
++                h.update(&[kind_tag(declaration.kind)]);
++                if declaration.kind != DeclKind::HyperArc {
++                    write_str(&mut h, self.it.resolve(declaration.name));
++                }
++                self.write_target(&mut h, d);
++                self.write_target(&mut h, declaration.parent);
++                self.write_anno(&mut h, &declaration.anno);
++                let record = match declaration.kind {
++                    DeclKind::Node => self.ir.as_node(d).map(|id| &records.nodes[id.raw()]),
++                    DeclKind::Edge => self.ir.as_edge(d).map(|id| &records.edges[id.raw()]),
++                    DeclKind::HyperArc => self.ir.as_arc(d).map(|id| &records.arcs[id.raw()]),
++                };
++                match record {
++                    Some(hash) => {
++                        h.update(&[1]);
++                        h.update(&hash.0);
++                    }
++                    None => {
++                        h.update(&[0]);
++                    }
++                }
++                HashId(*h.finalize().as_bytes())
++            })
++            .collect()
++    }
++
++    fn write_target(&self, h: &mut Hasher, d: DeclId) {
++        if d.is_none() {
++            h.update(&[0]);
++            return;
++        }
++        if self.scheme == TargetScheme::Path {
++            if let Some(path) = self.paths.as_ref().and_then(|paths| paths.path_of(d)) {
++                h.update(&[1]);
++                write_len(h, path.0.len());
++                for symbol in path.iter() {
++                    write_str(h, self.it.resolve(symbol));
++                }
++                return;
++            }
++            if let Some(arc) = self.ir.as_arc(d) {
++                h.update(&[2]);
++                self.write_arc_identity(h, arc);
++                return;
++            }
++        }
++        h.update(&[3]);
++        h.update(&(d.raw() as u64).to_le_bytes());
++    }
++
++    fn write_arc_identity(&self, h: &mut Hasher, arc: HyperArcId) {
++        if self.scheme == TargetScheme::Path {
++            h.update(&[0]);
++            self.write_target(h, self.ir.arcs[arc.raw()].in_edge);
++            let position = self.first_owner_slots[arc.raw()]
++                .expect("canonical mode requires an owner slot for every arc");
++            h.update(&(position as u64).to_le_bytes());
++        } else {
++            h.update(&[1]);
++            h.update(&(arc.raw() as u64).to_le_bytes());
++        }
++    }
++
++    fn write_anno(&self, h: &mut Hasher, anno: &AnnoR) {
++        h.update(b"ANNO");
++        write_len(h, anno.tags.len());
++        for &tag in &anno.tags {
++            write_str(h, self.it.resolve(tag));
++        }
++        match &anno.value {
++            Some(value) => {
++                h.update(&[1]);
++                self.write_value(h, value);
++            }
++            None => {
++                h.update(&[0]);
++            }
++        }
++    }
++
++    fn write_value(&self, h: &mut Hasher, value: &ValueR) {
++        // Iterator frames retain O(depth) state without recursive calls or
++        // materializing a wide list's children. Every finite value is encoded.
++        let mut frames = vec![std::slice::from_ref(value).iter()];
++        while let Some(frame) = frames.last_mut() {
++            let Some(value) = frame.next() else {
++                frames.pop();
++                continue;
++            };
++            match value {
++                ValueR::Str(symbol) => {
++                    h.update(&[1]);
++                    write_str(h, self.it.resolve(*symbol));
++                }
++                ValueR::Num(number) => {
++                    h.update(&[2]);
++                    h.update(&number.to_bits().to_le_bytes());
++                }
++                ValueR::List(values) => {
++                    h.update(&[3]);
++                    write_len(h, values.len());
++                    frames.push(values.iter());
++                }
++                ValueR::Ref(target) => {
++                    h.update(&[4]);
++                    self.write_target(h, *target);
++                }
++            }
++        }
++    }
++
++    fn write_signed_refs(&self, h: &mut Hasher, refs: &[SignedRefR]) {
++        write_len(h, refs.len());
++        for (slot, reference) in refs.iter().enumerate() {
++            h.update(&(slot as u64).to_le_bytes());
++            let (sign, atom) = match reference {
++                SignedRefR::Plus(a) => (1, a),
++                SignedRefR::Minus(a) => (2, a),
++                SignedRefR::Neutral(a) => (3, a),
++            };
++            h.update(&[sign]);
++            self.write_target(h, atom.target);
++            self.write_anno(h, &atom.anno);
++            match &atom.weights {
++                Some(weights) => {
++                    h.update(&[1]);
++                    write_len(h, weights.len());
++                    for weight in weights {
++                        self.write_value(h, weight);
++                    }
++                }
++                None => {
++                    h.update(&[0]);
++                }
++            }
++        }
++    }
++}
++
++const fn kind_tag(kind: DeclKind) -> u8 {
++    match kind {
++        DeclKind::Node => 1,
++        DeclKind::Edge => 2,
++        DeclKind::HyperArc => 3,
++    }
++}
++
++fn write_len(h: &mut Hasher, len: usize) {
++    h.update(&(len as u64).to_le_bytes());
++}
++
++fn write_str(h: &mut Hasher, value: &str) {
++    write_len(h, value.len());
++    h.update(value.as_bytes());
++}
++
++fn write_sorted_hashes(h: &mut Hasher, hashes: &mut [HashId]) {
++    hashes.sort_unstable_by_key(|hash| hash.0);
++    write_len(h, hashes.len());
++    for hash in hashes {
++        h.update(&hash.0);
++    }
++}
+diff --git a/hymeko_core/src/module_store/module_store.rs b/hymeko_core/src/module_store/module_store.rs
+--- a/hymeko_core/src/module_store/module_store.rs
++++ b/hymeko_core/src/module_store/module_store.rs
+@@ -1,5 +1,6 @@
+ use crate::common::ids::SymId;
+ use crate::ir::hash::HashId;
++#[allow(deprecated)]
+ use crate::ir::hash_pass::compute_merkle_hashes;
+ use crate::ir::ir::Ir;
+ use crate::ir::lower::lower_program_to_ir;
+@@ -259,6 +260,14 @@
+         let mut ir = lower_program_to_ir(&root_ast, &imported, &idx, &mut self.it)
+             .map_err(|e| ModuleLoadError::Parse(format!("lower failed: {e:?}")))?;
+ 
++        // AMBIGUOUS CONSUMER, DELIBERATELY NOT MIGRATED (semantic-model-digest-v2, 2026-09-05).
++        // `Ir::decl_hash` is a serialized field: `Ir`'s serde impl writes it and both
++        // `ir::coherence` and the CBOR validator check its LENGTH. Nothing checks its values, and
++        // no consumer has been shown to use them as an identity. Changing what this call stores is
++        // therefore a wire-content change with no established consumer contract, so it is left
++        // exactly as it was and classified `ambiguous -> blocked`. The sound identity is
++        // `ir::semantic_digest::semantic_model_digest_v2`, which is pure and writes nothing.
++        #[allow(deprecated)]
+         compute_merkle_hashes(&mut ir, &self.it);
+ 
+         let cfg = crate::ir::canonical_hash::CanonHashCfg {
+diff --git a/hymeko_core/tests/unified_ir/verification/mod.rs b/hymeko_core/tests/unified_ir/verification/mod.rs
+--- a/hymeko_core/tests/unified_ir/verification/mod.rs
++++ b/hymeko_core/tests/unified_ir/verification/mod.rs
+@@ -12,3 +12,4 @@
+ pub mod ids;
+ pub mod incidence;
+ pub mod namespace_faults;
++pub mod semantic_digest;
+diff --git a/hymeko_core/tests/unified_ir/verification/semantic_digest.rs b/hymeko_core/tests/unified_ir/verification/semantic_digest.rs
+new file mode 100644
+--- /dev/null
++++ b/hymeko_core/tests/unified_ir/verification/semantic_digest.rs
+@@ -0,0 +1,705 @@
++//! **Control matrix for the semantic model digest (APPROVED-CORE-EDIT: semantic-model-digest-v2).**
++//!
++//! Two instantiations of one matrix:
++//!
++//! * `legacy_*` runs it against [`compute_merkle_hashes`] and records the three measured defects.
++//!   These are characterization assertions: they document what the old pass does so it cannot drift
++//!   silently while consumers migrate.
++//! * `v2_*` runs it against [`semantic_model_digest_v2`] and asserts the requirements.
++//!
++//! Every mutation control first proves that it changed exactly the intended IR field
++//! (`assert_changed`). A comparison over two identical IRs is rejected as vacuous.
++
++use hymeko::common::ids::DeclId;
++use hymeko::ir::canonical_hash::CanonHashCfg;
++use hymeko::ir::hash_pass::compute_merkle_hashes;
++use hymeko::ir::ir::{AnnoR, Ir, RefAtomR, SignedRefR, ValueR};
++use hymeko::ir::semantic_digest::{
++    ProgramStructureHashV1, SEMANTIC_DIGEST_ALGO_VERSION, SEMANTIC_DIGEST_SCHEMA_VERSION,
++    SemanticModelDigestV2, program_structure_hash_v1, semantic_declaration_hashes,
++    semantic_model_digest_v2,
++};
++
++use crate::unified_ir::support::builder::{S, TestIr};
++
++// ---------------------------------------------------------------------------------------------
++// Fixtures
++// ---------------------------------------------------------------------------------------------
++
++/// An unweighted, unannotated signed reference to `target`.
++///
++/// The shared builder's `S::wrap` is private and this module needs to replace one reference in an
++/// already-built arc, which no builder method does.
++fn plain(sign: S, target: DeclId) -> SignedRefR {
++    let atom = RefAtomR {
++        target,
++        anno: AnnoR::default(),
++        weights: None,
++    };
++    match sign {
++        S::Plus => SignedRefR::Plus(atom),
++        S::Minus => SignedRefR::Minus(atom),
++        S::Neutral => SignedRefR::Neutral(atom),
++    }
++}
++
++/// Link `child` into `parent`'s intrusive chain.
++///
++/// The shared builder deliberately does not maintain first/next/last (see its `decl` docs), and the
++/// Merkle pass folds children, so the legacy arm needs a linked hierarchy to be exercised at all.
++fn link(t: &mut TestIr, parent: DeclId, child: DeclId) {
++    if parent.is_none() {
++        return;
++    }
++    let last = t.ir.decl_nodes[parent.raw()].last_child;
++    if last.is_none() {
++        t.ir.decl_nodes[parent.raw()].first_child = child;
++    } else {
++        t.ir.decl_nodes[last.raw()].next_sibling = child;
++    }
++    t.ir.decl_nodes[parent.raw()].last_child = child;
++}
++
++/// `m { a<alpha>, b<beta>, r, @e ( +a, -b ) }`.
++///
++/// `r`'s annotation value is the caller's, so two fixtures can differ in exactly that. `r` is
++/// declared **after** `a` and `b`, which is the ordinary lowering order and therefore the case that
++/// exposes D3.
++fn program(r_value: Option<ValueR>) -> TestIr {
++    let mut t = TestIr::new();
++    let root = t.node(&["m"], DeclId::NONE);
++    let a = t.node(&["m", "a"], root);
++    t.tag(a, &["alpha"]);
++    let b = t.node(&["m", "b"], root);
++    t.tag(b, &["beta"]);
++    let r = t.node(&["m", "r"], root);
++    t.ir.decl_nodes[r.raw()].anno.value = r_value;
++    let e = t.edge(&["m", "e"], root);
++    t.arc(e, &[(a, S::Plus), (b, S::Minus)]);
++    t.attach_arc_decls();
++    for c in [a, b, r, e] {
++        link(&mut t, root, c);
++    }
++    t
++}
++
++const A: DeclId = DeclId::new(1);
++const B: DeclId = DeclId::new(2);
++const R: DeclId = DeclId::new(3);
++
++/// The legacy table, as a consumer would obtain it.
++#[allow(deprecated)]
++fn legacy(t: &mut TestIr) -> Vec<Option<[u8; 32]>> {
++    compute_merkle_hashes(&mut t.ir, &t.it);
++    t.ir.decl_hash.iter().map(|e| e.map(|x| x.0)).collect()
++}
++
++fn v2(t: &TestIr) -> SemanticModelDigestV2 {
++    semantic_model_digest_v2(&t.ir, &t.it)
++}
++
++/// Observation floor: the mutation must have changed the `Ir`, or the comparison proves nothing.
++fn assert_changed(left: &Ir, right: &Ir, what: &str) {
++    let differs = left.decl_nodes.len() != right.decl_nodes.len()
++        || left
++            .decl_nodes
++            .iter()
++            .zip(&right.decl_nodes)
++            .any(|(x, y)| x.anno != y.anno || x.kind != y.kind || x.name != y.name)
++        || left.arcs.len() != right.arcs.len()
++        || left
++            .arcs
++            .iter()
++            .zip(&right.arcs)
++            .any(|(x, y)| x.refs != y.refs || x.anno != y.anno);
++    assert!(
++        differs,
++        "observation floor: `{what}` did not change the Ir, so the digest result is vacuous"
++    );
++}
++
++// ---------------------------------------------------------------------------------------------
++// Legacy characterization — the three defects, so they cannot drift silently
++// ---------------------------------------------------------------------------------------------
++
++/// **D1** — the legacy pass is not idempotent; it settles only from the second call on.
++#[test]
++fn legacy_merkle_pass_is_not_idempotent() {
++    let mut t = program(Some(ValueR::Ref(A)));
++    let passes: Vec<_> = (0..5).map(|_| legacy(&mut t)).collect();
++    assert_ne!(passes[0], passes[1], "first call disagrees with the second");
++    for k in 2..5 {
++        assert_eq!(passes[1], passes[k], "it settles at the second call");
++    }
++}
++
++/// **D2** — an incidence target change is invisible to the legacy first pass.
++#[test]
++fn legacy_first_pass_misses_an_incidence_target_change() {
++    let mut l = program(None);
++    let mut r = program(None);
++    r.ir.arcs[0].refs[0] = plain(S::Plus, B);
++    assert_changed(&l.ir, &r.ir, "incidence target +a -> +b");
++    assert_eq!(legacy(&mut l), legacy(&mut r), "measured: invisible");
++}
++
++/// **D3** — a backward `ValueR::Ref` contributes nothing to the legacy first pass.
++#[test]
++fn legacy_first_pass_misses_a_backward_reference_target() {
++    let mut l = program(Some(ValueR::Ref(A)));
++    let mut r = program(Some(ValueR::Ref(B)));
++    assert_changed(&l.ir, &r.ir, "backward ValueR::Ref(a) -> Ref(b)");
++    assert_eq!(legacy(&mut l), legacy(&mut r), "measured: invisible");
++}
++
++// ---------------------------------------------------------------------------------------------
++// V2 requirements
++// ---------------------------------------------------------------------------------------------
++
++#[test]
++fn v2_is_idempotent_from_the_first_call() {
++    let t = program(Some(ValueR::Ref(A)));
++    let first = v2(&t);
++    for _ in 0..5 {
++        assert_eq!(v2(&t), first, "every call returns the same value");
++    }
++}
++
++/// A stale, pre-populated `decl_hash` must not influence the result: V2 never reads it.
++#[test]
++fn v2_ignores_a_stale_decl_hash_table() {
++    let clean = program(Some(ValueR::Ref(A)));
++    let expected = v2(&clean);
++
++    let mut dirty = program(Some(ValueR::Ref(A)));
++    #[allow(deprecated)]
++    compute_merkle_hashes(&mut dirty.ir, &dirty.it); // pollute the destination
++    assert!(
++        dirty.ir.decl_hash.iter().any(Option::is_some),
++        "the pollution must be real, or the control is vacuous"
++    );
++    assert_eq!(v2(&dirty), expected, "a stale table changes nothing");
++
++    // And it does not write one either.
++    let fresh = program(Some(ValueR::Ref(A)));
++    let before = fresh.ir.decl_hash.clone();
++    let _ = v2(&fresh);
++    assert_eq!(fresh.ir.decl_hash, before, "V2 writes no destination table");
++}
++
++#[test]
++fn v2_moves_on_an_incidence_target_change() {
++    let l = program(None);
++    let mut r = program(None);
++    r.ir.arcs[0].refs[0] = plain(S::Plus, B);
++    assert_changed(&l.ir, &r.ir, "incidence target");
++    assert_ne!(v2(&l), v2(&r));
++}
++
++#[test]
++fn v2_moves_on_a_backward_reference_target() {
++    let l = program(Some(ValueR::Ref(A)));
++    let r = program(Some(ValueR::Ref(B)));
++    assert_changed(&l.ir, &r.ir, "backward ValueR::Ref");
++    assert_ne!(v2(&l), v2(&r));
++}
++
++#[test]
++fn v2_moves_on_a_forward_reference_target() {
++    // Referrer first: r = 1, a = 2, b = 3.
++    let build = |to_a: bool| {
++        let mut t = TestIr::new();
++        let root = t.node(&["m"], DeclId::NONE);
++        let r = t.node(&["m", "r"], root);
++        let a = t.node(&["m", "a"], root);
++        t.tag(a, &["alpha"]);
++        let b = t.node(&["m", "b"], root);
++        t.tag(b, &["beta"]);
++        t.ir.decl_nodes[r.raw()].anno.value = Some(ValueR::Ref(if to_a { a } else { b }));
++        for c in [r, a, b] {
++            link(&mut t, root, c);
++        }
++        t
++    };
++    let (l, r) = (build(true), build(false));
++    assert_changed(&l.ir, &r.ir, "forward ValueR::Ref");
++    assert_ne!(v2(&l), v2(&r));
++}
++
++#[test]
++fn v2_moves_on_a_nested_reference_target() {
++    let nest = |t: DeclId| ValueR::List(vec![ValueR::Num(1.0), ValueR::Ref(t)]);
++    let (l, r) = (program(Some(nest(A))), program(Some(nest(B))));
++    assert_changed(&l.ir, &r.ir, "nested ValueR::Ref");
++    assert_ne!(v2(&l), v2(&r));
++}
++
++/// A shared reference is stable: the same structure hashed twice is the same value, and
++/// multiplicity is not collapsed.
++#[test]
++fn v2_is_stable_under_sharing_and_sensitive_to_multiplicity() {
++    let shared = program(Some(ValueR::List(vec![ValueR::Ref(A), ValueR::Ref(A)])));
++    let same = program(Some(ValueR::List(vec![ValueR::Ref(A), ValueR::Ref(A)])));
++    assert_eq!(v2(&shared), v2(&same), "sharing is stable");
++
++    let mixed = program(Some(ValueR::List(vec![ValueR::Ref(A), ValueR::Ref(B)])));
++    assert_changed(&shared.ir, &mixed.ir, "shared reference multiplicity");
++    assert_ne!(v2(&shared), v2(&mixed), "multiplicity is not collapsed");
++}
++
++/// A reference cycle must terminate and be deterministic.
++#[test]
++fn v2_terminates_deterministically_on_a_reference_cycle() {
++    let mut t = program(None);
++    // r -> a and a -> r: a cycle through annotation values.
++    t.ir.decl_nodes[R.raw()].anno.value = Some(ValueR::Ref(A));
++    t.ir.decl_nodes[A.raw()].anno.value = Some(ValueR::Ref(R));
++    let first = v2(&t);
++    assert_eq!(v2(&t), first, "deterministic on a cyclic reference graph");
++}
++
++/// Mutating the *content* of a referenced declaration must move the **model** digest, because every
++/// declaration contributes — even though the reference itself carries only the target's identity.
++#[test]
++fn v2_moves_when_the_referenced_declarations_content_moves() {
++    let l = program(Some(ValueR::Ref(A)));
++    let mut r = program(Some(ValueR::Ref(A)));
++    r.tag(A, &["alpha", "changed"]);
++    assert_changed(&l.ir, &r.ir, "referenced declaration's tags");
++    assert_ne!(v2(&l), v2(&r));
++}
++
++#[test]
++fn v2_moves_on_annotation_tag_value_weight_sign_slot_and_target() {
++    // tag
++    let l = program(None);
++    let mut r = program(None);
++    r.tag(R, &["hot"]);
++    assert_changed(&l.ir, &r.ir, "annotation tag");
++    assert_ne!(v2(&l), v2(&r), "tag");
++
++    // value
++    let l = program(Some(ValueR::Num(1.0)));
++    let r = program(Some(ValueR::Num(2.0)));
++    assert_changed(&l.ir, &r.ir, "annotation value");
++    assert_ne!(v2(&l), v2(&r), "value");
++
++    // weight
++    let l = program(None);
++    let mut r = program(None);
++    if let SignedRefR::Plus(atom) = &mut r.ir.arcs[0].refs[0] {
++        atom.weights = Some(vec![ValueR::Num(2.0)]);
++    } else {
++        panic!("slot 0 is Plus");
++    }
++    assert_changed(&l.ir, &r.ir, "incidence weight");
++    assert_ne!(v2(&l), v2(&r), "weight");
++
++    // sign
++    let l = program(None);
++    let mut r = program(None);
++    r.ir.arcs[0].refs[0] = plain(S::Minus, A);
++    assert_changed(&l.ir, &r.ir, "incidence sign");
++    assert_ne!(v2(&l), v2(&r), "sign");
++
++    // slot order
++    let l = program(None);
++    let mut r = program(None);
++    r.ir.arcs[0].refs.swap(0, 1);
++    assert_changed(&l.ir, &r.ir, "slot order");
++    assert_ne!(v2(&l), v2(&r), "slot");
++
++    // reference-atom annotation
++    let l = program(None);
++    let mut r = program(None);
++    let marked = r.it.intern("marked");
++    if let SignedRefR::Plus(atom) = &mut r.ir.arcs[0].refs[0] {
++        atom.anno.tags.push(marked);
++    } else {
++        panic!("slot 0 is Plus");
++    }
++    assert_changed(&l.ir, &r.ir, "reference-atom annotation");
++    assert_ne!(v2(&l), v2(&r), "atom annotation");
++}
++
++/// Building the same program through a different *construction order* — same paths, same
++/// hierarchy, same incidences — must not move the digest. This is the control that proves the
++/// digest is about the program, not about how the builder was called.
++#[test]
++fn v2_is_invariant_under_a_semantically_irrelevant_construction_order() {
++    // Reference: nodes declared a, b; edge last.
++    let mut left = TestIr::new();
++    {
++        let root = left.node(&["m"], DeclId::NONE);
++        let a = left.node(&["m", "a"], root);
++        let b = left.node(&["m", "b"], root);
++        let e = left.edge(&["m", "e"], root);
++        left.arc(e, &[(a, S::Plus), (b, S::Minus)]);
++        left.attach_arc_decls();
++        for c in [a, b, e] {
++            link(&mut left, root, c);
++        }
++    }
++    // Same program, but `b` is interned before `a` so the string table order differs.
++    let mut right = TestIr::new();
++    {
++        let root = right.node(&["m"], DeclId::NONE);
++        let _warm = right.it.intern("b");
++        let a = right.node(&["m", "a"], root);
++        let b = right.node(&["m", "b"], root);
++        let e = right.edge(&["m", "e"], root);
++        right.arc(e, &[(a, S::Plus), (b, S::Minus)]);
++        right.attach_arc_decls();
++        for c in [a, b, e] {
++            link(&mut right, root, c);
++        }
++    }
++    assert_eq!(
++        v2(&left),
++        v2(&right),
++        "interner order is not part of the program's meaning"
++    );
++}
++
++// ---------------------------------------------------------------------------------------------
++// V1 preservation and V1/V2 separation
++// ---------------------------------------------------------------------------------------------
++
++/// The v1 wrapper returns exactly what `canonical_program_hash` returns: no byte moves.
++#[test]
++fn program_structure_hash_v1_is_the_unchanged_v1_value() {
++    let t = program(Some(ValueR::Ref(A)));
++    let direct =
++        hymeko::ir::canonical_hash::canonical_program_hash(CanonHashCfg::default(), &t.ir, &t.it);
++    let wrapped: ProgramStructureHashV1 =
++        program_structure_hash_v1(CanonHashCfg::default(), &t.ir, &t.it);
++    assert_eq!(
++        wrapped.0, direct,
++        "the wrapper renames, it does not recompute"
++    );
++}
++
++/// V1 and V2 cannot be confused: different domains and versions, therefore different values on the
++/// same input, and different types at every call site.
++#[test]
++fn v1_and_v2_are_domain_and_version_separated() {
++    let t = program(Some(ValueR::Ref(A)));
++    let v1 = program_structure_hash_v1(CanonHashCfg::default(), &t.ir, &t.it);
++    let v2v = semantic_model_digest_v2(&t.ir, &t.it);
++    assert_ne!(
++        v1.0.0, v2v.0.0,
++        "a shared value would mean a shared domain header"
++    );
++    assert_eq!(SEMANTIC_DIGEST_SCHEMA_VERSION, 2);
++    assert_eq!(SEMANTIC_DIGEST_ALGO_VERSION, 2);
++}
++
++/// V1's blind spot is unchanged: it still does not see annotations. Recorded so the two contracts
++/// stay legible side by side.
++#[test]
++fn v1_still_does_not_cover_annotations_and_v2_does() {
++    let l = program(None);
++    let mut r = program(None);
++    r.tag(R, &["hot"]);
++    assert_changed(&l.ir, &r.ir, "annotation tag");
++    assert_eq!(
++        program_structure_hash_v1(CanonHashCfg::default(), &l.ir, &l.it).0,
++        program_structure_hash_v1(CanonHashCfg::default(), &r.ir, &r.it).0,
++        "v1's contract is structural: annotations are outside it"
++    );
++    assert_ne!(v2(&l), v2(&r), "v2's contract includes them");
++}
++
++/// The per-declaration table is returned, not written, and has one entry per declaration.
++#[test]
++fn semantic_declaration_hashes_covers_every_declaration() {
++    let t = program(Some(ValueR::Ref(A)));
++    let table = semantic_declaration_hashes(&t.ir, &t.it);
++    assert_eq!(table.len(), t.ir.decl_nodes.len());
++    let mut sorted: Vec<_> = table.iter().map(|h| h.0).collect();
++    sorted.sort_unstable();
++    sorted.dedup();
++    assert_eq!(
++        sorted.len(),
++        table.len(),
++        "distinct declarations hash distinctly in this fixture"
++    );
++}
++
++// Diagnostic extension to 112a254's existing semantic_digest test module.
++// No production source change. These requirements are expected to fail there.
++#[test]
++fn audit_v2_covers_validated_arcs_without_separate_declarations() {
++    let build = |to_a: bool| {
++        let mut t = TestIr::new();
++        let root = t.node(&["m"], DeclId::NONE);
++        let a = t.node(&["m", "a"], root);
++        let b = t.node(&["m", "b"], root);
++        let edge = t.edge(&["m", "e"], root);
++        t.arc(edge, &[(if to_a { a } else { b }, S::Plus), (b, S::Minus)]);
++        for child in [a, b, edge] {
++            link(&mut t, root, child);
++        }
++        t
++    };
++    let (left, right) = (build(true), build(false));
++    for t in [&left, &right] {
++        assert_eq!(t.ir.arcs.len(), 1);
++        assert!((0..t.ir.decl_nodes.len()).all(|i| t.ir.as_arc(DeclId::new(i)).is_none()));
++        let bytes = hymeko::writers::cbor_writer::encode("model.hymeko", &t.ir, &t.idx, &t.it, &[])
++            .expect("Core CBOR encoder accepts this representation");
++        hymeko::writers::cbor_writer::decode(&bytes, &hymeko::ir_stream::DecodeLimits::DEFAULT)
++            .expect("Core CBOR decoder validates the same representation");
++    }
++    assert_changed(&left.ir, &right.ir, "validated incidence target");
++    assert_ne!(
++        program_structure_hash_v1(CanonHashCfg::default(), &left.ir, &left.it),
++        program_structure_hash_v1(CanonHashCfg::default(), &right.ir, &right.it),
++        "V1 independently observes the changed incidence target"
++    );
++    assert_ne!(
++        v2(&left),
++        v2(&right),
++        "V2 must cover every validated ArcRec"
++    );
++}
++
++#[test]
++fn audit_v2_distinguishes_values_at_depth_64() {
++    let nested = |leaf: f64| (0..64).fold(ValueR::Num(leaf), |v, _| ValueR::List(vec![v]));
++    let left = program(Some(nested(1.0)));
++    let right = program(Some(nested(2.0)));
++    assert_changed(&left.ir, &right.ir, "leaf at depth 64");
++    assert_ne!(
++        v2(&left),
++        v2(&right),
++        "different deep values are different models"
++    );
++}
++
++#[test]
++fn audit_v2_ignores_real_declaration_reindexing() {
++    let build = |reverse: bool| {
++        let mut t = TestIr::new();
++        let root = t.node(&["m"], DeclId::NONE);
++        let (a, b) = if reverse {
++            let b = t.node(&["m", "b"], root);
++            let a = t.node(&["m", "a"], root);
++            (a, b)
++        } else {
++            let a = t.node(&["m", "a"], root);
++            let b = t.node(&["m", "b"], root);
++            (a, b)
++        };
++        let e = t.edge(&["m", "e"], root);
++        t.arc(e, &[(a, S::Plus), (b, S::Minus)]);
++        t.attach_arc_decls();
++        for child in [a, b, e] {
++            link(&mut t, root, child);
++        }
++        t
++    };
++    let (left, right) = (build(false), build(true));
++    assert_ne!(left.path_of(DeclId::new(1)), right.path_of(DeclId::new(1)));
++    assert_eq!(
++        program_structure_hash_v1(CanonHashCfg::default(), &left.ir, &left.it),
++        program_structure_hash_v1(CanonHashCfg::default(), &right.ir, &right.it),
++        "the same named incidence structure"
++    );
++    assert_eq!(
++        v2(&left),
++        v2(&right),
++        "dense declaration IDs are storage choices"
++    );
++}
++
++#[test]
++fn audit_v2_ignores_arc_record_storage_order() {
++    let build = |reverse: bool| {
++        let mut t = TestIr::new();
++        let root = t.node(&["m"], DeclId::NONE);
++        let a = t.node(&["m", "a"], root);
++        let b = t.node(&["m", "b"], root);
++        let e = t.edge(&["m", "e"], root);
++        let f = t.edge(&["m", "f"], root);
++        let (ae, af) = if reverse {
++            let af = t.arc(f, &[(b, S::Plus), (a, S::Minus)]);
++            let ae = t.arc(e, &[(a, S::Plus), (b, S::Minus)]);
++            (ae, af)
++        } else {
++            let ae = t.arc(e, &[(a, S::Plus), (b, S::Minus)]);
++            let af = t.arc(f, &[(b, S::Plus), (a, S::Minus)]);
++            (ae, af)
++        };
++        for (edge, aid) in [(e, ae), (f, af)] {
++            let did = t.ir.push_anonymous_arc();
++            t.ir.decl_nodes[did.raw()].parent = edge;
++            t.ir.bind_arc_decl(did, aid).unwrap();
++            link(&mut t, edge, did);
++        }
++        for child in [a, b, e, f] {
++            link(&mut t, root, child);
++        }
++        t
++    };
++    let (left, right) = (build(false), build(true));
++    assert_ne!(left.ir.edges[0].arcs, right.ir.edges[0].arcs);
++    assert_eq!(
++        program_structure_hash_v1(CanonHashCfg::default(), &left.ir, &left.it),
++        program_structure_hash_v1(CanonHashCfg::default(), &right.ir, &right.it),
++        "each named edge retains its original ordered references"
++    );
++    assert_eq!(v2(&left), v2(&right), "ArcRec indices are storage choices");
++}
++// Proposed controls beyond the four already reproduced audit requirements.
++// These use the existing test builder and production CBOR facade only.
++#[test]
++fn v2_anonymous_placeholder_is_independent_of_interner_allocation() {
++    let build = |preintern: bool| {
++        let mut t = TestIr::new();
++        if preintern {
++            t.it.intern("unrelated-first-symbol");
++        }
++        let root = t.node(&["m"], DeclId::NONE);
++        let a = t.node(&["m", "a"], root);
++        let b = t.node(&["m", "b"], root);
++        let edge = t.edge(&["m", "e"], root);
++        let arc = t.arc(edge, &[(a, S::Plus), (b, S::Minus)]);
++        let declaration = t.ir.push_anonymous_arc();
++        t.ir.decl_nodes[declaration.raw()].parent = edge;
++        t.ir.bind_arc_decl(declaration, arc).unwrap();
++        for child in [a, b, edge] {
++            link(&mut t, root, child);
++        }
++        link(&mut t, edge, declaration);
++        (t, declaration)
++    };
++    let ((left, ld), (right, rd)) = (build(false), build(true));
++    assert_ne!(
++        left.it.resolve(left.ir.decl_nodes[ld.raw()].name),
++        right.it.resolve(right.ir.decl_nodes[rd.raw()].name)
++    );
++    assert_eq!(v2(&left), v2(&right));
++}
++
++#[test]
++fn v2_distinguishes_sharing_of_identical_arc_payloads() {
++    let build = |repeat_first: bool| {
++        let mut t = TestIr::new();
++        let root = t.node(&["m"], DeclId::NONE);
++        let a = t.node(&["m", "a"], root);
++        let b = t.node(&["m", "b"], root);
++        let edge = t.edge(&["m", "e"], root);
++        let first = t.arc(edge, &[(a, S::Plus), (b, S::Minus)]);
++        let second = t.arc(edge, &[(a, S::Plus), (b, S::Minus)]);
++        let eid = t.ir.as_edge(edge).unwrap();
++        t.ir.edges[eid.raw()].arcs = if repeat_first {
++            vec![first, first, second]
++        } else {
++            vec![first, second, second]
++        };
++        for child in [a, b, edge] {
++            link(&mut t, root, child);
++        }
++        t
++    };
++    let (left, right) = (build(true), build(false));
++    assert_eq!(left.ir.arcs[0].refs, left.ir.arcs[1].refs);
++    assert_eq!(left.ir.arcs[0].refs, right.ir.arcs[0].refs);
++    assert_ne!(left.ir.edges[0].arcs, right.ir.edges[0].arcs);
++    assert_ne!(v2(&left), v2(&right));
++}
++
++#[test]
++fn v2_fallback_keeps_orphan_arc_payload_and_idempotence() {
++    let mut left = program(None);
++    let mut right = program(None);
++    left.ir.edges[0].arcs.clear();
++    right.ir.edges[0].arcs.clear();
++    right.ir.arcs[0].refs[0] = plain(S::Plus, B);
++    assert_changed(&left.ir, &right.ir, "orphan arc target");
++    assert_ne!(v2(&left), v2(&right));
++    assert_eq!(v2(&left), v2(&left));
++    assert_eq!(v2(&right), v2(&right));
++    assert_ne!(v2(&left), v2(&program(None)), "membership remains semantic");
++}
++
++#[test]
++fn v2_values_remain_distinct_across_former_depth_boundary() {
++    for depth in [0, 1, 63, 64, 65, 128, 256] {
++        let nested = |leaf| (0..depth).fold(ValueR::Num(leaf), |v, _| ValueR::List(vec![v]));
++        let left = program(Some(nested(1.0)));
++        let right = program(Some(nested(2.0)));
++        assert_changed(&left.ir, &right.ir, "nested leaf");
++        assert_ne!(v2(&left), v2(&right), "depth {depth}");
++    }
++}
++
++fn unbound_record_fixture(kind: hymeko::ir::ir::DeclKind, to_a: bool) -> TestIr {
++    use hymeko::ir::ir::{DeclKind, EdgeRec, NodeRec};
++    let mut t = TestIr::new();
++    let root = t.node(&["m"], DeclId::NONE);
++    let a = t.node(&["m", "a"], root);
++    let b = t.node(&["m", "b"], root);
++    let unbound = t.decl(&["m", "unbound"], kind, root);
++    let bases = vec![plain(S::Plus, if to_a { a } else { b })];
++    match kind {
++        DeclKind::Node => t.ir.nodes.push(NodeRec::new(unbound, bases)),
++        DeclKind::Edge => t.ir.edges.push(EdgeRec::new(unbound, bases)),
++        DeclKind::HyperArc => panic!("this fixture constructs a node or edge"),
++    }
++    assert!(t.ir.as_node(unbound).is_none());
++    assert!(t.ir.as_edge(unbound).is_none());
++    for child in [a, b, unbound] {
++        link(&mut t, root, child);
++    }
++    t
++}
++
++fn assert_cbor_valid_record_fixture(t: &TestIr) {
++    let bytes = hymeko::writers::cbor_writer::encode("model.hymeko", &t.ir, &t.idx, &t.it, &[])
++        .expect("unbound concrete record is accepted by the Core encoder");
++    hymeko::writers::cbor_writer::decode(&bytes, &hymeko::ir_stream::DecodeLimits::DEFAULT)
++        .expect("unbound concrete record is accepted by the Core decoder");
++}
++
++#[test]
++fn v2_covers_validated_unbound_node_record() {
++    let left = unbound_record_fixture(hymeko::ir::ir::DeclKind::Node, true);
++    let right = unbound_record_fixture(hymeko::ir::ir::DeclKind::Node, false);
++    assert_cbor_valid_record_fixture(&left);
++    assert_cbor_valid_record_fixture(&right);
++    assert_ne!(
++        left.ir.nodes.last().unwrap().bases,
++        right.ir.nodes.last().unwrap().bases
++    );
++    assert_ne!(v2(&left), v2(&right));
++}
++
++#[test]
++fn v2_covers_validated_unbound_edge_record() {
++    let left = unbound_record_fixture(hymeko::ir::ir::DeclKind::Edge, true);
++    let right = unbound_record_fixture(hymeko::ir::ir::DeclKind::Edge, false);
++    assert_cbor_valid_record_fixture(&left);
++    assert_cbor_valid_record_fixture(&right);
++    assert_ne!(
++        left.ir.edges.last().unwrap().bases,
++        right.ir.edges.last().unwrap().bases
++    );
++    assert_ne!(v2(&left), v2(&right));
++}
++
++#[test]
++fn v2_fallback_handles_unbound_and_aliased_anonymous_declarations() {
++    let mut unbound = program(None);
++    unbound.ir.push_anonymous_arc();
++    assert_eq!(v2(&unbound), v2(&unbound));
++    let mut aliased = program(None);
++    let second = aliased.ir.push_anonymous_arc();
++    aliased
++        .ir
++        .bind_arc_decl(second, hymeko::common::ids::HyperArcId::new(0))
++        .unwrap();
++    assert_eq!(v2(&aliased), v2(&aliased));
++    assert_ne!(v2(&unbound), v2(&aliased), "the binding is observable");
++}

@@ -1,0 +1,27 @@
+%% Canonical CBOR codec validation dataflow.
+%% Created-at 2026-09-04 13:09 CEST
+
+flowchart LR
+    CP["CompiledProgram + Interner"] --> EC["encode_compiled()"]
+    EC --> EV{"paths portable?<br/>IR/index/strings coherent?"}
+    EV -- no --> EE["CborError"]
+    EV -- yes --> CBOR["schema-v1 CBOR bytes"]
+
+    CBOR --> TRANSPORT["Chordex / Zenoh / file<br/>unchanged byte carrier"]
+    TRANSPORT --> PF{"allocation-free preflight<br/>definite lengths + DecodeLimits"}
+    PF -- reject --> DE["CborError"]
+    PF -- accept --> SD["Serde decode"]
+    SD --> SV{"schema, paths, strings,<br/>IDs, hierarchy, namespaces"}
+    SV -- reject --> DE
+    SV -- accept --> RI["rebuild path index<br/>and Interner"]
+    RI --> HH{"streaming canonical hash<br/>no incidence buffer<br/>matches witness?"}
+    HH -- no --> DE
+    HH -- yes --> OUT["DecodedCborPayload<br/>validated IR + Interner"]
+
+    OUT --> SIM["simulator projection"]
+    OUT --> XR["XR projection"]
+
+    classDef err fill:#fdecea,stroke:#b3261e,color:#5f1512;
+    classDef ok fill:#e7f5ec,stroke:#1e7d34,color:#10321c;
+    class EE,DE err;
+    class OUT ok;

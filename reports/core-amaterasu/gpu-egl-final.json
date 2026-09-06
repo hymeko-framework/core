@@ -1,0 +1,235 @@
+[
+    {
+        "Id": "5995a5c07afc8ae172b184e23fd7b3ae0b3ff3d583e1086c729c8402f40f3332",
+        "Created": "2026-09-05T12:03:23.04624584Z",
+        "Path": "sh",
+        "Args": [
+            "-ec",
+            "\n/usr/bin/time -f \"resource stage=wgpu-tests elapsed_s=%e max_rss_kib=%M exit=%x\" cargo test -p hymeko_wgpu --release --locked --offline -- --nocapture\n/usr/bin/time -f \"resource stage=resident-bench-smoke elapsed_s=%e max_rss_kib=%M exit=%x\" cargo bench -p hymeko_wgpu --locked --offline --bench spmm_bench -- spmm_gpu_resident --test\nprintf \"cgroup_container_peak_bytes=\"; cat /sys/fs/cgroup/memory.peak\n"
+        ],
+        "State": {
+            "Status": "exited",
+            "Running": false,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 0,
+            "ExitCode": 143,
+            "Error": "",
+            "StartedAt": "2026-09-05T12:03:23.080628663Z",
+            "FinishedAt": "2026-09-05T12:05:53.59455534Z"
+        },
+        "Image": "sha256:05e0242c646ef0a944e637a00d1da83ceaaaa422abfb9ab62655ded1b82522ad",
+        "ResolvConfPath": "/var/lib/docker/containers/5995a5c07afc8ae172b184e23fd7b3ae0b3ff3d583e1086c729c8402f40f3332/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/5995a5c07afc8ae172b184e23fd7b3ae0b3ff3d583e1086c729c8402f40f3332/hostname",
+        "HostsPath": "/var/lib/docker/containers/5995a5c07afc8ae172b184e23fd7b3ae0b3ff3d583e1086c729c8402f40f3332/hosts",
+        "LogPath": "/var/lib/docker/containers/5995a5c07afc8ae172b184e23fd7b3ae0b3ff3d583e1086c729c8402f40f3332/5995a5c07afc8ae172b184e23fd7b3ae0b3ff3d583e1086c729c8402f40f3332-json.log",
+        "Name": "/hymeko-core-gpu-egl-20260905",
+        "RestartCount": 0,
+        "Driver": "overlay2",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "docker-default",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": null,
+            "ContainerIDFile": "",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {}
+            },
+            "NetworkMode": "none",
+            "PortBindings": {},
+            "RestartPolicy": {
+                "Name": "no",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": null,
+            "CgroupnsMode": "private",
+            "Dns": null,
+            "DnsOptions": [],
+            "DnsSearch": [],
+            "ExtraHosts": null,
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": null,
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 17179869184,
+            "NanoCpus": 6000000000,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": [],
+            "BlkioDeviceReadBps": [],
+            "BlkioDeviceWriteBps": [],
+            "BlkioDeviceReadIOps": [],
+            "BlkioDeviceWriteIOps": [],
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": [],
+            "DeviceCgroupRules": null,
+            "DeviceRequests": [
+                {
+                    "Driver": "",
+                    "Count": -1,
+                    "DeviceIDs": null,
+                    "Capabilities": [
+                        [
+                            "gpu"
+                        ]
+                    ],
+                    "Options": {}
+                }
+            ],
+            "MemoryReservation": 0,
+            "MemorySwap": 17179869184,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": null,
+            "Ulimits": [],
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "Mounts": [
+                {
+                    "Type": "volume",
+                    "Source": "hymeko-core-target-20260905",
+                    "Target": "/workspace/core/target"
+                }
+            ],
+            "MaskedPaths": [
+                "/proc/acpi",
+                "/proc/asound",
+                "/proc/interrupts",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/sys/devices/virtual/powercap",
+                "/sys/firmware"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ],
+            "Init": true
+        },
+        "GraphDriver": {
+            "Data": {
+                "ID": "5995a5c07afc8ae172b184e23fd7b3ae0b3ff3d583e1086c729c8402f40f3332",
+                "LowerDir": "/var/lib/docker/overlay2/51f6368233a6701df39782c97baa9aa9168468949c08b416ed98c2e2486ae3ec-init/diff:/var/lib/docker/overlay2/437f7e6889b037dab0acca8f2593ab5f571208002e6ec962bae1fac23fcb0bb0/diff:/var/lib/docker/overlay2/0a775cc764d511927e0d94c5b33b53d0c8309510ea1898afb79a2857a582db0e/diff:/var/lib/docker/overlay2/f2ede9489b702c22f9372e7c788e5f8b358860518c20dc2e4d04f855cb4881ec/diff:/var/lib/docker/overlay2/6660ed4bb50f9d77926e5db47d6d10c2cc1c68214cf3a2f67ec11fd39451689f/diff:/var/lib/docker/overlay2/c0ce3788a523814893edb8dd5290437957389588cdfd90cd45a0c970931fb348/diff:/var/lib/docker/overlay2/dd15f4be7c7e06cbaee128d5c1574037d340409df3f29a722d6a323a1a1d26c0/diff:/var/lib/docker/overlay2/c2f5b9b87db5489942c91f0dc01caca0de4e9b9df261ea5fef47899cd5d43a2e/diff:/var/lib/docker/overlay2/dfccd2416059a5845ea8ecc2e55cf313b9a38e48f23cbe5d4c2d8c4113c8450d/diff:/var/lib/docker/overlay2/f962c81294ad2e4acc64f33c6aa4828627cf865bca3d5a955f512bd7cd573b1b/diff:/var/lib/docker/overlay2/8037a0cd7cf9258d67ceaf5e7dbf22ebd54f9d0f1f1a45d8b26adc69b34284cf/diff:/var/lib/docker/overlay2/88eedcc0941867d5bf6fe4e01a29a8b96c8159e89b8de4b608744b7148789f45/diff:/var/lib/docker/overlay2/6e88d459bd6344e10673316e71fbfe1234d7c1f3f010e2b3f11442bfaa02735c/diff:/var/lib/docker/overlay2/98e5ef19e9b6c4d1114149d1f6b7a9995f6c49874142ac31c94e10a90201f76b/diff:/var/lib/docker/overlay2/30a62c2f6b8a09608e05f94f9b3121359c5b382297719a58f0164bb89f0f99a5/diff:/var/lib/docker/overlay2/7a4227fa5961f88e6bb891349783d44beb9553a5faf7a73e62a6debfb42edb8c/diff",
+                "MergedDir": "/var/lib/docker/overlay2/51f6368233a6701df39782c97baa9aa9168468949c08b416ed98c2e2486ae3ec/merged",
+                "UpperDir": "/var/lib/docker/overlay2/51f6368233a6701df39782c97baa9aa9168468949c08b416ed98c2e2486ae3ec/diff",
+                "WorkDir": "/var/lib/docker/overlay2/51f6368233a6701df39782c97baa9aa9168468949c08b416ed98c2e2486ae3ec/work"
+            },
+            "Name": "overlay2"
+        },
+        "Mounts": [
+            {
+                "Type": "volume",
+                "Name": "hymeko-core-target-20260905",
+                "Source": "/var/lib/docker/volumes/hymeko-core-target-20260905/_data",
+                "Destination": "/workspace/core/target",
+                "Driver": "local",
+                "Mode": "z",
+                "RW": true,
+                "Propagation": ""
+            }
+        ],
+        "Config": {
+            "Hostname": "5995a5c07afc",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": false,
+            "AttachStderr": false,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics",
+                "XDG_RUNTIME_DIR=/tmp",
+                "PATH=/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "RUSTUP_HOME=/usr/local/rustup",
+                "CARGO_HOME=/usr/local/cargo",
+                "RUST_VERSION=1.97.1",
+                "CARGO_BUILD_JOBS=6",
+                "RAYON_NUM_THREADS=6",
+                "CARGO_TERM_COLOR=never",
+                "CARGO_NET_GIT_FETCH_WITH_CLI=true",
+                "CARGO_NET_OFFLINE=true"
+            ],
+            "Cmd": [
+                "-ec",
+                "\n/usr/bin/time -f \"resource stage=wgpu-tests elapsed_s=%e max_rss_kib=%M exit=%x\" cargo test -p hymeko_wgpu --release --locked --offline -- --nocapture\n/usr/bin/time -f \"resource stage=resident-bench-smoke elapsed_s=%e max_rss_kib=%M exit=%x\" cargo bench -p hymeko_wgpu --locked --offline --bench spmm_bench -- spmm_gpu_resident --test\nprintf \"cgroup_container_peak_bytes=\"; cat /sys/fs/cgroup/memory.peak\n"
+            ],
+            "Image": "hymeko-core:20260905-egl",
+            "Volumes": null,
+            "WorkingDir": "/workspace/core",
+            "Entrypoint": [
+                "sh"
+            ],
+            "Labels": {
+                "org.opencontainers.image.revision": "69a5ec947b610a9ccc683d3f8d761d19d30c5b47-plus-container-working",
+                "org.opencontainers.image.source": "https://github.com/rust-lang/docker-rust",
+                "org.opencontainers.image.title": "HyMeKo Core SDK and verification"
+            }
+        },
+        "NetworkSettings": {
+            "SandboxID": "",
+            "SandboxKey": "",
+            "Ports": {},
+            "Networks": {
+                "none": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": null,
+                    "DriverOpts": null,
+                    "GwPriority": 0,
+                    "NetworkID": "ea309ccea73d92b0188166b7d043cc1020eecfafe5dbc0085762f1cee5f9569b",
+                    "EndpointID": "",
+                    "Gateway": "",
+                    "IPAddress": "",
+                    "MacAddress": "",
+                    "IPPrefixLen": 0,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": null
+                }
+            }
+        }
+    }
+]

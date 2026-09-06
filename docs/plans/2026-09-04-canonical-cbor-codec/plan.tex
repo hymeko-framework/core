@@ -1,0 +1,165 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=25mm]{geometry}
+\usepackage{tikz}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{hyperref}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric}
+\title{Canonical CBOR codec --- recovery, validation, and publication plan}
+\author{Codex integration plan}
+\date{Created-at 2026-09-04 13:09 CEST}
+
+\begin{document}
+\maketitle
+
+\section*{Authorisation}
+
+\begin{quote}
+\texttt{APPROVED-CORE-EDIT: canonical-cbor-codec}
+\end{quote}
+
+The first memory cell isolated a pre-existing per-incidence temporary in canonical hashing. The
+output-preserving internal repair is separately authorised by:
+
+\begin{quote}
+\texttt{APPROVED-CORE-EDIT: canonical-hash-streaming-incidence}
+\end{quote}
+
+The user supplied this token verbatim on 2026-09-04 after an alternative Codex process had produced
+an uncommitted implementation. The token authorises audit, correction, complete verification, and
+publication of that exact core scope. The commit message repeats the token in a footer.
+
+\section*{ETA}
+
+Approximately 2.5 hours from approval: 30 minutes recovery and design audit, 45 minutes integration
+and hostile-input tests, 35 minutes correctness and static gates, 25 minutes bounded memory/latency
+evidence, and 15 minutes report, commit, and remote verification. The implementation already exists;
+the uncertainty is validation depth rather than code volume.
+
+\section*{1. Goal and ownership}
+
+HyMeKo Core owns serialization and validation of its canonical compiled program. Transports such as
+Chordex and Zenoh remain byte carriers. Consumers receive only a validated IR and reconstructed
+interner:
+
+\[
+\texttt{CompiledProgram} \xrightarrow{\texttt{encode\_compiled}}
+\texttt{CBOR bytes} \xrightarrow{\texttt{decode + limits}}
+\texttt{DecodedCborPayload}.
+\]
+
+This work closes requirements \texttt{UIR-CBOR-01..03}. It extends the existing
+\texttt{writers::cbor\_writer} owner and reuses \texttt{ir\_stream::DecodeLimits}; it does not add a
+second codec, transport, IR, index, interner, or limit vocabulary.
+
+\section*{2. Recovery context}
+
+The implementation arrived while an older \texttt{origin/main} merge was unresolved. Before any
+integration mutation, the working-only CBOR files, 724-line agent contract, corpus resolution, Git
+index, and merge metadata were copied to
+\texttt{D:/h/core-merge-safety-20260904-1253} and verified by SHA-256. The corpus resolution was
+validated at 105 fixtures, staged alone, and the merge was closed as \texttt{d6be4ea}. CBOR work now
+lives on \texttt{feat/canonical-cbor-codec}; \texttt{CLAUDE.md} remains outside its index.
+
+\section*{3. Approved boundary}
+
+\begin{longtable}{@{}lll@{}}
+\toprule
+Path & Change & Authority \\
+\midrule
+\texttt{hymeko\_core/src/writers/cbor\_writer.rs} & public facade and errors & approved core \\
+\texttt{hymeko\_core/src/writers/cbor\_writer/*.rs} & preflight, validation, tests & approved core \\
+\texttt{hymeko\_core/src/ir/canonical\_hash.rs} & bit-identical streaming incidence hash & approved core \\
+\texttt{hymeko\_core/Cargo.toml} & direct pinned \texttt{ciborium 0.2.2} & approved core \\
+\texttt{Cargo.lock} & dependency ownership update & approved core \\
+\texttt{hymeko\_core/tests/**} & corpus/workload integration gates & allowlisted \\
+\texttt{hymeko\_core/benches/**} & Criterion and peak-RSS evidence if needed & allowlisted \\
+\texttt{docs/plans/**}, \texttt{reports/**} & traceability & allowlisted \\
+\bottomrule
+\end{longtable}
+
+Out of scope: IR layout or canonical-hash schema/ordering changes; \texttt{ir\_stream} wire changes;
+Chordex, Zenoh, simulator, or XR integration; mutation/snapshot APIs; a second serialization crate;
+and the working-only \texttt{CLAUDE.md} migration.
+
+The hash implementation change may only replace materialised incidence bytes with an equivalent
+ordered stream. Frozen v1 known-answer vectors and the 105-fixture corpus digest are rollback gates:
+any changed hash aborts the optimisation and the codec remains unpublished.
+
+\section*{4. Contracts}
+
+\paragraph{Encode.} Input paths must be non-empty, workspace-relative, Unicode, and portable across
+supported hosts. The index, namespace paths, all IDs, strings, imports, hierarchy, and canonical hash
+must be internally coherent. The output uses explicit schema version 1 and contains no trusted
+derived state that decode accepts without reconstruction or comparison.
+
+\paragraph{Decode.} Message, payload, text/byte strings, containers, and nesting are bounded before
+Serde allocation. Indefinite-length items, truncation, trailing bytes, unsupported schema, invalid
+portable paths, duplicate strings, invalid symbols/IDs, incoherent IR, unrebuildable or mismatched
+index, namespace mismatch, and canonical-hash mismatch fail closed.
+
+\paragraph{Postcondition.} A successful decode returns an immutable validated wrapper whose IR,
+index, interner, imports, path, and canonical hash are mutually consistent. For valid corpus and
+workload inputs, \texttt{decode(encode(x))} preserves canonical program identity.
+
+\section*{5. Discriminating audit questions}
+
+The inherited eight unit tests are necessary but not sufficient. Before accepting the code, answer
+with executable tests:
+
+\begin{enumerate}
+  \item Are alias entries semantically validated, or merely copied after rebuilding \texttt{by\_path}?
+  \item Are relative paths represented identically on Windows and Unix rather than serializing host
+        separators into the wire contract?
+  \item Does every truncated prefix and every indefinite container reject without panic?
+  \item Do nested vectors and value trees obey pre-allocation limits rather than only top-level
+        post-deserialization counts?
+  \item Does corpus/workload round-trip preserve canonical hash, hierarchy, namespace roots, aliases,
+        imports, and rendered semantics?
+\end{enumerate}
+
+A failed question is repaired minimally inside the approved owner and receives a regression test.
+
+\section*{6. Test and evidence strategy}
+
+\begin{itemize}
+  \item Retain and extend module unit tests for schema, path, hash, index, ID, indefinite-length,
+        trailing-byte, and truncation failures.
+  \item Add one integration owner under the existing unified-IR validation suite; do not create a
+        parallel test harness.
+  \item Round-trip every lowerable corpus fixture and deterministic small/medium/large workload
+        controls; compare semantic and canonical witnesses.
+  \item Run exact CBOR tests, core library/tests, then full workspace tests.
+  \item Run \texttt{cargo fmt --all -- --check} and pinned workspace Clippy
+        \texttt{--all-targets -- -D warnings}.
+  \item Measure Criterion encode/decode distributions on representative payload sizes only if no
+        trustworthy existing cell covers the new facade. Record median, IQR, worst, source hash,
+        fixture hash, and environment.
+  \item Measure decode peak working set in a child process. Budget: less than twice decoded IR heap
+        above process baseline and always below the 16 GiB host cap; no per-incidence temporary.
+  \item Re-run the same baseline/materialise/decode child-process cells after the streaming hash
+        repair; report both the failed pre-change cell and the accepted post-change cell.
+\end{itemize}
+
+\section*{7. Publication and rollback}
+
+The merge commit and CBOR implementation remain separate. The CBOR commit stages only its approved
+manifest, source, tests, plan, and report; the 724-line \texttt{CLAUDE.md} is excluded. Push
+\texttt{main} only after confirming the merge head still descends from the unchanged remote main,
+then push \texttt{feat/canonical-cbor-codec}. Verify local and remote object IDs.
+
+Rollback is one revert of the CBOR commit. It removes the additive API/modules and direct dependency,
+restoring the previous dormant payload definition. The already completed upstream merge is not part
+of CBOR rollback.
+
+\section*{8. Tooling waiver}
+
+\texttt{tools.yaml} records that no TeX engine is installed on this Windows host. Therefore
+\texttt{plan.tex}, \texttt{plan.tikz}, and \texttt{plan.mmd} are committed as renderable sources;
+\texttt{plan.pdf} cannot be produced locally. This named waiver is repeated in the final report.
+
+\section*{Architecture}
+
+\input{plan.tikz}
+
+\end{document}

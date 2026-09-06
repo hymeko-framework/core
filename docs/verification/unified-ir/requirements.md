@@ -207,16 +207,21 @@ production change; see `docs/unified-ir-single-cli.md`.
 
 ### CBOR readiness (`UIR-CBOR-01..05`)
 
-Audited read-only. **No CBOR codec exists**: `CborPayload` is
-`#[derive(Serialize, Deserialize)]` scaffolding, constructed nowhere, with no
-encoder (`UIR-CBOR-01`) and no bounded decoder (`UIR-CBOR-02`), so no semantic
-round-trip (`UIR-CBOR-03`) — all **NOT_IMPLEMENTED**. `ciborium 0.2.2` is present
-only *transitively via Criterion* (dev), not a production dependency.
-`UIR-CBOR-04/05` (**PASS** characterizations) record that the payload duplicates
-derived/cache state (`index`, `canon_hash`) and a string-table copy alongside the
-canonical `ir`, and that `root_path: PathBuf` is environment metadata, not portable
-canonical data. The proposed `APPROVED-CORE-EDIT: canonical-cbor-codec` scope is in
-`reports/2026-08-30-unified-ir-platform-conformance.md`.
+Implemented and independently validated on 2026-09-04. The public
+`encode_compiled`/`encode` facade and bounded, fail-closed `decode` facade close
+`UIR-CBOR-01/02`; the 105-program frozen corpus round-trip closes
+`UIR-CBOR-03` — all **PASS**. `ciborium 0.2.2` is now a pinned direct production
+dependency. Decode bounds the CBOR item tree before Serde allocation, rebuilds
+the interner and path index, checks IR/hierarchy/namespace coherence, recomputes
+the canonical hash, and rejects non-portable paths, indefinite items, trailing
+bytes, malformed IDs, and hostile lengths.
+
+`UIR-CBOR-04/05` remain **PASS** characterizations with their risk closed:
+schema-v1 retains duplicated derived/cache fields for compatibility, but decode
+never trusts them without reconstruction and comparison; `root_path` and import
+module keys are encoded as normalized, workspace-relative portable paths. The
+implementation record is `reports/2026-09-04-canonical-cbor-codec.md`; the
+2026-08-30 conformance report remains the historical pre-implementation baseline.
 
 ### Source emission completeness (`UIR-EMIT-01..02`)
 
@@ -230,6 +235,59 @@ tested there.
 
 ### Recomputed rates (matrix-wide, `traceability.csv`)
 
-47 PASS · 3 PARTIAL · 3 FAIL (known defects) · 13 NOT_IMPLEMENTED · 10 BLOCKED.
-The 13 NOT_IMPLEMENTED and 10 BLOCKED are honest future contracts (CBOR codec,
-stable IDs, mutation/transaction/replay), never faked to PASS.
+77 PASS · 3 PARTIAL · 3 FAIL (known defects) · 9 NOT_IMPLEMENTED · 17 BLOCKED ·
+1 FIXED · 1 PASS_WITH_REGRESSION (111 rows). The remaining future contracts
+(stable IDs, mutation/transaction/replay and related consumers) remain explicit;
+the CBOR rows moved only with executable facade, hostile-input, corpus, hash and
+memory evidence.
+
+## Distributed admission verification — 2026-09-05
+
+This update is scoped to the existing Core `ir_stream` admission boundary.
+It does not change the historical matrix-wide totals above or promote the
+`UIR-DYN-*` native mutation/publication requirements to PASS. The distinct
+[Lean specification](distributed-semantics.lean) is a normative abstraction,
+not a translation of Rust. The [audit report](../../../reports/2026-09-05-distributed-semantics.md)
+and [baseline mapping](../../../reports/distributed-semantics/traceability.tsv)
+keep **model proof**, **runtime observation** and **missing implementation** separate.
+
+| Requirement | Lean model | Actual Core correction `8a0c49d` |
+|---|---|---|
+| `DIST-ORDER` — componentwise version order | PROVED: reflexive, transitive, antisymmetric | Existing `SnapshotVersion::dominates`; not a new exhaustive Rust proof |
+| `DIST-MONOTONE` — accepted transitions cannot regress any component | PROVED: one step and finite replay | PASS: former snapshot/delta regression cases now return exact `IncoherentVersionBump` without state change |
+| `DIST-RESUME` — an equal established version with unknown identity is not installed | PROVED | PASS after `resuming_at(V)`, `resuming_at(ZERO)` and resync reset |
+| `DIST-BOOTSTRAP` — a fresh assembler may install ZERO | PROVED by closed example | PASS: public-API probe |
+| `DIST-STALE` — a delta with a different base does not install | PROVED | PASS: public-API stale-base probe |
+| `DIST-PRESERVE` — rejection leaves modeled held state unchanged | PROVED | PARTIAL: checked version/digest observations only; no actual IR application in this probe |
+| `DIST-IDEMPOTENT` — applying the same transaction twice preserves the once-applied state | PROVED, including adjacent duplicate elimination in a list | PARTIAL: known-identity replay after reset and the existing assembler suite pass; full semantic-state application remains outside this boundary |
+| `DIST-SNAPSHOT` — same coherent snapshot strictly newer than both replicas yields equal modeled state | PROVED under these explicit premises | PARTIAL: one resumed assembler advances; no full-state two-replica run |
+| `DIST-BINDING` — transaction identity authenticates every relevant payload bit | NOT MODELED: identity/payload tags are independent | Not established by this proof or seven probes; cryptographic assumptions remain explicit |
+| `DIST-INSTALL` — complete semantic application, durable atomic publication and installation acknowledgment | NOT MODELED | NOT_IMPLEMENTED as an end-to-end integration path here |
+| `DIST-LIVE` — eventual delivery, worker recovery and distributed progress | NOT MODELED | NOT_RUN: transport/scheduler experiment remains a follow-up |
+
+The 19 named Lean theorems are checked with installed Lean 4.19.0 and `Std`,
+without added dependencies. The axiom audit lists only the standard `propext`
+and `Quot.sound` where used; there is no project-declared axiom or admitted proof.
+State idempotence does not guarantee a duplicate *outcome*: a retried advancing
+delta may return stale-base while preserving state. Snapshot convergence does
+not prove snapshot/delta equivalence, delivery, or resolution of two divergent
+replicas already at the same target version.
+
+`Nat` components abstract the ordering of bounded `u64` versions without modeling
+increment/overflow. Whole-transaction admission abstracts away wire and sequence
+validation, staging limits and reset handling. The payload token is not a decoded
+canonical IR. Equal structural v1 hashes are insufficient as full-state equality
+evidence. Numerical associativity/distributivity and hyperedge partition exchange
+are separate obligations, with no new algebra or grammar approved by this update.
+
+The user approved `APPROVED-CORE-EDIT: distributed-admission-monotone-resume`.
+Correction `8a0c49d` changes the existing assembler, with no public-signature,
+wire, dependency or fixture change. All nine regression cases pass on Amaterasu;
+the original seven retain their expected outcomes. The test source moved from
+the audit directory into `hymeko_core/tests/ir_stream_admission.rs` and is
+registered in the existing harness. The old source and FAIL evidence remain
+available at audit commit `1befefb`; they are not rewritten as historical PASS.
+[Current report](../../../reports/2026-09-05-distributed-admission-fix.md) and
+[current mapping](../../../reports/distributed-admission-fix/traceability.tsv)
+record observed conformance. Rust PASS here means the named checks passed; it
+does not turn the abstract Lean proof into a whole-implementation refinement proof.

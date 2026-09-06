@@ -1,0 +1,74 @@
+#!/bin/sh
+# Contract gate, commit-msg half. Install with tools/hooks/install.sh.
+#
+# This is where the preflight blocks, because this is the first hook that can see
+# the message: git passes the file as $1. `pre-commit` cannot -- at that point
+# `.git/COMMIT_EDITMSG` still holds the previous commit's message, so a bypass
+# read there would match the wrong commit and fail open. Verified on git 2.55.0.
+#
+# A commit that adds a file resembling something that already exists is refused
+# until the message carries a line beginning `DISCOVERY:` -- §6.6's ledger, in the
+# one place git will preserve it. The rule was never that a new artifact is
+# forbidden, only that the search must be visible.
+
+set -u
+
+SPEC="git+ssh://git@192.168.1.228:2222/hymeko/hymeko.git@d02aa614bc06a348dbcbe3936dcd3b9285b8bdeb"
+
+MESSAGE_FILE="${1:-}"
+[ -n "$MESSAGE_FILE" ] || exit 0
+
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+cd "$ROOT" || exit 0
+
+export PYTHONIOENCODING=utf-8
+
+if ! command -v uv >/dev/null 2>&1; then
+    echo "contract hooks: uv not found — preflight skipped, not failed." >&2
+    exit 0
+fi
+
+# Prefer an installed entry point; fall back to resolving from git each call.
+# Measured: `uv tool run --from <git spec>` costs ~785 ms per invocation against
+# ~320 ms for an installed entry point, and this hook makes three calls. 2.7 s
+# versus 1.0 s decides whether a hook survives its first week.
+#   one-time:  sh tools/hooks/install.sh   (which runs `uv tool install`)
+if command -v contract-symbols >/dev/null 2>&1; then
+    gate() { "$@"; }
+else
+    gate() { uv tool run --quiet --from "$SPEC" "$@"; }
+fi
+
+set --
+while IFS= read -r path; do
+    [ -n "$path" ] && set -- "$@" --path "$path"
+done <<ADDED
+$(git diff --cached --diff-filter=A --name-only)
+ADDED
+
+[ "$#" -gt 0 ] || exit 0
+
+if gate contract-preflight --root . "$@" >/dev/null 2>&1; then
+    exit 0
+fi
+
+if grep -qE '^[[:space:]]*DISCOVERY:' "$MESSAGE_FILE"; then
+    exit 0
+fi
+
+echo >&2
+gate contract-preflight --root . "$@" >&2
+cat >&2 <<'WHY'
+
+  This commit adds a file resembling something that already exists.
+
+  Extend the existing one, or record the search in the commit message — a line
+  beginning DISCOVERY: naming what you rejected and why. One sentence. "Not
+  quite the same" is not a reason; name the differing invariant, owner or
+  contract (§6.6).
+
+    DISCOVERY: rejected hymeko_pgraph because it owns the P-graph schema, and
+    this is the hypergraph lowering that consumes it.
+
+WHY
+exit 1

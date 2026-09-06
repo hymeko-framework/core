@@ -1,0 +1,220 @@
+[
+    {
+        "Id": "cd11eec77dae1b006841d9417a1423ed123b09acb3a784974422667ed23be5a6",
+        "Created": "2026-09-05T11:37:21.467059994Z",
+        "Path": "/usr/local/bin/hymeko-core-check",
+        "Args": [
+            "all"
+        ],
+        "State": {
+            "Status": "exited",
+            "Running": false,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 0,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-09-05T11:37:21.49622719Z",
+            "FinishedAt": "2026-09-05T11:38:43.736941965Z"
+        },
+        "Image": "sha256:502416f964b74329e79b1a512604d1c523c43d44f1bb48853b1bcefc4d318d76",
+        "ResolvConfPath": "/var/lib/docker/containers/cd11eec77dae1b006841d9417a1423ed123b09acb3a784974422667ed23be5a6/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/cd11eec77dae1b006841d9417a1423ed123b09acb3a784974422667ed23be5a6/hostname",
+        "HostsPath": "/var/lib/docker/containers/cd11eec77dae1b006841d9417a1423ed123b09acb3a784974422667ed23be5a6/hosts",
+        "LogPath": "/var/lib/docker/containers/cd11eec77dae1b006841d9417a1423ed123b09acb3a784974422667ed23be5a6/cd11eec77dae1b006841d9417a1423ed123b09acb3a784974422667ed23be5a6-json.log",
+        "Name": "/hymeko-core-cpu-20260905",
+        "RestartCount": 0,
+        "Driver": "overlay2",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "docker-default",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": null,
+            "ContainerIDFile": "",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {}
+            },
+            "NetworkMode": "none",
+            "PortBindings": {},
+            "RestartPolicy": {
+                "Name": "no",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": null,
+            "CgroupnsMode": "private",
+            "Dns": null,
+            "DnsOptions": [],
+            "DnsSearch": [],
+            "ExtraHosts": null,
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": null,
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 17179869184,
+            "NanoCpus": 6000000000,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": [],
+            "BlkioDeviceReadBps": [],
+            "BlkioDeviceWriteBps": [],
+            "BlkioDeviceReadIOps": [],
+            "BlkioDeviceWriteIOps": [],
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": [],
+            "DeviceCgroupRules": null,
+            "DeviceRequests": null,
+            "MemoryReservation": 0,
+            "MemorySwap": 17179869184,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": null,
+            "Ulimits": [],
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "Mounts": [
+                {
+                    "Type": "volume",
+                    "Source": "hymeko-core-target-20260905",
+                    "Target": "/workspace/core/target"
+                }
+            ],
+            "MaskedPaths": [
+                "/proc/acpi",
+                "/proc/asound",
+                "/proc/interrupts",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/sys/devices/virtual/powercap",
+                "/sys/firmware"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ],
+            "Init": true
+        },
+        "GraphDriver": {
+            "Data": {
+                "ID": "cd11eec77dae1b006841d9417a1423ed123b09acb3a784974422667ed23be5a6",
+                "LowerDir": "/var/lib/docker/overlay2/6fa25e2860bf066798093ef3f72bb489acc7384ec70a0b057bdfbbeca625b4a7-init/diff:/var/lib/docker/overlay2/d771944f586d614c7c52a5bee169b9cff72db6628875dcf944260293e06c3700/diff:/var/lib/docker/overlay2/64671193f49ba9eb9aec443482c6881529c2e4087f13de8088c5aeb45d407eb1/diff:/var/lib/docker/overlay2/1b6b1cfebce3ccf73d42f15a3902c741c6132bb268b5d271f9c15c3b203a159f/diff:/var/lib/docker/overlay2/11196ac4b99e43e3d9a9974428f0d6f71033451776827595c3a0b74bbe9cb14c/diff:/var/lib/docker/overlay2/bad838e8c7e5cd67da9c43a95f758bbfa5308543db753b756b3991d6d2dbeec6/diff:/var/lib/docker/overlay2/a390f9c8cfe79c572fbbebfbb476c993d7cfc09ee8ee500d5234b8748af1810e/diff:/var/lib/docker/overlay2/88eedcc0941867d5bf6fe4e01a29a8b96c8159e89b8de4b608744b7148789f45/diff:/var/lib/docker/overlay2/6e88d459bd6344e10673316e71fbfe1234d7c1f3f010e2b3f11442bfaa02735c/diff:/var/lib/docker/overlay2/98e5ef19e9b6c4d1114149d1f6b7a9995f6c49874142ac31c94e10a90201f76b/diff:/var/lib/docker/overlay2/30a62c2f6b8a09608e05f94f9b3121359c5b382297719a58f0164bb89f0f99a5/diff:/var/lib/docker/overlay2/7a4227fa5961f88e6bb891349783d44beb9553a5faf7a73e62a6debfb42edb8c/diff",
+                "MergedDir": "/var/lib/docker/overlay2/6fa25e2860bf066798093ef3f72bb489acc7384ec70a0b057bdfbbeca625b4a7/merged",
+                "UpperDir": "/var/lib/docker/overlay2/6fa25e2860bf066798093ef3f72bb489acc7384ec70a0b057bdfbbeca625b4a7/diff",
+                "WorkDir": "/var/lib/docker/overlay2/6fa25e2860bf066798093ef3f72bb489acc7384ec70a0b057bdfbbeca625b4a7/work"
+            },
+            "Name": "overlay2"
+        },
+        "Mounts": [
+            {
+                "Type": "volume",
+                "Name": "hymeko-core-target-20260905",
+                "Source": "/var/lib/docker/volumes/hymeko-core-target-20260905/_data",
+                "Destination": "/workspace/core/target",
+                "Driver": "local",
+                "Mode": "z",
+                "RW": true,
+                "Propagation": ""
+            }
+        ],
+        "Config": {
+            "Hostname": "cd11eec77dae",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": false,
+            "AttachStderr": false,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "PATH=/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "RUSTUP_HOME=/usr/local/rustup",
+                "CARGO_HOME=/usr/local/cargo",
+                "RUST_VERSION=1.97.1",
+                "CARGO_BUILD_JOBS=6",
+                "RAYON_NUM_THREADS=6",
+                "CARGO_TERM_COLOR=never",
+                "CARGO_NET_GIT_FETCH_WITH_CLI=true",
+                "CARGO_NET_OFFLINE=true"
+            ],
+            "Cmd": [
+                "all"
+            ],
+            "Image": "hymeko-core:20260905-candidate",
+            "Volumes": null,
+            "WorkingDir": "/workspace/core",
+            "Entrypoint": [
+                "/usr/local/bin/hymeko-core-check"
+            ],
+            "Labels": {
+                "hymeko.task": "core-amaterasu-20260905",
+                "org.opencontainers.image.revision": "69a5ec947b610a9ccc683d3f8d761d19d30c5b47+docker-working-files",
+                "org.opencontainers.image.source": "https://github.com/rust-lang/docker-rust",
+                "org.opencontainers.image.title": "HyMeKo Core SDK and verification"
+            }
+        },
+        "NetworkSettings": {
+            "SandboxID": "",
+            "SandboxKey": "",
+            "Ports": {},
+            "Networks": {
+                "none": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": null,
+                    "DriverOpts": null,
+                    "GwPriority": 0,
+                    "NetworkID": "ea309ccea73d92b0188166b7d043cc1020eecfafe5dbc0085762f1cee5f9569b",
+                    "EndpointID": "",
+                    "Gateway": "",
+                    "IPAddress": "",
+                    "MacAddress": "",
+                    "IPPrefixLen": 0,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": null
+                }
+            }
+        }
+    }
+]

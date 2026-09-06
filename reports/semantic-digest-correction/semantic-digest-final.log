@@ -1,0 +1,729 @@
+2026-09-05T23:44:48+00:00
+1e05d1920afc9739d07157236ccdb7f21345af708a5a3c34b60122bede9a89fc  Cargo.lock
+c940a07a26eed39abfbc683626607e11171163682944b02f7d4573ad0f9586a9  hymeko_core/src/ir/semantic_digest.rs
+88bb8d674f3bac9823c888c93fa8a2ee3cff7bab9bcf8aa0a7dfad7e62fcb89b  hymeko_core/tests/unified_ir/verification/semantic_digest.rs
+   Compiling hymeko_core v0.1.0 (/tmp/core/hymeko_core)
+    Finished `release` profile [optimized] target(s) in 8.22s
+     Running tests/mod.rs (/target/release/deps/mod-f87f1ab25fa3d2aa)
+
+running 29 tests
+test unified_ir::verification::semantic_digest::audit_v2_distinguishes_values_at_depth_64 ... ok
+test unified_ir::verification::semantic_digest::audit_v2_ignores_arc_record_storage_order ... ok
+test unified_ir::verification::semantic_digest::legacy_first_pass_misses_a_backward_reference_target ... ok
+test unified_ir::verification::semantic_digest::legacy_first_pass_misses_an_incidence_target_change ... ok
+test unified_ir::verification::semantic_digest::audit_v2_covers_validated_arcs_without_separate_declarations ... ok
+test unified_ir::verification::semantic_digest::audit_v2_ignores_real_declaration_reindexing ... ok
+test unified_ir::verification::semantic_digest::legacy_merkle_pass_is_not_idempotent ... ok
+test unified_ir::verification::semantic_digest::program_structure_hash_v1_is_the_unchanged_v1_value ... ok
+test unified_ir::verification::semantic_digest::semantic_declaration_hashes_covers_every_declaration ... ok
+test unified_ir::verification::semantic_digest::v1_still_does_not_cover_annotations_and_v2_does ... ok
+test unified_ir::verification::semantic_digest::v1_and_v2_are_domain_and_version_separated ... ok
+test unified_ir::verification::semantic_digest::v2_distinguishes_sharing_of_identical_arc_payloads ... ok
+test unified_ir::verification::semantic_digest::v2_covers_validated_unbound_node_record ... ok
+test unified_ir::verification::semantic_digest::v2_anonymous_placeholder_is_independent_of_interner_allocation ... ok
+test unified_ir::verification::semantic_digest::v2_fallback_handles_unbound_and_aliased_anonymous_declarations ... ok
+test unified_ir::verification::semantic_digest::v2_fallback_keeps_orphan_arc_payload_and_idempotence ... ok
+test unified_ir::verification::semantic_digest::v2_ignores_a_stale_decl_hash_table ... ok
+test unified_ir::verification::semantic_digest::v2_is_invariant_under_a_semantically_irrelevant_construction_order ... ok
+test unified_ir::verification::semantic_digest::v2_covers_validated_unbound_edge_record ... ok
+test unified_ir::verification::semantic_digest::v2_moves_on_a_backward_reference_target ... ok
+test unified_ir::verification::semantic_digest::v2_is_idempotent_from_the_first_call ... ok
+test unified_ir::verification::semantic_digest::v2_is_stable_under_sharing_and_sensitive_to_multiplicity ... ok
+test unified_ir::verification::semantic_digest::v2_moves_on_a_forward_reference_target ... ok
+test unified_ir::verification::semantic_digest::v2_moves_on_a_nested_reference_target ... ok
+test unified_ir::verification::semantic_digest::v2_moves_on_an_incidence_target_change ... ok
+test unified_ir::verification::semantic_digest::v2_moves_on_annotation_tag_value_weight_sign_slot_and_target ... ok
+test unified_ir::verification::semantic_digest::v2_terminates_deterministically_on_a_reference_cycle ... ok
+test unified_ir::verification::semantic_digest::v2_moves_when_the_referenced_declarations_content_moves ... ok
+test unified_ir::verification::semantic_digest::v2_values_remain_distinct_across_former_depth_boundary ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 231 filtered out; finished in 0.00s
+
+resource stage=digest elapsed_s=8.25 max_rss_kib=428612 exit=0
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+binary: rustc
+commit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452
+commit-date: 2026-07-14
+host: x86_64-unknown-linux-gnu
+release: 1.97.1
+LLVM version: 22.1.6
+cargo 1.97.1 (c980f4866 2026-06-30)
+
+[2026-09-05T23:44:56Z] stage=dependencies
+bit-set v0.9.1
+└── lalrpop v0.23.1
+    [build-dependencies]
+    └── parser v0.1.0 (ssh://git@amaterasu.local:2222/hymeko/parser.git?branch=master#284c490d)
+        └── hymeko_core v0.1.0 (/tmp/core/hymeko_core)
+            └── hymeko_wgpu v0.1.0 (/tmp/core/hymeko_wgpu)
+
+bit-set v0.10.0
+├── naga v30.0.1
+│   ├── wgpu-core v30.0.1
+│   │   └── wgpu v30.0.1
+│   │       └── hymeko_wgpu v0.1.0 (/tmp/core/hymeko_wgpu)
+│   │       [dev-dependencies]
+│   │       └── hymeko_wgpu v0.1.0 (/tmp/core/hymeko_wgpu)
+│   ├── wgpu-hal v30.0.1
+│   │   ├── wgpu v30.0.1 (*)
+│   │   ├── wgpu-core v30.0.1 (*)
+│   │   └── wgpu-core-deps-windows-linux-android v30.0.1
+│   │       └── wgpu-core v30.0.1 (*)
+│   └── wgpu-naga-bridge v30.0.1
+│       ├── wgpu-core v30.0.1 (*)
+│       └── wgpu-hal v30.0.1 (*)
+└── wgpu-core v30.0.1 (*)
+
+foldhash v0.1.5
+└── hashbrown v0.15.5
+    └── petgraph v0.8.3
+        └── lalrpop v0.23.1 (*)
+
+foldhash v0.2.0
+├── hashbrown v0.16.1
+│   └── gpu-allocator v0.28.0
+│       └── wgpu-hal v30.0.1 (*)
+└── hashbrown v0.17.1
+    ├── naga v30.0.1 (*)
+    ├── naga-types v30.0.1
+    │   ├── naga v30.0.1 (*)
+    │   ├── wgpu-core v30.0.1 (*)
+    │   ├── wgpu-hal v30.0.1 (*)
+    │   └── wgpu-types v30.0.1
+    │       ├── wgpu v30.0.1 (*)
+    │       ├── wgpu-core v30.0.1 (*)
+    │       ├── wgpu-hal v30.0.1 (*)
+    │       └── wgpu-naga-bridge v30.0.1 (*)
+    ├── wgpu v30.0.1 (*)
+    ├── wgpu-core v30.0.1 (*)
+    └── wgpu-hal v30.0.1 (*)
+
+hashbrown v0.15.5 (*)
+
+hashbrown v0.16.1 (*)
+
+hashbrown v0.17.1
+└── indexmap v2.14.0
+    ├── naga v30.0.1 (*)
+    ├── naga-types v30.0.1 (*)
+    ├── petgraph v0.8.3 (*)
+    └── wgpu-core v30.0.1 (*)
+
+hashbrown v0.17.1 (*)
+
+itertools v0.13.0
+├── criterion v0.8.2
+│   [dev-dependencies]
+│   ├── hymeko_core v0.1.0 (/tmp/core/hymeko_core) (*)
+│   └── hymeko_wgpu v0.1.0 (/tmp/core/hymeko_wgpu)
+└── criterion-plot v0.8.2
+    └── criterion v0.8.2 (*)
+
+itertools v0.14.0
+└── lalrpop v0.23.1 (*)
+
+lalrpop-util v0.23.1
+└── parser v0.1.0 (ssh://git@amaterasu.local:2222/hymeko/parser.git?branch=master#284c490d) (*)
+
+lalrpop-util v0.23.1
+└── lalrpop v0.23.1 (*)
+
+log v0.4.33
+└── ena v0.14.4
+    └── lalrpop v0.23.1 (*)
+
+log v0.4.33
+├── env_filter v2.0.0
+│   └── env_logger v0.11.11
+│       [dev-dependencies]
+│       └── hymeko_core v0.1.0 (/tmp/core/hymeko_core) (*)
+├── env_logger v0.11.11 (*)
+├── gpu-allocator v0.28.0 (*)
+├── naga v30.0.1 (*)
+├── wgpu v30.0.1 (*)
+├── wgpu-core v30.0.1 (*)
+├── wgpu-hal v30.0.1 (*)
+└── wgpu-types v30.0.1 (*)
+[dev-dependencies]
+└── hymeko_core v0.1.0 (/tmp/core/hymeko_core) (*)
+
+regex v1.13.1
+└── criterion v0.8.2 (*)
+
+regex v1.13.1
+└── lalrpop v0.23.1 (*)
+
+rustc-hash v1.1.0
+├── naga v30.0.1 (*)
+├── naga-types v30.0.1 (*)
+└── wgpu-core v30.0.1 (*)
+
+rustc-hash v2.1.3
+└── hymeko_core v0.1.0 (/tmp/core/hymeko_core) (*)
+
+smallvec v1.15.2
+└── parking_lot_core v0.9.12
+    └── parking_lot v0.12.5
+        ├── string_cache v0.9.0
+        │   └── lalrpop v0.23.1 (*)
+        ├── wgpu-core v30.0.1 (*)
+        └── wgpu-hal v30.0.1 (*)
+
+smallvec v1.15.2
+├── wgpu v30.0.1 (*)
+├── wgpu-core v30.0.1 (*)
+└── wgpu-hal v30.0.1 (*)
+
+syn v2.0.119
+├── nalgebra-macros v0.3.0 (proc-macro)
+│   └── nalgebra v0.34.2
+│       ├── hymeko_core v0.1.0 (/tmp/core/hymeko_core) (*)
+│       └── nalgebra-sparse v0.11.0
+│           └── hymeko_core v0.1.0 (/tmp/core/hymeko_core) (*)
+└── zerocopy-derive v0.8.56 (proc-macro)
+    └── zerocopy v0.8.56
+        └── half v2.7.1
+            ├── ciborium-ll v0.2.2
+            │   └── ciborium v0.2.2
+            │       ├── criterion v0.8.2 (*)
+            │       └── hymeko_core v0.1.0 (/tmp/core/hymeko_core) (*)
+            └── naga v30.0.1 (*)
+
+syn v3.0.3
+├── bytemuck_derive v1.12.0 (proc-macro)
+│   └── bytemuck v1.25.2
+│       ├── hymeko_wgpu v0.1.0 (/tmp/core/hymeko_wgpu)
+│       ├── safe_arch v0.7.4
+│       │   └── wide v0.7.33
+│       │       └── simba v0.9.1
+│       │           └── nalgebra v0.34.2 (*)
+│       ├── wgpu v30.0.1 (*)
+│       ├── wgpu-core v30.0.1 (*)
+│       ├── wgpu-hal v30.0.1 (*)
+│       ├── wgpu-types v30.0.1 (*)
+│       └── wide v0.7.33 (*)
+│       [dev-dependencies]
+│       └── hymeko_wgpu v0.1.0 (/tmp/core/hymeko_wgpu)
+├── serde_derive v1.0.229 (proc-macro)
+│   └── serde v1.0.229
+│       ├── ciborium v0.2.2 (*)
+│       ├── criterion v0.8.2 (*)
+│       ├── hymeko_core v0.1.0 (/tmp/core/hymeko_core) (*)
+│       └── tinytemplate v1.2.1
+│           └── criterion v0.8.2 (*)
+└── thiserror-impl v2.0.20 (proc-macro)
+    └── thiserror v2.0.20
+        ├── gpu-allocator v0.28.0 (*)
+        ├── naga v30.0.1 (*)
+        ├── naga-types v30.0.1 (*)
+        ├── wgpu-core v30.0.1 (*)
+        └── wgpu-hal v30.0.1 (*)
+resource stage=dependencies elapsed_s=0.13 max_rss_kib=65896 exit=0
+resource stage=dependencies cgroup_container_peak_bytes=412356608
+
+[2026-09-05T23:44:56Z] stage=cli
+   Compiling hymeko_core v0.1.0 (/tmp/core/hymeko_core)
+    Finished `release` profile [optimized] target(s) in 3.80s
+     Running `/target/release/hymeko_core data/minimal_examples/minimal_example.hymeko`
+=== HyMeKo compile ===
+Canonical program hash: e7e1f1a305fb5e8754605252f6c351cd9af84211a27ee64fc27d09d0ab2ff738
+Root: /tmp/core/data/minimal_examples/minimal_example.hymeko
+
+Imports (namespace -> file):
+  (none)
+
+Derived path count: 1
+IR decls:   1
+IR edges:   0
+IR arcs:    0
+
+Decls (hierarchy):
+context  did=Id(0)  kind=Node  hash=61ac8b3eb45b2f17eb444719f9ce38dc95d2404c41bfb047b81eb51714e79063
+resource stage=cli elapsed_s=3.82 max_rss_kib=376964 exit=0
+resource stage=cli cgroup_container_peak_bytes=412356608
+
+[2026-09-05T23:45:00Z] stage=cbor-corpus
+   Compiling hymeko_core v0.1.0 (/tmp/core/hymeko_core)
+    Finished `release` profile [optimized] target(s) in 8.14s
+     Running tests/mod.rs (/target/release/deps/mod-f87f1ab25fa3d2aa)
+
+running 1 test
+test unified_ir::validation::cbor_roundtrip::every_lowerable_corpus_program_round_trips_through_the_public_facade ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 259 filtered out; finished in 0.12s
+
+resource stage=cbor-corpus elapsed_s=8.29 max_rss_kib=429812 exit=0
+resource stage=cbor-corpus cgroup_container_peak_bytes=412356608
+
+[2026-09-05T23:45:08Z] stage=core-tests
+   Compiling hymeko_core v0.1.0 (/tmp/core/hymeko_core)
+    Finished `release` profile [optimized] target(s) in 9.27s
+     Running unittests src/lib.rs (/target/release/deps/hymeko-c58f92da726d0aa9)
+
+running 135 tests
+test generators::tests::combinations_are_distinct_ascending_and_counted ... ok
+test generators::tests::binom_matches_small_known_values ... ok
+test generators::tests::complete_uniform_has_binom_edges_each_of_arity_r ... ok
+test generators::tests::complete_uniform_rejects_arity_outside_2_to_n ... ok
+test generators::tests::steiner_rejects_orders_outside_existence_condition ... ok
+test generators::tests::sunflower_edges_pairwise_intersect_in_exactly_the_core ... ok
+test generators::tests::sunflower_rejects_zero_petals_or_petal_size ... ok
+test ir::incidence::fault_tests::duplicated_coordinate_is_caught ... ok
+test ir::incidence::fault_tests::out_of_range_slot_is_caught ... ok
+test ir::incidence::fault_tests::swapped_coordinate_keeping_degree_is_caught ... ok
+test generators::tests::generator_enum_dispatches_to_the_free_functions ... ok
+test ir::incidence::fault_tests::truncated_row_is_caught ... ok
+test ir::incidence::fault_tests::valid_index_is_a_bijection ... ok
+test ir::ir::compaction_coverage::every_ir_decode_error_formats_nonempty ... ok
+test ir::ir::compaction_coverage::a_reserved_dispatch_slot_is_rejected_by_coherence_and_serialize ... ok
+test ir::ir::dispatch::tests::encode_decode_round_trips_each_kind ... ok
+test ir::ir::dispatch::tests::encode_zero_index_sets_only_the_tag_bit_plus_one ... ok
+test ir::ir::dispatch::tests::every_dispatch_error_formats_nonempty ... ok
+test ir::ir::dispatch::tests::max_representable_index_encodes_and_overflow_is_rejected ... ok
+test ir::ir::dispatch::tests::non_none_zero_index_is_malformed ... ok
+test ir::ir::dispatch::tests::none_slot_decodes_to_absence ... ok
+test ir::ir::dispatch::tests::reserved_tag_is_always_an_error_but_never_a_false_hit ... ok
+test ir_stream::assembler::model::an_exact_replay_never_changes_state ... ok
+test ir_stream::assembler::model::at_most_one_commit_is_emitted_per_transaction_identity ... ok
+test ir_stream::assembler::part_a_probe::probe_all_ten ... ignored, taxonomy dump: run with --ignored --nocapture to print all ten audit outcomes
+test ir_stream::assembler::tests::a_changed_stream_identity_demands_resync ... ok
+test ir_stream::assembler::tests::a_chunk_without_an_open_transaction_is_refused ... ok
+test ir_stream::assembler::tests::a_commit_for_a_different_transaction_is_refused_and_discards_staging ... ok
+test ir_stream::assembler::tests::a_delta_against_the_wrong_base_is_refused ... ok
+test ir_stream::assembler::model::exhaustive_short_sequences_never_panic_and_never_regress ... ok
+test ir_stream::assembler::tests::a_different_transaction_at_the_same_version_is_a_conflict ... ok
+test ir_stream::assembler::tests::a_differing_message_at_a_seen_sequence_is_a_conflict_not_a_duplicate ... ok
+test ir_stream::assembler::tests::a_drain_for_a_different_transaction_demands_resync ... ok
+test ir_stream::assembler::tests::a_full_snapshot_and_a_delta_chain_reach_the_same_version_and_content ... ok
+test ir_stream::assembler::tests::a_replayed_sequence_number_is_a_duplicate ... ok
+test ir_stream::assembler::tests::a_replay_older_than_the_window_is_not_claimed_to_be_exact ... ok
+test ir_stream::assembler::tests::a_resync_demanding_message_does_not_poison_replay_history ... ok
+test ir_stream::assembler::tests::a_second_begin_while_one_is_open_is_refused ... ok
+test ir_stream::assembler::tests::a_sequence_gap_demands_resync_and_discards_staging ... ok
+test ir_stream::assembler::model::randomized_streams_with_a_zero_capacity_window ... ok
+test ir_stream::assembler::tests::a_snapshot_transaction_begins_chunks_and_commits ... ok
+test ir_stream::assembler::tests::a_superseded_drain_can_be_aborted_and_is_bounded ... ok
+test ir_stream::assembler::tests::a_superseded_transaction_is_drained_not_orphaned ... ok
+test ir_stream::assembler::tests::a_topology_bump_without_weights_and_features_is_incoherent ... ok
+test ir_stream::assembler::tests::a_weight_only_delta_commits_and_does_not_change_topology ... ok
+test ir_stream::assembler::tests::a_wrapped_slot_collision_never_produces_a_false_match ... ok
+test ir_stream::assembler::tests::a_zero_capacity_window_authenticates_nothing ... ok
+test ir_stream::assembler::tests::an_abort_leaves_no_trace ... ok
+test ir_stream::assembler::tests::an_identical_message_at_a_seen_sequence_is_an_exact_duplicate ... ok
+test ir_stream::assembler::tests::consumer_to_producer_messages_are_refused_on_a_consumer_input ... ok
+test ir_stream::assembler::tests::resync_keeps_the_version_and_forgets_the_position ... ok
+test ir_stream::assembler::tests::staging_is_bounded_by_bytes ... ok
+test ir_stream::assembler::tests::replay_memory_is_constant_with_stream_age ... ok
+test ir_stream::assembler::tests::staging_is_bounded_by_chunk_count ... ok
+test ir_stream::assembler::tests::state_is_never_visible_before_commit ... ok
+test ir_stream::assembler::tests::the_same_transaction_replayed_with_new_sequences_is_an_exact_duplicate ... ok
+test ir_stream::assembler::tests::the_sequence_boundary_is_handled_explicitly ... ok
+test ir_stream::codec::frozen::blake3_matches_the_published_empty_vector ... ok
+test ir_stream::assembler::tests::transaction_digests_distinguish_content_order_and_count ... ok
+test ir_stream::codec::frozen::the_encoder_reproduces_the_frozen_bytes_exactly ... ok
+test ir_stream::codec::frozen::the_frozen_digest_is_blake3_of_the_payload_and_nothing_else ... ok
+test ir_stream::codec::frozen::no_single_byte_mutation_can_be_silently_absorbed ... ok
+test ir_stream::codec::frozen::the_frozen_vector_decodes_to_the_hand_checked_values ... ok
+test ir_stream::codec::frozen::the_frozen_vector_has_the_expected_bytes_at_every_documented_offset ... ok
+test ir_stream::codec::tests::a_control_message_with_no_payload_validates ... ok
+test ir_stream::codec::tests::a_flipped_hash_field_is_caught ... ok
+test ir_stream::codec::tests::a_short_buffer_is_rejected ... ok
+test ir_stream::codec::tests::header_plus_payload_overflow_is_checked ... ok
+test ir_stream::codec::tests::any_payload_bit_flip_is_caught_by_the_digest ... ok
+test ir_stream::codec::tests::limits_are_enforced_before_hashing ... ok
+test ir_stream::codec::tests::no_input_can_panic_the_validator ... ok
+test ir_stream::codec::tests::round_trip_preserves_every_envelope_field ... ok
+test ir_stream::codec::tests::trailing_bytes_are_rejected ... ok
+test ir_stream::envelope::tests::a_longer_header_from_a_newer_producer_is_tolerated ... ok
+test ir_stream::envelope::tests::every_message_type_round_trips_through_its_wire_value ... ok
+test ir_stream::envelope::tests::encoding_is_little_endian_on_every_host ... ok
+test ir_stream::envelope::tests::every_truncation_errors_rather_than_panics ... ok
+test ir_stream::envelope::tests::field_offsets_are_where_the_specification_says ... ok
+test ir_stream::envelope::tests::header_is_exactly_144_bytes ... ok
+test ir_stream::envelope::tests::header_length_bounds_are_enforced ... ok
+test ir_stream::envelope::tests::magic_is_checked_before_anything_else ... ok
+test ir_stream::envelope::tests::reserved_must_be_zero ... ok
+test ir_stream::envelope::tests::round_trip_is_identity ... ok
+test ir_stream::envelope::tests::unknown_message_types_and_flags_are_refused ... ok
+test ir_stream::envelope::tests::unsupported_schema_is_refused ... ok
+test ir_stream::limits::tests::defaults_are_internally_consistent ... ok
+test ir_stream::limits::tests::strict_limits_are_smaller_in_every_dimension ... ok
+test ir_stream::section::tests::a_body_inside_the_table_is_rejected ... ok
+test ir_stream::section::tests::a_length_that_disagrees_with_the_element_count_is_rejected ... ok
+test ir_stream::section::tests::a_section_bearing_payload_must_carry_a_table_even_when_empty ... ok
+test ir_stream::assembler::tests::no_message_sequence_can_panic_the_assembler ... ok
+test ir_stream::section::tests::a_tiny_message_cannot_request_an_enormous_allocation ... ok
+test ir_stream::section::tests::a_type_mismatch_reports_a_type_mismatch ... ok
+test ir_stream::section::tests::a_well_formed_table_validates_and_iterates_in_offset_order ... ok
+test ir_stream::section::tests::descending_offsets_are_rejected ... ok
+test ir_stream::section::tests::duplicate_singletons_are_rejected_but_patches_may_repeat ... ok
+test ir_stream::section::tests::every_truncation_of_a_valid_payload_errors_rather_than_panics ... ok
+test ir_stream::section::tests::hostile_lengths_from_the_phase9_audit_are_rejected ... ok
+test ir_stream::section::tests::misaligned_bodies_are_rejected ... ok
+test ir_stream::section::tests::overlapping_sections_are_rejected ... ok
+test ir_stream::section::tests::two_zero_length_sections_cannot_share_an_offset ... ok
+test ir_stream::section::tests::typed_access_copies_and_respects_the_declared_element_kind ... ok
+test ir_stream::section::tests::unknown_sections_skip_or_reject_by_criticality ... ok
+test ir_stream::section::tests::zero_length_sections_are_rejected ... ok
+test ir_stream::version::tests::divergent_versions_are_incomparable ... ok
+test ir_stream::version::tests::domination_requires_every_component ... ok
+test ir_stream::version::tests::wire_image_round_trips_and_is_little_endian ... ok
+test ir_stream::version::tests::zero_is_dominated_by_everything ... ok
+test resolution::const_resolve::tests::cycle_detected ... ok
+test resolution::const_resolve::tests::division_by_zero_detected ... ok
+test resolution::const_resolve::tests::evaluates_arithmetic ... ok
+test resolution::const_resolve::tests::evaluates_simple_literals ... ok
+test resolution::const_resolve::tests::forward_references_resolve ... ok
+test resolution::const_resolve::tests::pi_and_exp_evaluate ... ok
+test resolution::const_resolve::tests::undefined_ref_detected ... ok
+test generators::tests::steiner_design_valid_for_every_offered_order ... ok
+test tensor::sparse_workload::tests::small_is_well_formed ... ok
+test writers::cbor_writer::tests::compiled_program_facade_makes_paths_workspace_relative ... ok
+test writers::cbor_writer::tests::decode_rejects_a_tampered_canonical_hash ... ok
+test tensor::sparse_workload::tests::irregular_shape_varies_row_degree ... ok
+test writers::cbor_writer::tests::decode_rejects_a_tampered_index ... ok
+test writers::cbor_writer::tests::decode_rejects_an_alias_to_a_missing_path ... ok
+test writers::cbor_writer::tests::decode_rejects_an_out_of_range_namespace_symbol_before_hashing ... ok
+test writers::cbor_writer::tests::decode_requires_the_explicit_supported_schema ... ok
+test writers::cbor_writer::tests::encode_rejects_absolute_and_parent_traversing_paths ... ok
+test writers::cbor_writer::tests::facade_round_trips_usable_ir_interner_and_hash ... ok
+test writers::cbor_writer::tests::every_truncated_prefix_is_rejected ... ok
+test writers::cbor_writer::tests::paths_have_one_platform_independent_wire_spelling ... ok
+test writers::cbor_writer::tests::paths_reject_drive_like_and_empty_segments ... ok
+test writers::cbor_writer::tests::preflight_rejects_indefinite_items_and_trailing_bytes ... ok
+test writers::cbor_writer::tests::preflight_rejects_oversize_before_deserialization ... ok
+test ir_stream::assembler::model::randomized_streams_preserve_every_invariant ... ok
+test writers::cbor_writer::tests::codec_rejects_positions_that_do_not_fit_canonical_hash_v1 ... ok
+test generators::tests::steiner_25_builds_under_budget ... ok
+test tensor::sparse_workload::tests::build_is_deterministic ... ok
+
+test result: ok. 134 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running unittests src/main.rs (/target/release/deps/hymeko_core-435fd9efb1d70e51)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/mod.rs (/target/release/deps/mod-1579bcb07da869c6)
+
+running 260 tests
+test aggregations::aggregation_tests::tests::test_agg_sign_works_for_f64_too ... ok
+test aggregations::aggregation_tests::tests::test_clamp01_basic ... ok
+test aggregations::aggregation_tests::tests::test_sign_agg_channels3 ... ok
+test aggregations::aggregation_tests::tests::test_sign_agg_weighted_vote ... ok
+test aggregations::aggregation_tests::tests::test_sign_agg_prefer_non_neutral ... ok
+test aggregations::aggregation_tests::tests::test_weight_agg_clamp01_flag ... ok
+test aggregations::aggregation_tests::tests::test_weight_agg_lukasiewicz_sat01 ... ok
+test aggregations::aggregation_tests::tests::test_weight_agg_max ... ok
+test aggregations::aggregation_tests::tests::test_weight_agg_prob_sum01 ... ok
+test aggregations::aggregation_tests::tests::test_weight_agg_sum ... ok
+test basic::test_ids::tests::test_equality_across_same_tag ... ok
+test basic::test_ids::tests::test_explicit_construction_seam ... ok
+test basic::test_ids::tests::test_hash_consistency ... ok
+test basic::test_ids::tests::test_new_and_raw ... ok
+test basic::test_ids::tests::test_none_sentinel ... ok
+test basic::test_ids::tests::test_ordering ... ok
+test basic::test_ids::tests::test_sealing_is_size_neutral ... ok
+test basic::test_ids::tests::test_serde_roundtrip ... ok
+test basic::test_ids::tests::test_type_safety_demo ... ok
+test basic::test_ids::tests::test_vec_index_mut ... ok
+test basic::test_ids::tests::test_vec_indexing ... ok
+test computations::test_weight_init::tests::constant_xavier_scale ... ok
+test computations::test_weight_init::tests::van_der_corput_range ... ok
+test computations::test_weight_init::tests::xavier_random_different_seeds ... ok
+test computations::test_weight_init::tests::xavier_bounds ... ok
+test computations::test_weight_init::tests::xavier_random_seeded_deterministic ... ok
+test computations::test_weight_init::tests::kaiming_bounds ... ok
+test computations::test_weight_init::tests::zeros_and_ones ... ok
+test hash::hashing_test::tests::test_hash_doc_determinism_insertion_order ... ok
+test intermediate_tests::ir_blake3_hash_tests::ir_blake3_hash_tests::edge_fixture_hashes_cover_subelements ... ok
+test intermediate_tests::ir_blake3_hash_tests::ir_blake3_hash_tests::context_hash_differs_between_examples ... ok
+test intermediate_tests::ir_blake3_hash_tests::ir_blake3_hash_tests::singleton_node_hash_matches_blake3_preimage ... ok
+test intermediate_tests::ir_blake3_hash_tests::ir_blake3_hash_tests::hierarchy_fixture_hashes_cover_subelements ... ok
+test intermediate_tests::ir_transformation_tests::basic_transformation_tests::edge_children_include_arcs_as_decls ... ok
+test intermediate_tests::ir_test_hash_pass::test_hash_pass::deterministic_merkle_hashing ... ok
+test intermediate_tests::ir_transformation_tests::basic_transformation_tests::node_child_chain_order_is_body_order ... ok
+test intermediate_tests::ir_transformation_tests::basic_transformation_tests::node_child_chain_order_is_body_order_same_names ... ok
+test ir_stream_admission::dominating_snapshot_advances_a_resumed_replica ... ok
+test intermediate_tests::ir_value_tests::ir_value_tests::ir_value_resolution ... ok
+test ir_stream_admission::empty_bootstrap_can_install_zero_version ... ok
+test ir_stream_admission::incomparable_delta_cannot_regress_weights ... ok
+test ir_stream_admission::incomparable_snapshot_cannot_regress_topology ... ok
+test ir_stream_admission::known_identity_survives_resync_and_replay ... ok
+test ir_stream_admission::resume_equal_version_without_identity_requires_resync ... ok
+test ir_stream_admission::resumed_zero_is_distinct_from_empty_bootstrap ... ok
+test ir_stream_admission::resync_does_not_turn_resumed_zero_into_bootstrap ... ok
+test ir_stream_admission::stale_delta_base_preserves_the_current_version ... ok
+test minimal_tests::annotations::test_annotations::test_annotations::parses_minimal_tag_annotation_and_extracts_bases_and_arc_weights ... ok
+test minimal_tests::annotations::test_annotations::test_annotations::lowers_multi_bases_into_ir_and_preserves_tags_and_default_direction ... ok
+test minimal_tests::annotations::test_annotations::test_annotations::lowers_node_bases_into_ir_with_isa_tag ... ok
+test minimal_tests::edges::test_recursive_multivalues::hierarchy_edges::e0_exists ... ok
+test minimal_tests::edges::test_recursive_multivalues::hierarchy_edges::e0_first_weight_is_0_85 ... ok
+test minimal_tests::edges::test_recursive_multivalues::hierarchy_edges::parses_without_error ... ok
+test minimal_tests::edges::test_recursive_multivalues::linear_edges::all_edges_found ... ok
+test minimal_tests::edges::test_recursive_multivalues::linear_edges::five_nodes ... ok
+test minimal_tests::edges::test_recursive_multivalues::linear_edges::has_four_edges ... ok
+test minimal_tests::edges::test_recursive_multivalues::linear_edges::parses_without_error ... ok
+test minimal_tests::edges::test_recursive_multivalues::minimal_2n1e::e0_exists ... ok
+test minimal_tests::edges::test_recursive_multivalues::minimal_2n1e::parses_and_has_one_edge ... ok
+test minimal_tests::edges::test_recursive_multivalues::multivalue_edges::edge_e_exists ... ok
+test minimal_tests::edges::test_recursive_multivalues::multivalue_edges::parses_nested_arrays ... ok
+test minimal_tests::edges::test_ref_values::test_ref_values::edges_with_ref_values ... ok
+test minimal_tests::edges::test_ref_values::test_ref_values::edges_with_ref_values_ir ... ok
+test minimal_tests::test_import::test_import_graphs::test_import_graphs::check_import_graph_library ... ok
+test minimal_tests::test_minimal_example::fails_if_arc_missing_semicolon ... ok
+test minimal_tests::test_import::test_import_graphs::test_import_graphs::check_import_graph_library_with_import ... ok
+test minimal_tests::test_minimal_example::parses_minimal_description ... ok
+test minimal_tests::test_import::test_import_graphs::test_import_graphs::check_xprofile_instance_ref ... ok
+test minimal_tests::test_minimal_example::parses_multiple_arcs_in_one_edge ... ok
+test minimal_tests::test_minimal_example_basic_hierarchy::parses_minimal_example_context_fields ... ok
+test minimal_tests::test_minimal_example_comments::parses_minimal_example_context_fields_with_bad_comments ... ok
+test minimal_tests::test_minimal_example_comments::parses_minimal_example_context_fields_with_bad_comments_inline ... ok
+test minimal_tests::test_minimal_example_comments::parses_minimal_example_context_fields_with_comments ... ok
+test minimal_tests::test_minimal_example_comments::parses_minimal_example_context_fields_with_header_comment ... ok
+test minimal_tests::test_minimal_example_comments::parses_minimal_example_context_fields_with_line_comments ... ok
+test minimal_tests::test_minimal_example_field_refs::parses_legacy_context_with_refs ... ok
+test minimal_tests::test_minimal_example_field_refs::parses_legacy_context_with_refs_alternative ... ok
+test minimal_tests::test_minimal_example_fileread::test_minimal_example ... ok
+test minimal_tests::test_minimal_example_fileread::test_minimal_example_base_elements ... ok
+test minimal_tests::test_minimal_example_with_fields::parses_minimal_example_context_fields ... ok
+test minimal_tests::test_module_store::test_module_store::mod_test_module_store::module_store_allows_resolving_imported_refs ... ok
+test minimal_tests::test_module_store::test_module_store::mod_test_module_store::module_store_loads_root_and_one_import ... ok
+test minimal_tests::test_smoke_test::ast_variants_are_constructible ... ok
+test minimal_tests::test_read_minimal_example::test_minimal_example_from_file ... ok
+test test_tensor_representations::test_compute_vocabulary::test_compute_vocabulary::test_backend_kind_names_and_host_flag ... ok
+test test_tensor_representations::test_compute_vocabulary::test_compute_vocabulary::test_compute_error_is_a_std_error_and_names_the_backend ... ok
+test test_tensor_representations::test_compute_vocabulary::test_compute_vocabulary::test_sparse_csr_shape_derived_extents ... ok
+test test_tensor_representations::test_compute_vocabulary::test_compute_vocabulary::test_tensor_shape_elements_and_empty ... ok
+test test_tensor_representations::test_compute_vocabulary::test_compute_vocabulary::test_tensor_shape_overflow_is_reported_not_panicked ... ok
+test test_tensor_representations::test_compute_vocabulary::test_compute_vocabulary::test_tensor_shape_validate_len ... ok
+test test_tensor_representations::test_compute_vocabulary::test_compute_vocabulary::test_try_u32_rejects_instead_of_wrapping ... ok
+test test_tensor_representations::test_weight_extraction::test_weight_extraction::test_empty_and_non_numeric_yield_one ... ok
+test test_tensor_representations::test_weight_extraction::test_weight_extraction::test_f32_and_f64_conversion_paths ... ok
+test test_tensor_representations::test_weight_extraction::test_weight_extraction::test_list_is_flattened_one_level ... ok
+test test_tensor_representations::test_weight_extraction::test_weight_extraction::test_multiple_values_sum_in_order ... ok
+test test_tensor_representations::test_weight_extraction::test_weight_extraction::test_nested_list_is_not_recursed ... ok
+test test_tensor_representations::test_weight_extraction::test_weight_extraction::test_none_yields_one ... ok
+test test_tensor_representations::test_weight_extraction::test_weight_extraction::test_single_negative_zero_is_returned_verbatim ... ok
+test test_tensor_representations::test_weight_extraction::test_weight_extraction::test_single_value_is_returned_verbatim ... ok
+test typical_graphs::ir_fano_graph::ir_fano_graph::fano_graph_lowers_to_ir_with_correct_arc_targets ... ok
+test typical_graphs::resolve_fano_graph::resolve_fano_graph::fano_edges_resolve_to_expected_nodes ... ok
+test typical_graphs::resolve_fano_graph::resolve_fano_graph::fano_graph_shape ... ok
+test typical_graphs::resolve_fano_graph::resolve_fano_graph::parse_fano_graph_resolve ... ok
+test typical_graphs::test_fano_graph::parse_fano_graph ... ok
+test unified_ir::validation::cbor_roundtrip::canonical_cbor_memory_decode ... ignored, measurement cell; invoked in a fresh process by the evidence harness
+test unified_ir::validation::cbor_roundtrip::canonical_cbor_memory_materialize_only ... ignored, diagnostic cell; separates materialization from semantic/hash validation
+test unified_ir::validation::cbor_roundtrip::canonical_cbor_memory_read_baseline ... ignored, measurement cell; invoked in a fresh process by the evidence harness
+test sparse_workload_kat::small_identity_is_frozen ... ok
+test hash::hashing_test::tests::test_hash_doc_performance_benchmark ... ok
+test unified_ir::validation::cbor_roundtrip::deterministic_small_medium_large_corpus_workloads_round_trip ... ok
+test unified_ir::validation::cbor_roundtrip::write_canonical_cbor_memory_fixture ... ignored, measurement fixture generator; invoked explicitly by the evidence harness
+test unified_ir::validation::consumer_equivalence::count_accessors_match_direct_lengths_on_the_corpus ... ok
+test unified_ir::validation::consumer_equivalence::edge_for_decl_matches_map_then_index_on_the_corpus ... ok
+test unified_ir::validation::consumer_equivalence::pretty_printer_runs_over_the_corpus_without_panicking ... ok
+test unified_ir::validation::consumer_equivalence::writer_accepts_a_well_formed_ir_unchanged ... ok
+test unified_ir::validation::consumer_equivalence::writer_emits_the_declaration_skeleton_but_not_annotations_a_known_limitation ... ok
+test unified_ir::validation::cbor_roundtrip::every_lowerable_corpus_program_round_trips_through_the_public_facade ... ok
+test unified_ir::validation::consumer_equivalence::writer_reports_a_dangling_child_link ... ok
+test unified_ir::validation::consumer_equivalence::writer_reports_a_dangling_root_declaration ... ok
+test unified_ir::validation::consumer_equivalence::writer_reports_a_dangling_sibling_link ... ok
+test unified_ir::validation::consumer_equivalence::writer_reports_a_sibling_cycle_instead_of_looping ... ok
+test sparse_workload_kat::medium_identity_is_frozen ... ok
+test unified_ir::validation::consumer_equivalence::writer_output_is_byte_identical_across_the_corpus ... ok
+test unified_ir::validation::corpus::bench_lowering_corpus ... ignored
+test unified_ir::validation::consumer_equivalence::writer_root_selection_matches_the_direct_reference_on_the_corpus ... ok
+test unified_ir::validation::corpus::accessors_agree_with_direct_field_access_on_the_whole_corpus ... ok
+test unified_ir::validation::corpus::corpus_hierarchy_index_coherence_survey ... ok
+test unified_ir::validation::corpus::derived_path_index_round_trips_on_the_corpus ... ok
+test unified_ir::validation::corpus::nsroots_prefix_length_survey ... ok
+test unified_ir::validation::corpus::link_derived_hash_equals_index_hash_on_the_whole_corpus ... ok
+test unified_ir::validation::corpus::print_corpus_digest_for_capture ... ok
+test unified_ir::validation::product_cli::product_cli_compiles_a_valid_source_and_succeeds ... ok
+test unified_ir::validation::product_cli::product_cli_reports_a_missing_input_file ... ok
+test unified_ir::validation::product_cli::product_cli_reports_usage_without_arguments ... ok
+test unified_ir::verification::access::arc_for_decl_checks_presence_only_and_agrees_with_as_arc ... ok
+test unified_ir::verification::access::child_iteration_terminates_on_a_sibling_cycle ... ok
+test unified_ir::verification::access::child_order_matches_the_existing_iterator ... ok
+test unified_ir::verification::access::counts_equal_iterator_lengths ... ok
+test unified_ir::verification::access::declaration_to_record_mapping_agrees_with_backlinks ... ok
+test unified_ir::verification::access::hierarchy_root_nested_siblings_and_leaf ... ok
+test unified_ir::verification::access::iterated_ids_resolve_back_to_the_same_record_with_no_gaps_or_duplicates ... ok
+test unified_ir::verification::access::iteration_over_a_singleton ... ok
+test unified_ir::verification::access::iteration_over_an_empty_ir_yields_nothing ... ok
+test unified_ir::verification::access::last_child_of_agrees_with_the_final_child ... ok
+test unified_ir::verification::access::lookup_first_middle_last_declaration ... ok
+test unified_ir::verification::access::lookup_rejects_none_and_out_of_range ... ok
+test unified_ir::verification::access::mapping_pointing_at_a_foreign_record_returns_none_rather_than_the_wrong_record ... ok
+test unified_ir::verification::access::mapping_pointing_out_of_range_returns_none_and_does_not_panic ... ok
+test unified_ir::verification::access::mixed_declaration_kinds_are_all_visited ... ok
+test unified_ir::verification::access::node_and_edge_for_decl_validate_the_backlink_but_as_node_does_not ... ok
+test unified_ir::verification::access::repeated_iteration_is_deterministic ... ok
+test unified_ir::verification::access::typed_record_lookup_returns_the_matching_record ... ok
+test unified_ir::verification::access::valid_declaration_without_the_requested_record_returns_none ... ok
+test unified_ir::verification::access::wrong_id_domain_does_not_alias_across_tables ... ok
+test unified_ir::verification::coherence::a_coherent_ir_passes ... ok
+test unified_ir::verification::coherence::arc_record_out_of_range_is_detected ... ok
+test unified_ir::verification::coherence::corrupted_parent_is_detected ... ok
+test unified_ir::verification::coherence::edge_record_backlink_mismatch_is_detected ... ok
+test unified_ir::verification::coherence::findings_are_bounded_and_deterministic ... ok
+test unified_ir::verification::coherence::index_path_disagreement_is_detected ... ok
+test unified_ir::verification::coherence::mismatched_decl_to_map_is_detected ... ok
+test unified_ir::verification::coherence::missing_child_backlink_is_detected ... ok
+test unified_ir::verification::coherence::parallel_array_length_mismatch_is_detected ... ok
+test unified_ir::validation::corpus::real_corpus_declaration_depth_audit ... ok
+test unified_ir::verification::coherence::record_backlink_mismatch_is_detected ... ok
+test unified_ir::verification::coherence::sibling_cycle_is_detected_and_terminates ... ok
+test unified_ir::verification::dispatch_serde::a_binding_disagreeing_with_the_declaration_kind_is_rejected ... ok
+test unified_ir::verification::dispatch_serde::a_declaration_bound_in_no_map_decodes_to_an_absent_slot ... ok
+test unified_ir::verification::dispatch_serde::a_declaration_bound_in_two_maps_is_rejected ... ok
+test unified_ir::verification::dispatch_serde::a_wrong_backlink_is_rejected ... ok
+test unified_ir::verification::dispatch_serde::an_edge_bound_to_a_foreign_record_is_rejected ... ok
+test unified_ir::verification::dispatch_serde::an_out_of_range_arc_record_is_rejected ... ok
+test unified_ir::verification::dispatch_serde::an_out_of_range_edge_record_is_rejected ... ok
+test unified_ir::verification::dispatch_serde::an_out_of_range_record_index_is_rejected ... ok
+test unified_ir::verification::dispatch_serde::invalid_map_length_is_rejected ... ok
+test unified_ir::verification::dispatch_serde::round_trip_reconstructs_the_compact_slots ... ok
+test unified_ir::verification::coherence::parent_cycle_is_detected_and_terminates ... ok
+test unified_ir::verification::dispatch_serde::wire_is_byte_frozen_and_carries_the_legacy_three_maps ... ok
+test unified_ir::verification::frozen_hash::dense_permutation_does_not_change_v1 ... ok
+test unified_ir::verification::frozen_hash::dense_permutation_uses_genuinely_different_declids ... ok
+test unified_ir::verification::frozen_hash::link_derived_hash_equals_index_hash_on_wellformed_vectors ... ok
+test unified_ir::verification::frozen_hash::link_derived_hash_matches_frozen_kats_on_wellformed_vectors ... ok
+test unified_ir::verification::frozen_hash::print_frozen_vectors_for_capture ... ok
+test unified_ir::verification::frozen_hash::slot_order_and_multiplicity_change_v1 ... ok
+test unified_ir::verification::frozen_hash::v1_known_answer_vectors_are_unchanged ... ok
+test unified_ir::verification::hash_coverage::hash_bytes_are_stable_across_repeated_runs ... ok
+test unified_ir::verification::hash_coverage::numeric_special_values_are_distinguished_by_the_merkle_hash ... ok
+test unified_ir::verification::hash_coverage::hash_coverage_matrix ... ok
+test unified_ir::verification::hierarchy::synthetic_chain_depths_are_traversable_and_hashable ... ok
+test unified_ir::verification::hierarchy::synthetic_high_cardinality_edge_is_hashable ... ok
+test unified_ir::validation::corpus::v1_corpus_digest_is_unchanged ... ok
+test unified_ir::verification::identity::c10_reconstruction_without_semantic_change ... ok
+test unified_ir::verification::hierarchy::synthetic_wide_hierarchy_is_traversable_and_hashable ... ok
+test unified_ir::verification::identity::c1_forward_versus_reverse_declaration_order ... ok
+test unified_ir::verification::identity::c2_sibling_permutation ... ok
+test unified_ir::verification::identity::c3_node_edge_interleaving ... ok
+test unified_ir::verification::identity::c4_incidence_slot_order_is_treated_as_semantic ... ok
+test unified_ir::verification::identity::c6_dense_id_shift_does_not_change_the_hash ... ok
+test unified_ir::verification::identity::c5_dense_id_assignment_does_not_affect_the_hash ... ok
+test unified_ir::verification::identity::c9_serde_round_trip_preserves_the_hash ... ok
+test unified_ir::verification::identity::intrusive_parent_links_now_determine_the_canonical_hash ... ok
+test unified_ir::verification::ids::an_empty_ir_rejects_every_id_including_zero ... ok
+test unified_ir::verification::ids::backlink_validation_survives_the_optimisation ... ok
+test unified_ir::verification::ids::guard_free_agrees_with_an_explicitly_guarded_reference_implementation ... ok
+test unified_ir::verification::ids::guard_free_lookups_reject_exact_end_and_far_out_of_range ... ok
+test unified_ir::verification::ids::guard_free_lookups_reject_none ... ok
+test unified_ir::verification::ids::guard_free_lookups_still_resolve_first_middle_and_last ... ok
+test unified_ir::verification::ids::hierarchy_accessors_remain_total ... ok
+test unified_ir::verification::ids::option_reference_is_niche_optimised ... ok
+test unified_ir::verification::ids::retained_guards_still_return_none_for_the_sentinel ... ok
+test unified_ir::verification::incidence::bench_incidence_operator_vs_clique ... ignored
+test unified_ir::verification::ids::the_none_sentinel_is_rejected_by_the_bounds_check_alone ... ok
+test unified_ir::verification::incidence::dangling_target_is_a_typed_error ... ok
+test unified_ir::verification::incidence::duplicate_incidence_kept_as_distinct_coordinates ... ok
+test unified_ir::verification::incidence::empty_is_total ... ok
+test unified_ir::verification::incidence::multiway_hyperedge_all_three_signs_resolves_coordinates ... ok
+test unified_ir::verification::incidence::ragged_arity_shared_and_singleton ... ok
+test unified_ir::verification::incidence::star_operator_matches_dense_b_matvec ... ok
+test unified_ir::verification::incidence::weight_policy_none_single_and_multivalued ... ok
+test unified_ir::verification::namespace_faults::a_correct_imported_ir_validates_clean ... ok
+test unified_ir::verification::namespace_faults::dangling_namespace_root_is_rejected ... ok
+test unified_ir::verification::namespace_faults::duplicate_namespace_root_is_rejected ... ok
+test unified_ir::verification::namespace_faults::empty_prefix_is_rejected ... ok
+test unified_ir::verification::namespace_faults::missing_namespace_metadata_is_detected ... ok
+test unified_ir::verification::namespace_faults::unknown_schema_version_is_rejected ... ok
+test unified_ir::verification::namespace_faults::unsorted_namespace_roots_are_rejected ... ok
+test unified_ir::verification::semantic_digest::audit_v2_covers_validated_arcs_without_separate_declarations ... ok
+test unified_ir::verification::semantic_digest::audit_v2_distinguishes_values_at_depth_64 ... ok
+test unified_ir::verification::namespace_faults::wrong_prefix_symbol_is_a_path_mismatch ... ok
+test unified_ir::verification::semantic_digest::audit_v2_ignores_arc_record_storage_order ... ok
+test unified_ir::verification::semantic_digest::audit_v2_ignores_real_declaration_reindexing ... ok
+test unified_ir::verification::semantic_digest::legacy_first_pass_misses_a_backward_reference_target ... ok
+test unified_ir::verification::semantic_digest::legacy_first_pass_misses_an_incidence_target_change ... ok
+test unified_ir::verification::semantic_digest::legacy_merkle_pass_is_not_idempotent ... ok
+test unified_ir::verification::semantic_digest::program_structure_hash_v1_is_the_unchanged_v1_value ... ok
+test unified_ir::verification::semantic_digest::semantic_declaration_hashes_covers_every_declaration ... ok
+test unified_ir::verification::semantic_digest::v1_and_v2_are_domain_and_version_separated ... ok
+test unified_ir::verification::semantic_digest::v1_still_does_not_cover_annotations_and_v2_does ... ok
+test unified_ir::verification::semantic_digest::v2_anonymous_placeholder_is_independent_of_interner_allocation ... ok
+test unified_ir::verification::semantic_digest::v2_covers_validated_unbound_edge_record ... ok
+test unified_ir::verification::semantic_digest::v2_covers_validated_unbound_node_record ... ok
+test unified_ir::verification::semantic_digest::v2_distinguishes_sharing_of_identical_arc_payloads ... ok
+test unified_ir::verification::semantic_digest::v2_fallback_handles_unbound_and_aliased_anonymous_declarations ... ok
+test unified_ir::verification::semantic_digest::v2_fallback_keeps_orphan_arc_payload_and_idempotence ... ok
+test unified_ir::verification::semantic_digest::v2_ignores_a_stale_decl_hash_table ... ok
+test unified_ir::verification::semantic_digest::v2_is_idempotent_from_the_first_call ... ok
+test unified_ir::verification::semantic_digest::v2_is_invariant_under_a_semantically_irrelevant_construction_order ... ok
+test unified_ir::verification::semantic_digest::v2_is_stable_under_sharing_and_sensitive_to_multiplicity ... ok
+test unified_ir::verification::semantic_digest::v2_moves_on_a_backward_reference_target ... ok
+test unified_ir::verification::semantic_digest::v2_moves_on_a_forward_reference_target ... ok
+test unified_ir::verification::semantic_digest::v2_moves_on_a_nested_reference_target ... ok
+test unified_ir::verification::semantic_digest::v2_moves_on_an_incidence_target_change ... ok
+test unified_ir::verification::semantic_digest::v2_moves_when_the_referenced_declarations_content_moves ... ok
+test unified_ir::verification::semantic_digest::v2_moves_on_annotation_tag_value_weight_sign_slot_and_target ... ok
+test unified_ir::verification::semantic_digest::v2_terminates_deterministically_on_a_reference_cycle ... ok
+test unified_ir::verification::semantic_digest::v2_values_remain_distinct_across_former_depth_boundary ... ok
+test sparse_workload_kat::large_identity_is_frozen ... ok
+test hash::hashing_test::tests::test_hash_doc_performance_benchmark_multiple_nodes ... ok
+test unified_ir::validation::cbor_roundtrip::corpus_wire_faults_fail_closed ... ok
+test unified_ir::verification::hierarchy::deep_chain_overflow_boundary_is_far_above_the_real_corpus ... ok
+
+test result: ok. 254 passed; 0 failed; 6 ignored; 0 measured; 0 filtered out; finished in 11.88s
+
+   Doc-tests hymeko
+
+running 2 tests
+test hymeko_core/src/lib.rs - ir_stream (line 132) ... ok
+test hymeko_core/src/common/ids.rs - common::ids::Id (line 79) ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 5 tests
+test hymeko_core/src/lib.rs - ir_stream (line 111) - compile fail ... ok
+test hymeko_core/src/common/ids.rs - common::ids::Id (line 50) - compile fail ... ok
+test hymeko_core/src/common/ids.rs - common::ids::Id (line 56) - compile fail ... ok
+test hymeko_core/src/common/ids.rs - common::ids::Id (line 61) - compile fail ... ok
+test hymeko_core/src/common/ids.rs - common::ids::Id (line 68) - compile fail ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+all doctests ran in 0.25s; merged doctests compilation took 0.19s
+resource stage=core-tests elapsed_s=21.62 max_rss_kib=3068524 exit=0
+resource stage=core-tests cgroup_container_peak_bytes=3300356096
+
+[2026-09-05T23:45:30Z] stage=format
+resource stage=format elapsed_s=0.33 max_rss_kib=52952 exit=0
+resource stage=format cgroup_container_peak_bytes=3300356096
+
+[2026-09-05T23:45:30Z] stage=clippy
+    Checking hymeko_core v0.1.0 (/tmp/core/hymeko_core)
+    Checking hymeko_wgpu v0.1.0 (/tmp/core/hymeko_wgpu)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.84s
+resource stage=clippy elapsed_s=1.90 max_rss_kib=261732 exit=0
+resource stage=clippy cgroup_container_peak_bytes=3300356096
+
+[2026-09-05T23:45:32Z] stage=cbor-bench-smoke
+   Compiling hymeko_core v0.1.0 (/tmp/core/hymeko_core)
+    Finished `bench` profile [optimized] target(s) in 4.54s
+     Running benches/cbor_bench.rs (/target/release/deps/cbor_bench-da2336915fee8027)
+[canonical_cbor small_d1] decls=1 arcs=0 bytes=584
+Testing canonical_cbor_encode/small_d1
+Success
+[canonical_cbor medium_d45] decls=45 arcs=1 bytes=10578
+Testing canonical_cbor_encode/medium_d45
+Success
+[canonical_cbor large_d409] decls=409 arcs=33 bytes=99181
+Testing canonical_cbor_encode/large_d409
+Success
+
+Testing canonical_cbor_decode/small_d1
+Success
+Testing canonical_cbor_decode/medium_d45
+Success
+Testing canonical_cbor_decode/large_d409
+Success
+
+resource stage=cbor-bench-smoke elapsed_s=4.57 max_rss_kib=370916 exit=0
+resource stage=cbor-bench-smoke cgroup_container_peak_bytes=3300356096

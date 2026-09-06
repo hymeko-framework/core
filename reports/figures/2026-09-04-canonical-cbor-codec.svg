@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="920" viewBox="0 0 1200 920" role="img" aria-labelledby="title desc">
+  <title id="title">Canonical CBOR codec: streaming-hash benchmark and memory result</title>
+  <desc id="desc">Six latency comparisons normalized to the materialized-hash baseline and one decode-memory comparison. Streaming hashing lowers every median and passes the less-than-two-times decoded-IR-heap memory gate.</desc>
+  <rect width="1200" height="920" fill="#0f172a"/>
+  <style>
+    text { font-family: Inter, Segoe UI, sans-serif; fill: #e2e8f0; }
+    .title { font-size: 28px; font-weight: 700; }
+    .subtitle { font-size: 16px; fill: #94a3b8; }
+    .label { font-size: 16px; font-weight: 600; }
+    .value { font-size: 14px; }
+    .note { font-size: 14px; fill: #94a3b8; }
+    .axis { stroke: #475569; stroke-width: 1; }
+    .baseline { fill: #64748b; }
+    .stream { fill: #22c55e; }
+    .fail { fill: #ef4444; }
+    .gate { stroke: #fbbf24; stroke-width: 3; stroke-dasharray: 7 6; }
+  </style>
+  <text x="60" y="55" class="title">Canonical CBOR: streaming hash removes the incidence temporary</text>
+  <text x="60" y="84" class="subtitle">Criterion 0.8.2, 30 samples, 5 s measurement; post-change median relative to materialized-hash baseline</text>
+
+  <rect x="760" y="46" width="18" height="18" class="baseline"/><text x="786" y="61" class="value">materialized hash</text>
+  <rect x="960" y="46" width="18" height="18" class="stream"/><text x="986" y="61" class="value">streaming hash</text>
+
+  <text x="60" y="130" class="label">Latency medians</text>
+  <line x1="300" y1="145" x2="1050" y2="145" class="axis"/>
+
+  <text x="60" y="190" class="label">encode · small</text>
+  <rect x="300" y="163" width="360" height="18" rx="3" class="baseline"/><text x="672" y="178" class="value">44.9 µs</text>
+  <rect x="300" y="187" width="253" height="18" rx="3" class="stream"/><text x="565" y="202" class="value">31.6 µs · −29.7%</text>
+
+  <text x="60" y="270" class="label">encode · medium</text>
+  <rect x="300" y="243" width="360" height="18" rx="3" class="baseline"/><text x="672" y="258" class="value">156.0 µs</text>
+  <rect x="300" y="267" width="232" height="18" rx="3" class="stream"/><text x="544" y="282" class="value">100.6 µs · −35.5%</text>
+
+  <text x="60" y="350" class="label">encode · large</text>
+  <rect x="300" y="323" width="360" height="18" rx="3" class="baseline"/><text x="672" y="338" class="value">873.5 µs</text>
+  <rect x="300" y="347" width="260" height="18" rx="3" class="stream"/><text x="572" y="362" class="value">629.6 µs · −27.9%</text>
+
+  <text x="60" y="430" class="label">decode · small</text>
+  <rect x="300" y="403" width="360" height="18" rx="3" class="baseline"/><text x="672" y="418" class="value">6.83 µs</text>
+  <rect x="300" y="427" width="302" height="18" rx="3" class="stream"/><text x="614" y="442" class="value">5.72 µs · −16.2%</text>
+
+  <text x="60" y="510" class="label">decode · medium</text>
+  <rect x="300" y="483" width="360" height="18" rx="3" class="baseline"/><text x="672" y="498" class="value">141.2 µs</text>
+  <rect x="300" y="507" width="306" height="18" rx="3" class="stream"/><text x="618" y="522" class="value">120.2 µs · −14.9%</text>
+
+  <text x="60" y="590" class="label">decode · large</text>
+  <rect x="300" y="563" width="360" height="18" rx="3" class="baseline"/><text x="672" y="578" class="value">1.298 ms</text>
+  <rect x="300" y="587" width="302" height="18" rx="3" class="stream"/><text x="614" y="602" class="value">1.089 ms · −16.1%</text>
+
+  <text x="60" y="675" class="label">1,048,576-incidence decode peak above process baseline</text>
+  <text x="60" y="702" class="note">Absolute scale; gate = 2 × decoded IR heap = 188.4 MB</text>
+  <line x1="300" y1="720" x2="660" y2="720" class="axis"/>
+  <line x1="575" y1="708" x2="575" y2="807" class="gate"/>
+  <text x="582" y="724" class="value">gate</text>
+  <rect x="300" y="746" width="360" height="24" rx="4" class="fail"/><text x="672" y="764" class="value">246.6 MB · 2.62× · FAIL</text>
+  <rect x="300" y="787" width="145" height="24" rx="4" class="stream"/><text x="457" y="805" class="value">99.4 MB · 1.05× · PASS</text>
+
+  <text x="60" y="860" class="note">Wire bytes and frozen v1 hashes are unchanged. Full data: reports/data/2026-09-04-canonical-cbor-codec-{benchmark,memory}.tsv</text>
+  <text x="60" y="888" class="note">Host: Intel Core Ultra 9 275HX · Windows 11 · Rust 1.97.1 · 63.4 GiB RAM</text>
+</svg>

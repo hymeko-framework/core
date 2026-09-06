@@ -1,0 +1,66 @@
+{
+  "buildx.build.provenance": {
+    "builder": {
+      "id": ""
+    },
+    "buildType": "https://mobyproject.org/buildkit@v1",
+    "materials": [
+      {
+        "uri": "pkg:docker/rust@1.97.1-bookworm?digest=sha256:408fe88047cef61a2087653b0c5255fa51c0f2d6d94ddedd7a2562a9b91a46f6\u0026platform=linux%2Famd64",
+        "digest": {
+          "sha256": "408fe88047cef61a2087653b0c5255fa51c0f2d6d94ddedd7a2562a9b91a46f6"
+        }
+      }
+    ],
+    "invocation": {
+      "configSource": {
+        "entryPoint": "Dockerfile"
+      },
+      "parameters": {
+        "frontend": "dockerfile.v0",
+        "args": {
+          "add-hosts": "amaterasu.local=192.168.1.228",
+          "build-arg:SOURCE_REVISION": "c935909ec97bcb01e9dafd52d64227ee9df81e4b"
+        },
+        "secrets": [
+          {
+            "id": "known_hosts"
+          }
+        ],
+        "ssh": [
+          {
+            "id": "default"
+          }
+        ],
+        "locals": [
+          {
+            "name": "context"
+          },
+          {
+            "name": "dockerfile"
+          }
+        ]
+      },
+      "environment": {
+        "dockerfileVersion": "1.26.0",
+        "platform": "linux/amd64"
+      }
+    }
+  },
+  "buildx.build.ref": "hymeko-core-amaterasu-20260905/hymeko-core-amaterasu-202609050/nm30iz8cufv5h4pie7acyg1eq",
+  "containerimage.config.digest": "sha256:a26c1d9cec52094054fa31cbb482fedb0a57562149b3a9b6cfdb25e1f79e1d5c",
+  "containerimage.descriptor": {
+    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+    "digest": "sha256:8a465116b9cc9c525935159b425bc1d81c680a8848f10ac57cde49905927ab26",
+    "size": 3160,
+    "annotations": {
+      "org.opencontainers.image.created": "2026-09-05T12:08:29Z"
+    },
+    "platform": {
+      "architecture": "amd64",
+      "os": "linux"
+    }
+  },
+  "containerimage.digest": "sha256:8a465116b9cc9c525935159b425bc1d81c680a8848f10ac57cde49905927ab26",
+  "image.name": "docker.io/library/hymeko-core:c935909ec97bcb01e9dafd52d64227ee9df81e4b"
+}

@@ -1,0 +1,144 @@
+Updating 8a0c49d..1886f17
+Fast-forward
+ .claude/settings.json                              |   31 +
+ .gitattributes                                     |   11 +
+ .github/workflows/duplication-gate.yml             |    4 +-
+ AGENTS.md                                          |   31 +
+ CLAUDE.md                                          |  120 +-
+ Cargo.lock                                         |    2 +-
+ SYMBOLS.md                                         |   30 +-
+ docs/agent-contract/README.md                      |   98 +-
+ docs/agent-contract/repo/toolchain.md              |    2 +-
+ docs/core-container.md                             |    8 +-
+ docs/hypergraph-synchronization.md                 |   10 +-
+ .../2026-09-05-contract-provider-refresh/plan.mmd  |    9 +
+ .../2026-09-05-contract-provider-refresh/plan.pdf  |  Bin 0 -> 138602 bytes
+ .../2026-09-05-contract-provider-refresh/plan.tex  |   72 ++
+ .../2026-09-05-contract-provider-refresh/plan.tikz |    9 +
+ docs/plans/2026-09-05-dependency-refresh/plan.mmd  |   10 +
+ docs/plans/2026-09-05-dependency-refresh/plan.pdf  |  Bin 0 -> 139997 bytes
+ docs/plans/2026-09-05-dependency-refresh/plan.tex  |   69 ++
+ docs/plans/2026-09-05-dependency-refresh/plan.tikz |   10 +
+ docs/unified-ir-architecture.md                    |    7 +-
+ docs/verification/unified-ir/requirements.md       |   25 +-
+ reports/2026-09-05-contract-provider-refresh.md    |  122 ++
+ reports/2026-09-05-dependency-refresh.md           |  112 ++
+ reports/2026-09-05-distributed-admission-fix.md    |  110 ++
+ .../artifact-manifest.json                         |  338 ++++++
+ .../duplication-direct.memory.json                 |   20 +
+ .../duplication-direct.stderr.log                  |    0
+ .../duplication-direct.stdout.log                  |    2 +
+ .../duplication.memory.json                        |   20 +
+ .../duplication.stderr.log                         |    0
+ .../duplication.stdout.log                         |    2 +
+ .../final-verification.json                        |  129 +++
+ reports/contract-provider-refresh/hook-status.log  |    2 +
+ .../missing-discovery.stderr.log                   |   96 ++
+ .../missing-discovery.stdout.log                   |    0
+ .../persona-invalid.stderr.log                     |    0
+ .../persona-invalid.stdout.log                     |    1 +
+ .../persona-loop-guard.stderr.log                  |    0
+ .../persona-loop-guard.stdout.log                  |    0
+ .../persona-valid.stderr.log                       |    0
+ .../persona-valid.stdout.log                       |    0
+ reports/contract-provider-refresh/plan-build.log   |  189 +++
+ .../pre-commit.stderr.log                          |    0
+ .../pre-commit.stdout.log                          |   89 ++
+ .../symbols-direct.memory.json                     |   20 +
+ .../symbols-direct.stderr.log                      |    5 +
+ .../symbols-direct.stdout.log                      |    0
+ .../contract-provider-refresh/symbols.memory.json  |   20 +
+ .../contract-provider-refresh/symbols.stderr.log   |    5 +
+ .../contract-provider-refresh/symbols.stdout.log   |    0
+ .../contract-provider-refresh/verification.json    |   63 +
+ .../with-discovery.stderr.log                      |    0
+ .../with-discovery.stdout.log                      |    0
+ reports/dependency-refresh/artifact-manifest.json  |   74 ++
+ reports/dependency-refresh/core-parser.patch       |   11 +
+ reports/dependency-refresh/plan-build.log          |  195 ++++
+ reports/dependency-refresh/verification.json       |   14 +
+ .../artifact-manifest.json                         |  242 ++++
+ .../candidate-container.json                       |  263 +++++
+ .../candidate-source.sha256                        |    3 +
+ reports/distributed-admission-fix/candidate.log    |  747 ++++++++++++
+ .../core-image-build.json                          |   66 ++
+ .../distributed-admission-fix/final-container.json |  219 ++++
+ reports/distributed-admission-fix/final-image.json |   72 ++
+ .../distributed-admission-fix/final-source.sha256  |    3 +
+ reports/distributed-admission-fix/final.log        |  933 +++++++++++++++
+ reports/distributed-admission-fix/image-build.log  |  343 ++++++
+ reports/distributed-admission-fix/integrity.json   |    8 +
+ .../lean-check.memory.json                         |   20 +
+ .../lean-check.stderr.log                          |    0
+ .../lean-check.stdout.log                          |   19 +
+ reports/distributed-admission-fix/plan-build.log   |  190 +++
+ reports/distributed-admission-fix/results.json     |   32 +
+ reports/distributed-admission-fix/results.svg      | 1204 ++++++++++++++++++++
+ reports/distributed-admission-fix/traceability.tsv |   12 +
+ tools/hooks/commit-msg                             |    2 +-
+ tools/hooks/pre-commit                             |    2 +-
+ 77 files changed, 6474 insertions(+), 103 deletions(-)
+ create mode 100644 .claude/settings.json
+ create mode 100644 AGENTS.md
+ create mode 100644 docs/plans/2026-09-05-contract-provider-refresh/plan.mmd
+ create mode 100644 docs/plans/2026-09-05-contract-provider-refresh/plan.pdf
+ create mode 100644 docs/plans/2026-09-05-contract-provider-refresh/plan.tex
+ create mode 100644 docs/plans/2026-09-05-contract-provider-refresh/plan.tikz
+ create mode 100644 docs/plans/2026-09-05-dependency-refresh/plan.mmd
+ create mode 100644 docs/plans/2026-09-05-dependency-refresh/plan.pdf
+ create mode 100644 docs/plans/2026-09-05-dependency-refresh/plan.tex
+ create mode 100644 docs/plans/2026-09-05-dependency-refresh/plan.tikz
+ create mode 100644 reports/2026-09-05-contract-provider-refresh.md
+ create mode 100644 reports/2026-09-05-dependency-refresh.md
+ create mode 100644 reports/2026-09-05-distributed-admission-fix.md
+ create mode 100644 reports/contract-provider-refresh/artifact-manifest.json
+ create mode 100644 reports/contract-provider-refresh/duplication-direct.memory.json
+ create mode 100644 reports/contract-provider-refresh/duplication-direct.stderr.log
+ create mode 100644 reports/contract-provider-refresh/duplication-direct.stdout.log
+ create mode 100644 reports/contract-provider-refresh/duplication.memory.json
+ create mode 100644 reports/contract-provider-refresh/duplication.stderr.log
+ create mode 100644 reports/contract-provider-refresh/duplication.stdout.log
+ create mode 100644 reports/contract-provider-refresh/final-verification.json
+ create mode 100644 reports/contract-provider-refresh/hook-status.log
+ create mode 100644 reports/contract-provider-refresh/missing-discovery.stderr.log
+ create mode 100644 reports/contract-provider-refresh/missing-discovery.stdout.log
+ create mode 100644 reports/contract-provider-refresh/persona-invalid.stderr.log
+ create mode 100644 reports/contract-provider-refresh/persona-invalid.stdout.log
+ create mode 100644 reports/contract-provider-refresh/persona-loop-guard.stderr.log
+ create mode 100644 reports/contract-provider-refresh/persona-loop-guard.stdout.log
+ create mode 100644 reports/contract-provider-refresh/persona-valid.stderr.log
+ create mode 100644 reports/contract-provider-refresh/persona-valid.stdout.log
+ create mode 100644 reports/contract-provider-refresh/plan-build.log
+ create mode 100644 reports/contract-provider-refresh/pre-commit.stderr.log
+ create mode 100644 reports/contract-provider-refresh/pre-commit.stdout.log
+ create mode 100644 reports/contract-provider-refresh/symbols-direct.memory.json
+ create mode 100644 reports/contract-provider-refresh/symbols-direct.stderr.log
+ create mode 100644 reports/contract-provider-refresh/symbols-direct.stdout.log
+ create mode 100644 reports/contract-provider-refresh/symbols.memory.json
+ create mode 100644 reports/contract-provider-refresh/symbols.stderr.log
+ create mode 100644 reports/contract-provider-refresh/symbols.stdout.log
+ create mode 100644 reports/contract-provider-refresh/verification.json
+ create mode 100644 reports/contract-provider-refresh/with-discovery.stderr.log
+ create mode 100644 reports/contract-provider-refresh/with-discovery.stdout.log
+ create mode 100644 reports/dependency-refresh/artifact-manifest.json
+ create mode 100644 reports/dependency-refresh/core-parser.patch
+ create mode 100644 reports/dependency-refresh/plan-build.log
+ create mode 100644 reports/dependency-refresh/verification.json
+ create mode 100644 reports/distributed-admission-fix/artifact-manifest.json
+ create mode 100644 reports/distributed-admission-fix/candidate-container.json
+ create mode 100644 reports/distributed-admission-fix/candidate-source.sha256
+ create mode 100644 reports/distributed-admission-fix/candidate.log
+ create mode 100644 reports/distributed-admission-fix/core-image-build.json
+ create mode 100644 reports/distributed-admission-fix/final-container.json
+ create mode 100644 reports/distributed-admission-fix/final-image.json
+ create mode 100644 reports/distributed-admission-fix/final-source.sha256
+ create mode 100644 reports/distributed-admission-fix/final.log
+ create mode 100644 reports/distributed-admission-fix/image-build.log
+ create mode 100644 reports/distributed-admission-fix/integrity.json
+ create mode 100644 reports/distributed-admission-fix/lean-check.memory.json
+ create mode 100644 reports/distributed-admission-fix/lean-check.stderr.log
+ create mode 100644 reports/distributed-admission-fix/lean-check.stdout.log
+ create mode 100644 reports/distributed-admission-fix/plan-build.log
+ create mode 100644 reports/distributed-admission-fix/results.json
+ create mode 100644 reports/distributed-admission-fix/results.svg
+ create mode 100644 reports/distributed-admission-fix/traceability.tsv

@@ -150,8 +150,8 @@ pub enum ResyncReason {
     /// A transaction tried to stage or drain more than [`AssemblerLimits`]
     /// permits. Accumulated across messages, unlike a decode limit.
     StagingLimitExceeded { what: &'static str },
-    /// A transaction bumped `topology` without also supplying new `weights` and
-    /// `features`, which are indexed by structure — see §4 of the design note.
+    /// A target regressed a version component, or bumped `topology` without
+    /// also supplying new `weights` and `features` indexed by that structure.
     IncoherentVersionBump {
         base: SnapshotVersion,
         target: SnapshotVersion,
@@ -202,9 +202,10 @@ pub enum ApplyOutcome {
     /// A message belonging to a transaction whose target the consumer has
     /// already moved past. Consumed and discarded without staging.
     Superseded,
-    /// A replay whose sequence is older than the retained window, so it cannot
-    /// be authenticated as either exact or conflicting. The caller must decide;
-    /// resynchronising is always safe.
+    /// A replay whose sequence is older than the retained window, or whose
+    /// established version was restored without its commit identity. It cannot
+    /// be authenticated as either exact or conflicting; the caller must recover
+    /// rather than publish it as a new commit.
     ReplayOutsideWindow { seq: u64 },
     /// The sequence space is exhausted: no successor to `u64::MAX` exists, so
     /// this stream cannot continue and a new stream identity is required.
@@ -598,6 +599,8 @@ pub struct TransactionAssembler {
     stream_id: Option<u64>,
     last_seq: Option<u64>,
     current: SnapshotVersion,
+    /// Distinguishes an empty bootstrap from a restored version, including ZERO.
+    has_current_version: bool,
     /// Digest of the transaction that established `current`, when one did.
     /// Bounded: 32 bytes, replaced on each commit.
     current_commit_digest: Option<[u8; 32]>,
@@ -615,6 +618,7 @@ impl TransactionAssembler {
             stream_id: None,
             last_seq: None,
             current: SnapshotVersion::ZERO,
+            has_current_version: false,
             current_commit_digest: None,
             open: None,
             discarding: None,
@@ -625,8 +629,9 @@ impl TransactionAssembler {
 
     /// A consumer resuming at a known version, as after a restart.
     ///
-    /// The version is the consumer's durable state. Stream identity, sequence
-    /// position, staging and replay history are deliberately not restored: a
+    /// The caller must already hold the state corresponding to `version`; this
+    /// restores only its version metadata. Stream identity, sequence position,
+    /// staging and replay history are deliberately not restored: a
     /// restart cannot know whether the producer also restarted. The commit
     /// digest is likewise unknown, so a transaction re-establishing this exact
     /// version cannot be authenticated as an exact replay and reports
@@ -635,6 +640,7 @@ impl TransactionAssembler {
     pub fn resuming_at(version: SnapshotVersion, limits: AssemblerLimits) -> Self {
         let mut a = Self::new(limits);
         a.current = version;
+        a.has_current_version = true;
         a
     }
 
@@ -845,6 +851,15 @@ impl TransactionAssembler {
             return ApplyOutcome::Superseded;
         }
 
+        // A single-writer stream cannot move one version axis backwards while
+        // advancing another. Fully superseded targets were handled above.
+        if !target.dominates(&self.current) {
+            return ApplyOutcome::ResyncRequired(ResyncReason::IncoherentVersionBump {
+                base: self.current,
+                target,
+            });
+        }
+
         // A delta is meaningful only against the exact state it was computed
         // from. A snapshot replaces state outright, so its base is advisory.
         if kind == TransactionKind::Delta && id.base_version != self.current {
@@ -874,7 +889,7 @@ impl TransactionAssembler {
         // established the current version, but its identity is not complete
         // until Commit. Stage it under ordinary limits and compare then --
         // never publish or replace anything before equality is established.
-        let revalidating = target == self.current && self.current_commit_digest.is_some();
+        let revalidating = target == self.current && self.has_current_version;
 
         let mut digest =
             TransactionDigestBuilder::new(kind, id.stream_id, id.txn_id, id.base_version, target);
@@ -1024,13 +1039,14 @@ impl TransactionAssembler {
                     expected_digest: known,
                     got_digest: digest,
                 }),
-                // Cannot happen: `revalidating` is only set when a digest is
-                // held. Reported rather than assumed.
+                // A restored version without its commit identity cannot
+                // authenticate this replay. Keep the restored state intact.
                 None => ApplyOutcome::ReplayOutsideWindow { seq: id.seq },
             };
         }
 
         self.current = open.target_version;
+        self.has_current_version = true;
         self.current_commit_digest = Some(digest);
         ApplyOutcome::Committed(CommittedTransaction {
             stream_id: self.stream_id.unwrap_or_default(),

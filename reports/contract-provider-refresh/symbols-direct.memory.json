@@ -1,0 +1,20 @@
+{
+    "bench":  "",
+    "executable":  "C:\\Users\\kyber\\AppData\\Roaming\\uv\\python\\cpython-3.14-windows-x86_64-none\\python.exe",
+    "executable_sha256":  "6BF492976E3A0CBB10695171D7F11897C4935BA93BC078B3BC3BE52861D78ECC",
+    "arguments":  "-m contract_tools.index --root . --check --stats",
+    "working_directory":  "D:\\hnnwork\\distributed\\core",
+    "filter":  "(all)",
+    "rayon_threads":  "inherited",
+    "exit_code":  0,
+    "wall_seconds":  0.414,
+    "peak_working_set_mib":  30.371,
+    "peak_paged_mib":  22.199,
+    "peak_virtual_mib":  4186.289,
+    "peak_observed":  true,
+    "poll_interval_ms":  100,
+    "cap_mib":  2048,
+    "terminated_for_cap":  false,
+    "cap_ok":  true,
+    "cap_16gb_ok":  true
+}

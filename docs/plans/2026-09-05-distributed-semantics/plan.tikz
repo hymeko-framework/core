@@ -1,0 +1,12 @@
+\begin{center}
+\begin{tikzpicture}[node distance=10mm, every node/.style={draw,rounded corners,align=center,font=\small}, >=Stealth]
+\node (spec) {Existing Core specification};
+\node (model) [below left=of spec] {Lean admission model\\kernel-checked properties};
+\node (runtime) [below right=of spec] {Actual Core public API\\counterexample traces};
+\node (result) [below=23mm of spec] {Traceability: proved / observed / missing};
+\draw[->] (spec) -- (model);
+\draw[->] (spec) -- (runtime);
+\draw[->] (model) -- (result);
+\draw[->] (runtime) -- (result);
+\end{tikzpicture}
+\end{center}

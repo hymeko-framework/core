@@ -1,0 +1,184 @@
+﻿[
+    {
+        "path":  "D:\\hakiko_ai_ws\\03_implementation\\hymeko_framework\\core",
+        "git":  true,
+        "branch":  "integrate/contract-cbor-webxr-clean",
+        "head":  "0a34a976457fdc775abe180295ab0ac70598a89f",
+        "upstream":  "origin/integrate/contract-cbor-webxr-clean",
+        "ahead_behind":  "0\t0",
+        "remotes":  [
+                        "origin\tssh://git@amaterasu.local:2222/hymeko/core.git (fetch)",
+                        "origin\tssh://git@amaterasu.local:2222/hymeko/core.git (push)"
+                    ],
+        "status":  [
+
+                   ],
+        "merge":  false,
+        "rebase":  false,
+        "cherry_pick":  false,
+        "stale_rebase_head":  false
+    },
+    {
+        "path":  "D:\\hakiko_ai_ws\\03_implementation\\hymeko_framework\\graph",
+        "git":  true,
+        "branch":  "main",
+        "head":  "29087858c0424fbd5aae4dba3373d64dea92d408",
+        "upstream":  "origin/main",
+        "ahead_behind":  "0\t37",
+        "remotes":  [
+                        "origin\tssh://git@amaterasu.local:2222/hymeko/graph.git (fetch)",
+                        "origin\tssh://git@amaterasu.local:2222/hymeko/graph.git (push)"
+                    ],
+        "status":  [
+
+                   ],
+        "merge":  false,
+        "rebase":  false,
+        "cherry_pick":  false,
+        "stale_rebase_head":  true
+    },
+    {
+        "path":  "D:\\hakiko_ai_ws\\03_implementation\\hymeko_framework\\transformation",
+        "git":  true,
+        "branch":  "main",
+        "head":  "0d78d403983b9cd272e9fcac2c17e79467a611e7",
+        "upstream":  "origin/main",
+        "ahead_behind":  "0\t0",
+        "remotes":  [
+                        "origin\tssh://git@amaterasu.local:2222/hymeko/transformation.git (fetch)",
+                        "origin\tssh://git@amaterasu.local:2222/hymeko/transformation.git (push)"
+                    ],
+        "status":  [
+
+                   ],
+        "merge":  false,
+        "rebase":  false,
+        "cherry_pick":  false,
+        "stale_rebase_head":  false
+    },
+    {
+        "path":  "D:\\hakiko_ai_ws\\03_implementation\\hymeko_framework\\transformation-webxr-relocate",
+        "git":  true,
+        "branch":  "feat/webxr-domain-projection",
+        "head":  "4298cfca0ed12a734f0792b33d434f47b165b4fe",
+        "upstream":  null,
+        "ahead_behind":  null,
+        "remotes":  [
+                        "origin\tssh://git@amaterasu.local:2222/hymeko/transformation.git (fetch)",
+                        "origin\tssh://git@amaterasu.local:2222/hymeko/transformation.git (push)"
+                    ],
+        "status":  [
+
+                   ],
+        "merge":  false,
+        "rebase":  false,
+        "cherry_pick":  false,
+        "stale_rebase_head":  false
+    },
+    {
+        "path":  "D:\\hakiko_ai_ws\\03_implementation\\axon",
+        "git":  true,
+        "branch":  "main",
+        "head":  "bdbf837f87a309536105911aa812a59921adb577",
+        "upstream":  "origin/main",
+        "ahead_behind":  "0\t0",
+        "remotes":  [
+                        "origin\tssh://git@192.168.1.228:2222/hymeko/axon.git (fetch)",
+                        "origin\tssh://git@192.168.1.228:2222/hymeko/axon.git (push)"
+                    ],
+        "status":  [
+
+                   ],
+        "merge":  false,
+        "rebase":  false,
+        "cherry_pick":  false,
+        "stale_rebase_head":  false
+    },
+    {
+        "path":  "D:\\hakiko_ai_ws\\03_implementation\\soma_chordex",
+        "git":  false
+    },
+    {
+        "path":  "D:\\hakiko_ai_ws\\03_implementation\\hymeko_simulator",
+        "git":  true,
+        "branch":  "chore/contract-tooling",
+        "head":  "b7a21c7e2107c95ac9954a6523087cfd7e564304",
+        "upstream":  null,
+        "ahead_behind":  null,
+        "remotes":  [
+                        "origin\tssh://git@amaterasu.local:2222/hymeko/simulator.git (fetch)",
+                        "origin\tssh://git@amaterasu.local:2222/hymeko/simulator.git (push)"
+                    ],
+        "status":  [
+                       " M Cargo.toml",
+                       " M SCHEMA.md",
+                       " M hymeko/demo_electromagnetics.hymeko",
+                       " M src/cli.rs",
+                       " M src/dynamics.rs",
+                       " M src/electro/port_hamiltonian/tests.rs",
+                       " M src/electro/scene.rs",
+                       " M src/electro/scene/builders.rs",
+                       " M src/hymeko_scene.rs",
+                       " M src/lib.rs",
+                       " M src/main.rs",
+                       " M src/mode.rs",
+                       " M src/native.rs",
+                       " M src/pick.rs",
+                       " M src/quantum.rs",
+                       " M src/quantum_surface.rs",
+                       " M src/render.rs",
+                       " M src/robot.rs",
+                       " M src/scene_desc.rs",
+                       " M src/scene_view.rs",
+                       " M src/shader.wgsl",
+                       " M src/web.rs",
+                       " M tests/app.rs",
+                       " M tests/cli.rs",
+                       " M tests/dynamics.rs",
+                       " M tests/hymeko_scene.rs",
+                       " M tests/hymeko_scene_ir.rs",
+                       " M tests/mode.rs",
+                       " M tests/pick_geometry.rs",
+                       " M tests/quantum_drive.rs",
+                       " M tests/readout.rs",
+                       " M tests/robot.rs",
+                       " M tests/smoke.rs",
+                       " M web/README.md",
+                       " M web/build.sh",
+                       " M web/index.html",
+                       "?? src/electro/scene/circuit.rs",
+                       "?? src/model_ingress.rs",
+                       "?? src/runtime.rs",
+                       "?? src/runtime/",
+                       "?? src/sensors.rs",
+                       "?? src/sensors/",
+                       "?? src/spatial.rs",
+                       "?? src/spatial/",
+                       "?? tests/anchors.rs",
+                       "?? tests/declared_port_hamiltonian.rs",
+                       "?? tests/fiducial_overlay.rs",
+                       "?? tests/model_ingress.rs",
+                       "?? tests/render_into_formats.rs",
+                       "?? tests/resistor_bands.rs",
+                       "?? tests/runtime_binding.rs",
+                       "?? tests/shader_uniformity.rs",
+                       "?? web-next/",
+                       "?? web/capture.html",
+                       "?? web/chain.html",
+                       "?? web/check_frame.py",
+                       "?? web/check_labels.py",
+                       "?? web/circuit.html",
+                       "?? web/make_pages.py",
+                       "?? web/trace_capture.html",
+                       "?? web/tracked.html",
+                       "?? web/viewer.js",
+                       "?? web/viewer.tmpl.html",
+                       "?? web/zenoh-ingress.mjs",
+                       "?? web/zenoh-ingress.test.mjs"
+                   ],
+        "merge":  false,
+        "rebase":  false,
+        "cherry_pick":  false,
+        "stale_rebase_head":  false
+    }
+]

@@ -1,0 +1,611 @@
+         1:	find library=libgcc_s.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	  trying file=/lib/x86_64-linux-gnu/libgcc_s.so.1
+         1:	
+         1:	find library=libm.so.6 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	  trying file=/lib/x86_64-linux-gnu/libm.so.6
+         1:	
+         1:	find library=libc.so.6 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	  trying file=/lib/x86_64-linux-gnu/libc.so.6
+         1:	
+         1:	
+         1:	calling init: /lib64/ld-linux-x86-64.so.2
+         1:	
+         1:	
+         1:	calling init: /lib/x86_64-linux-gnu/libc.so.6
+         1:	
+         1:	
+         1:	calling init: /lib/x86_64-linux-gnu/libm.so.6
+         1:	
+         1:	
+         1:	calling init: /lib/x86_64-linux-gnu/libgcc_s.so.1
+         1:	
+         1:	
+         1:	initialize program: /workspace/core/target/release/deps/spmm_bench-c98480c5b7920517
+         1:	
+         1:	
+         1:	transferring control: /workspace/core/target/release/deps/spmm_bench-c98480c5b7920517
+         1:	
+         1:	find library=libvulkan.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	  trying file=/lib/x86_64-linux-gnu/libvulkan.so.1
+         1:	
+         1:	
+         1:	calling init: /lib/x86_64-linux-gnu/libvulkan.so.1
+         1:	
+         1:	find library=libGLX_nvidia.so.0 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	  trying file=/lib/x86_64-linux-gnu/libGLX_nvidia.so.0
+         1:	
+         1:	find library=libnvidia-glsi.so.595.91.07 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	  trying file=/lib/x86_64-linux-gnu/libnvidia-glsi.so.595.91.07
+         1:	
+         1:	find library=libnvidia-tls.so.595.91.07 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	  trying file=/lib/x86_64-linux-gnu/libnvidia-tls.so.595.91.07
+         1:	
+         1:	find library=libnvidia-glcore.so.595.91.07 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	  trying file=/lib/x86_64-linux-gnu/libnvidia-glcore.so.595.91.07
+         1:	
+         1:	find library=libX11.so.6 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	  trying file=/lib/x86_64-linux-gnu/libX11.so.6
+         1:	
+         1:	find library=libXext.so.6 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	  trying file=/lib/x86_64-linux-gnu/libXext.so.6
+         1:	
+         1:	find library=libdl.so.2 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	  trying file=/lib/x86_64-linux-gnu/libdl.so.2
+         1:	
+         1:	find library=libpthread.so.0 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	  trying file=/lib/x86_64-linux-gnu/libpthread.so.0
+         1:	
+         1:	find library=librt.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	  trying file=/lib/x86_64-linux-gnu/librt.so.1
+         1:	
+         1:	find library=libnvidia-gpucomp.so.595.91.07 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	  trying file=/lib/x86_64-linux-gnu/libnvidia-gpucomp.so.595.91.07
+         1:	
+         1:	find library=libxcb.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	  trying file=/lib/x86_64-linux-gnu/libxcb.so.1
+         1:	
+         1:	find library=libXau.so.6 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	  trying file=/lib/x86_64-linux-gnu/libXau.so.6
+         1:	
+         1:	find library=libXdmcp.so.6 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	  trying file=/lib/x86_64-linux-gnu/libXdmcp.so.6
+         1:	
+         1:	find library=libbsd.so.0 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	  trying file=/lib/x86_64-linux-gnu/libbsd.so.0
+         1:	
+         1:	find library=libmd.so.0 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	  trying file=/lib/x86_64-linux-gnu/libmd.so.0
+         1:	
+         1:	
+         1:	calling init: /lib/x86_64-linux-gnu/libmd.so.0
+         1:	
+         1:	
+         1:	calling init: /lib/x86_64-linux-gnu/libbsd.so.0
+         1:	
+         1:	
+         1:	calling init: /lib/x86_64-linux-gnu/libXdmcp.so.6
+         1:	
+         1:	
+         1:	calling init: /lib/x86_64-linux-gnu/libXau.so.6
+         1:	
+         1:	
+         1:	calling init: /lib/x86_64-linux-gnu/libxcb.so.1
+         1:	
+         1:	
+         1:	calling init: /lib/x86_64-linux-gnu/libpthread.so.0
+         1:	
+         1:	
+         1:	calling init: /lib/x86_64-linux-gnu/librt.so.1
+         1:	
+         1:	
+         1:	calling init: /lib/x86_64-linux-gnu/libdl.so.2
+         1:	
+         1:	
+         1:	calling init: /lib/x86_64-linux-gnu/libnvidia-gpucomp.so.595.91.07
+         1:	
+         1:	
+         1:	calling init: /lib/x86_64-linux-gnu/libX11.so.6
+         1:	
+         1:	
+         1:	calling init: /lib/x86_64-linux-gnu/libXext.so.6
+         1:	
+         1:	
+         1:	calling init: /lib/x86_64-linux-gnu/libnvidia-tls.so.595.91.07
+         1:	
+         1:	
+         1:	calling init: /lib/x86_64-linux-gnu/libnvidia-glcore.so.595.91.07
+         1:	
+         1:	
+         1:	calling init: /lib/x86_64-linux-gnu/libnvidia-glsi.so.595.91.07
+         1:	
+         1:	
+         1:	calling init: /lib/x86_64-linux-gnu/libGLX_nvidia.so.0
+         1:	
+         1:	/lib/x86_64-linux-gnu/libnvidia-glcore.so.595.91.07: error: symbol lookup error: undefined symbol: __malloc_hook (fatal)
+         1:	/lib/x86_64-linux-gnu/libnvidia-glcore.so.595.91.07: error: symbol lookup error: undefined symbol: __realloc_hook (fatal)
+         1:	/lib/x86_64-linux-gnu/libnvidia-glcore.so.595.91.07: error: symbol lookup error: undefined symbol: __free_hook (fatal)
+         1:	/lib/x86_64-linux-gnu/libnvidia-glcore.so.595.91.07: error: symbol lookup error: undefined symbol: __memalign_hook (fatal)
+         1:	/lib/x86_64-linux-gnu/libnvidia-glcore.so.595.91.07: error: symbol lookup error: undefined symbol: ErrorF (fatal)
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu/glibc-hwcaps/x86-64-v3:/lib/x86_64-linux-gnu/glibc-hwcaps/x86-64-v2:/lib/x86_64-linux-gnu/tls/x86_64/x86_64:/lib/x86_64-linux-gnu/tls/x86_64:/lib/x86_64-linux-gnu/tls/x86_64:/lib/x86_64-linux-gnu/tls:/lib/x86_64-linux-gnu/x86_64/x86_64:/lib/x86_64-linux-gnu/x86_64:/lib/x86_64-linux-gnu/x86_64:/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu/glibc-hwcaps/x86-64-v3:/usr/lib/x86_64-linux-gnu/glibc-hwcaps/x86-64-v2:/usr/lib/x86_64-linux-gnu/tls/x86_64/x86_64:/usr/lib/x86_64-linux-gnu/tls/x86_64:/usr/lib/x86_64-linux-gnu/tls/x86_64:/usr/lib/x86_64-linux-gnu/tls:/usr/lib/x86_64-linux-gnu/x86_64/x86_64:/usr/lib/x86_64-linux-gnu/x86_64:/usr/lib/x86_64-linux-gnu/x86_64:/usr/lib/x86_64-linux-gnu:/lib/glibc-hwcaps/x86-64-v3:/lib/glibc-hwcaps/x86-64-v2:/lib/tls/x86_64/x86_64:/lib/tls/x86_64:/lib/tls/x86_64:/lib/tls:/lib/x86_64/x86_64:/lib/x86_64:/lib/x86_64:/lib:/usr/lib/glibc-hwcaps/x86-64-v3:/usr/lib/glibc-hwcaps/x86-64-v2:/usr/lib/tls/x86_64/x86_64:/usr/lib/tls/x86_64:/usr/lib/tls/x86_64:/usr/lib/tls:/usr/lib/x86_64/x86_64:/usr/lib/x86_64:/usr/lib/x86_64:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/glibc-hwcaps/x86-64-v3/libEGL.so.1
+         1:	  trying file=/lib/x86_64-linux-gnu/glibc-hwcaps/x86-64-v2/libEGL.so.1
+         1:	  trying file=/lib/x86_64-linux-gnu/tls/x86_64/x86_64/libEGL.so.1
+         1:	  trying file=/lib/x86_64-linux-gnu/tls/x86_64/libEGL.so.1
+         1:	  trying file=/lib/x86_64-linux-gnu/tls/x86_64/libEGL.so.1
+         1:	  trying file=/lib/x86_64-linux-gnu/tls/libEGL.so.1
+         1:	  trying file=/lib/x86_64-linux-gnu/x86_64/x86_64/libEGL.so.1
+         1:	  trying file=/lib/x86_64-linux-gnu/x86_64/libEGL.so.1
+         1:	  trying file=/lib/x86_64-linux-gnu/x86_64/libEGL.so.1
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/glibc-hwcaps/x86-64-v3/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/glibc-hwcaps/x86-64-v2/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/tls/x86_64/x86_64/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/tls/x86_64/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/tls/x86_64/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/tls/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/x86_64/x86_64/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/x86_64/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/x86_64/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/glibc-hwcaps/x86-64-v3/libEGL.so.1
+         1:	  trying file=/lib/glibc-hwcaps/x86-64-v2/libEGL.so.1
+         1:	  trying file=/lib/tls/x86_64/x86_64/libEGL.so.1
+         1:	  trying file=/lib/tls/x86_64/libEGL.so.1
+         1:	  trying file=/lib/tls/x86_64/libEGL.so.1
+         1:	  trying file=/lib/tls/libEGL.so.1
+         1:	  trying file=/lib/x86_64/x86_64/libEGL.so.1
+         1:	  trying file=/lib/x86_64/libEGL.so.1
+         1:	  trying file=/lib/x86_64/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/glibc-hwcaps/x86-64-v3/libEGL.so.1
+         1:	  trying file=/usr/lib/glibc-hwcaps/x86-64-v2/libEGL.so.1
+         1:	  trying file=/usr/lib/tls/x86_64/x86_64/libEGL.so.1
+         1:	  trying file=/usr/lib/tls/x86_64/libEGL.so.1
+         1:	  trying file=/usr/lib/tls/x86_64/libEGL.so.1
+         1:	  trying file=/usr/lib/tls/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64/x86_64/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	
+         1:	calling fini: /lib/x86_64-linux-gnu/libvulkan.so.1 [0]
+         1:	
+GPU cells SKIPPED - no adapter: no suitable adapter for Backends(VULKAN | DX12): No suitable graphics adapter found; noop not requested, vulkan drivers/libraries could not be loaded, metal not requested, dx12 support not compiled in, gl not requested, webgpu not requested
+         1:	find library=libvulkan.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	  trying file=/lib/x86_64-linux-gnu/libvulkan.so.1
+         1:	
+         1:	
+         1:	calling init: /lib/x86_64-linux-gnu/libvulkan.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	
+         1:	calling fini: /lib/x86_64-linux-gnu/libvulkan.so.1 [0]
+         1:	
+GPU cells SKIPPED - no adapter: no suitable adapter for Backends(VULKAN | DX12): No suitable graphics adapter found; noop not requested, vulkan drivers/libraries could not be loaded, metal not requested, dx12 support not compiled in, gl not requested, webgpu not requested
+         1:	find library=libvulkan.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	  trying file=/lib/x86_64-linux-gnu/libvulkan.so.1
+         1:	
+         1:	
+         1:	calling init: /lib/x86_64-linux-gnu/libvulkan.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	
+         1:	calling fini: /lib/x86_64-linux-gnu/libvulkan.so.1 [0]
+         1:	
+GPU cells SKIPPED - no adapter: no suitable adapter for Backends(VULKAN | DX12): No suitable graphics adapter found; noop not requested, vulkan drivers/libraries could not be loaded, metal not requested, dx12 support not compiled in, gl not requested, webgpu not requested
+         1:	find library=libvulkan.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	  trying file=/lib/x86_64-linux-gnu/libvulkan.so.1
+         1:	
+         1:	
+         1:	calling init: /lib/x86_64-linux-gnu/libvulkan.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	
+         1:	calling fini: /lib/x86_64-linux-gnu/libvulkan.so.1 [0]
+         1:	
+GPU cells SKIPPED - no adapter: no suitable adapter for Backends(VULKAN | DX12): No suitable graphics adapter found; noop not requested, vulkan drivers/libraries could not be loaded, metal not requested, dx12 support not compiled in, gl not requested, webgpu not requested
+         1:	find library=libvulkan.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	  trying file=/lib/x86_64-linux-gnu/libvulkan.so.1
+         1:	
+         1:	
+         1:	calling init: /lib/x86_64-linux-gnu/libvulkan.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	find library=libEGL.so.1 [0]; searching
+         1:	 search cache=/etc/ld.so.cache
+         1:	 search path=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/lib:/usr/lib		(system search path)
+         1:	  trying file=/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/usr/lib/x86_64-linux-gnu/libEGL.so.1
+         1:	  trying file=/lib/libEGL.so.1
+         1:	  trying file=/usr/lib/libEGL.so.1
+         1:	
+         1:	
+         1:	calling fini: /lib/x86_64-linux-gnu/libvulkan.so.1 [0]
+         1:	
+GPU cells SKIPPED - no adapter: no suitable adapter for Backends(VULKAN | DX12): No suitable graphics adapter found; noop not requested, vulkan drivers/libraries could not be loaded, metal not requested, dx12 support not compiled in, gl not requested, webgpu not requested
+         1:	
+         1:	calling fini:  [0]
+         1:	
+         1:	
+         1:	calling fini: /lib/x86_64-linux-gnu/libgcc_s.so.1 [0]
+         1:	
+         1:	
+         1:	calling fini: /lib/x86_64-linux-gnu/libGLX_nvidia.so.0 [0]
+         1:	
+         1:	
+         1:	calling fini: /lib/x86_64-linux-gnu/libnvidia-glsi.so.595.91.07 [0]
+         1:	
+         1:	
+         1:	calling fini: /lib/x86_64-linux-gnu/libnvidia-glcore.so.595.91.07 [0]
+         1:	
+         1:	
+         1:	calling fini: /lib/x86_64-linux-gnu/libnvidia-tls.so.595.91.07 [0]
+         1:	
+         1:	
+         1:	calling fini: /lib/x86_64-linux-gnu/libXext.so.6 [0]
+         1:	
+         1:	
+         1:	calling fini: /lib/x86_64-linux-gnu/libX11.so.6 [0]
+         1:	
+         1:	
+         1:	calling fini: /lib/x86_64-linux-gnu/libnvidia-gpucomp.so.595.91.07 [0]
+         1:	
+         1:	
+         1:	calling fini: /lib/x86_64-linux-gnu/libm.so.6 [0]
+         1:	
+         1:	
+         1:	calling fini: /lib/x86_64-linux-gnu/libdl.so.2 [0]
+         1:	
+         1:	
+         1:	calling fini: /lib/x86_64-linux-gnu/librt.so.1 [0]
+         1:	
+         1:	
+         1:	calling fini: /lib/x86_64-linux-gnu/libpthread.so.0 [0]
+         1:	
+         1:	
+         1:	calling fini: /lib/x86_64-linux-gnu/libxcb.so.1 [0]
+         1:	
+         1:	
+         1:	calling fini: /lib/x86_64-linux-gnu/libXau.so.6 [0]
+         1:	
+         1:	
+         1:	calling fini: /lib/x86_64-linux-gnu/libXdmcp.so.6 [0]
+         1:	
+         1:	
+         1:	calling fini: /lib/x86_64-linux-gnu/libbsd.so.0 [0]
+         1:	
+         1:	
+         1:	calling fini: /lib/x86_64-linux-gnu/libmd.so.0 [0]
+         1:	
+         1:	
+         1:	calling fini: /lib/x86_64-linux-gnu/libc.so.6 [0]
+         1:	
+         1:	
+         1:	calling fini: /lib64/ld-linux-x86-64.so.2 [0]
+         1:	

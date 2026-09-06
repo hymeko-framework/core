@@ -1,0 +1,92 @@
+#!/bin/sh
+# Contract gate, pre-commit half. Install with tools/hooks/install.sh.
+#
+#   1. SYMBOLS.md is not stale.
+#   2. Duplication has not increased against .duplication-baseline.json.
+#   3. Every added file is run past the preflight, and the candidates are PRINTED.
+#
+# Only the first two block here. The third does not, and the reason is measured
+# rather than assumed: at pre-commit time `.git/COMMIT_EDITMSG` still holds the
+# PREVIOUS commit's message. A gate that blocked here with a "unless the message
+# says DISCOVERY:" escape would read the wrong message -- and would fail OPEN
+# whenever the last commit happened to carry that word. So the blocking half of
+# the preflight lives in `commit-msg`, where the message arrives as $1.
+#
+# The tooling is NOT vendored here. It is one implementation in hymeko/hymeko,
+# run from git and pinned to a revision, because three copies of a duplication
+# detector is the joke that writes itself. Re-pin deliberately; a moving pin
+# means the gate's answer changes without anyone changing anything.
+
+set -u
+
+SPEC="git+ssh://git@192.168.1.228:2222/hymeko/hymeko.git@d02aa614bc06a348dbcbe3936dcd3b9285b8bdeb"
+
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+cd "$ROOT" || exit 0
+
+export PYTHONIOENCODING=utf-8
+
+# One dependency: uv. It resolves the interpreter, the pinned tool and its locked
+# dependency set. This replaced fifteen lines that probed for a working `python3`
+# -- on the workstation this was written for, `command -v python3` finds a
+# Microsoft Store shim that answers and then exits 49.
+if ! command -v uv >/dev/null 2>&1; then
+    echo "contract hooks: uv not found — checks skipped, not failed." >&2
+    echo "  install: https://docs.astral.sh/uv/" >&2
+    exit 0
+fi
+
+# Prefer an installed entry point; fall back to resolving from git each call.
+# Measured: `uv tool run --from <git spec>` costs ~785 ms per invocation against
+# ~320 ms for an installed entry point, and this hook makes three calls. 2.7 s
+# versus 1.0 s decides whether a hook survives its first week.
+#   one-time:  sh tools/hooks/install.sh   (which runs `uv tool install`)
+if command -v contract-symbols >/dev/null 2>&1; then
+    gate() { "$@"; }
+else
+    gate() { uv tool run --quiet --from "$SPEC" "$@"; }
+fi
+
+fail=0
+
+# The aggregate self-check is provider-only. This guard is intentionally false
+# in this consumer; keeping it in the portable template prevents an accidental
+# tooling vendoring from silently turning into an unverified provider fork.
+if [ -f "$ROOT/tools/contract_tools/self_check.py" ]; then
+    if ! uv run --frozen contract-self-check --root . --staged; then
+        echo >&2
+        echo "  Contract-owned files changed and the complete self-check failed." >&2
+        fail=1
+    fi
+fi
+
+if ! gate contract-symbols --root . --check; then
+    echo >&2
+    echo "  SYMBOLS.md is stale. Run:  uv tool run --from \"\$SPEC\" contract-symbols --root ." >&2
+    fail=1
+fi
+
+if [ -f .duplication-baseline.json ] && ! gate contract-duplication --root .; then
+    echo >&2
+    echo "  Duplication rose. Consolidate, or justify the rise and re-run with --update." >&2
+    fail=1
+fi
+
+# Added files only: a modified file is not a new artifact. `--path` per file, not
+# a bare positional -- a name without a `/` is otherwise read as a SYMBOL, which
+# skips the self-exclusion and makes every added file its own candidate at 1.00.
+set --
+while IFS= read -r path; do
+    [ -n "$path" ] && set -- "$@" --path "$path"
+done <<ADDED
+$(git diff --cached --diff-filter=A --name-only)
+ADDED
+
+if [ "$#" -gt 0 ]; then
+    echo
+    gate contract-preflight --root . "$@" || true
+    echo
+    echo "  (advisory here — commit-msg blocks unless the message carries a DISCOVERY: line)"
+fi
+
+exit "$fail"

@@ -1,0 +1,52 @@
+{
+  "buildx.build.provenance": {
+    "builder": {
+      "id": ""
+    },
+    "buildType": "https://mobyproject.org/buildkit@v1",
+    "materials": [
+      {
+        "uri": "pkg:docker/python@3.13-slim-bookworm?platform=linux%2Famd64",
+        "digest": {
+          "sha256": "ed86c82274b3c69b52fb5820f358f0bd7df0b603332063cb5c6e32bd220c3e6e"
+        }
+      }
+    ],
+    "invocation": {
+      "configSource": {
+        "entryPoint": "Dockerfile"
+      },
+      "parameters": {
+        "frontend": "dockerfile.v0",
+        "locals": [
+          {
+            "name": "context"
+          },
+          {
+            "name": "dockerfile"
+          }
+        ]
+      },
+      "environment": {
+        "dockerfileVersion": "1.26.0",
+        "platform": "linux/amd64"
+      }
+    }
+  },
+  "buildx.build.ref": "hymeko-core-amaterasu-20260905/hymeko-core-amaterasu-202609050/3sesm8vy9es3ckimrgt6bru9f",
+  "containerimage.config.digest": "sha256:917a1626a3caa68f59b40a1d54c86b0cfd6c431009cf2a411cd10ccbc4825ec9",
+  "containerimage.descriptor": {
+    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+    "digest": "sha256:6b740752e069fd6afc80ba483f33d76644db6302e003742d9b918a78fc2010e8",
+    "size": 3149,
+    "annotations": {
+      "org.opencontainers.image.created": "2026-09-05T12:11:50Z"
+    },
+    "platform": {
+      "architecture": "amd64",
+      "os": "linux"
+    }
+  },
+  "containerimage.digest": "sha256:6b740752e069fd6afc80ba483f33d76644db6302e003742d9b918a78fc2010e8",
+  "image.name": "docker.io/library/hymeko-core-contract:515f285-lf"
+}

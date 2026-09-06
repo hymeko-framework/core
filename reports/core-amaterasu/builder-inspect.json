@@ -1,0 +1,205 @@
+[
+    {
+        "Id": "c9e007841e03537ba7889defdda2f1612828df7896a9063c1d2301e012d3bf6a",
+        "Created": "2026-09-05T11:29:36.716535893Z",
+        "Path": "/usr/bin/buildkitd-entrypoint",
+        "Args": [
+            "--allow-insecure-entitlement=network.host"
+        ],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 1604204,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-09-05T11:29:36.758777492Z",
+            "FinishedAt": "0001-01-01T00:00:00Z"
+        },
+        "Image": "sha256:260cc297a47c57183fe53fb963885068c30e976060fabc90e32af04919dbd0bf",
+        "ResolvConfPath": "/var/lib/docker/containers/c9e007841e03537ba7889defdda2f1612828df7896a9063c1d2301e012d3bf6a/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/c9e007841e03537ba7889defdda2f1612828df7896a9063c1d2301e012d3bf6a/hostname",
+        "HostsPath": "/var/lib/docker/containers/c9e007841e03537ba7889defdda2f1612828df7896a9063c1d2301e012d3bf6a/hosts",
+        "LogPath": "/var/lib/docker/containers/c9e007841e03537ba7889defdda2f1612828df7896a9063c1d2301e012d3bf6a/c9e007841e03537ba7889defdda2f1612828df7896a9063c1d2301e012d3bf6a-json.log",
+        "Name": "/buildx_buildkit_hymeko-core-amaterasu-202609050",
+        "RestartCount": 0,
+        "Driver": "overlay2",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "unconfined",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": null,
+            "ContainerIDFile": "",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {}
+            },
+            "NetworkMode": "bridge",
+            "PortBindings": {},
+            "RestartPolicy": {
+                "Name": "unless-stopped",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": null,
+            "CgroupnsMode": "private",
+            "Dns": null,
+            "DnsOptions": null,
+            "DnsSearch": null,
+            "ExtraHosts": null,
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": true,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": [
+                "label=disable"
+            ],
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 17179869184,
+            "NanoCpus": 0,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": null,
+            "BlkioDeviceReadBps": null,
+            "BlkioDeviceWriteBps": null,
+            "BlkioDeviceReadIOps": null,
+            "BlkioDeviceWriteIOps": null,
+            "CpuPeriod": 100000,
+            "CpuQuota": 600000,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": null,
+            "DeviceCgroupRules": null,
+            "DeviceRequests": [
+                {
+                    "Driver": "",
+                    "Count": -1,
+                    "DeviceIDs": null,
+                    "Capabilities": [
+                        [
+                            "gpu"
+                        ]
+                    ],
+                    "Options": {}
+                }
+            ],
+            "MemoryReservation": 0,
+            "MemorySwap": 17179869184,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": null,
+            "Ulimits": null,
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "Mounts": [
+                {
+                    "Type": "volume",
+                    "Source": "buildx_buildkit_hymeko-core-amaterasu-202609050_state",
+                    "Target": "/var/lib/buildkit"
+                }
+            ],
+            "MaskedPaths": null,
+            "ReadonlyPaths": null,
+            "Init": true
+        },
+        "GraphDriver": {
+            "Data": {
+                "ID": "c9e007841e03537ba7889defdda2f1612828df7896a9063c1d2301e012d3bf6a",
+                "LowerDir": "/var/lib/docker/overlay2/95ac6e556855266c0eae5e6bfd0de0619af4c2ba3ce54eb42a2ba2c785570f49-init/diff:/var/lib/docker/overlay2/a5d65f6da66ce4f8414077fac86ef647417a2ff131e8b75bb58218fb0ea0bca9/diff:/var/lib/docker/overlay2/e248932ecfc4fbbc03d0e9e206e87e72ac03f579c1a15948d889048014f666d0/diff:/var/lib/docker/overlay2/672f337066537d05a6420c40c5b7242532fc592de8dee910926a54ebff5f82d7/diff:/var/lib/docker/overlay2/b59a013bb041a9be875a8b2925ede1ec033053692005bd17c4fc94145a0987b4/diff:/var/lib/docker/overlay2/e571e0c94bc0a87aadd83b49bfc597c966dc586499a30bca26d41bae6dc8539d/diff:/var/lib/docker/overlay2/0f4ad580b177bf8cf35c6cdbce6c8e151f8f37804f0b1de078e391e0285b0e9d/diff:/var/lib/docker/overlay2/3fd662543fc8f6d3d5a5b1b11b768d05830403cb81d58985098765c902be0e8a/diff",
+                "MergedDir": "/var/lib/docker/overlay2/95ac6e556855266c0eae5e6bfd0de0619af4c2ba3ce54eb42a2ba2c785570f49/merged",
+                "UpperDir": "/var/lib/docker/overlay2/95ac6e556855266c0eae5e6bfd0de0619af4c2ba3ce54eb42a2ba2c785570f49/diff",
+                "WorkDir": "/var/lib/docker/overlay2/95ac6e556855266c0eae5e6bfd0de0619af4c2ba3ce54eb42a2ba2c785570f49/work"
+            },
+            "Name": "overlay2"
+        },
+        "Mounts": [
+            {
+                "Type": "volume",
+                "Name": "buildx_buildkit_hymeko-core-amaterasu-202609050_state",
+                "Source": "/var/lib/docker/volumes/buildx_buildkit_hymeko-core-amaterasu-202609050_state/_data",
+                "Destination": "/var/lib/buildkit",
+                "Driver": "local",
+                "Mode": "z",
+                "RW": true,
+                "Propagation": ""
+            }
+        ],
+        "Config": {
+            "Hostname": "c9e007841e03",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": false,
+            "AttachStderr": false,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "BUILDKIT_SETUP_CGROUPV2_ROOT=1"
+            ],
+            "Cmd": [
+                "--allow-insecure-entitlement=network.host"
+            ],
+            "Image": "moby/buildkit:buildx-stable-1",
+            "Volumes": {
+                "/var/lib/buildkit": {}
+            },
+            "WorkingDir": "/",
+            "Entrypoint": [
+                "/usr/bin/buildkitd-entrypoint"
+            ],
+            "Labels": {}
+        },
+        "NetworkSettings": {
+            "SandboxID": "0362eb1444ffe789d05be76784f642eac625de6c27b937db1ae120786a57f1c2",
+            "SandboxKey": "/var/run/docker/netns/0362eb1444ff",
+            "Ports": {},
+            "Networks": {
+                "bridge": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": null,
+                    "DriverOpts": null,
+                    "GwPriority": 0,
+                    "NetworkID": "6051a9af6d9f1bf8ecc76b0b67a0d3c7e9dd4684c945909aecbf563a8da77a7d",
+                    "EndpointID": "dbb8013159e7c1dbcaecd4f1ce786ca8556d73c5a63fd9a1eb80aca894b3c060",
+                    "Gateway": "172.17.0.1",
+                    "IPAddress": "172.17.0.3",
+                    "MacAddress": "da:64:52:bc:6a:48",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": null
+                }
+            }
+        }
+    }
+]

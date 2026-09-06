@@ -1,0 +1,12 @@
+requirement	model_status	runtime_status	evidence	limit
+DIST-ORDER	PROVED	PARTIAL	unchanged SnapshotVersion::dominates; Lean order theorems	No whole-Rust refinement proof
+DIST-MONOTONE	PROVED	PASS	ir_stream_admission::incomparable_snapshot_cannot_regress_topology;ir_stream_admission::incomparable_delta_cannot_regress_weights	Named public-API regressions plus reviewed componentwise guard
+DIST-RESUME	PROVED	PASS	ir_stream_admission::resume_equal_version_without_identity_requires_resync;ir_stream_admission::resumed_zero_is_distinct_from_empty_bootstrap;ir_stream_admission::resync_does_not_turn_resumed_zero_into_bootstrap	Held version and digest remain unchanged
+DIST-BOOTSTRAP	PROVED	PASS	ir_stream_admission::empty_bootstrap_can_install_zero_version	Empty section table; not semantic IR installation
+DIST-STALE	PROVED	PASS	ir_stream_admission::stale_delta_base_preserves_the_current_version	Exact StaleBase and version/digest checks
+DIST-PRESERVE	PROVED	PARTIAL	Producer::rejected helper in all rejection cases	Assembler metadata only; no complete payload application
+DIST-IDEMPOTENT	PROVED	PARTIAL	ir_stream_admission::known_identity_survives_resync_and_replay;37 existing assembler tests	State idempotence does not imply Duplicate for every delta retry
+DIST-SNAPSHOT	PROVED	PARTIAL	ir_stream_admission::dominating_snapshot_advances_a_resumed_replica	No two-replica semantic installation run
+DIST-BINDING	NOT_MODELED	NOT_RUN	-	Identity/payload tags independent in the model
+DIST-INSTALL	NOT_MODELED	NOT_IMPLEMENTED	-	Durable semantic installation remains an integration obligation
+DIST-LIVE	NOT_MODELED	NOT_RUN	-	No scheduler, network fairness or distributed throughput experiment

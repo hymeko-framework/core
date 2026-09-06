@@ -1,0 +1,112 @@
+
+// Diagnostic extension to 112a254's existing semantic_digest test module.
+// No production source change. These requirements are expected to fail there.
+#[test]
+fn audit_v2_covers_validated_arcs_without_separate_declarations() {
+    let build = |to_a: bool| {
+        let mut t = TestIr::new();
+        let root = t.node(&["m"], DeclId::NONE);
+        let a = t.node(&["m", "a"], root);
+        let b = t.node(&["m", "b"], root);
+        let edge = t.edge(&["m", "e"], root);
+        t.arc(edge, &[(if to_a { a } else { b }, S::Plus), (b, S::Minus)]);
+        for child in [a, b, edge] { link(&mut t, root, child); }
+        t
+    };
+    let (left, right) = (build(true), build(false));
+    for t in [&left, &right] {
+        assert_eq!(t.ir.arcs.len(), 1);
+        assert!((0..t.ir.decl_nodes.len()).all(|i| t.ir.as_arc(DeclId::new(i)).is_none()));
+        let bytes = hymeko::writers::cbor_writer::encode(
+            "model.hymeko", &t.ir, &t.idx, &t.it, &[],
+        ).expect("Core CBOR encoder accepts this representation");
+        hymeko::writers::cbor_writer::decode(
+            &bytes, &hymeko::ir_stream::DecodeLimits::DEFAULT,
+        ).expect("Core CBOR decoder validates the same representation");
+    }
+    assert_changed(&left.ir, &right.ir, "validated incidence target");
+    assert_ne!(
+        program_structure_hash_v1(CanonHashCfg::default(), &left.ir, &left.it),
+        program_structure_hash_v1(CanonHashCfg::default(), &right.ir, &right.it),
+        "V1 independently observes the changed incidence target"
+    );
+    assert_ne!(v2(&left), v2(&right), "V2 must cover every validated ArcRec");
+}
+
+#[test]
+fn audit_v2_distinguishes_values_at_depth_64() {
+    let nested = |leaf: f64| {
+        (0..64).fold(ValueR::Num(leaf), |v, _| ValueR::List(vec![v]))
+    };
+    let left = program(Some(nested(1.0)));
+    let right = program(Some(nested(2.0)));
+    assert_changed(&left.ir, &right.ir, "leaf at depth 64");
+    assert_ne!(v2(&left), v2(&right), "different deep values are different models");
+}
+
+#[test]
+fn audit_v2_ignores_real_declaration_reindexing() {
+    let build = |reverse: bool| {
+        let mut t = TestIr::new();
+        let root = t.node(&["m"], DeclId::NONE);
+        let (a, b) = if reverse {
+            let b = t.node(&["m", "b"], root);
+            let a = t.node(&["m", "a"], root);
+            (a, b)
+        } else {
+            let a = t.node(&["m", "a"], root);
+            let b = t.node(&["m", "b"], root);
+            (a, b)
+        };
+        let e = t.edge(&["m", "e"], root);
+        t.arc(e, &[(a, S::Plus), (b, S::Minus)]);
+        t.attach_arc_decls();
+        for child in [a, b, e] { link(&mut t, root, child); }
+        t
+    };
+    let (left, right) = (build(false), build(true));
+    assert_ne!(left.path_of(DeclId::new(1)), right.path_of(DeclId::new(1)));
+    assert_eq!(
+        program_structure_hash_v1(CanonHashCfg::default(), &left.ir, &left.it),
+        program_structure_hash_v1(CanonHashCfg::default(), &right.ir, &right.it),
+        "the same named incidence structure"
+    );
+    assert_eq!(v2(&left), v2(&right), "dense declaration IDs are storage choices");
+}
+
+#[test]
+fn audit_v2_ignores_arc_record_storage_order() {
+    let build = |reverse: bool| {
+        let mut t = TestIr::new();
+        let root = t.node(&["m"], DeclId::NONE);
+        let a = t.node(&["m", "a"], root);
+        let b = t.node(&["m", "b"], root);
+        let e = t.edge(&["m", "e"], root);
+        let f = t.edge(&["m", "f"], root);
+        let (ae, af) = if reverse {
+            let af = t.arc(f, &[(b, S::Plus), (a, S::Minus)]);
+            let ae = t.arc(e, &[(a, S::Plus), (b, S::Minus)]);
+            (ae, af)
+        } else {
+            let ae = t.arc(e, &[(a, S::Plus), (b, S::Minus)]);
+            let af = t.arc(f, &[(b, S::Plus), (a, S::Minus)]);
+            (ae, af)
+        };
+        for (edge, aid) in [(e, ae), (f, af)] {
+            let did = t.ir.push_anonymous_arc();
+            t.ir.decl_nodes[did.raw()].parent = edge;
+            t.ir.bind_arc_decl(did, aid).unwrap();
+            link(&mut t, edge, did);
+        }
+        for child in [a, b, e, f] { link(&mut t, root, child); }
+        t
+    };
+    let (left, right) = (build(false), build(true));
+    assert_ne!(left.ir.edges[0].arcs, right.ir.edges[0].arcs);
+    assert_eq!(
+        program_structure_hash_v1(CanonHashCfg::default(), &left.ir, &left.it),
+        program_structure_hash_v1(CanonHashCfg::default(), &right.ir, &right.it),
+        "each named edge retains its original ordered references"
+    );
+    assert_eq!(v2(&left), v2(&right), "ArcRec indices are storage choices");
+}

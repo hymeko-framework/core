@@ -12,7 +12,10 @@ synchronization as hypothetical extensions.
 > staging. See `reports/2026-08-28-phase10a-ir-stream-wire-codec.md` and
 > `reports/2026-08-28-phase10b1-audit-and-transaction-assembler.md`.
 >
-> Claims **C1-C6, C13 and C14** of §12 are proved by tests; C7 partly. The
+> Historical Phase 10B1 tests cover the **assembler/codec interpretation** of
+> C1-C6, C13 and C14, and part of C7. They do not establish full IR installation
+> or durable recovery. The 2026-09-05 audit below found admission counterexamples
+> to the earlier unqualified replay/version claims. The
 > Phase 10B1 corrective (`reports/2026-08-28-phase10b1-corrective-content-aware-replay.md`)
 > made replay detection content-aware: a conflicting replay is no longer
 > reported as a duplicate, superseded transactions are drained rather than
@@ -21,6 +24,15 @@ synchronization as hypothetical extensions.
 > **Still unimplemented**: the producer side (coalescing, delta log, resync
 > emission), CPU snapshot publication (§7), orientation rebuilding (§8) and GPU
 > materialization and retirement (§9).
+
+**2026-09-05 update:** the existing [Core specification, Part G](unified-ir-architecture.md#part-g--distributed-updates)
+and [Lean admission model](verification/unified-ir/distributed-semantics.lean)
+now separate normative safety from Rust conformance. The model passes kernel
+checking. The pre-fix Amaterasu baseline passed three of seven admission probes
+and failed four. Approved correction `8a0c49d` makes all seven pass and adds two
+reset/identity-retention regressions, also passing.
+[Baseline](../reports/2026-09-05-distributed-semantics.md) and
+[correction evidence](../reports/2026-09-05-distributed-admission-fix.md).
 
 ---
 
@@ -239,7 +251,11 @@ unchanged structure.
 
 **Ordering rules.**
 
-* Each counter is strictly increasing within a stream. Equal means identical.
+* Each counter is nondecreasing within a stream; unchanged components are allowed.
+  An established state advances only to a componentwise dominating, unequal
+  tuple. Equality alone does **not** prove transaction or payload identity.
+* Strictly dominated targets are superseded. Incomparable targets request
+  resynchronization and do not install; lexical tuple comparison is invalid.
 * `topology` is the **dominant** counter. A topology bump invalidates the meaning
   of the other three, because they are indexed by structure. A transaction that
   bumps `topology` **must** carry new `weights` and `features` values in the same
@@ -423,15 +439,21 @@ rather than an error.
 
 ### 6.3 Idempotence, duplicates and gaps
 
-**Idempotence comes from absolute target versions.** A transaction states the
-version it *produces*, not a relative change. Applying a transaction whose
-`target_version` is component-wise `<=` the consumer's current version is a
-**no-op**: acknowledge and discard. Retransmission is therefore always safe, and
-the consumer needs no dedup table beyond its current version tuple.
+**Idempotence requires content identity as well as versions.** A strictly
+dominated target is superseded and drained without changing the held version.
+For an equal established version, a matching retained transaction digest permits
+`ExactDuplicate`; a differing digest reports `ConflictingCommit`; an unknown
+digest requires `ReplayOutsideWindow`, preserving state. A fresh assembler may
+bootstrap at ZERO; restoring an already established ZERO is a different case.
+These are required semantics; the version-only resume defect is reproduced in
+the 2026-09-05 audit and corrected in `8a0c49d`, without changing the public API.
 
-Duplicate detection uses `(stream_id, seq)`: a `seq` already seen is dropped
-silently. A `seq` **greater than** `last_seq + 1` is a gap — the consumer does not
-attempt to apply it, aborts any open transaction, and issues `ResyncRequest`.
+The existing bounded replay window records content-aware message identities.
+Reusing `(stream_id, seq)` with different contents is a conflict, not a duplicate;
+traffic too old to authenticate is not silently accepted. A sequence gap rejects
+application and requires resynchronization. The assembler returns typed outcomes;
+emission of wire `Nack`/`ResyncRequest` and delivery/retry remain transport and
+consumer integration obligations.
 
 **Stale base** is the other direction: a `DeltaBegin` whose `base_version` does
 not equal the consumer's current version cannot be applied, because a delta is
@@ -439,21 +461,29 @@ meaningful only against the state it was computed from. The consumer replies
 `Nack { reason: StaleBase, have: current_version }` and the producer decides
 between replaying from the log or sending a full snapshot (§6.5).
 
-Both checks are pure comparisons of values already in the header.
+Version and base checks use header values. Exact replay additionally requires
+bounded staging/content validation and retained identity. Repeated application
+can preserve state while returning `StaleBase` or another recovery outcome;
+idempotence does not promise that every retry returns `ExactDuplicate`.
 
 ### 6.4 Crash and restart recovery
 
-The consumer's durable state is its version tuple; everything else is
-reconstructible. On restart it sends `ResyncRequest { have: last_committed }` —
-or `have: ZERO` if it has nothing, which is the same code path.
+Durable recovery requires a checkpoint containing the actual semantic state,
+version, transaction identity and its algorithm/writer provenance, committed
+atomically. A version tuple alone cannot reconstruct state or authenticate an
+equal-version replay. The current `resuming_at` restores only the tuple and is
+therefore conservative by requirement; its equal-version acceptance defect is
+recorded above. No durable checkpoint writer is implemented here. Restored ZERO
+and absence of a checkpoint must remain distinguishable.
 
 The producer keeps a **bounded delta log**. If `have` is within the log it
-replays deltas; otherwise it sends a full snapshot. Both converge to the same
-state, which is the property worth testing (§12).
+replays deltas; otherwise it sends a full snapshot. Their equivalence is a
+required semantic-application property (§12), not established by the admission
+model. This producer log/recovery service remains unimplemented.
 
-An interrupted transaction needs no recovery: staging is not durable, so a crash
-mid-transaction leaves the last committed version intact by construction. That is
-the reason for staging, not merely a benefit of it.
+Discarding incomplete in-memory staging preserves the assembler's last commit.
+Process crashes during IR installation/checkpoint writes require separate fault
+injection and a durable publication protocol; staging alone proves neither.
 
 Producer restart is symmetric but changes `stream_id`: a consumer seeing a new
 `stream_id` discards its per-stream sequence state and resynchronizes from
@@ -462,10 +492,11 @@ scratch. Reusing a `stream_id` across producer restarts is **forbidden**, becaus
 
 ### 6.5 Resynchronization
 
-`ResyncRequest` is the single entry point for every divergence — gap, stale base,
-hash failure, restart, or a consumer that has simply fallen too far behind. It
-carries the consumer's version tuple and nothing else, so the producer needs no
-per-consumer bookkeeping beyond the log.
+`ResyncRequest` is the proposed recovery entry point for gaps, stale bases,
+identity failures, restarts and lag. A version-only request can locate a candidate
+log range but cannot prove the consumer holds the corresponding state. Recovery
+must validate checkpoint identity or replace state from an authoritative snapshot;
+writer restart/identity negotiation and durable installation remain to be wired.
 
 ### 6.6 Backpressure
 
@@ -494,8 +525,12 @@ before sending, using the version model:
   be clever: the alternative is index remapping across an arbitrary number of
   intermediate structures.
 
-Coalescing is a producer-side optimisation and changes no consumer semantics,
-which makes it independently testable (§12).
+These coalescing rules require absolute assignments, unchanged referenced
+structure, compatible validation and observation only at the resulting committed
+state. They do not authorize dropping arbitrary deltas, intermediate side effects
+or compute jobs. Equivalence is still an unimplemented C8 obligation. A transport
+slot that keeps only the latest full snapshot is a separate policy: consumers
+must validate its authority/version and acknowledge installation separately.
 
 ---
 
@@ -632,16 +667,30 @@ resync point and the producer never has to guess what the consumer holds.
 
 ---
 
-## 11. Distributed coherence — still deferred
+## 11. Distributed execution and partition coherence
 
-Unchanged from the first draft, and the reasoning is unaffected by the IPC
-requirement: partitioning cuts **hyperedges**, so halo cost scales with cut
+**Partition coherence remains deferred.** Partitioning cuts **hyperedges**, so halo cost scales with cut
 *cardinality*, not cut count, and one high-cardinality edge spanning every
 partition is a global reduction. That term is entirely unmeasured.
 
 The protocol above is single-producer/multi-consumer and does not attempt to be a
 partition protocol. It does not preclude one — a partition worker is a consumer —
 but no claim is made that distribution helps until B6/B7 (§12) produce numbers.
+
+**Independent jobs are an earlier, separate experiment**, authorized on
+Amaterasu. Compare the same fixed work locally, remotely and across both workers.
+Measure end-to-end time, serialization/transfer bytes, queue/compute time, peak
+memory, result equivalence and interrupted-worker recovery. Bind job identity to
+the exact input snapshot, parameters, algorithm revision and seed; accept retries
+idempotently. Receipt of a snapshot is not acknowledgment of job completion or
+IR installation. The currently negotiated 1 Gbit/s links are capacity metadata,
+not measured throughput or evidence of speedup.
+
+Core retains codec/version/admission ownership; Chordex carries opaque data and
+consumers compose scheduling. No new worker-side IR, parser or numerical solver
+is warranted. A latest-snapshot transport slot cannot also be a reliable job
+queue. The Lean model verifies admission safety only, not this future scheduler,
+network fairness or halo exchange.
 
 ---
 
@@ -652,9 +701,9 @@ phase. Each is stated with the test that would refute it.
 
 | # | Claim | Test that would falsify it |
 |---|---|---|
-| C1 | Replaying any prefix of a transaction stream twice yields the same state as replaying it once | Property test: random valid stream, apply with random duplication, compare canonical hash |
-| C2 | A transaction whose `target_version <= current` is a no-op | Apply an old transaction after a newer one; assert state and version unchanged |
-| C3 | Full-snapshot resync and delta-replay converge to identical state | Fork a stream at version V, deliver one path by each route, compare canonical hashes |
+| C1 | Valid ordered replay is state-idempotent, with typed conflict/unknown-identity outcomes | Inject duplication/conflicts/reconnects and compare full semantic state; admission proof covers repeated individual transactions only |
+| C2 | Superseded or equal-established targets never replace state; incomparable targets never regress an axis | Test old/equal/incomparable targets, including resume at ZERO, with exact recovery outcomes |
+| C3 | Full-snapshot resync and delta-replay converge to identical semantic state | Fork at version V; compare complete state through both routes; structural v1 hash equality is insufficient |
 | C4 | No sequence gap is ever applied | Inject dropped/reordered messages; assert `Nack{SequenceGap}` and unchanged state |
 | C5 | A corrupt payload never mutates live state | Flip bits in payload and header; assert `Nack` and previous version still served |
 | C6 | Wrapped/hostile length fields are rejected, not wrapped | Replay the §1.2 values (`nnz = 2^61`, `u64::MAX`) through the section validator |
@@ -693,9 +742,10 @@ and specified here** (§5, §6, §8). It was deferred on the grounds that nothin
 mutates a `HyperGraphView`; the requirement removes that premise. Still not
 implemented in Phase 9 — the deliverable is this protocol plus C1–C14.
 
-**S3 — distributed synchronization.** **Unchanged: deferred**, pending B6/B7.
-The IPC requirement does not imply distribution; it makes the *source of truth*
-external, which the single-producer protocol above already serves.
+**S3 — distributed execution.** Independent-job and single-writer replica
+experiments can proceed on Amaterasu after admission and consumer installation
+checks. Tightly coupled partition synchronization remains deferred pending B6/B7.
+The protocol and formal admission model alone establish no distributed speedup.
 
 **Implementation order, when a later phase takes this up.** (1) The envelope,
 section table and validator, with C6/C13/C14 — the audit's most serious defect is

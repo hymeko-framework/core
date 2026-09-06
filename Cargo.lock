@@ -1129,6 +1129,7 @@ version = "0.1.0"
 dependencies = [
  "arrow",
  "blake3",
+ "ciborium",
  "criterion",
  "env_logger",
  "iceoryx2",
@@ -1924,7 +1925,7 @@ dependencies = [
 [[package]]
 name = "parser"
 version = "0.1.0"
-source = "git+ssh://git@amaterasu.local:2222/hymeko/parser.git?branch=master#e28a205147c48273980e63aa3338ca286974a6ed"
+source = "git+ssh://git@amaterasu.local:2222/hymeko/parser.git?branch=master#284c490d68232973a006bcba974279fed6f89ce8"
 dependencies = [
  "lalrpop",
  "lalrpop-util",

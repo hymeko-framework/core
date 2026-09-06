@@ -68,6 +68,9 @@
 #include <vector>
 #include <algorithm>
 #include <cmath>
+#include <cerrno>
+#include <limits>
+#include <chrono>
 
 // ---------------------------------------------------------------------------
 // Faithful port of hymeko_hnn::workloads::Lcg
@@ -132,8 +135,9 @@ static Csr build_csr(size_t rows, size_t cols, size_t avg_deg, DegreeShape shape
     m.rows = rows;
     m.cols = cols;
     m.row_ptr.reserve(rows + 1);
-    m.col_ind.reserve(rows * avg_deg);
-    m.val.reserve(rows * avg_deg);
+    // A row cannot retain more than cols entries, even for a huge requested degree.
+    m.col_ind.reserve(rows * std::min(avg_deg, cols));
+    m.val.reserve(rows * std::min(avg_deg, cols));
     std::vector<size_t> scratch;
 
     m.row_ptr.push_back(0);
@@ -216,26 +220,62 @@ __global__ void spmm_kernel(
     } \
 } while (0)
 
+// Stateless CLI conversion; reject malformed/overflowed dimensions before allocation.
+static size_t parse_positive(const char* flag, const char* value) {
+    errno = 0;
+    char* end = nullptr;
+    unsigned long long n = strtoull(value, &end, 10);
+    if (errno || value[0] < '0' || value[0] > '9' || !end || *end ||
+        n == 0 || n > std::numeric_limits<uint32_t>::max()) {
+        fprintf(stderr, "invalid positive u32 for %s: %s\n", flag, value);
+        exit(2);
+    }
+    return static_cast<size_t>(n);
+}
+
 int main(int argc, char** argv) {
     size_t rows = 200000, cols = 0, deg = 8, fd = 32;
     DegreeShape shape = UNIFORM;
     uint64_t seed = 0x005EEDC0FFEEULL;   // matches crossover_sweep's SEED
     bool verify = false, bench = false, check_nnz = false;
-    int bx = 16, by = 8;                 // matches spmm_workgroup_for's 16x8
+    bool edge_cases = false, nonfinite = false;
+    size_t bx = 16, by = 8;              // matches spmm_workgroup_for's 16x8
 
     for (int i = 1; i < argc; ++i) {
-        if (!strcmp(argv[i], "--rows") && i + 1 < argc)      rows = strtoull(argv[++i], 0, 10);
-        else if (!strcmp(argv[i], "--cols") && i + 1 < argc) cols = strtoull(argv[++i], 0, 10);
-        else if (!strcmp(argv[i], "--deg") && i + 1 < argc)  deg  = strtoull(argv[++i], 0, 10);
-        else if (!strcmp(argv[i], "--fd") && i + 1 < argc)   fd   = strtoull(argv[++i], 0, 10);
-        else if (!strcmp(argv[i], "--bx") && i + 1 < argc)   bx   = atoi(argv[++i]);
-        else if (!strcmp(argv[i], "--by") && i + 1 < argc)   by   = atoi(argv[++i]);
+        const char* flag = argv[i];
+        if (!strcmp(flag, "--rows") && i + 1 < argc)      rows = parse_positive(flag, argv[++i]);
+        else if (!strcmp(flag, "--cols") && i + 1 < argc) cols = parse_positive(flag, argv[++i]);
+        else if (!strcmp(flag, "--deg") && i + 1 < argc)  deg  = parse_positive(flag, argv[++i]);
+        else if (!strcmp(flag, "--fd") && i + 1 < argc)   fd   = parse_positive(flag, argv[++i]);
+        else if (!strcmp(flag, "--bx") && i + 1 < argc)   bx   = parse_positive(flag, argv[++i]);
+        else if (!strcmp(flag, "--by") && i + 1 < argc)   by   = parse_positive(flag, argv[++i]);
         else if (!strcmp(argv[i], "--irregular"))            shape = IRREGULAR;
         else if (!strcmp(argv[i], "--verify"))               verify = true;
         else if (!strcmp(argv[i], "--bench"))                bench = true;
         else if (!strcmp(argv[i], "--check-nnz"))            check_nnz = true;
+        else if (!strcmp(argv[i], "--edge-cases"))           edge_cases = verify = true;
+        else if (!strcmp(argv[i], "--nonfinite"))            nonfinite = edge_cases = verify = true;
+        else {
+            fprintf(stderr, "unknown option or missing value: %s\n", flag);
+            return 2;
+        }
     }
     if (cols == 0) cols = rows;
+    // Conservative payload bound leaves half of the 16 GiB RSS budget for
+    // allocator growth, CUDA runtime and driver state. VAS is not constrained.
+    const uint64_t payload_budget = 8ULL << 30;
+    const uint64_t max_degree = std::min<uint64_t>(cols, uint64_t(deg) * 8);
+    if (bx > 1024 || by > 1024 || bx * by > 1024 ||
+        rows > UINT32_MAX / max_degree || rows * uint64_t(fd) > payload_budget / 16 ||
+        cols * uint64_t(fd) > payload_budget / 8 ||
+        uint64_t(rows) * max_degree * 24 + uint64_t(rows + 1) * 8 +
+            uint64_t(cols) * fd * 4 + uint64_t(rows) * fd * 12 + max_degree * 8 > payload_budget) {
+        fprintf(stderr, "workload exceeds checked index, workgroup or 8 GiB payload budget\n");
+        return 2;
+    }
+    if (edge_cases) { rows = cols = deg = 4; fd = 8; }
+    // A benchmark is never allowed to bypass the numerical oracle.
+    if (bench) verify = true;
 
     if (check_nnz) {
         // The port-fidelity check. These must match the Rust generator.
@@ -251,33 +291,80 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+    using Clock = std::chrono::steady_clock;
+    const auto elapsed_us = [](Clock::time_point begin) {
+        return std::chrono::duration<double, std::micro>(Clock::now() - begin).count();
+    };
+    cudaDeviceProp prop{};
+    int device = 0, runtime_version = 0, driver_version = 0;
+    CHECK(cudaGetDevice(&device));
+    CHECK(cudaGetDeviceProperties(&prop, device));
+    CHECK(cudaRuntimeGetVersion(&runtime_version));
+    CHECK(cudaDriverGetVersion(&driver_version));
+    if (bx > size_t(prop.maxThreadsDim[0]) || by > size_t(prop.maxThreadsDim[1]) ||
+        bx * by > size_t(prop.maxThreadsPerBlock) ||
+        (fd + bx - 1) / bx > size_t(prop.maxGridSize[0]) ||
+        (rows + by - 1) / by > size_t(prop.maxGridSize[1])) {
+        fprintf(stderr, "workload exceeds device launch dimensions\n");
+        return 2;
+    }
+    printf("device=%s cc=%d.%d runtime=%d driver_api=%d precision=f32 seed=%llu warmup=5 samples=50\n",
+           prop.name, prop.major, prop.minor, runtime_version, driver_version,
+           static_cast<unsigned long long>(seed));
+
     fprintf(stderr, "building workload: rows=%zu cols=%zu deg=%zu fd=%zu %s\n",
             rows, cols, deg, fd, shape == UNIFORM ? "uniform" : "irregular");
-    Csr m = build_csr(rows, cols, deg, shape, seed);
+    const auto generation_start = Clock::now();
+    Csr m;
+    if (edge_cases) {
+        // Signed duplicate column, empty row, zero coefficient: execution controls, no IR.
+        m.rows = rows; m.cols = cols;
+        m.row_ptr = {0, 2, 2, 5, 6};
+        m.col_ind = {1, 1, 0, 2, 3, 0};
+        m.val = {1.0f, -0.25f, 2.0f, -1.0f, 0.5f, 0.0f};
+    } else {
+        m = build_csr(rows, cols, deg, shape, seed);
+    }
     std::vector<float> x = dense_block(cols, fd, seed);
+    if (nonfinite) {
+        x[0] = std::numeric_limits<float>::quiet_NaN();
+        x[fd] = std::numeric_limits<float>::infinity();
+        x[2 * fd] = -std::numeric_limits<float>::infinity();
+    }
+    printf("fixture_generation_us=%.3f\n", elapsed_us(generation_start));
     fprintf(stderr, "nnz = %zu\n", m.nnz());
 
     uint32_t *d_rp, *d_ci; float *d_v, *d_x, *d_y;
     size_t y_elems = rows * fd;
+    const auto first_call_start = Clock::now();
     CHECK(cudaMalloc(&d_rp, m.row_ptr.size() * sizeof(uint32_t)));
     CHECK(cudaMalloc(&d_ci, m.col_ind.size() * sizeof(uint32_t)));
     CHECK(cudaMalloc(&d_v,  m.val.size()     * sizeof(float)));
     CHECK(cudaMalloc(&d_x,  x.size()         * sizeof(float)));
     CHECK(cudaMalloc(&d_y,  y_elems          * sizeof(float)));
+    const double allocation_us = elapsed_us(first_call_start);
+    const auto upload_start = Clock::now();
     CHECK(cudaMemcpy(d_rp, m.row_ptr.data(), m.row_ptr.size()*sizeof(uint32_t), cudaMemcpyHostToDevice));
     CHECK(cudaMemcpy(d_ci, m.col_ind.data(), m.col_ind.size()*sizeof(uint32_t), cudaMemcpyHostToDevice));
     CHECK(cudaMemcpy(d_v,  m.val.data(),     m.val.size()*sizeof(float),        cudaMemcpyHostToDevice));
     CHECK(cudaMemcpy(d_x,  x.data(),         x.size()*sizeof(float),            cudaMemcpyHostToDevice));
+    CHECK(cudaDeviceSynchronize());
+    const double upload_us = elapsed_us(upload_start);
 
     dim3 block(bx, by);
     dim3 grid((uint32_t)((fd + bx - 1) / bx), (uint32_t)((rows + by - 1) / by));
 
     if (verify) {
+        const auto cold_kernel_start = Clock::now();
         spmm_kernel<<<grid, block>>>(d_rp, d_ci, d_v, d_x, d_y, (uint32_t)rows, (uint32_t)fd);
         CHECK(cudaGetLastError());
         CHECK(cudaDeviceSynchronize());
+        const double cold_kernel_us = elapsed_us(cold_kernel_start);
         std::vector<float> gpu(y_elems);
         CHECK(cudaMemcpy(gpu.data(), d_y, y_elems*sizeof(float), cudaMemcpyDeviceToHost));
+        const double first_call_us = elapsed_us(first_call_start);
+        printf("cold,allocation_setup_us,%.3f\ncold,h2d_completed_host_us,%.3f\ncold,kernel_host_us,%.3f\ncold,first_call_e2e_us,%.3f\n",
+               allocation_us, upload_us, cold_kernel_us, first_call_us);
 
         std::vector<float> cpu(y_elems);
         spmm_cpu(m, x.data(), fd, cpu.data());
@@ -288,7 +375,11 @@ int main(int argc, char** argv) {
             double abs = fabs(a - b);
             double rel = fabs(b) > 0.0 ? abs / fabs(b) : abs;
             if (rel > worst_rel) { worst_rel = rel; worst_i = i; }
-            if (!(abs <= 1e-4 || rel <= 1e-5)) ++bad;
+            const bool same_nonfinite = (std::isnan(a) && std::isnan(b)) ||
+                (std::isinf(a) && a == b);
+            const bool close_finite = std::isfinite(a) && std::isfinite(b) &&
+                (abs <= 1e-4 || rel <= 1e-5);
+            if (!(same_nonfinite || close_finite)) ++bad;
         }
         printf("verify: elements=%zu  worst_rel=%.3e at %zu (gpu=%.6f cpu=%.6f)  failures=%zu\n",
                y_elems, worst_rel, worst_i, gpu[worst_i], cpu[worst_i], bad);
@@ -306,33 +397,45 @@ int main(int argc, char** argv) {
         const int REPS = 50;
         std::vector<float> ms(REPS);
         for (int i = 0; i < REPS; ++i) {
+            const auto host_start = Clock::now();
             CHECK(cudaEventRecord(t0));
             spmm_kernel<<<grid, block>>>(d_rp, d_ci, d_v, d_x, d_y, (uint32_t)rows, (uint32_t)fd);
+            CHECK(cudaGetLastError());
             CHECK(cudaEventRecord(t1));
             CHECK(cudaEventSynchronize(t1));
+            const double host_us = elapsed_us(host_start);
             CHECK(cudaEventElapsedTime(&ms[i], t0, t1));
+            printf("sample,kernel,%d,%.6f,%.6f\n", i, ms[i] * 1000.0, host_us);
         }
         std::sort(ms.begin(), ms.end());
         double med = ms[REPS/2], q1 = ms[REPS/4], q3 = ms[(3*REPS)/4];
         double macs = (double)m.nnz() * (double)fd;
-        printf("kernel_only rows=%zu deg=%zu fd=%zu block=%dx%d: median=%.1f us (q1=%.1f q3=%.1f) %.1f GMAC/s\n",
+        printf("kernel_only rows=%zu deg=%zu fd=%zu block=%zux%zu: median=%.1f us (q1=%.1f q3=%.1f) %.1f GMAC/s\n",
                rows, deg, fd, bx, by, med*1000.0, q1*1000.0, q3*1000.0, macs / (med/1000.0) / 1e9);
 
         // Readback measured separately: the wgpu report shows device-to-host
         // dominating at 88-95%, and lumping it in would hide that.
         std::vector<float> host(y_elems);
-        CHECK(cudaEventRecord(t0));
-        for (int i = 0; i < 10; ++i)
+        for (int i = -5; i < REPS; ++i) {
+            const auto begin = Clock::now();
             CHECK(cudaMemcpy(host.data(), d_y, y_elems*sizeof(float), cudaMemcpyDeviceToHost));
-        CHECK(cudaEventRecord(t1));
-        CHECK(cudaEventSynchronize(t1));
-        float rb; CHECK(cudaEventElapsedTime(&rb, t0, t1));
-        double rb_us = rb * 1000.0 / 10.0;
-        printf("readback   %zu MB: %.1f us  (%.2f GB/s)\n",
-               y_elems*sizeof(float)/(1024*1024), rb_us,
-               (double)(y_elems*sizeof(float)) / (rb_us*1e-6) / 1e9);
+            const double us = elapsed_us(begin);
+            if (i >= 0) printf("sample,d2h_completed_host,%d,%.6f\n", i, us);
+        }
+        for (int i = -5; i < REPS; ++i) {
+            const auto begin = Clock::now();
+            CHECK(cudaMemcpy(d_x, x.data(), x.size()*sizeof(float), cudaMemcpyHostToDevice));
+            spmm_kernel<<<grid, block>>>(d_rp, d_ci, d_v, d_x, d_y, (uint32_t)rows, (uint32_t)fd);
+            CHECK(cudaGetLastError());
+            CHECK(cudaMemcpy(host.data(), d_y, y_elems*sizeof(float), cudaMemcpyDeviceToHost));
+            const double us = elapsed_us(begin);
+            if (i >= 0) printf("sample,steady_e2e_resident_csr,%d,%.6f\n", i, us);
+        }
+        CHECK(cudaEventDestroy(t0));
+        CHECK(cudaEventDestroy(t1));
     }
 
-    cudaFree(d_rp); cudaFree(d_ci); cudaFree(d_v); cudaFree(d_x); cudaFree(d_y);
+    CHECK(cudaFree(d_rp)); CHECK(cudaFree(d_ci)); CHECK(cudaFree(d_v));
+    CHECK(cudaFree(d_x)); CHECK(cudaFree(d_y));
     return 0;
 }

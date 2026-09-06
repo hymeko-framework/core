@@ -1,0 +1,16 @@
+e1ab2c2be3b2f645f16931b8eb7a52c8b2ca54751857f512c4edabff1b0003d2  Cargo.lock
+syntax_license_secret_isolation=PASS
+usage: hymeko-core-check [smoke|test|lint|bench-smoke|all]
+control=invalid actual=2 expected=2
+Expected at most one verification action.
+control=extra actual=2 expected=2
+Disable container swap with equal --memory and --memory-swap.
+control=swap actual=2 expected=2
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+binary: rustc
+commit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452
+commit-date: 2026-07-14
+host: x86_64-unknown-linux-gnu
+release: 1.97.1
+LLVM version: 22.1.6
+control=failure actual=42 expected=42

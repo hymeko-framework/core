@@ -1,0 +1,8 @@
+flowchart TD
+    S[Existing Core single-writer specification] --> L[Lean commit admission model]
+    S --> R[Actual Rust codec and assembler]
+    L --> P[Kernel-checked safety and conditional convergence]
+    R --> C[Public API counterexamples and regression checks]
+    P --> T[Separate model proof from implementation evidence]
+    C --> T
+    T --> I[Dependency CI, browser and distributed consumer integration]

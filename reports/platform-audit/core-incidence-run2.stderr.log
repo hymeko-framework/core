@@ -1,0 +1,11 @@
+[inc-bench] size_of HyperArcId=8 u32=4  (all times MICROSECONDS)
+
+[inc-bench] --- n_nodes=500000 n_arcs=200000 arity=5 nnz=1000000 ---
+[inc-bench] B sparse index: build=20012us  retained=14800008B  bytes/inc=14.8
+[inc-bench] operator us: Bx=5854  BTy=28949  BTBx=35246
+[inc-bench] D clique/2-section (COMPLETE build): build=27953us  legs=4000000  bytes=18000004B  bytes/inc=18.0  (1.4x index build, 1.2x index memory)
+
+[inc-bench] --- n_nodes=50000 n_arcs=50000 arity=20 nnz=1000000 ---
+[inc-bench] B sparse index: build=15383us  retained=12400008B  bytes/inc=12.4
+[inc-bench] operator us: Bx=4626  BTy=17329  BTBx=22620
+[inc-bench] D clique/2-section (COMPLETE build): build=57129us  legs=19000000  bytes=76200004B  bytes/inc=76.2  (3.7x index build, 6.1x index memory)

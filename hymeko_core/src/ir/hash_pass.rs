@@ -6,6 +6,26 @@ use blake3::Hasher;
 use crate::ir::hash::HashId;
 use crate::resolution::interner::Interner;
 
+/// Legacy per-declaration Merkle hashes, written into [`Ir::decl_hash`].
+///
+/// # Deprecated — three measured defects make it unsound as a model identity
+///
+/// Superseded by [`crate::ir::semantic_digest::semantic_model_digest_v2`], which is pure, versioned
+/// and domain-separated. Measured 2026-09-05, reproduced by
+/// `tests/unified_ir/verification/semantic_digest.rs`:
+///
+/// * **D1** not idempotent — it reads `ir.decl_hash` while writing it, so the first call disagrees
+///   with the second and the value depends on how many times it has run;
+/// * **D2** an incidence target change is invisible to the first pass;
+/// * **D3** a reference to an earlier-declared entity folds `None` and contributes nothing.
+///
+/// Retained, unchanged, for provenance and for consumers that have not migrated. It is **not** a
+/// model identity and must not be bound to an `ExecutionPlan`.
+#[deprecated(
+    since = "0.1.0",
+    note = "unsound as a model identity (D1 non-idempotent, D2 incidence target invisible, \
+            D3 backward reference dropped); use ir::semantic_digest::semantic_model_digest_v2"
+)]
 pub fn compute_merkle_hashes(ir: &mut Ir, interner: &Interner) {
     let num_decls = ir.decl_nodes.len();
 

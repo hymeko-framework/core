@@ -1,0 +1,41 @@
+
+running 2 tests
+
+=== direct-Ir op survey (us; median-of-9 warm; arity 5; single-host PROVISIONAL) ===
+op	n_nodes	nnz	index_build_us	warm_query_us
+
+=== direct-Ir traversal benchmark (microseconds; median of 9 after warmup) ===
+host: single machine; times are us. A=direct(node+arc)  B=direct(no arc-visited)  C=sparse-star O(nnz)  D=clique O(Sum k^2)
+reachable_nodes	10000	49980	383.2	158.2
+berge_shortest_path	10000	49980	383.2	193.6
+connected_components	10000	49980	383.2	171.7
+dual_reachability	10000	49980	383.2	151.4
+s_connected_components_s1	10000	49980	383.2	139.9
+batch16_serial	10000	49980	383.2	2947.4
+batch16_rayon	10000	49980	383.2	867.7
+reachable_nodes	100000	499980	7346.4	6811.2
+berge_shortest_path	100000	499980	7346.4	8064.2
+connected_components	100000	499980	7346.4	7077.4
+dual_reachability	100000	499980	7346.4	6471.8
+s_connected_components_s1	100000	499980	7346.4	1369.1
+
+-- arity 5  (nnz~1e6): m=200000 nodes, arcs=199996, nnz=999980 --
+  build (us):   index=15048.0  star=16695.7  clique=54186.0  (clique/index=3.6x)
+  bytes/inc:    index=12.8  star=9.6  clique=7.2  (clique/index=0.6x)
+  query (us):   A=14742.1  B(no-arc)=20723.8  C(star)=1049.4  D(clique)=662.0
+  FALSIFIER:    B/A=1.41x (visited-arc removes k^2 => grows with arity)   A vs C=14.05x
+batch16_serial	100000	499980	7346.4	126146.2
+batch16_rayon	100000	499980	7346.4	11150.3
+
+test bench_direct_ir_ops ... ok
+
+-- arity 20 (nnz~1e6, high-arity): m=50000 nodes, arcs=49981, nnz=999620 --
+  build (us):   index=13089.7  star=12789.8  clique=108791.1  (clique/index=8.3x)
+  bytes/inc:    index=12.2  star=8.4  clique=7.8  (clique/index=0.6x)
+  query (us):   A=8738.0  B(no-arc)=12654.1  C(star)=656.0  D(clique)=509.7
+  FALSIFIER:    B/A=1.45x (visited-arc removes k^2 => grows with arity)   A vs C=13.32x
+
+test bench_direct_vs_star_vs_clique ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 2.27s
+

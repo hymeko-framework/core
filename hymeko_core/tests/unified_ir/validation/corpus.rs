@@ -168,14 +168,12 @@ fn corpus_digest() -> (usize, String) {
     (n, h.finalize().to_hex().to_string())
 }
 
-// Re-bumped 2026-09-01 (APPROVED-CORE-EDIT: webxr-semantic-contract-completion): the two PoW-0
-// fixtures (webxr_vocabulary.hymeko, webxr_scene_demo.hymeko) were removed and replaced by three
-// contract-completion fixtures under data/webxr/ (meta_spatial.hymeko, meta_webxr.hymeko,
-// webxr_hypergraph_demo.hymeko): net 98 -> 99. No pre-existing fixture was edited (git confirms no
-// modified non-webxr data/** file), and no lowering code changed — corpus set change, NOT a lowering
-// regression of algo_version=1.
-const KAT_CORPUS_COUNT: usize = 105;
-const KAT_CORPUS_DIGEST: &str = "916e27c92ddc4d6b46d36c94d4532d52ad5dd3db2b134a0eb805699ceaffd3c8";
+// Re-frozen 2026-09-04 (APPROVED-CORE-EDIT: relocate-webxr-to-transformation): the three WebXR
+// domain fixtures moved to their owner, hymeko/transformation::hymeko_webxr. No remaining fixture
+// or lowering implementation changed: 105 -> 102 is exactly the three-file ownership move, not an
+// algo_version=1 regression. The transformation crate compiles and validates the same source files.
+const KAT_CORPUS_COUNT: usize = 102;
+const KAT_CORPUS_DIGEST: &str = "f9ab7da8b5d823fa9d55c28e78fd63bc37660a97f67852ad587a145f951cb3b5";
 
 #[test]
 fn print_corpus_digest_for_capture() {

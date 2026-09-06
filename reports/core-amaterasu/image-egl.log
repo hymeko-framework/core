@@ -1,0 +1,477 @@
+#0 building with "hymeko-core-amaterasu-20260905" instance using docker-container driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.68kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/rust:1.97.1-bookworm@sha256:408fe88047cef61a2087653b0c5255fa51c0f2d6d94ddedd7a2562a9b91a46f6
+#2 ...
+
+#3 [auth] library/rust:pull token for registry-1.docker.io
+#3 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/rust:1.97.1-bookworm@sha256:408fe88047cef61a2087653b0c5255fa51c0f2d6d94ddedd7a2562a9b91a46f6
+#2 DONE 0.7s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 349B 0.0s done
+#4 DONE 0.0s
+
+#5 [toolchain 1/3] FROM docker.io/library/rust:1.97.1-bookworm@sha256:408fe88047cef61a2087653b0c5255fa51c0f2d6d94ddedd7a2562a9b91a46f6
+#5 resolve docker.io/library/rust:1.97.1-bookworm@sha256:408fe88047cef61a2087653b0c5255fa51c0f2d6d94ddedd7a2562a9b91a46f6 done
+#5 CACHED
+
+#6 [internal] load build context
+#6 transferring context: 23.43kB 0.1s done
+#6 DONE 0.1s
+
+#7 [toolchain 2/3] RUN rustup component add rustfmt clippy     && apt-get update     && apt-get install --no-install-recommends -y time libvulkan1 libegl1     && rm -rf /var/lib/apt/lists/*
+#7 0.115 info: downloading component rustfmt
+#7 0.832 info: downloading component clippy
+#7 2.215 Get:1 http://deb.debian.org/debian bookworm InRelease [151 kB]
+#7 2.274 Get:2 http://deb.debian.org/debian bookworm-updates InRelease [55.4 kB]
+#7 2.299 Get:3 http://deb.debian.org/debian-security bookworm-security InRelease [34.8 kB]
+#7 2.341 Get:4 http://deb.debian.org/debian bookworm/main amd64 Packages [8790 kB]
+#7 3.510 Get:5 http://deb.debian.org/debian bookworm-updates/main amd64 Packages [6924 B]
+#7 3.511 Get:6 http://deb.debian.org/debian-security bookworm-security/main amd64 Packages [336 kB]
+#7 4.167 Fetched 9375 kB in 2s (4302 kB/s)
+#7 4.167 Reading package lists...
+#7 4.565 Reading package lists...
+#7 4.960 Building dependency tree...
+#7 5.051 Reading state information...
+#7 5.140 The following additional packages will be installed:
+#7 5.140   libdrm-common libdrm2 libegl-mesa0 libgbm1 libglapi-mesa libglvnd0
+#7 5.140   libwayland-client0 libwayland-server0 libx11-xcb1 libxcb-dri2-0
+#7 5.140   libxcb-dri3-0 libxcb-present0 libxcb-randr0 libxcb-sync1 libxcb-xfixes0
+#7 5.140   libxshmfence1
+#7 5.141 Recommended packages:
+#7 5.141   mesa-vulkan-drivers | vulkan-icd
+#7 5.233 The following NEW packages will be installed:
+#7 5.233   libdrm-common libdrm2 libegl-mesa0 libegl1 libgbm1 libglapi-mesa libglvnd0
+#7 5.233   libvulkan1 libwayland-client0 libwayland-server0 libx11-xcb1 libxcb-dri2-0
+#7 5.233   libxcb-dri3-0 libxcb-present0 libxcb-randr0 libxcb-sync1 libxcb-xfixes0
+#7 5.233   libxshmfence1 time
+#7 5.285 0 upgraded, 19 newly installed, 0 to remove and 12 not upgraded.
+#7 5.285 Need to get 1404 kB of archives.
+#7 5.285 After this operation, 3759 kB of additional disk space will be used.
+#7 5.285 Get:1 http://deb.debian.org/debian bookworm/main amd64 libdrm-common all 2.4.114-1 [7112 B]
+#7 5.304 Get:2 http://deb.debian.org/debian bookworm/main amd64 libdrm2 amd64 2.4.114-1+b1 [37.5 kB]
+#7 5.312 Get:3 http://deb.debian.org/debian bookworm/main amd64 libwayland-server0 amd64 1.21.0-1 [35.9 kB]
+#7 5.327 Get:4 http://deb.debian.org/debian bookworm/main amd64 libgbm1 amd64 22.3.6-1+deb12u2 [38.1 kB]
+#7 5.332 Get:5 http://deb.debian.org/debian bookworm/main amd64 libglapi-mesa amd64 22.3.6-1+deb12u2 [35.9 kB]
+#7 5.342 Get:6 http://deb.debian.org/debian bookworm/main amd64 libwayland-client0 amd64 1.21.0-1 [28.3 kB]
+#7 5.344 Get:7 http://deb.debian.org/debian bookworm/main amd64 libx11-xcb1 amd64 2:1.8.4-2+deb12u2 [192 kB]
+#7 5.365 Get:8 http://deb.debian.org/debian bookworm/main amd64 libxcb-dri2-0 amd64 1.15-1 [107 kB]
+#7 5.399 Get:9 http://deb.debian.org/debian bookworm/main amd64 libxcb-dri3-0 amd64 1.15-1 [107 kB]
+#7 5.405 Get:10 http://deb.debian.org/debian bookworm/main amd64 libxcb-present0 amd64 1.15-1 [105 kB]
+#7 5.409 Get:11 http://deb.debian.org/debian bookworm/main amd64 libxcb-randr0 amd64 1.15-1 [117 kB]
+#7 5.420 Get:12 http://deb.debian.org/debian bookworm/main amd64 libxcb-sync1 amd64 1.15-1 [109 kB]
+#7 5.447 Get:13 http://deb.debian.org/debian bookworm/main amd64 libxcb-xfixes0 amd64 1.15-1 [109 kB]
+#7 5.448 Get:14 http://deb.debian.org/debian bookworm/main amd64 libxshmfence1 amd64 1.3-1 [8820 B]
+#7 5.449 Get:15 http://deb.debian.org/debian bookworm/main amd64 libegl-mesa0 amd64 22.3.6-1+deb12u2 [114 kB]
+#7 5.455 Get:16 http://deb.debian.org/debian bookworm/main amd64 libglvnd0 amd64 1.6.0-1 [51.8 kB]
+#7 5.456 Get:17 http://deb.debian.org/debian bookworm/main amd64 libvulkan1 amd64 1.3.239.0-1 [116 kB]
+#7 5.457 Get:18 http://deb.debian.org/debian bookworm/main amd64 time amd64 1.9-0.2 [50.8 kB]
+#7 5.458 Get:19 http://deb.debian.org/debian bookworm/main amd64 libegl1 amd64 1.6.0-1 [33.7 kB]
+#7 5.593 debconf: delaying package configuration, since apt-utils is not installed
+#7 5.627 Fetched 1404 kB in 0s (6329 kB/s)
+#7 5.643 Selecting previously unselected package libdrm-common.
+#7 5.643 (Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 23256 files and directories currently installed.)
+#7 5.656 Preparing to unpack .../00-libdrm-common_2.4.114-1_all.deb ...
+#7 5.657 Unpacking libdrm-common (2.4.114-1) ...
+#7 5.681 Selecting previously unselected package libdrm2:amd64.
+#7 5.683 Preparing to unpack .../01-libdrm2_2.4.114-1+b1_amd64.deb ...
+#7 5.687 Unpacking libdrm2:amd64 (2.4.114-1+b1) ...
+#7 5.710 Selecting previously unselected package libwayland-server0:amd64.
+#7 5.712 Preparing to unpack .../02-libwayland-server0_1.21.0-1_amd64.deb ...
+#7 5.714 Unpacking libwayland-server0:amd64 (1.21.0-1) ...
+#7 5.738 Selecting previously unselected package libgbm1:amd64.
+#7 5.740 Preparing to unpack .../03-libgbm1_22.3.6-1+deb12u2_amd64.deb ...
+#7 5.742 Unpacking libgbm1:amd64 (22.3.6-1+deb12u2) ...
+#7 5.772 Selecting previously unselected package libglapi-mesa:amd64.
+#7 5.775 Preparing to unpack .../04-libglapi-mesa_22.3.6-1+deb12u2_amd64.deb ...
+#7 5.777 Unpacking libglapi-mesa:amd64 (22.3.6-1+deb12u2) ...
+#7 5.803 Selecting previously unselected package libwayland-client0:amd64.
+#7 5.805 Preparing to unpack .../05-libwayland-client0_1.21.0-1_amd64.deb ...
+#7 5.807 Unpacking libwayland-client0:amd64 (1.21.0-1) ...
+#7 5.833 Selecting previously unselected package libx11-xcb1:amd64.
+#7 5.835 Preparing to unpack .../06-libx11-xcb1_2%3a1.8.4-2+deb12u2_amd64.deb ...
+#7 5.837 Unpacking libx11-xcb1:amd64 (2:1.8.4-2+deb12u2) ...
+#7 5.862 Selecting previously unselected package libxcb-dri2-0:amd64.
+#7 5.865 Preparing to unpack .../07-libxcb-dri2-0_1.15-1_amd64.deb ...
+#7 5.867 Unpacking libxcb-dri2-0:amd64 (1.15-1) ...
+#7 5.896 Selecting previously unselected package libxcb-dri3-0:amd64.
+#7 5.898 Preparing to unpack .../08-libxcb-dri3-0_1.15-1_amd64.deb ...
+#7 5.900 Unpacking libxcb-dri3-0:amd64 (1.15-1) ...
+#7 5.928 Selecting previously unselected package libxcb-present0:amd64.
+#7 5.930 Preparing to unpack .../09-libxcb-present0_1.15-1_amd64.deb ...
+#7 5.932 Unpacking libxcb-present0:amd64 (1.15-1) ...
+#7 5.959 Selecting previously unselected package libxcb-randr0:amd64.
+#7 5.961 Preparing to unpack .../10-libxcb-randr0_1.15-1_amd64.deb ...
+#7 5.963 Unpacking libxcb-randr0:amd64 (1.15-1) ...
+#7 5.993 Selecting previously unselected package libxcb-sync1:amd64.
+#7 5.995 Preparing to unpack .../11-libxcb-sync1_1.15-1_amd64.deb ...
+#7 5.997 Unpacking libxcb-sync1:amd64 (1.15-1) ...
+#7 6.024 Selecting previously unselected package libxcb-xfixes0:amd64.
+#7 6.026 Preparing to unpack .../12-libxcb-xfixes0_1.15-1_amd64.deb ...
+#7 6.029 Unpacking libxcb-xfixes0:amd64 (1.15-1) ...
+#7 6.057 Selecting previously unselected package libxshmfence1:amd64.
+#7 6.061 Preparing to unpack .../13-libxshmfence1_1.3-1_amd64.deb ...
+#7 6.063 Unpacking libxshmfence1:amd64 (1.3-1) ...
+#7 6.089 Selecting previously unselected package libegl-mesa0:amd64.
+#7 6.092 Preparing to unpack .../14-libegl-mesa0_22.3.6-1+deb12u2_amd64.deb ...
+#7 6.095 Unpacking libegl-mesa0:amd64 (22.3.6-1+deb12u2) ...
+#7 6.128 Selecting previously unselected package libglvnd0:amd64.
+#7 6.131 Preparing to unpack .../15-libglvnd0_1.6.0-1_amd64.deb ...
+#7 6.134 Unpacking libglvnd0:amd64 (1.6.0-1) ...
+#7 6.164 Selecting previously unselected package libvulkan1:amd64.
+#7 6.167 Preparing to unpack .../16-libvulkan1_1.3.239.0-1_amd64.deb ...
+#7 6.169 Unpacking libvulkan1:amd64 (1.3.239.0-1) ...
+#7 6.198 Selecting previously unselected package time.
+#7 6.201 Preparing to unpack .../17-time_1.9-0.2_amd64.deb ...
+#7 6.203 Unpacking time (1.9-0.2) ...
+#7 6.229 Selecting previously unselected package libegl1:amd64.
+#7 6.232 Preparing to unpack .../18-libegl1_1.6.0-1_amd64.deb ...
+#7 6.234 Unpacking libegl1:amd64 (1.6.0-1) ...
+#7 6.271 Setting up libxcb-dri3-0:amd64 (1.15-1) ...
+#7 6.277 Setting up libwayland-server0:amd64 (1.21.0-1) ...
+#7 6.282 Setting up libx11-xcb1:amd64 (2:1.8.4-2+deb12u2) ...
+#7 6.289 Setting up time (1.9-0.2) ...
+#7 6.294 Setting up libxcb-xfixes0:amd64 (1.15-1) ...
+#7 6.299 Setting up libglvnd0:amd64 (1.6.0-1) ...
+#7 6.305 Setting up libxcb-present0:amd64 (1.15-1) ...
+#7 6.312 Setting up libxcb-sync1:amd64 (1.15-1) ...
+#7 6.317 Setting up libglapi-mesa:amd64 (22.3.6-1+deb12u2) ...
+#7 6.323 Setting up libvulkan1:amd64 (1.3.239.0-1) ...
+#7 6.328 Setting up libxcb-dri2-0:amd64 (1.15-1) ...
+#7 6.335 Setting up libxshmfence1:amd64 (1.3-1) ...
+#7 6.340 Setting up libxcb-randr0:amd64 (1.15-1) ...
+#7 6.346 Setting up libdrm-common (2.4.114-1) ...
+#7 6.351 Setting up libwayland-client0:amd64 (1.21.0-1) ...
+#7 6.358 Setting up libdrm2:amd64 (2.4.114-1+b1) ...
+#7 6.363 Setting up libgbm1:amd64 (22.3.6-1+deb12u2) ...
+#7 6.369 Setting up libegl-mesa0:amd64 (22.3.6-1+deb12u2) ...
+#7 6.375 Setting up libegl1:amd64 (1.6.0-1) ...
+#7 6.383 Processing triggers for libc-bin (2.36-9+deb12u14) ...
+#7 DONE 6.5s
+
+#8 [toolchain 3/3] WORKDIR /workspace/core
+#8 DONE 0.0s
+
+#9 [dependencies 1/4] COPY Cargo.toml Cargo.lock ./
+#9 DONE 0.0s
+
+#10 [dependencies 2/4] COPY hymeko_core ./hymeko_core
+#10 DONE 0.0s
+
+#11 [dependencies 3/4] COPY hymeko_wgpu ./hymeko_wgpu
+#11 DONE 0.0s
+
+#12 [dependencies 4/4] RUN --mount=type=ssh,required=true     --mount=type=secret,id=known_hosts,target=/etc/ssh/ssh_known_hosts,required=true     GIT_SSH_COMMAND='ssh -o BatchMode=yes -o StrictHostKeyChecking=yes'     cargo fetch --locked --target x86_64-unknown-linux-gnu
+#12 0.094     Updating crates.io index
+#12 0.094     Updating git repository `ssh://git@amaterasu.local:2222/hymeko/parser.git`
+#12 0.344 From ssh://amaterasu.local:2222/hymeko/parser
+#12 0.344  * [new branch]      master     -> origin/master
+#12 0.344  * [new ref]                    -> origin/HEAD
+#12 5.750  Downloading crates ...
+#12 5.882   Downloaded simdutf8 v0.1.5
+#12 5.909   Downloaded lexical-write-integer v1.0.6
+#12 5.929   Downloaded cfg_aliases v0.2.2
+#12 5.941   Downloaded is_terminal_polyfill v1.70.2
+#12 5.944   Downloaded rustc_version v0.4.1
+#12 5.952   Downloaded lexical-core v1.0.6
+#12 5.984   Downloaded profiling v1.0.18
+#12 6.022   Downloaded equivalent v1.0.2
+#12 6.024   Downloaded cfg-if v1.0.4
+#12 6.027   Downloaded scopeguard v1.2.0
+#12 6.030   Downloaded document-features v0.2.12
+#12 6.032   Downloaded itoa v1.0.18
+#12 6.036   Downloaded rustc-hash v2.1.3
+#12 6.039   Downloaded same-file v1.0.6
+#12 6.042   Downloaded anstyle-query v1.1.5
+#12 6.044   Downloaded anstyle-parse v1.0.0
+#12 6.047   Downloaded colorchoice v1.0.5
+#12 6.049   Downloaded naga-types v30.0.1
+#12 6.052   Downloaded rustc-hash v1.1.0
+#12 6.054   Downloaded renderdoc-sys v1.1.0
+#12 6.056   Downloaded wgpu-naga-bridge v30.0.1
+#12 6.057   Downloaded unicode-xid v0.2.6
+#12 6.060   Downloaded string_cache v0.9.0
+#12 6.064   Downloaded wgpu-core-deps-windows-linux-android v30.0.1
+#12 6.065   Downloaded atoi v2.0.0
+#12 6.071   Downloaded alloca v0.4.0
+#12 6.074   Downloaded csv-core v0.1.13
+#12 6.077   Downloaded autocfg v1.5.1
+#12 6.081   Downloaded utf8parse v0.2.2
+#12 6.086   Downloaded bytemuck_derive v1.12.0
+#12 6.089   Downloaded constant_time_eq v0.4.2
+#12 6.093   Downloaded flatbuffers v25.12.19
+#12 6.116   Downloaded bit-set v0.10.0
+#12 6.119   Downloaded foldhash v0.2.0
+#12 6.121   Downloaded lock_api v0.4.14
+#12 6.123   Downloaded tinytemplate v1.2.1
+#12 6.127   Downloaded crossbeam-deque v0.8.7
+#12 6.130   Downloaded crypto-common v0.1.7
+#12 6.131   Downloaded static_assertions v1.1.0
+#12 6.134   Downloaded lalrpop-util v0.23.1
+#12 6.136   Downloaded presser v0.3.1
+#12 6.139   Downloaded libloading v0.8.9
+#12 6.144   Downloaded phf_shared v0.13.1
+#12 6.145   Downloaded thiserror v2.0.20
+#12 6.156   Downloaded zmij v1.0.23
+#12 6.158   Downloaded quote v1.0.47
+#12 6.161   Downloaded walkdir v2.5.0
+#12 6.163   Downloaded env_logger v0.11.11
+#12 6.176   Downloaded bit-vec v0.9.1
+#12 6.181   Downloaded either v1.18.0
+#12 6.189   Downloaded iceoryx2-log-types v0.8.1
+#12 6.193   Downloaded lexical-parse-integer v1.0.6
+#12 6.197   Downloaded semver v1.0.28
+#12 6.203   Downloaded arrow-csv v58.4.0
+#12 6.212   Downloaded lazy_static v1.5.0
+#12 6.219   Downloaded iceoryx2-bb-system-types v0.8.1
+#12 6.227   Downloaded spirv v0.4.0+sdk-1.4.341.0
+#12 6.234   Downloaded thiserror-impl v2.0.20
+#12 6.237   Downloaded parking_lot_core v0.9.12
+#12 6.244   Downloaded crossbeam-utils v0.8.22
+#12 6.256   Downloaded raw-window-handle v0.6.2
+#12 6.266   Downloaded siphasher v1.0.3
+#12 6.276   Downloaded term v1.2.1
+#12 6.281   Downloaded parking_lot v0.12.5
+#12 6.291   Downloaded smallvec v1.15.2
+#12 6.309   Downloaded ryu v1.0.23
+#12 6.317   Downloaded iceoryx2-pal-configuration v0.8.1
+#12 6.329   Downloaded toml_parser v1.1.3+spec-1.1.0
+#12 6.334   Downloaded find-msvc-tools v0.1.11
+#12 6.338   Downloaded sha1_smol v1.0.1
+#12 6.341   Downloaded iceoryx2-bb-elementary-traits v0.8.1
+#12 6.343   Downloaded iceoryx2-bb-linux v0.8.1
+#12 6.346   Downloaded serde_spanned v1.1.1
+#12 6.348   Downloaded iceoryx2-bb-concurrency v0.8.1
+#12 6.350   Downloaded iceoryx2-loggers v0.8.1
+#12 6.353   Downloaded env_filter v2.0.0
+#12 6.356   Downloaded iceoryx2-log v0.8.1
+#12 6.357   Downloaded iceoryx2-bb-elementary v0.8.1
+#12 6.376   Downloaded cobs v0.3.0
+#12 6.384   Downloaded once_cell v1.21.4
+#12 6.389   Downloaded gpu-allocator v0.28.0
+#12 6.395   Downloaded shlex v2.0.1
+#12 6.398   Downloaded arrayvec v0.7.8
+#12 6.402   Downloaded num-traits v0.2.19
+#12 6.407   Downloaded proc-macro2 v1.0.107
+#12 6.413   Downloaded allocator-api2 v0.2.21
+#12 6.417   Downloaded litrs v1.0.0
+#12 6.421   Downloaded bytemuck v1.25.2
+#12 6.425   Downloaded page_size v0.6.0
+#12 6.431   Downloaded arrow-arith v58.4.0
+#12 6.433   Downloaded log v0.4.33
+#12 6.436   Downloaded serde_derive v1.0.229
+#12 6.439   Downloaded crossbeam-epoch v0.9.20
+#12 6.442   Downloaded bitflags v2.13.1
+#12 6.448   Downloaded ordered-float v5.5.0
+#12 6.449   Downloaded new_debug_unreachable v1.0.6
+#12 6.451   Downloaded version_check v0.9.5
+#12 6.452   Downloaded half v2.7.1
+#12 6.455   Downloaded ciborium-ll v0.2.2
+#12 6.456   Downloaded const-random-macro v0.1.16
+#12 6.463   Downloaded cexpr v0.6.0
+#12 6.473   Downloaded iceoryx2-bb-derive-macros v0.8.1
+#12 6.485   Downloaded postcard v1.1.3
+#12 6.506   Downloaded enum-iterator v2.3.0
+#12 6.515   Downloaded shlex v1.3.0
+#12 6.529   Downloaded iceoryx2-bb-memory v0.8.1
+#12 6.532   Downloaded glob v0.3.4
+#12 6.534   Downloaded anstream v1.0.0
+#12 6.543   Downloaded unicode-ident v1.0.24
+#12 6.553   Downloaded serde_core v1.0.229
+#12 6.588   Downloaded rayon-core v1.13.0
+#12 6.597   Downloaded crunchy v0.2.4
+#12 6.605   Downloaded codespan-reporting v0.13.1
+#12 6.639   Downloaded base64 v0.22.1
+#12 6.648   Downloaded iceoryx2-bb-lock-free v0.8.1
+#12 6.668   Downloaded clang-sys v1.9.1
+#12 6.685   Downloaded serde v1.0.229
+#12 6.723   Downloaded cpufeatures v0.3.0
+#12 6.752   Downloaded spin v0.9.9
+#12 6.758   Downloaded lexical-write-float v1.0.6
+#12 6.775   Downloaded prettyplease v0.2.37
+#12 6.786   Downloaded iceoryx2-bb-container v0.8.1
+#12 6.808   Downloaded memchr v2.8.3
+#12 6.822   Downloaded zerocopy-derive v0.8.56
+#12 6.844   Downloaded approx v0.5.1
+#12 6.848   Downloaded lexical-util v1.0.7
+#12 6.865   Downloaded generic-array v0.14.7
+#12 6.927   Downloaded arrow-ipc v58.4.0
+#12 6.931   Downloaded keccak v0.1.6
+#12 6.932   Downloaded arrow-cast v58.4.0
+#12 6.939   Downloaded minimal-lexical v0.2.1
+#12 6.973   Downloaded block-buffer v0.10.4
+#12 6.998   Downloaded cc v1.4.4
+#12 7.005   Downloaded ciborium-io v0.2.2
+#12 7.012   Downloaded indexmap v2.14.0
+#12 7.018   Downloaded nalgebra-macros v0.3.0
+#12 7.019   Downloaded const-random v0.1.18
+#12 7.021   Downloaded hashbrown v0.16.1
+#12 7.039   Downloaded wgpu-types v30.0.1
+#12 7.056   Downloaded ena v0.14.4
+#12 7.060   Downloaded ascii-canvas v4.0.0
+#12 7.069   Downloaded iceoryx2-pal-concurrency-sync v0.8.1
+#12 7.082   Downloaded embedded-io v0.6.1
+#12 7.109   Downloaded cast v0.3.0
+#12 7.114   Downloaded serde_json v1.0.151
+#12 7.142   Downloaded nom v7.1.3
+#12 7.171   Downloaded clap_lex v1.1.0
+#12 7.194   Downloaded lexical-parse-float v1.0.6
+#12 7.207   Downloaded aho-corasick v1.1.5
+#12 7.216   Downloaded iceoryx2-bb-posix v0.8.1
+#12 7.224   Downloaded itertools v0.13.0
+#12 7.233   Downloaded hashbrown v0.17.1
+#12 7.239   Downloaded libm v0.2.16
+#12 7.256   Downloaded rayon v1.12.0
+#12 7.267   Downloaded tiny-fn v0.1.9
+#12 7.287   Downloaded precomputed-hash v0.1.1
+#12 7.311   Downloaded winnow v1.0.4
+#12 7.323   Downloaded wgpu v30.0.1
+#12 7.368   Downloaded lalrpop v0.23.1
+#12 7.428   Downloaded embedded-io v0.4.0
+#12 7.444   Downloaded enum-iterator-derive v1.5.0
+#12 7.445   Downloaded iceoryx2-pal-os-api v0.8.1
+#12 7.458   Downloaded bindgen v0.72.1
+#12 7.466   Downloaded unicode-width v0.2.2
+#12 7.515   Downloaded rawpointer v0.2.1
+#12 7.516   Downloaded toml_writer v1.1.2+spec-1.1.0
+#12 7.518   Downloaded oorandom v11.1.5
+#12 7.522   Downloaded zerocopy v0.8.56
+#12 7.551   Downloaded syn v2.0.119
+#12 7.565   Downloaded syn v3.0.3
+#12 7.619   Downloaded criterion-plot v0.8.2
+#12 7.629   Downloaded regex-syntax v0.8.11
+#12 7.659   Downloaded digest v0.10.7
+#12 7.668   Downloaded wgpu-core v30.0.1
+#12 7.745   Downloaded ash v0.38.0+1.3.281
+#12 7.788   Downloaded wgpu-hal v30.0.1
+#12 7.809   Downloaded pico-args v0.5.0
+#12 7.812   Downloaded bit-set v0.9.1
+#12 7.828   Downloaded foldhash v0.1.5
+#12 7.831   Downloaded num-rational v0.4.2
+#12 7.881   Downloaded anes v0.1.6
+#12 7.909   Downloaded regex-automata v0.4.18
+#12 7.941   Downloaded paste v1.0.15
+#12 7.946   Downloaded tiny-keccak v2.0.2
+#12 7.973   Downloaded libc v0.2.189
+#12 8.032   Downloaded csv v1.4.0
+#12 8.050   Downloaded naga v30.0.1
+#12 8.090   Downloaded toml_datetime v0.7.5+spec-1.1.0
+#12 8.092   Downloaded anstyle v1.0.14
+#12 8.117   Downloaded fixedbitset v0.5.7
+#12 8.142   Downloaded arrow-string v58.4.0
+#12 8.168   Downloaded ahash v0.8.12
+#12 8.251   Downloaded ciborium v0.2.2
+#12 8.299   Downloaded num-integer v0.1.47
+#12 8.307   Downloaded num-complex v0.4.6
+#12 8.391   Downloaded iana-time-zone v0.1.65
+#12 8.535   Downloaded simba v0.9.1
+#12 8.547   Downloaded arrow-row v58.4.0
+#12 8.562   Downloaded matrixmultiply v0.3.11
+#12 8.588   Downloaded toml v0.9.12+spec-1.1.0
+#12 8.608   Downloaded getrandom v0.2.17
+#12 8.641   Downloaded arrow-data v58.4.0
+#12 8.662   Downloaded getrandom v0.3.4
+#12 8.718   Downloaded clap v4.6.6
+#12 8.842   Downloaded bytes v1.12.1
+#12 8.913   Downloaded safe_arch v0.7.4
+#12 8.922   Downloaded arrow-ord v58.4.0
+#12 9.082   Downloaded arrow-schema v58.4.0
+#12 9.183   Downloaded arrow-json v58.4.0
+#12 9.281   Downloaded iceoryx2-cal v0.8.1
+#12 9.301   Downloaded arrow-select v58.4.0
+#12 9.326   Downloaded arrow-buffer v58.4.0
+#12 9.360   Downloaded nalgebra-sparse v0.11.0
+#12 9.370   Downloaded wide v0.7.33
+#12 9.392   Downloaded arrow v58.4.0
+#12 9.420   Downloaded num-bigint v0.4.8
+#12 9.433   Downloaded typenum v1.20.1
+#12 9.524   Downloaded criterion v0.8.2
+#12 9.590   Downloaded glam v0.14.0
+#12 9.675   Downloaded glam v0.17.3
+#12 9.697   Downloaded hashbrown v0.15.5
+#12 9.724   Downloaded glam v0.15.2
+#12 9.768   Downloaded glam v0.16.0
+#12 9.785   Downloaded glam v0.18.0
+#12 9.804   Downloaded iceoryx2-pal-posix v0.8.1
+#12 9.822   Downloaded glam v0.19.0
+#12 9.845   Downloaded regex v1.13.1
+#12 9.856   Downloaded itertools v0.14.0
+#12 9.863   Downloaded clap_builder v4.6.6
+#12 9.906   Downloaded iceoryx2 v0.8.1
+#12 9.931   Downloaded glam v0.20.5
+#12 9.942   Downloaded winnow v0.7.15
+#12 10.05   Downloaded blake3 v1.8.7
+#12 10.13   Downloaded chrono v0.4.45
+#12 10.24   Downloaded glam v0.21.3
+#12 10.27   Downloaded glam v0.22.0
+#12 10.32   Downloaded glam v0.23.0
+#12 10.34   Downloaded arrow-array v58.4.0
+#12 10.43   Downloaded glam v0.24.2
+#12 10.51   Downloaded glam v0.25.0
+#12 10.58   Downloaded nalgebra v0.34.2
+#12 10.62   Downloaded glam v0.27.0
+#12 10.70   Downloaded glam v0.28.0
+#12 10.75   Downloaded glam v0.29.3
+#12 11.00   Downloaded petgraph v0.8.3
+#12 11.03   Downloaded glam v0.30.10
+#12 11.06   Downloaded glam v0.32.1
+#12 11.09   Downloaded glam v0.31.1
+#12 11.12   Downloaded sha3 v0.10.9
+#12 DONE 11.6s
+
+#13 [verify 1/4] COPY data ./data
+#13 DONE 0.2s
+
+#14 [verify 2/4] COPY README.md LICENSE ./
+#14 DONE 0.0s
+
+#15 [verify 3/4] COPY tools/ci/core.sh /usr/local/bin/hymeko-core-check
+#15 DONE 0.0s
+
+#16 [verify 4/4] RUN sed -i 's/\r$//' /usr/local/bin/hymeko-core-check     && chmod +x /usr/local/bin/hymeko-core-check
+#16 DONE 0.1s
+
+#17 exporting to docker image format
+#17 exporting layers
+#17 exporting layers 4.4s done
+#17 exporting manifest sha256:180313022d68cf2f6d716450a4f37f7b4a8573bc5faa33726a79c6e55ae969e3 done
+#17 exporting config sha256:05e0242c646ef0a944e637a00d1da83ceaaaa422abfb9ab62655ded1b82522ad done
+#17 sending tarball
+#17 ...
+
+#18 importing to docker
+#18 loading layer e4e56b3c02ed 131.07kB / 12.85MB
+#18 loading layer 0b89b1396b24 118B / 118B
+#18 loading layer f8c524172f7b 18.63kB / 18.63kB
+#18 loading layer 31a36b920a0b 32.77kB / 252.96kB
+#18 loading layer f1aeed7d396f 32.77kB / 143.47kB
+#18 loading layer 490357e4319a 557.06kB / 53.34MB
+#18 loading layer 490357e4319a 39.55MB / 53.34MB 2.1s
+#18 loading layer 4b868bffe441 32.77kB / 107.93kB
+#18 loading layer e4e56b3c02ed 12.85MB / 12.85MB 4.3s done
+#18 loading layer bc84acb35118 1.58kB / 1.58kB
+#18 loading layer 0a6b06fa4607 1.29kB / 1.29kB
+#18 loading layer 72312c43894d 1.28kB / 1.28kB
+#18 loading layer 0b89b1396b24 118B / 118B 3.9s done
+#18 loading layer f8c524172f7b 18.63kB / 18.63kB 3.9s done
+#18 loading layer 31a36b920a0b 252.96kB / 252.96kB 3.9s done
+#18 loading layer f1aeed7d396f 143.47kB / 143.47kB 3.9s done
+#18 loading layer 490357e4319a 53.34MB / 53.34MB 3.8s done
+#18 loading layer 4b868bffe441 107.93kB / 107.93kB 0.1s done
+#18 loading layer bc84acb35118 1.58kB / 1.58kB 0.1s done
+#18 loading layer 0a6b06fa4607 1.29kB / 1.29kB 0.1s done
+#18 loading layer 72312c43894d 1.28kB / 1.28kB 0.1s done
+#18 DONE 4.3s
+
+#17 exporting to docker image format
+#17 sending tarball 7.6s done
+#17 DONE 12.1s
+
+#19 resolving provenance for metadata file
+#19 DONE 0.0s

@@ -1,0 +1,16 @@
+flowchart TD
+  A[Core dependency approval] --> C[Parser 284c490d and verified final Core]
+  C --> G[Graph]
+  C --> T[Transformation]
+  C --> H[Hotaru]
+  G --> U[Consumer checks]
+  T --> U
+  H --> U
+  U --> R[Remote revision availability]
+  R --> TAG[Tested revision set then tags]
+  TAG --> B[Inspect remaining branch refs]
+  B --> S[Core digest / portable IDs / robotics separately]
+  B --> P[Graph P34 and existing search fixes]
+  S --> V[Conflict analysis and discriminating tests]
+  P --> V
+  V --> A[Concrete scoped proposal and approval boundary]

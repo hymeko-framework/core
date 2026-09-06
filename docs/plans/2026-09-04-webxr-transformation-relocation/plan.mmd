@@ -1,0 +1,10 @@
+flowchart LR
+    SRC[Latest core WebXR working tree] --> T[hymeko_webxr in transformation]
+    C[hymeko_core: generic IR and accessors] --> T
+    T --> V[Validator and borrowed query]
+    T --> B[Browser/simulator adapter]
+    V --> TV[Transformation tests]
+    TV --> R[Remove WebXR from core]
+    R --> CV[Core tests and corpus re-freeze]
+    CV --> BM[Clean benchmark reproduction]
+    BM --> REP[Measured report]

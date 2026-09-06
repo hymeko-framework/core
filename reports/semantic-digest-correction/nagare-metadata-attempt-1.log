@@ -1,0 +1,83 @@
+2026-09-06T00:18:21+00:00
+CONTROL
+/usr/local/cargo/bin/cargo
+/usr/local/cargo/bin/rustc
+/usr/bin/git
+cargo 1.97.1 (c980f4866 2026-06-30)
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+binary: rustc
+commit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452
+commit-date: 2026-07-14
+host: x86_64-unknown-linux-gnu
+release: 1.97.1
+LLVM version: 22.1.6
+core-baseline.bundle: OK
+core.bundle: OK
+graph.bundle: OK
+hymeko.bundle: OK
+nagare.bundle: OK
+parser.bundle: OK
+tensor.bundle: OK
+registry/ROADMAPS.md: OK
+nagare/docs/roadmaps/micro-nagare-mcu-backend.md: OK
+nagare/docs/roadmaps/nagare-long-term-roadmap.md: OK
+nagare/tests/merkle_digest_soundness.rs: OK
+nagare/tests/hnn/test_helpers.rs: OK
+nagare/tests/hnn_data/mlp/mlp2.hymeko: OK
+hymeko/CLAUDE.md: OK
+hymeko/docs/agent-contract/global.md: OK
+nagare/.cargo/config.toml: OK
+BASELINE_METADATA
+    Updating crates.io index
+    Updating git repository `ssh://git@amaterasu.local:2222/hymeko/core.git`
+fatal: detected dubious ownership in repository at '/workspace/core/.git'
+To add an exception for this directory, call:
+
+	git config --global --add safe.directory /workspace/core/.git
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+warning: spurious network error (3 tries remaining): process didn't exit successfully: `git fetch --tags --force --update-head-ok 'ssh://git@amaterasu.local:2222/hymeko/core.git' '+refs/heads/*:refs/remotes/origin/*' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
+fatal: detected dubious ownership in repository at '/workspace/core/.git'
+To add an exception for this directory, call:
+
+	git config --global --add safe.directory /workspace/core/.git
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+warning: spurious network error (2 tries remaining): process didn't exit successfully: `git fetch --tags --force --update-head-ok 'ssh://git@amaterasu.local:2222/hymeko/core.git' '+refs/heads/*:refs/remotes/origin/*' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
+fatal: detected dubious ownership in repository at '/workspace/core/.git'
+To add an exception for this directory, call:
+
+	git config --global --add safe.directory /workspace/core/.git
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+warning: spurious network error (1 try remaining): process didn't exit successfully: `git fetch --tags --force --update-head-ok 'ssh://git@amaterasu.local:2222/hymeko/core.git' '+refs/heads/*:refs/remotes/origin/*' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
+fatal: detected dubious ownership in repository at '/workspace/core/.git'
+To add an exception for this directory, call:
+
+	git config --global --add safe.directory /workspace/core/.git
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+error: failed to get `hymeko_core` as a dependency of package `hymeko_nagare v0.1.0 (/workspace/nagare)`
+
+Caused by:
+  failed to load source for dependency `hymeko_core`
+
+Caused by:
+  unable to update ssh://git@amaterasu.local:2222/hymeko/core.git?branch=main#112a2543
+
+Caused by:
+  failed to fetch into: /cargo/git/db/core-037eca43517efe3a
+
+Caused by:
+  process didn't exit successfully: `git fetch --tags --force --update-head-ok 'ssh://git@amaterasu.local:2222/hymeko/core.git' '+refs/heads/*:refs/remotes/origin/*' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
+Command exited with non-zero status 101
+resource stage=metadata_before elapsed_s=10.77 max_rss_kib=36768 exit=101
+2026-09-06T00:18:32+00:00

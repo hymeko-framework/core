@@ -1,0 +1,42 @@
+% Canonical CBOR codec ownership and trust boundary.
+% Created-at 2026-09-04 13:09 CEST
+
+\begin{tikzpicture}[
+  font=\small,
+  box/.style={draw, rounded corners=2pt, minimum height=9mm, align=center, inner sep=4pt},
+  external/.style={box, fill=black!4},
+  core/.style={box, fill=blue!7},
+  validated/.style={box, fill=green!9},
+  arr/.style={-Stealth, thick},
+  reject/.style={box, fill=red!7},
+  note/.style={font=\scriptsize\itshape, align=left, text width=40mm}
+]
+
+\node[core] (program) at (0,1.5) {\texttt{CompiledProgram} + \texttt{Interner}};
+\node[core] (encode) at (4.2,1.5) {\texttt{encode\_compiled}\path normalization\witness verification};
+\node[external] (bytes) at (8.3,1.5) {versioned CBOR bytes\transport-owned unchanged};
+\draw[arr] (program) -- (encode);
+\draw[arr] (encode) -- (bytes);
+
+\draw[dashed, thick, red!60] (8.3,-3.0) -- (8.3,0.7)
+  node[above, font=\scriptsize\bfseries, red!60] {untrusted input boundary};
+
+\node[core] (preflight) at (11.8,0.5) {\texttt{preflight}\definite lengths\limits before Serde};
+\node[core] (serde) at (11.8,-1.0) {Serde materialization\schema v1};
+\node[core] (validate) at (7.4,-2.0) {semantic validation\IDs, paths, hierarchy, namespaces};
+\node[core] (rebuild) at (3.2,-2.0) {rebuild index + interner\stream canonical hash};
+\node[validated] (out) at (-1.1,-2.0) {\texttt{DecodedCborPayload}\validated IR + Interner};
+\node[reject] (error) at (11.8,-2.8) {\texttt{CborError}\fail closed};
+
+\draw[arr] (bytes) -- (preflight);
+\draw[arr] (preflight) -- (serde);
+\draw[arr] (serde) -- (validate);
+\draw[arr] (validate) -- (rebuild);
+\draw[arr] (rebuild) -- (out);
+\draw[arr, red!60] (preflight) -- (error);
+\draw[arr, red!60] (serde) -- (error);
+\draw[arr, red!60] (validate) -- (error);
+
+\node[note] at (3.2,-3.3) {Chordex, Zenoh, simulator, and XR are consumers or carriers; none owns this schema.};
+
+\end{tikzpicture}

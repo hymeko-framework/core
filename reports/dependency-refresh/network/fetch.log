@@ -1,0 +1,15 @@
+    Updating git repository `ssh://git@amaterasu.local:2222/hymeko/hotaru.git`
+From ssh://amaterasu.local:2222/hymeko/hotaru
+ * [new branch]      audit/dependency-refresh-2026-09-05 -> origin/audit/dependency-refresh-2026-09-05
+ * [new branch]      main       -> origin/main
+ * [new ref]                    -> origin/HEAD
+    Updating git repository `ssh://git@amaterasu.local:2222/hymeko/transformation.git`
+From ssh://amaterasu.local:2222/hymeko/transformation
+ * [new branch]      audit/platform-2026-09-05 -> origin/audit/platform-2026-09-05
+ * [new branch]      feat/geometry-crate-and-forward-kinematics -> origin/feat/geometry-crate-and-forward-kinematics
+ * [new branch]      feat/humanoid-actuation -> origin/feat/humanoid-actuation
+ * [new branch]      feat/transformation-current-canonical-core -> origin/feat/transformation-current-canonical-core
+ * [new branch]      feat/webxr-domain-projection -> origin/feat/webxr-domain-projection
+ * [new branch]      main                    -> origin/main
+ * [new branch]      master                  -> origin/master
+ * [new ref]                                 -> origin/HEAD

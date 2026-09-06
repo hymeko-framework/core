@@ -1,0 +1,12 @@
+spmm_gpu_resident/E_resident_reused_readback/medium/fd32
+                        time:   [812.82 µs 817.74 µs 824.48 µs]
+                        thrpt:  [31.045 Gelem/s 31.301 Gelem/s 31.491 Gelem/s]
+                 change:
+                        time:   [−1.9249% −0.4031% +1.5837%] (p = 0.68 > 0.05)
+                        thrpt:  [−1.5590% +0.4048% +1.9627%]
+                        No change in performance detected.
+Found 4 outliers among 30 measurements (13.33%)
+  1 (3.33%) low severe
+  1 (3.33%) low mild
+  2 (6.67%) high severe
+

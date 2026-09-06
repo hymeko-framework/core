@@ -1,0 +1,63 @@
+{
+  "created_at": "2026-09-05T20:00:58.661618+02:00",
+  "base": "5887d0782433ebc95e113dde80340699fac1eba7",
+  "provider_revision": "5517e6b3b63df3e9632b1fb810a41470b51a2f73",
+  "installed_tool": {
+    "url": "ssh://git@192.168.1.228:2222/hymeko/hymeko.git",
+    "vcs_info": {
+      "vcs": "git",
+      "commit_id": "5517e6b3b63df3e9632b1fb810a41470b51a2f73",
+      "requested_revision": "5517e6b3b63df3e9632b1fb810a41470b51a2f73"
+    }
+  },
+  "imports": [
+    "AGENTS.md",
+    "../hymeko/docs/agent-contract/global.md"
+  ],
+  "checks": [
+    {
+      "check": "missing-discovery",
+      "exit_code": 1,
+      "expected": 1,
+      "wall_seconds": 1.73
+    },
+    {
+      "check": "with-discovery",
+      "exit_code": 0,
+      "expected": 0,
+      "wall_seconds": 0.94
+    },
+    {
+      "check": "pre-commit",
+      "exit_code": 0,
+      "expected": 0,
+      "wall_seconds": 2.778
+    },
+    {
+      "check": "persona-valid",
+      "exit_code": 0,
+      "expected_block": false,
+      "decision": null,
+      "wall_seconds": 0.399
+    },
+    {
+      "check": "persona-invalid",
+      "exit_code": 0,
+      "expected_block": true,
+      "decision": {
+        "decision": "block",
+        "reason": "Persona gate rejected the response. Rewrite it: the first line must be [YYYY-MM-DD HH:MM +HH:MM] from the system clock"
+      },
+      "wall_seconds": 0.368
+    },
+    {
+      "check": "persona-loop-guard",
+      "exit_code": 0,
+      "expected_block": false,
+      "decision": null,
+      "wall_seconds": 0.383
+    }
+  ],
+  "provider_suite_applicable": false,
+  "claude_runtime_activation_verified": false
+}
