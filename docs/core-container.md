@@ -152,3 +152,48 @@ source revisions, hardware identity, input fixtures and timing boundaries.
 Build behavior follows Docker's [SSH and secret mounts](https://docs.docker.com/build/building/secrets/),
 [container resource limits](https://docs.docker.com/engine/containers/resource_constraints/)
 and Cargo's [locked dependency fetch](https://doc.rust-lang.org/cargo/commands/cargo-fetch.html).
+
+## Distributed admission and ARM64 portability
+
+The existing `cross-toolchain` target adds the ARM64 Rust standard library,
+GNU linker/libc sysroot and static QEMU user interpreter. The default SDK target
+is unchanged. Build natively with the existing bounded builder:
+
+```sh
+docker buildx build --builder hymeko-core-amaterasu-20260905   --target cross-toolchain --load -t hymeko-core-cross:1.97.1   -f tools/ci/Dockerfile .
+```
+
+Use the existing Core source checkout and compatible Cargo/target caches. Run
+`sh tools/ci/core.sh distributed-build` in this image with the usual 16-GiB,
+no-swap container limits, four Cargo jobs and `CARGO_BUILD_TARGET` unset for
+native Linux or `aarch64-unknown-linux-gnu` for ARM64. The action compiles the
+existing integration harness and `ir_stream_bench` without attempting to execute
+a foreign binary. It emits stage timing/RSS and cgroup progress as other actions do.
+
+Run the ARM64 ELF in an ARM64 Debian runtime with `--platform linux/arm64` and
+an explicitly mounted native static QEMU entry point. Both the runtime image
+architecture and the executable ELF machine must be checked. This requires
+neither privileged Docker nor host binfmt registration. Mount the exact benchmark
+and output directory, disable networking, set four CPUs and 16 GiB with no swap.
+The runtime image/guest libc and QEMU hashes are part of measurement provenance.
+
+Correctness uses the real `ir_stream_admission` integration tests, including the
+Lean-generated reference matrix. Benchmark preflight precedes timing:
+
+```sh
+./ir_stream_bench --test '^(ir_stream_admission/|ir_stream_replay/(exact_duplicate|conflicting_duplicate|replay_window_miss)$)'
+CRITERION_HOME=/results/run1/criterion RAYON_NUM_THREADS=4   ./ir_stream_bench --bench '^(ir_stream_admission/|ir_stream_replay/(exact_duplicate|conflicting_duplicate|replay_window_miss)$)'
+```
+
+Use separate result directories for three process repetitions. The existing
+`scripts/dev/criterion_report.ps1 -CriterionRoot <directory> -Baseline new`
+reads retained samples and reports median, interpolated quartiles and worst
+iteration-batch mean. These are not individual-request tail latencies. Admission
+setup constructs a fresh assembler outside the timed closure; validation,
+admission and closure-owned assembler destruction are timed. Criterion batching
+can retain many assemblers, so peak process memory describes the harness as well
+as the operation. Native and QEMU timings must be reported separately; the latter
+are not native ARM hardware performance or distributed speedup.
+
+The [recorded campaign](../reports/2026-09-06-distributed-verification-benchmarks.md)
+contains exact commands, source/lock/image hashes, raw samples and resource limits.

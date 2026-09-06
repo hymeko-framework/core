@@ -291,3 +291,24 @@ available at audit commit `1befefb`; they are not rewritten as historical PASS.
 [current mapping](../../../reports/distributed-admission-fix/traceability.tsv)
 record observed conformance. Rust PASS here means the named checks passed; it
 does not turn the abstract Lean proof into a whole-implementation refinement proof.
+
+### Extended admission evidence - 2026-09-06
+
+The model now has **23** checked theorems. `committed_replay_after_suffix`
+strengthens `DIST-IDEMPOTENT`: an installed transaction can be replayed after
+an arbitrary finite suffix without changing the modeled replica. The premise
+that the first admission installed is essential; this is not retry liveness.
+
+`admission_matches_lean_vectors_and_preserves_committed_state` runs 26,406
+Lean-generated cases through the actual codec/assembler with two embeddings,
+including `u64::MAX`: 52,812 comparisons of typed outcomes, version and digest.
+This extends bounded runtime evidence for `DIST-MONOTONE`, `DIST-RESUME`,
+`DIST-BOOTSTRAP`, `DIST-STALE` and `DIST-PRESERVE`. Neither an exhaustive Rust
+refinement nor complete semantic-state installation is claimed. `DIST-BINDING`,
+`DIST-INSTALL`, `DIST-LIVE` and the UIR-DYN matrix statuses remain as above.
+
+The [three-platform campaign](../../../reports/2026-09-06-distributed-verification-benchmarks.md)
+records theorem axioms, a false resumed-zero negative control, exact generated
+bytes, platform correctness and Criterion samples. Model and implementation
+remain independent owners; the Rust test consumes expected data rather than
+reimplementing the model's decision function.

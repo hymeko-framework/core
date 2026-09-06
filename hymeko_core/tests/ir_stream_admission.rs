@@ -183,6 +183,36 @@ fn known_identity_survives_resync_and_replay() {
     );
 }
 
+#[test]
+fn installed_transaction_replay_after_advancing_suffix_preserves_state() {
+    let first = SnapshotVersion::new(1, 1, 1, 0);
+    for begin in [MessageType::SnapshotBegin, MessageType::DeltaBegin] {
+        for suffix_len in 1..=4 {
+            let mut assembler = TransactionAssembler::new(AssemblerLimits::strict());
+            let mut producer = Producer { seq: 0 };
+            assert!(matches!(
+                producer.transaction(&mut assembler, begin, ZERO, first),
+                ApplyOutcome::Committed(_)
+            ));
+            for level in 2..=suffix_len + 1 {
+                let target = SnapshotVersion::new(level, level, level, 0);
+                assert!(matches!(
+                    producer.transaction(&mut assembler, MessageType::SnapshotBegin, ZERO, target),
+                    ApplyOutcome::Committed(_)
+                ));
+            }
+            let version = assembler.current_version();
+            let digest = assembler.current_commit_digest().copied();
+            assert_eq!(
+                producer.transaction(&mut assembler, begin, ZERO, first),
+                ApplyOutcome::Superseded
+            );
+            assert_eq!(assembler.current_version(), version);
+            assert_eq!(assembler.current_commit_digest().copied(), digest);
+        }
+    }
+}
+
 /// The expected verdicts come from the independently executable Lean model,
 /// not a second Rust implementation of the admission guards. The same ordered
 /// levels are exercised at ordinary values and at the u64 boundary.
