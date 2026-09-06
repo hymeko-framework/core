@@ -197,6 +197,8 @@ pub enum KernelId {
     ActivationInPlace(ActivationEntry),
     /// Signed HSiKAN Chebyshev--Catmull-Rom inference.
     Hsikan,
+    /// Rotation-invariant spatial covariance and eigen-entropy pooling.
+    GlobalEntropyPool,
     /// Sparse, single-head, untransported quaternion rotor attention.
     RotorAttention,
     /// Star-centred rotor-spike orientation population code.
@@ -220,6 +222,7 @@ impl KernelId {
             Self::ActivationOutOfPlace(_) => "activation",
             Self::ActivationInPlace(_) => "activation_inplace",
             Self::Hsikan => "hsikan",
+            Self::GlobalEntropyPool => "global_entropy_pool",
             Self::RotorAttention => "rotor_attention",
             Self::StarRotorSpike => "star_rotor_spike",
             Self::Fill => "fill",
@@ -234,6 +237,7 @@ impl KernelId {
             Self::ActivationOutOfPlace(_) => crate::operations::ACTIVATION_SHADER,
             Self::ActivationInPlace(_) => crate::operations::ACTIVATION_INPLACE_SHADER,
             Self::Hsikan => crate::operations::HSIKAN_SHADER,
+            Self::GlobalEntropyPool => crate::operations::GLOBAL_ENTROPY_POOL_SHADER,
             Self::RotorAttention => crate::operations::ROTOR_ATTENTION_SHADER,
             Self::StarRotorSpike => crate::operations::STAR_ROTOR_SPIKE_SHADER,
             Self::Fill => crate::FILL_SHADER,
@@ -249,6 +253,7 @@ impl KernelId {
             | Self::ActivationInPlace(a) => a.entry_point(),
             Self::Fill => "main",
             Self::Hsikan => "main",
+            Self::GlobalEntropyPool => "main",
             Self::RotorAttention => "main",
             Self::StarRotorSpike => "main",
         }
@@ -261,6 +266,7 @@ impl KernelId {
             Self::ActivationOutOfPlace(_) => LayoutId::ActivationOutOfPlace,
             Self::ActivationInPlace(_) => LayoutId::ActivationInPlace,
             Self::Hsikan => LayoutId::Hsikan,
+            Self::GlobalEntropyPool => LayoutId::ActivationOutOfPlace,
             Self::RotorAttention => LayoutId::RotorAttention,
             Self::StarRotorSpike => LayoutId::StarRotorSpike,
             Self::Fill => LayoutId::Fill,
@@ -566,6 +572,7 @@ mod tests {
             KernelId::ActivationInPlace(ActivationEntry::Relu),
             KernelId::ActivationOutOfPlace(ActivationEntry::Identity),
             KernelId::Hsikan,
+            KernelId::GlobalEntropyPool,
             KernelId::RotorAttention,
             KernelId::StarRotorSpike,
             KernelId::Fill,
@@ -612,5 +619,14 @@ mod tests {
                 "SpMM binding {i} must be read-only"
             );
         }
+    }
+
+    #[test]
+    fn global_entropy_pool_reuses_the_compatible_three_binding_layout() {
+        assert_eq!(
+            KernelId::GlobalEntropyPool.layout(),
+            LayoutId::ActivationOutOfPlace
+        );
+        assert_eq!(KernelId::GlobalEntropyPool.layout().entries().len(), 3);
     }
 }

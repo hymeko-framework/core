@@ -10,6 +10,7 @@
 
 pub mod activation;
 pub(crate) mod dispatch;
+pub mod global_entropy_pool;
 pub mod hsikan;
 pub mod rotor_attention;
 pub mod spmm;
@@ -18,6 +19,10 @@ pub mod star_rotor_spike;
 pub use activation::{
     ACTIVATION_INPLACE_SHADER, ACTIVATION_SHADER, ACTIVATION_WORKGROUP_SWEEP, ActivationBuilder,
     ActivationKind, DEFAULT_ACTIVATION_WORKGROUP, PreparedActivation,
+};
+pub use global_entropy_pool::{
+    DEFAULT_GLOBAL_ENTROPY_POOL_WORKGROUP, GLOBAL_ENTROPY_POOL_SHADER, GlobalEntropyPoolBuilder,
+    PreparedGlobalEntropyPool,
 };
 pub use hsikan::{DEFAULT_HSIKAN_WORKGROUP, HSIKAN_SHADER, HsikanBuilder, PreparedHsikan};
 pub use rotor_attention::{
@@ -32,6 +37,7 @@ pub use star_rotor_spike::{
 
 use crate::pipeline::PipelineCache;
 use activation::ActivationLimits;
+use global_entropy_pool::GlobalEntropyPoolLimits;
 use hsikan::HsikanLimits;
 use rotor_attention::RotorAttentionLimits;
 use spmm::SpmmLimits;
@@ -45,6 +51,7 @@ pub struct OperationFactory<'a> {
     cache: &'a PipelineCache,
     limits: SpmmLimits,
     activation_limits: ActivationLimits,
+    global_entropy_pool_limits: GlobalEntropyPoolLimits,
     hsikan_limits: HsikanLimits,
     rotor_attention_limits: RotorAttentionLimits,
     star_rotor_spike_limits: StarRotorSpikeLimits,
@@ -69,6 +76,10 @@ impl<'a> OperationFactory<'a> {
                 max_storage_buffers_per_stage,
             },
             activation_limits: ActivationLimits {
+                max_workgroups_per_dimension,
+                max_invocations_per_workgroup,
+            },
+            global_entropy_pool_limits: GlobalEntropyPoolLimits {
                 max_workgroups_per_dimension,
                 max_invocations_per_workgroup,
             },
@@ -100,6 +111,17 @@ impl<'a> OperationFactory<'a> {
     #[must_use]
     pub fn activation(&self) -> ActivationBuilder<'a> {
         ActivationBuilder::new(self.device, self.queue, self.cache, self.activation_limits)
+    }
+
+    /// Begin building spatial global-entropy pooling over `(K,H,W)` responses.
+    #[must_use]
+    pub fn global_entropy_pool(&self) -> GlobalEntropyPoolBuilder<'a> {
+        GlobalEntropyPoolBuilder::new(
+            self.device,
+            self.queue,
+            self.cache,
+            self.global_entropy_pool_limits,
+        )
     }
 
     /// Begin building a fused signed HSiKAN inference dispatch.
