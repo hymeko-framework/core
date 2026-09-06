@@ -31,11 +31,7 @@ use crate::unified_ir::support::builder::{S, TestIr};
 /// The shared builder's `S::wrap` is private and this module needs to replace one reference in an
 /// already-built arc, which no builder method does.
 fn plain(sign: S, target: DeclId) -> SignedRefR {
-    let atom = RefAtomR {
-        target,
-        anno: AnnoR::default(),
-        weights: None,
-    };
+    let atom = RefAtomR::plain(target);
     match sign {
         S::Plus => SignedRefR::Plus(atom),
         S::Minus => SignedRefR::Minus(atom),
@@ -419,7 +415,12 @@ fn v1_and_v2_are_domain_and_version_separated() {
         "a shared value would mean a shared domain header"
     );
     assert_eq!(SEMANTIC_DIGEST_SCHEMA_VERSION, 2);
-    assert_eq!(SEMANTIC_DIGEST_ALGO_VERSION, 2);
+    // Algorithm 2 -> 3 on 2026-09-06 under APPROVED-CORE-EDIT: executable-model-contract. The
+    // covered set grew: the optional model facet (role, shape, dtype, operator identity) is folded
+    // into every declaration hash. The bump is safe because no artifact pins an absolute V2 value —
+    // every assertion in this file is relative — while the v1 goldens are untouched because v1 does
+    // not see the facet (`model_contract::v1_is_blind_to_the_model_facet`).
+    assert_eq!(SEMANTIC_DIGEST_ALGO_VERSION, 3);
 }
 
 /// V1's blind spot is unchanged: it still does not see annotations. Recorded so the two contracts

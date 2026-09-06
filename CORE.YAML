@@ -174,6 +174,45 @@ crates:
           - four recorded regressions and additional discriminating controls
           - full Core and existing Nagare consumer gates before publication
 
+      # APPROVED-CORE-EDIT: executable-model-contract (2026-09-06, user chat)
+      - slug: executable-model-contract
+        date: 2026-09-06
+        scope: >
+          Tier 2A/2B of the Nagare Slice-1 enablement, planned in
+          docs/plans/2026-09-06-executable-model-contract/.
+          hymeko_core/src/ir/ir.rs gains the OPTIONAL executable-model facet
+          (TensorRole, DType, Extent, TensorContract, OperatorContract, ModelFacet),
+          the Ir side table decl_model with model_facet / set_model_facet /
+          declares_executable_model / model_facet_table_len accessors, PortDirection
+          and the RefAtomR.direction field plus RefAtomR::plain.
+          hymeko_core/src/ir/coherence.rs gains ModelFinding and
+          validate_model_contract. hymeko_core/src/ir/semantic_digest.rs folds the
+          facet and the direction, and raises SEMANTIC_DIGEST_ALGO_VERSION 2 -> 3.
+          Construction sites updated mechanically in ir/incidence.rs,
+          resolution/resolve.rs, writers/cbor_writer/tests.rs, examples/ir_depth_probe.rs,
+          benches/ir_bench.rs and four test modules. Gates in
+          tests/unified_ir/verification/model_contract.rs (30 tests).
+        constraints:
+          - "MOST DECLARATIONS ARE NOT MODEL ELEMENTS: the facet is optional, the table
+             stays empty for a non-model document, and validate_model_contract returns
+             Ok without checking anything unless a facet exists"
+          - "canonical_program_hash v1 untouched: no signature, no byte, no algo_version,
+             no golden. Proven by v1_is_blind_to_the_model_facet and by the unchanged
+             KAT_CORPUS_DIGEST and frozen_hash KATs"
+          - "wire compatibility is byte-identical for legacy documents: decl_model is
+             serialized only when a facet exists (the namespace_roots precedent) and
+             PortDirection::Unspecified is skip_serializing_if. A regression here was
+             CAUGHT by a_pre_direction_payload_decodes_as_unspecified and fixed"
+          - "the semantic digest algorithm version rises because the covered set grows;
+             safe because no artifact pins an absolute V2 value - every assertion in
+             semantic_digest.rs is relative"
+          - "port direction is a SEPARATE axis from the algebraic sign and is never derived
+             from it: the four (sign, direction) combinations must yield four distinct
+             digests"
+          - "no runtime tensor framework, no operator registry and no dependency enters core;
+             the operator vocabulary stays with the consuming framework"
+          - every mutation control proves it changed the intended field first
+
   # `hymeko_hnn` was RELOCATED 2026-08-31 to hymeko/nagare (hymeko_nagare::hnn) and no longer
   # exists in this workspace (Cargo.toml members = [hymeko_core, hymeko_wgpu]; the directory is
   # gone). Its stale crate declaration was removed here on 2026-09-01 under

@@ -16,7 +16,8 @@
 use hymeko::common::ids::{DeclId, EdgeId, HyperArcId, NodeId, SymId};
 use hymeko::common::pathkey::PathKey;
 use hymeko::ir::ir::{
-    AnnoR, ArcRec, DeclKind, DeclNode, EdgeRec, Ir, NodeRec, RefAtomR, SignedRefR, ValueR,
+    AnnoR, ArcRec, DeclKind, DeclNode, EdgeRec, Ir, NodeRec, PortDirection, RefAtomR, SignedRefR,
+    ValueR,
 };
 use hymeko::resolution::interner::Interner;
 use hymeko::resolution::resolve::Index;
@@ -123,6 +124,7 @@ impl TestIr {
                     target: *target,
                     anno: AnnoR::default(),
                     weights: weights.clone(),
+                    direction: PortDirection::Unspecified,
                 })
             })
             .collect();
@@ -151,6 +153,7 @@ impl TestIr {
                     target: *t,
                     anno: AnnoR::default(),
                     weights: None,
+                    direction: PortDirection::Unspecified,
                 })
             })
             .collect();

@@ -10,7 +10,7 @@
 
 use hymeko::common::ids::{DeclId, HyperArcId};
 use hymeko::ir::incidence::{IncidenceError, build_incidence_index, scalar_weight};
-use hymeko::ir::ir::{Ir, SignedRefR};
+use hymeko::ir::ir::{Ir, PortDirection, SignedRefR};
 
 use crate::unified_ir::support::builder::{S, TestIr};
 
@@ -122,6 +122,7 @@ fn weight_policy_none_single_and_multivalued() {
             target: DeclId::new(0),
             anno: hymeko::ir::ir::AnnoR::default(),
             weights: w,
+            direction: PortDirection::Unspecified,
         })
     };
     assert_eq!(scalar_weight(&mk(None)), 1.0);
@@ -264,6 +265,7 @@ fn build_synth_ir(n_nodes: usize, n_arcs: usize, arity: usize, seed: u64) -> Ir 
                     target: DeclId::new(t),
                     anno: AnnoR::default(),
                     weights: None,
+                    direction: PortDirection::Unspecified,
                 })
             })
             .collect();

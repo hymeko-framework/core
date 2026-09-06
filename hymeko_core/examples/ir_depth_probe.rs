@@ -81,11 +81,7 @@ fn build_chain(depth: usize) -> (Ir, Index, Interner) {
     ir.arcs.push(ArcRec {
         anno: AnnoR::default(),
         in_edge: ed,
-        refs: vec![SignedRefR::Plus(RefAtomR {
-            target: last,
-            anno: AnnoR::default(),
-            weights: None,
-        })],
+        refs: vec![SignedRefR::Plus(RefAtomR::plain(last))],
     });
     ir.arc_hash.push(None);
     ir.edges[eid.raw()].arcs.push(aid);

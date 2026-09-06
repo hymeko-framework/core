@@ -35,7 +35,9 @@ use crate::ir::canonical_hash::{
     CanonHashCfg, DerivedPathIndex, build_path_index, canonical_program_hash,
 };
 use crate::ir::hash::HashId;
-use crate::ir::ir::{AnnoR, DeclKind, Ir, SignedRefR, ValueR};
+use crate::ir::ir::{
+    AnnoR, DType, DeclKind, Extent, Ir, ModelFacet, PortDirection, SignedRefR, TensorRole, ValueR,
+};
 use crate::resolution::interner::Interner;
 
 const MAGIC: &[u8; 8] = b"HYMEKOCN";
@@ -48,7 +50,7 @@ const DOMAIN_ARC: &[u8; 8] = b"SEMARC\0\0";
 /// Version of the intended semantic field set.
 pub const SEMANTIC_DIGEST_SCHEMA_VERSION: u16 = 2;
 /// Encoding version. Algorithm 2 corrects coverage and canonicalization defects.
-pub const SEMANTIC_DIGEST_ALGO_VERSION: u16 = 2;
+pub const SEMANTIC_DIGEST_ALGO_VERSION: u16 = 3;
 
 /// V1 structural identity: excludes annotation values and incidence weights.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -265,6 +267,11 @@ impl<'a> SemanticContext<'a> {
                 self.write_target(&mut h, d);
                 self.write_target(&mut h, declaration.parent);
                 self.write_anno(&mut h, &declaration.anno);
+                // APPROVED-CORE-EDIT: executable-model-contract (2026-09-06). The typed facet is
+                // part of the meaning, so it is part of the identity. Absence is folded as an
+                // explicit tag rather than as nothing, so "no facet" and "a facet that happens to
+                // encode to no bytes" can never collide.
+                self.write_model_facet(&mut h, self.ir.model_facet(d));
                 let record = match declaration.kind {
                     DeclKind::Node => self.ir.as_node(d).map(|id| &records.nodes[id.raw()]),
                     DeclKind::Edge => self.ir.as_edge(d).map(|id| &records.edges[id.raw()]),
@@ -320,6 +327,55 @@ impl<'a> SemanticContext<'a> {
             h.update(&[1]);
             h.update(&(arc.raw() as u64).to_le_bytes());
         }
+    }
+
+    /// The optional executable-model facet, domain-tagged so absence is explicit.
+    ///
+    /// Every field is fixed-width or length-prefixed, so two different facets cannot produce the
+    /// same byte stream by concatenation. A `Symbolic` extent contributes the resolved symbol text,
+    /// not its `SymId`, so the digest stays independent of interner order.
+    fn write_model_facet(&self, h: &mut Hasher, facet: Option<&ModelFacet>) {
+        h.update(b"MODEL");
+        match facet {
+            None => h.update(&[0u8]),
+            Some(ModelFacet::Tensor(t)) => {
+                h.update(&[1u8]);
+                h.update(&[match t.role {
+                    TensorRole::Input => 1u8,
+                    TensorRole::Output => 2,
+                    TensorRole::Parameter => 3,
+                    TensorRole::State => 4,
+                    TensorRole::Intermediate => 5,
+                }]);
+                h.update(&[match t.dtype {
+                    DType::F32 => 1u8,
+                    DType::F64 => 2,
+                    DType::I32 => 3,
+                    DType::I64 => 4,
+                    DType::U8 => 5,
+                    DType::Bool => 6,
+                }]);
+                write_len(h, t.shape.len());
+                for extent in &t.shape {
+                    match extent {
+                        Extent::Static(v) => {
+                            h.update(&[1u8]);
+                            h.update(&v.to_le_bytes());
+                        }
+                        Extent::Symbolic(sym) => {
+                            h.update(&[2u8]);
+                            write_str(h, self.it.resolve(*sym));
+                        }
+                    }
+                }
+                h
+            }
+            Some(ModelFacet::Operator(o)) => {
+                h.update(&[2u8]);
+                write_str(h, self.it.resolve(o.identity));
+                h
+            }
+        };
     }
 
     fn write_anno(&self, h: &mut Hasher, anno: &AnnoR) {
@@ -381,6 +437,15 @@ impl<'a> SemanticContext<'a> {
             };
             h.update(&[sign]);
             let atom = reference.atom();
+            // APPROVED-CORE-EDIT: executable-model-contract (2026-09-06). Direction is folded under
+            // its OWN tag, immediately after the sign and never merged with it, so a sign change
+            // and a direction change are two distinct mutations of the digest.
+            h.update(b"DIR");
+            h.update(&[match atom.direction {
+                PortDirection::Unspecified => 0u8,
+                PortDirection::In => 1,
+                PortDirection::Out => 2,
+            }]);
             self.write_target(h, atom.target);
             self.write_anno(h, &atom.anno);
             match &atom.weights {

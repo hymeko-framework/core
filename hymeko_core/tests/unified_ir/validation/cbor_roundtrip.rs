@@ -274,11 +274,9 @@ fn incidence_heavy_memory_fixture() -> (Ir, Index, Interner) {
 
         let refs = (0..ARITY)
             .map(|slot| {
-                SignedRefR::Neutral(RefAtomR {
-                    target: nodes[(edge_number * ARITY + slot) % nodes.len()],
-                    weights: None,
-                    anno: AnnoR::default(),
-                })
+                SignedRefR::Neutral(RefAtomR::plain(
+                    nodes[(edge_number * ARITY + slot) % nodes.len()],
+                ))
             })
             .collect();
         let arc_id = HyperArcId::new(ir.arcs.len());

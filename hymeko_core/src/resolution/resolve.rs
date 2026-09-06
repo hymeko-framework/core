@@ -1,7 +1,7 @@
 // src/resolve.rs
 use crate::common::ids::{DeclId, SymId};
 use crate::common::pathkey::PathKey;
-use crate::ir::ir::{AnnoR, RefAtomR, SignedRefR, ValueR};
+use crate::ir::ir::{AnnoR, PortDirection, RefAtomR, SignedRefR, ValueR};
 use crate::resolution::interner::Interner;
 use crate::sym_ast::AstSym;
 use parser::ast::{
@@ -347,6 +347,9 @@ pub fn resolve_signed_refs<'a>(
             target: did,
             weights: weights_r,
             anno: anno_r,
+            // Lowering declares no direction yet: the surface syntax has no port-direction form, so
+            // inventing one here would be exactly the sign/direction conflation this axis prevents.
+            direction: PortDirection::Unspecified,
         };
 
         let sref_r = match sref {

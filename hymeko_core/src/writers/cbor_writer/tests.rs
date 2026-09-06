@@ -213,11 +213,7 @@ fn codec_rejects_positions_that_do_not_fit_canonical_hash_v1() {
     ));
 
     let mut payload: CborPayload = ciborium::de::from_reader(bytes.as_slice()).unwrap();
-    let reference = SignedRefR::Neutral(RefAtomR {
-        target: DeclId::new(0),
-        weights: None,
-        anno: AnnoR::default(),
-    });
+    let reference = SignedRefR::Neutral(RefAtomR::plain(DeclId::new(0)));
     payload.ir.arcs.push(ArcRec {
         anno: AnnoR::default(),
         in_edge: DeclId::new(0),

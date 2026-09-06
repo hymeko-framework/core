@@ -1,0 +1,16 @@
+%% Tier 2A/2B gate order. One diagram per file.
+flowchart TD
+    G0["ENTRY: core main 4acba44 green<br/>395 passed, 0 failed, clippy 0, fmt 0<br/>v1 corpus golden PASSES again"]
+    G0 --> A1["2A.1 ModelFacet type + Option field<br/>legacy = None"]
+    A1 --> A2["2A.2 serde/CBOR: serde(default),<br/>old payload decodes unchanged"]
+    A2 --> A3["2A.3 digest: facet folded, algo 2 -> 3<br/>no absolute V2 golden exists"]
+    A3 --> A4["2A.4 coherence: executable model<br/>must be complete; tags are not authority"]
+    A4 --> A5{"2A gates green?"}
+    A5 -->|no| STOP1["STOP. Report. No 2B."]
+    A5 -->|yes| B1["2B.1 PortDirection on RefAtomR<br/>Unspecified for legacy"]
+    B1 --> B2["2B.2 digest folds direction<br/>separately from the sign"]
+    B2 --> B3["2B.3 coherence: illegal port wiring rejected"]
+    B3 --> B4{"2B gates green?"}
+    B4 -->|no| STOP2["STOP. 2A stands alone."]
+    B4 -->|yes| W["canonical_mlp_witness re-run<br/>rows 1-7, 9, 10 -> CanonicalOwned"]
+    W --> DONE["commit-ready, NOT committed"]

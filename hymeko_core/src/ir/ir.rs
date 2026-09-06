@@ -54,6 +54,95 @@ pub struct Ir {
     // prefixes are non-empty (single-module roots absent -> zero cost). Storage is
     // PRIVATE; reads via `namespace_prefix`, writes via `record_namespace_root`.
     pub(crate) namespace_roots: Vec<(DeclId, Box<[SymId]>)>,
+
+    // APPROVED-CORE-EDIT: executable-model-contract (2026-09-06).
+    //
+    // The OPTIONAL executable-model facet, one slot per declaration, keyed by `DeclId` exactly as
+    // `decl_hash` and `arc_hash` are. It is a side table rather than a `DeclNode` field for two
+    // reasons: `DeclNode` has 17 literal construction sites across core and its consumers, and the
+    // struct-of-arrays layout is what the surrounding code already uses for per-declaration data.
+    //
+    // MOST DECLARATIONS ARE NOT MODEL ELEMENTS. The tracked corpus describes service networks,
+    // robotics meta-graphs and P-graph structures; none of them carries a facet, and for those
+    // documents this vector stays empty and costs nothing. A document is an *executable model*
+    // exactly when at least one declaration carries a facet, and only then does
+    // `coherence::validate_model_contract` engage.
+    //
+    // Storage is PRIVATE: reads via `model_facet`, writes via `set_model_facet`. The wire is
+    // additive and conditional (see `Serialize`), so a document without facets serializes
+    // byte-identically to the pre-facet form.
+    pub(crate) decl_model: Vec<Option<ModelFacet>>,
+}
+
+/// What role a tensor plays in an executable model.
+///
+/// A closed set: a declaration that is part of a model is exactly one of these, and a reader that
+/// does not recognise a variant is reading a newer schema, not guessing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum TensorRole {
+    /// A model input, supplied by the caller.
+    Input,
+    /// A model output, produced by the model.
+    Output,
+    /// A learnable parameter.
+    Parameter,
+    /// Persistent state carried across invocations.
+    State,
+    /// An internal value, neither supplied nor returned.
+    Intermediate,
+}
+
+/// Element type of a tensor.
+///
+/// Deliberately small and closed. This is a *type tag*, not a numeric tower: core gains no
+/// arithmetic, no storage and no runtime tensor framework from it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum DType {
+    F32,
+    F64,
+    I32,
+    I64,
+    U8,
+    Bool,
+}
+
+/// One dimension of a shape.
+///
+/// Rank-general by construction, so the later vision work is not blocked; the first consumer
+/// exercises only the small ranks an MLP needs.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Extent {
+    /// A known extent.
+    Static(u64),
+    /// A named extent, resolved by the consumer (batch size, sequence length).
+    Symbolic(SymId),
+}
+
+/// The tensor contract of a declaration.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct TensorContract {
+    pub role: TensorRole,
+    /// Dimensions, outermost first. An empty shape is a scalar.
+    pub shape: Vec<Extent>,
+    pub dtype: DType,
+}
+
+/// The operator contract of a declaration.
+///
+/// `identity` is an interned symbol in a **typed position**: core owns the fact that this
+/// declaration *is* an operator and that this symbol *is* its identity. Core deliberately does not
+/// own the vocabulary — what `linear` or `relu` mean is the consuming framework's, and an operator
+/// registry in core is explicitly out of scope.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct OperatorContract {
+    pub identity: SymId,
+}
+
+/// The optional executable-model facet of a declaration.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ModelFacet {
+    Tensor(TensorContract),
+    Operator(OperatorContract),
 }
 
 /// Checked encode/decode for the compact declaration-dispatch slot (option D).
@@ -409,7 +498,58 @@ impl Ir {
         let id = DeclId::new(self.decl_nodes.len());
         self.decl_nodes.push(node);
         self.decl_to_record.push(dispatch::NONE);
+        // The facet table is grown lazily: it stays EMPTY for a document with no model facet, so a
+        // non-model program pays nothing and serializes byte-identically to the pre-facet form.
+        if !self.decl_model.is_empty() {
+            self.decl_model.push(None);
+        }
         id
+    }
+
+    /// The executable-model facet of a declaration, if it has one.
+    ///
+    /// `None` for every declaration of a document that is not an executable model, which is the
+    /// ordinary case.
+    #[must_use]
+    pub fn model_facet(&self, d: DeclId) -> Option<&ModelFacet> {
+        self.decl_model.get(d.raw()).and_then(Option::as_ref)
+    }
+
+    /// Attach (or clear) a declaration's model facet.
+    ///
+    /// Grows the table on first use, so the empty-table fast path survives until a document
+    /// actually declares a model.
+    ///
+    /// # Preconditions
+    /// `d` indexes a live declaration.
+    /// # Postconditions
+    /// `model_facet(d)` returns what was set.
+    pub fn set_model_facet(&mut self, d: DeclId, facet: Option<ModelFacet>) {
+        debug_assert!(d.raw() < self.decl_nodes.len(), "decl out of range");
+        if self.decl_model.is_empty() {
+            if facet.is_none() {
+                return;
+            }
+            self.decl_model.resize(self.decl_nodes.len(), None);
+        }
+        if self.decl_model.len() < self.decl_nodes.len() {
+            self.decl_model.resize(self.decl_nodes.len(), None);
+        }
+        self.decl_model[d.raw()] = facet;
+    }
+
+    /// Length of the facet table, for the coherence length check.
+    #[must_use]
+    pub fn model_facet_table_len(&self) -> usize {
+        self.decl_model.len()
+    }
+
+    /// Whether this `Ir` declares an executable model at all.
+    ///
+    /// The switch that decides whether the model-contract validator engages.
+    #[must_use]
+    pub fn declares_executable_model(&self) -> bool {
+        self.decl_model.iter().any(Option::is_some)
     }
 
     /// Crate-private typed binding: `decl (kind Node) -> node record`. Checks the
@@ -475,6 +615,9 @@ impl Ir {
         self.decl_to_record
             .resize(total_named_decls, dispatch::NONE);
         self.decl_hash.resize(total_named_decls, None);
+        if !self.decl_model.is_empty() {
+            self.decl_model.resize(total_named_decls, None);
+        }
     }
 
     pub fn push_anonymous_arc(&mut self) -> DeclId {
@@ -490,6 +633,9 @@ impl Ir {
         });
         self.decl_to_record.push(dispatch::NONE);
         self.decl_hash.push(None);
+        if !self.decl_model.is_empty() {
+            self.decl_model.push(None);
+        }
         id
     }
 }
@@ -547,11 +693,66 @@ pub struct ArcRec {
                          // később: attribútumok/value külön, lásd lent
 }
 
+/// Which way data flows across a port, as an axis **independent of the algebraic sign**.
+///
+/// APPROVED-CORE-EDIT: executable-model-contract (2026-09-06).
+///
+/// `SignedRefR::{Plus, Minus, Neutral}` is the signed-hypergraph *algebra*: it says how an incidence
+/// enters a balance or a cycle product. It is **not** direction, and direction is never derived from
+/// it. A production incidence may legitimately be `Minus` and `In`, `Minus` and `Out`, `Plus` and
+/// `In`, or `Plus` and `Out`; conflating the two axes is the error this type exists to make
+/// impossible.
+///
+/// `Unspecified` is the only value a legacy incidence receives. Nothing invents a direction for an
+/// edge that never declared one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum PortDirection {
+    /// No direction was declared. Every pre-2026-09-06 incidence is this.
+    #[default]
+    Unspecified,
+    /// The referenced declaration is consumed by the operator.
+    In,
+    /// The referenced declaration is produced by the operator.
+    Out,
+}
+
+impl PortDirection {
+    /// Whether no direction was declared. Used by the serde skip so the legacy wire is unchanged.
+    #[must_use]
+    pub const fn is_unspecified(&self) -> bool {
+        matches!(self, Self::Unspecified)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RefAtomR {
     pub target: DeclId,
     pub anno: AnnoR,
     pub weights: Option<Vec<ValueR>>,
+    /// Data-flow direction, orthogonal to the sign.
+    ///
+    /// `Unspecified` is both the default and *skipped on the wire*, so a document that declares no
+    /// direction — every pre-2026-09-06 document — serializes byte-identically to the pre-field
+    /// form. A caught regression, not a design guess: emitting it unconditionally grew the wire for
+    /// legacy payloads, which `a_pre_direction_payload_decodes_as_unspecified` detected.
+    #[serde(default, skip_serializing_if = "PortDirection::is_unspecified")]
+    pub direction: PortDirection,
+}
+
+impl RefAtomR {
+    /// A reference with no annotation, no weights and no declared direction.
+    ///
+    /// The shape every pre-2026-09-06 construction site had; provided so those sites read as what
+    /// they are rather than repeating three defaults.
+    #[must_use]
+    pub fn plain(target: DeclId) -> Self {
+        Self {
+            target,
+            anno: AnnoR::default(),
+            weights: None,
+            direction: PortDirection::Unspecified,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -737,7 +938,12 @@ impl Serialize for Ir {
         // metadata (single-module) the wire keeps exactly the legacy 11 fields ->
         // byte-identical to the pre-U2.1 form (and the frozen serde KAT).
         let has_ns = !self.namespace_roots.is_empty();
-        let mut st = s.serialize_struct("Ir", if has_ns { 12 } else { 11 })?;
+        // APPROVED-CORE-EDIT: executable-model-contract. Additive and CONDITIONAL, following the
+        // `namespace_roots` precedent: a document with no facet emits the legacy field set, so its
+        // bytes -- and the frozen serde KAT -- are unchanged.
+        let has_model = self.decl_model.iter().any(Option::is_some);
+        let fields = 11 + usize::from(has_ns) + usize::from(has_model);
+        let mut st = s.serialize_struct("Ir", fields)?;
         st.serialize_field("meta", &self.meta)?;
         st.serialize_field("doc_hash", &self.doc_hash)?;
         st.serialize_field("decl_hash", &self.decl_hash)?;
@@ -749,6 +955,9 @@ impl Serialize for Ir {
         st.serialize_field("decl_to_node", &d2n)?;
         st.serialize_field("decl_to_edge", &d2e)?;
         st.serialize_field("decl_to_arc", &d2a)?;
+        if has_model {
+            st.serialize_field("decl_model", &self.decl_model)?;
+        }
         if has_ns {
             st.serialize_field(
                 "namespace_roots",
@@ -785,6 +994,10 @@ struct IrWire {
     decl_to_arc: Vec<Option<HyperArcId>>,
     #[serde(default)]
     namespace_roots: Option<NamespaceWire>,
+    /// APPROVED-CORE-EDIT: executable-model-contract. Absent on every pre-facet payload, which
+    /// `serde(default)` turns into the empty table -- i.e. "no declaration is a model element".
+    #[serde(default)]
+    decl_model: Vec<Option<ModelFacet>>,
 }
 
 impl Ir {
@@ -884,6 +1097,21 @@ impl Ir {
             arcs: w.arcs,
             decl_to_record,
             namespace_roots,
+            // Fail-closed: a facet table that disagrees with the declaration count is a malformed
+            // payload, not something to pad silently. An ABSENT table (the pre-facet wire) is the
+            // legitimate empty case and stays empty.
+            decl_model: {
+                let m = w.decl_model;
+                if !m.is_empty() && m.len() != n {
+                    return Err(IrDecodeError::InvalidMapLength {
+                        decl_nodes: n,
+                        node: m.len(),
+                        edge: m.len(),
+                        arc: m.len(),
+                    });
+                }
+                m
+            },
         })
     }
 }

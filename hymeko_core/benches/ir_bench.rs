@@ -113,11 +113,7 @@ fn build_ir(nodes: usize, edges: usize, arity: usize) -> Ir {
         let refs: Vec<SignedRefR> = (0..arity)
             .map(|k| {
                 let target = node_decls[(e * arity + k) % node_decls.len().max(1)];
-                let atom = RefAtomR {
-                    target,
-                    anno: AnnoR::default(),
-                    weights: None,
-                };
+                let atom = RefAtomR::plain(target);
                 match k % 3 {
                     0 => SignedRefR::Plus(atom),
                     1 => SignedRefR::Minus(atom),
@@ -368,11 +364,7 @@ fn build_indexed(nodes: usize, edges: usize, arity: usize) -> (Ir, Index, Intern
         let refs: Vec<SignedRefR> = (0..arity)
             .map(|k| {
                 let target = node_decls[(e * arity + k) % node_decls.len().max(1)];
-                let atom = RefAtomR {
-                    target,
-                    anno: AnnoR::default(),
-                    weights: None,
-                };
+                let atom = RefAtomR::plain(target);
                 match k % 3 {
                     0 => SignedRefR::Plus(atom),
                     1 => SignedRefR::Minus(atom),
