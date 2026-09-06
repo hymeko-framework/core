@@ -160,7 +160,9 @@ GNU linker/libc sysroot and static QEMU user interpreter. The default SDK target
 is unchanged. Build natively with the existing bounded builder:
 
 ```sh
-docker buildx build --builder hymeko-core-amaterasu-20260905   --target cross-toolchain --load -t hymeko-core-cross:1.97.1   -f tools/ci/Dockerfile .
+docker buildx build --builder hymeko-core-amaterasu-20260905 \
+  --target cross-toolchain --load -t hymeko-core-cross:1.97.1 \
+  -f tools/ci/Dockerfile .
 ```
 
 Use the existing Core source checkout and compatible Cargo/target caches. Run
@@ -182,7 +184,8 @@ Lean-generated reference matrix. Benchmark preflight precedes timing:
 
 ```sh
 ./ir_stream_bench --test '^(ir_stream_admission/|ir_stream_replay/(exact_duplicate|conflicting_duplicate|replay_window_miss)$)'
-CRITERION_HOME=/results/run1/criterion RAYON_NUM_THREADS=4   ./ir_stream_bench --bench '^(ir_stream_admission/|ir_stream_replay/(exact_duplicate|conflicting_duplicate|replay_window_miss)$)'
+CRITERION_HOME=/results/run1/criterion RAYON_NUM_THREADS=4 \
+  ./ir_stream_bench --bench '^(ir_stream_admission/|ir_stream_replay/(exact_duplicate|conflicting_duplicate|replay_window_miss)$)'
 ```
 
 Use separate result directories for three process repetitions. The existing

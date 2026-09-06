@@ -42,5 +42,8 @@
 /reports/semantic-digest-correction/*.diff whitespace=-blank-at-eol
 
 # Exact distributed reference and measurement evidence.
-/reports/distributed-verification-benchmarks/** -text
+/reports/distributed-verification-benchmarks/** -text whitespace=cr-at-eol
+# Preserve literal command output and Matplotlib SVG coordinates, including spaces.
+/reports/distributed-verification-benchmarks/*.log -whitespace
+/reports/distributed-verification-benchmarks/*.svg -whitespace
 /hymeko_core/tests/ir_stream_admission_vectors.tsv text eol=lf
