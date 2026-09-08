@@ -359,3 +359,60 @@ pub fn build_row_ptr(counts: &[usize]) -> (Vec<usize>, usize) {
     row_ptr[dim] = total;
     (row_ptr, total)
 }
+
+// ---------------------------------------------------------------------------
+// Sparse contract — additive. No field, signature or number above changes.
+// ---------------------------------------------------------------------------
+
+use crate::tensor::representations::sparse::{
+    Coalescing, SparseLayout, SparseShape, SparseTensorContract, SparseViolation, StoredOrder,
+    ValidatedSparse, validate_csr_parts,
+};
+
+impl<F: Real> SparseTensorContract for TensorCsr<F> {
+    type Scalar = F;
+
+    fn layout(&self) -> SparseLayout {
+        SparseLayout::Csr
+    }
+
+    fn shape(&self) -> SparseShape {
+        SparseShape::new(vec![self.num_rows, self.num_cols], self.col_ind.len())
+    }
+
+    /// Rows ascending, and **within a row the stored order is kept**. A CSR whose columns are
+    /// unsorted inside a row is structurally valid; re-sorting it would change a float
+    /// accumulation order, so this contract reports the order rather than imposing one.
+    fn stored_order(&self) -> StoredOrder {
+        StoredOrder::RowMajorRowsThenStored
+    }
+
+    /// Validate the CSR structure without touching it.
+    ///
+    /// Delegates to [`validate_csr_parts`], the single owner of these rules. Nothing is
+    /// re-implemented here and nothing is re-implemented on the device side either: the WGPU
+    /// backend's CSR upload calls the same function, so the two cannot drift.
+    ///
+    /// # Postconditions
+    /// As [`validate_csr_parts`], plus: the returned proof borrows `self`, so it cannot be paired
+    /// with a different tensor. Duplicate entries are **preserved**.
+    ///
+    /// # Errors
+    /// The first [`SparseViolation`] found.
+    fn validate(&self) -> Result<ValidatedSparse<'_, Self>, SparseViolation> {
+        validate_csr_parts(
+            self.num_rows,
+            self.num_cols,
+            &self.row_ptr,
+            &self.col_ind,
+            self.val.len(),
+        )?;
+        Ok(ValidatedSparse::bind(
+            self,
+            SparseLayout::Csr,
+            self.shape(),
+            self.stored_order(),
+            Coalescing::Preserved,
+        ))
+    }
+}

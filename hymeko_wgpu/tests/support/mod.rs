@@ -1,0 +1,165 @@
+//! Shared scaffolding for the sparse-adapter and parity suites.
+//!
+//! Three suites — `scatter_mean_csr`, `highway_identity`, `resident_hsikan_chain` — need the same
+//! three things: an inverse incidence built the way `CycleIncidence` builds one, a route onto the
+//! device through the **validated** core contract, and a parity assertion with a declared bound.
+//! Written three times they would be three chances to drift, and the duplication gate sees them as
+//! clones because they are.
+//!
+//! This owns no behaviour: it constructs inputs, calls production entry points, and compares. The
+//! general builder-family refactor is deliberately NOT here — it is a separate follow-up before the
+//! next WGPU primitive.
+
+#![allow(dead_code)]
+
+use hymeko::tensor::representations::sparse::SparseTensorContract;
+use hymeko::tensor::representations::tensor_csr::TensorCsr;
+use hymeko_wgpu::{ComputeError, GpuCsrMatrix, ResourceFactory, WgpuBackend};
+
+/// The CPU/WGPU parity bound, **declared before any number was measured** and never relaxed.
+pub const ABS_BOUND: f32 = 1.0e-6;
+
+/// An inverse incidence: for each node, the hyperedges naming it.
+///
+/// Built exactly as the CPU owner builds one — a vertex listed twice in an edge appears twice,
+/// because the mean's denominator counts incidences, not distinct edges.
+pub struct Incidence {
+    pub n_nodes: usize,
+    pub n_edges: usize,
+    pub row_ptr: Vec<usize>,
+    pub col_ind: Vec<usize>,
+    pub counts: Vec<f32>,
+}
+
+impl Incidence {
+    /// From an edge -> member-vertex listing.
+    pub fn from_edges(n_nodes: usize, edges: &[Vec<usize>]) -> Self {
+        let mut rows: Vec<Vec<usize>> = vec![Vec::new(); n_nodes];
+        for (edge, members) in edges.iter().enumerate() {
+            for &v in members {
+                rows[v].push(edge);
+            }
+        }
+        let mut row_ptr = vec![0usize];
+        let mut col_ind = Vec::new();
+        for row in &rows {
+            col_ind.extend_from_slice(row);
+            row_ptr.push(col_ind.len());
+        }
+        let counts = rows.iter().map(|r| r.len() as f32).collect();
+        Self {
+            n_nodes,
+            n_edges: edges.len(),
+            row_ptr,
+            col_ind,
+            counts,
+        }
+    }
+
+    /// The core-owned sparse tensor for this incidence: rows = nodes, cols = edges.
+    ///
+    /// Values are all `1.0` and are **not consumed** by the unweighted mean; they exist because the
+    /// CSR layout carries a value per entry.
+    pub fn tensor(&self) -> TensorCsr<f32> {
+        TensorCsr {
+            num_rows: self.n_nodes,
+            num_cols: self.n_edges.max(1),
+            row_ptr: self.row_ptr.clone(),
+            col_ind: self.col_ind.clone(),
+            val: vec![1.0; self.col_ind.len()],
+        }
+    }
+
+    /// Validate through **core** and upload. The device adapter re-checks nothing structural.
+    ///
+    /// # Errors
+    /// Core's [`SparseViolation`] surfaces as a panic here (a malformed fixture is a test bug);
+    /// device errors propagate.
+    pub fn upload(
+        &self,
+        resources: &ResourceFactory<'_>,
+        label: &str,
+    ) -> Result<GpuCsrMatrix<f32>, ComputeError> {
+        // The tensor must outlive the proof that borrows it, which is exactly the binding this
+        // fixture is exercising: `validated` cannot be handed a different tensor.
+        let tensor = self.tensor();
+        let validated = tensor
+            .validate()
+            .unwrap_or_else(|violation| panic!("{label}: the fixture is malformed: {violation}"));
+        resources.upload_validated_csr(label, &validated)
+    }
+
+    /// The CPU owner's pooling, in its order: accumulate in CSR order, then multiply by the
+    /// reciprocal of the incidence count. A division would be a different float operation.
+    pub fn reference_mean(&self, edge_state: &[f32], hidden: usize) -> Vec<f32> {
+        let mut out = vec![0.0f32; self.n_nodes * hidden];
+        for node in 0..self.n_nodes {
+            let (first, last) = (self.row_ptr[node], self.row_ptr[node + 1]);
+            let row = &mut out[node * hidden..(node + 1) * hidden];
+            for &edge in &self.col_ind[first..last] {
+                let base = edge * hidden;
+                for (slot, &x) in row.iter_mut().zip(&edge_state[base..base + hidden]) {
+                    *slot += x;
+                }
+            }
+            if last > first {
+                let inv = 1.0 / (last - first) as f32;
+                for slot in row.iter_mut() {
+                    *slot *= inv;
+                }
+            }
+        }
+        out
+    }
+}
+
+/// Deterministic values, distinct per index so a permutation is visible.
+pub fn series(len: usize, phase: usize, scale: f32) -> Vec<f32> {
+    (0..len)
+        .map(|i| (((i + phase) as f32) * 0.37).sin() * scale)
+        .collect()
+}
+
+/// Assert CPU/WGPU parity, reporting the worst deviation even when it passes, and naming the FIRST
+/// diverging coordinate with both values and the ULP distance when it does not.
+pub fn assert_parity(label: &str, actual: &[f32], expected: &[f32]) {
+    assert_eq!(actual.len(), expected.len(), "{label}: length");
+    let worst = actual
+        .iter()
+        .zip(expected)
+        .map(|(a, b)| (a - b).abs())
+        .fold(0.0f32, f32::max);
+    let worst_ulp = actual
+        .iter()
+        .zip(expected)
+        .map(|(a, b)| (a.to_bits() as i64 - b.to_bits() as i64).abs())
+        .max()
+        .unwrap_or(0);
+    eprintln!("PARITY {label}: worst |d| {worst:e}, worst ulp {worst_ulp}, bound {ABS_BOUND:e}");
+    for (index, (&got, &want)) in actual.iter().zip(expected).enumerate() {
+        assert!(got.is_finite(), "{label}[{index}]: {got} is not finite");
+        let error = (got - want).abs();
+        let bound = ABS_BOUND * 1.0f32.max(want.abs());
+        assert!(
+            error <= bound,
+            "{label}: FIRST DIVERGENCE at coordinate {index} — gpu {got:e}, cpu {want:e}, \
+             |d| {error:e}, bound {bound:e}, ulp {}",
+            (got.to_bits() as i64 - want.to_bits() as i64).abs()
+        );
+    }
+}
+
+/// The suite's **one** backend, or `None` when no adapter exists.
+///
+/// Delegates to `hymeko_wgpu::testing::shared_backend`, so however many tests call this, the binary
+/// constructs exactly one device. That is not a convenience: constructing several concurrently is
+/// what this repository documents as deadlocking in the Vulkan loader, and what was measured here
+/// segfaulting `highway_identity` in 2 of 3 default-threaded runs before the change.
+///
+/// The adapter identity is printed once, so a reported GPU result can never be a silent skip.
+pub fn backend() -> Option<&'static WgpuBackend> {
+    let backend = hymeko_wgpu::testing::shared_backend("hymeko-sparse-suite")?;
+    static ANNOUNCED: std::sync::Once = std::sync::Once::new();
+    ANNOUNCED.call_once(|| eprintln!("adapter={}", backend.capabilities().summary()));
+    Some(backend)
+}

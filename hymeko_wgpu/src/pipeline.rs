@@ -89,6 +89,10 @@ pub enum LayoutId {
     StarRotorSpike,
     /// output (read_write), params.
     Fill,
+    /// Inverse-incidence CSR (offsets, edge index, counts), edge state, node state, params.
+    ScatterMeanCsr,
+    /// step (read), carry (read), gate (read), next (read_write), params.
+    HighwayIdentity,
 }
 
 impl LayoutId {
@@ -101,6 +105,8 @@ impl LayoutId {
             Self::RotorAttention => "rotor_attention.layout",
             Self::StarRotorSpike => "star_rotor_spike.layout",
             Self::Fill => "fill.layout",
+            Self::ScatterMeanCsr => "scatter_mean_csr.layout",
+            Self::HighwayIdentity => "highway_identity.layout",
         }
     }
 
@@ -143,12 +149,20 @@ impl LayoutId {
                 storage_entry(6, false),
                 uniform_entry(7),
             ],
-            Self::StarRotorSpike => vec![
+            Self::StarRotorSpike | Self::HighwayIdentity => vec![
                 storage_entry(0, true),
                 storage_entry(1, true),
                 storage_entry(2, true),
                 storage_entry(3, false),
                 uniform_entry(4),
+            ],
+            Self::ScatterMeanCsr => vec![
+                storage_entry(0, true),
+                storage_entry(1, true),
+                storage_entry(2, true),
+                storage_entry(3, true),
+                storage_entry(4, false),
+                uniform_entry(5),
             ],
         }
     }
@@ -201,6 +215,10 @@ pub enum KernelId {
     GlobalEntropyPool,
     /// Sparse, single-head, untransported quaternion rotor attention.
     RotorAttention,
+    /// Edge to node mean scatter as a node-indexed CSR gather. No atomics.
+    ScatterMeanCsr,
+    /// Per-channel identity-transport highway transition.
+    HighwayIdentity,
     /// Star-centred rotor-spike orientation population code.
     StarRotorSpike,
     /// Skeleton validation kernel. Not an operation; retained because
@@ -226,6 +244,8 @@ impl KernelId {
             Self::RotorAttention => "rotor_attention",
             Self::StarRotorSpike => "star_rotor_spike",
             Self::Fill => "fill",
+            Self::ScatterMeanCsr => "scatter_mean_csr",
+            Self::HighwayIdentity => "highway_identity",
         }
     }
 
@@ -241,6 +261,8 @@ impl KernelId {
             Self::RotorAttention => crate::operations::ROTOR_ATTENTION_SHADER,
             Self::StarRotorSpike => crate::operations::STAR_ROTOR_SPIKE_SHADER,
             Self::Fill => crate::FILL_SHADER,
+            Self::ScatterMeanCsr => crate::operations::SCATTER_MEAN_CSR_SHADER,
+            Self::HighwayIdentity => crate::operations::HIGHWAY_IDENTITY_SHADER,
         }
     }
 
@@ -256,6 +278,8 @@ impl KernelId {
             Self::GlobalEntropyPool => "main",
             Self::RotorAttention => "main",
             Self::StarRotorSpike => "main",
+            Self::ScatterMeanCsr => "main",
+            Self::HighwayIdentity => "main",
         }
     }
 
@@ -270,6 +294,8 @@ impl KernelId {
             Self::RotorAttention => LayoutId::RotorAttention,
             Self::StarRotorSpike => LayoutId::StarRotorSpike,
             Self::Fill => LayoutId::Fill,
+            Self::ScatterMeanCsr => LayoutId::ScatterMeanCsr,
+            Self::HighwayIdentity => LayoutId::HighwayIdentity,
         }
     }
 }

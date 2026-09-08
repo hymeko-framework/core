@@ -13,7 +13,7 @@ Extracted by grammar -- tree-sitter for Rust and C++, `ast` for Python -- so tha
 `pub(crate)`, a `pub fn` inside a private `mod`, and a `def` written inside a
 docstring are all excluded for a stated reason rather than by luck.
 
-**5 package(s), 670 public symbol(s).**
+**5 package(s), 765 public symbol(s).**
 
 ## docs (rust)
 
@@ -41,6 +41,7 @@ _No public symbols._
 - `Real` — `hymeko_core/src/tensor/common.rs`
 - `RefValueExtractor` — `hymeko_core/src/tensor/tensor_val.rs`
 - `SourceProvider` — `hymeko_core/src/module_store/source_provider.rs`
+- `SparseTensorContract` — `hymeko_core/src/tensor/representations/sparse.rs`
 - `WeightInit` — `hymeko_core/src/tensor/conv/weight_init/weight_init.rs`
 
 ### structs
@@ -60,6 +61,7 @@ _No public symbols._
 - `Constant` — `hymeko_core/src/tensor/conv/weight_init/weight_init.rs`
 - `CooEntry` — `hymeko_core/src/tensor/representations/tensor_coo.rs`
 - `CooSoa` — `hymeko_core/src/tensor/representations/tensor_coo.rs`
+- `CsrStructure` — `hymeko_core/src/tensor/representations/sparse.rs`
 - `DeclChildren` — `hymeko_core/src/ir/ir.rs`
 - `DeclNode` — `hymeko_core/src/ir/ir.rs`
 - `DeclTag` — `hymeko_core/src/common/ids.rs`
@@ -115,6 +117,7 @@ _No public symbols._
 - `SemanticModelDigestV2` — `hymeko_core/src/ir/semantic_digest.rs`
 - `SnapshotVersion` — `hymeko_core/src/ir_stream/version.rs`
 - `SparseCsrShape` — `hymeko_core/src/tensor/compute/mod.rs`
+- `SparseShape` — `hymeko_core/src/tensor/representations/sparse.rs`
 - `SparseSpec` — `hymeko_core/src/tensor/sparse_workload.rs`
 - `StagedSection` — `hymeko_core/src/ir_stream/assembler.rs`
 - `StarOperator` — `hymeko_core/src/ir/incidence.rs`
@@ -132,6 +135,7 @@ _No public symbols._
 - `ValidatedEnvelope` — `hymeko_core/src/ir_stream/envelope.rs`
 - `ValidatedMessage` — `hymeko_core/src/ir_stream/codec.rs`
 - `ValidatedSection` — `hymeko_core/src/ir_stream/section.rs`
+- `ValidatedSparse` — `hymeko_core/src/tensor/representations/sparse.rs`
 - `Xavier` — `hymeko_core/src/tensor/conv/weight_init/weight_init.rs`
 - `XavierRandom` — `hymeko_core/src/tensor/conv/weight_init/weight_init.rs`
 - `Zeros` — `hymeko_core/src/tensor/conv/weight_init/weight_init.rs`
@@ -142,6 +146,7 @@ _No public symbols._
 - `AssemblerState` — `hymeko_core/src/ir_stream/assembler.rs`
 - `BackendKind` — `hymeko_core/src/tensor/compute/mod.rs`
 - `CborError` — `hymeko_core/src/writers/cbor_writer.rs`
+- `Coalescing` — `hymeko_core/src/tensor/representations/sparse.rs`
 - `ComputeError` — `hymeko_core/src/tensor/compute/mod.rs`
 - `ConstResolveError` — `hymeko_core/src/resolution/const_resolve.rs`
 - `CoordError` — `hymeko_core/src/ir/incidence.rs`
@@ -171,6 +176,9 @@ _No public symbols._
 - `SectionKind` — `hymeko_core/src/ir_stream/section.rs`
 - `SignAgg` — `hymeko_core/src/tensor/aggregation.rs`
 - `SignedRefR` — `hymeko_core/src/ir/ir.rs`
+- `SparseLayout` — `hymeko_core/src/tensor/representations/sparse.rs`
+- `SparseViolation` — `hymeko_core/src/tensor/representations/sparse.rs`
+- `StoredOrder` — `hymeko_core/src/tensor/representations/sparse.rs`
 - `TensorRole` — `hymeko_core/src/ir/ir.rs`
 - `TransactionKind` — `hymeko_core/src/ir_stream/assembler.rs`
 - `ValueR` — `hymeko_core/src/ir/ir.rs`
@@ -223,6 +231,7 @@ _No public symbols._
 - `child_decls` — `hymeko_core/src/ir/access.rs`
 - `children` — `hymeko_core/src/ir/ir.rs`
 - `clamp01` — `hymeko_core/src/tensor/aggregation.rs`
+- `coalescing` — `hymeko_core/src/tensor/representations/sparse.rs`
 - `combinations` — `hymeko_core/src/generators.rs`
 - `compile` — `hymeko_core/src/module_store/module_store.rs`
 - `complete_uniform_design` — `hymeko_core/src/generators.rs`
@@ -271,6 +280,7 @@ _No public symbols._
 - `entry` — `hymeko_core/src/tensor/representations/tensor_coo.rs`
 - `envelope` — `hymeko_core/src/ir_stream/codec.rs`
 - `evaluate_consts` — `hymeko_core/src/resolution/const_resolve.rs`
+- `extents` — `hymeko_core/src/tensor/representations/sparse.rs`
 - `extract_ref_weight_scalar` — `hymeko_core/src/tensor/tensor_val.rs`
 - `finalize_coalesced` — `hymeko_core/src/tensor/representations/tensor_csr_builder_impl.rs`
 - `find_edge` — `hymeko_core/src/lib.rs`
@@ -332,6 +342,7 @@ _No public symbols._
 - `large` — `hymeko_core/src/tensor/sparse_workload.rs`
 - `last_child_of` — `hymeko_core/src/ir/access.rs`
 - `last_seq` — `hymeko_core/src/ir_stream/assembler.rs`
+- `layout` — `hymeko_core/src/tensor/representations/sparse.rs`
 - `len` — `hymeko_core/src/ir/canonical_hash.rs`
 - `len` — `hymeko_core/src/tensor/representations/tensor_coo.rs`
 - `load_recursive` — `hymeko_core/src/module_store/module_store.rs`
@@ -359,6 +370,7 @@ _No public symbols._
 - `new` — `hymeko_core/src/resolution/interner.rs`
 - `new` — `hymeko_core/src/resolution/resolve.rs`
 - `new` — `hymeko_core/src/tensor/compute/mod.rs`
+- `new` — `hymeko_core/src/tensor/representations/sparse.rs`
 - `new` — `hymeko_core/src/tensor/representations/tensor_coo.rs`
 - `new` — `hymeko_core/src/tensor/shared_state.rs`
 - `new` — `hymeko_core/src/tensor/sparse_workload.rs`
@@ -366,6 +378,7 @@ _No public symbols._
 - `next_sibling` — `hymeko_core/src/ir/ir.rs`
 - `next_sibling_of` — `hymeko_core/src/ir/access.rs`
 - `next_u64` — `hymeko_core/src/tensor/sparse_workload.rs`
+- `nnz` — `hymeko_core/src/tensor/representations/sparse.rs`
 - `nnz` — `hymeko_core/src/tensor/representations/tensor_csr.rs`
 - `node` — `hymeko_core/src/ir/access.rs`
 - `node_count` — `hymeko_core/src/ir/access.rs`
@@ -396,6 +409,7 @@ _No public symbols._
 - `push` — `hymeko_core/src/tensor/representations/tensor_coo.rs`
 - `push_anonymous_arc` — `hymeko_core/src/ir/ir.rs`
 - `push_decl` — `hymeko_core/src/ir/ir.rs`
+- `rank` — `hymeko_core/src/tensor/representations/sparse.rs`
 - `raw` — `hymeko_core/src/common/ids.rs`
 - `read_count` — `hymeko_core/src/module_store/source_provider.rs`
 - `reconstruction_error` — `hymeko_core/src/tensor/decomposition.rs`
@@ -430,6 +444,7 @@ _No public symbols._
 - `seq` — `hymeko_core/src/ir_stream/assembler.rs`
 - `seq` — `hymeko_core/src/ir_stream/envelope.rs`
 - `set_model_facet` — `hymeko_core/src/ir/ir.rs`
+- `shape` — `hymeko_core/src/tensor/representations/sparse.rs`
 - `sign` — `hymeko_core/src/ir/ir.rs`
 - `signed_incidence` — `hymeko_core/src/tensor/common.rs`
 - `size` — `hymeko_core/src/ir_stream/section.rs`
@@ -450,6 +465,7 @@ _No public symbols._
 - `state` — `hymeko_core/src/ir_stream/assembler.rs`
 - `steiner_design` — `hymeko_core/src/generators.rs`
 - `steiner_triples` — `hymeko_core/src/generators.rs`
+- `stored_order` — `hymeko_core/src/tensor/representations/sparse.rs`
 - `stream_id` — `hymeko_core/src/ir_stream/assembler.rs`
 - `stream_id` — `hymeko_core/src/ir_stream/envelope.rs`
 - `strict` — `hymeko_core/src/ir_stream/assembler.rs`
@@ -459,6 +475,7 @@ _No public symbols._
 - `target` — `hymeko_core/src/ir/ir.rs`
 - `target_version` — `hymeko_core/src/ir_stream/assembler.rs`
 - `target_version` — `hymeko_core/src/ir_stream/envelope.rs`
+- `tensor` — `hymeko_core/src/tensor/representations/sparse.rs`
 - `to_bytes` — `hymeko_core/src/ir_stream/envelope.rs`
 - `to_bytes` — `hymeko_core/src/ir_stream/section.rs`
 - `to_f32_vec` — `hymeko_core/src/ir_stream/section.rs`
@@ -481,6 +498,7 @@ _No public symbols._
 - `validate_all_refs_modules` — `hymeko_core/src/module_store/module_view.rs`
 - `validate_all_refs_sym` — `hymeko_core/src/resolution/resolve.rs`
 - `validate_all_refs_sym_with_prefix` — `hymeko_core/src/resolution/resolve.rs`
+- `validate_csr_parts` — `hymeko_core/src/tensor/representations/sparse.rs`
 - `validate_hierarchy_index_coherence` — `hymeko_core/src/ir/coherence.rs`
 - `validate_len` — `hymeko_core/src/tensor/compute/mod.rs`
 - `validate_message` — `hymeko_core/src/ir_stream/codec.rs`
@@ -513,13 +531,16 @@ _No public symbols._
 - `AllocationKey` — `hymeko_wgpu/src/arena.rs`
 - `ArenaStats` — `hymeko_wgpu/src/arena.rs`
 - `ArenaTensor` — `hymeko_wgpu/src/arena.rs`
+- `BackendCell` — `hymeko_wgpu/src/testing.rs`
 - `CompletionTracker` — `hymeko_wgpu/src/completion.rs`
 - `DeviceCapabilities` — `hymeko_wgpu/src/backend.rs`
 - `ElapsedTicks` — `hymeko_wgpu/src/profiling.rs`
 - `Fixture` — `hymeko_wgpu/src/testing.rs`
+- `GlobalEntropyPoolBuilder` — `hymeko_wgpu/src/operations/global_entropy_pool.rs`
 - `GpuCsrMatrix` — `hymeko_wgpu/src/resources.rs`
 - `GpuTensor` — `hymeko_wgpu/src/resources.rs`
 - `GpuTimer` — `hymeko_wgpu/src/profiling.rs`
+- `HighwayIdentityBuilder` — `hymeko_wgpu/src/operations/highway.rs`
 - `HsikanBuilder` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `LeaseReleasedExactlyOnce` — `hymeko_wgpu/src/scope.rs`
 - `NoDerefToRawTensor` — `hymeko_wgpu/src/scope.rs`
@@ -530,15 +551,23 @@ _No public symbols._
 - `PooledOperandNeedsSession` — `hymeko_wgpu/src/scope.rs`
 - `PreparedActivation` — `hymeko_wgpu/src/operations/activation.rs`
 - `PreparedCannotOutliveOperands` — `hymeko_wgpu/src/scope.rs`
+- `PreparedGlobalEntropyPool` — `hymeko_wgpu/src/operations/global_entropy_pool.rs`
+- `PreparedHighwayIdentity` — `hymeko_wgpu/src/operations/highway.rs`
 - `PreparedHsikan` — `hymeko_wgpu/src/operations/hsikan.rs`
+- `PreparedRotorAttention` — `hymeko_wgpu/src/operations/rotor_attention.rs`
+- `PreparedScatterMean` — `hymeko_wgpu/src/operations/scatter_mean.rs`
 - `PreparedSpmm` — `hymeko_wgpu/src/operations/spmm.rs`
+- `PreparedStarRotorSpike` — `hymeko_wgpu/src/operations/star_rotor_spike.rs`
 - `ReadbackPlan` — `hymeko_wgpu/src/profiling.rs`
 - `ReadbackTiming` — `hymeko_wgpu/src/profiling.rs`
 - `ReadbackWorkspace` — `hymeko_wgpu/src/readback.rs`
 - `ResourceFactory` — `hymeko_wgpu/src/resources.rs`
+- `RotorAttentionBuilder` — `hymeko_wgpu/src/operations/rotor_attention.rs`
+- `ScatterMeanBuilder` — `hymeko_wgpu/src/operations/scatter_mean.rs`
 - `SessionSubmittedOnce` — `hymeko_wgpu/src/scope.rs`
 - `SpmmBuilder` — `hymeko_wgpu/src/operations/spmm.rs`
 - `StagingStorage` — `hymeko_wgpu/src/readback.rs`
+- `StarRotorSpikeBuilder` — `hymeko_wgpu/src/operations/star_rotor_spike.rs`
 - `SubmissionEpoch` — `hymeko_wgpu/src/completion.rs`
 - `TensorArena` — `hymeko_wgpu/src/arena.rs`
 - `TensorArenaConfig` — `hymeko_wgpu/src/arena.rs`
@@ -565,6 +594,7 @@ _No public symbols._
 - `acquire` — `hymeko_wgpu/src/arena.rs`
 - `acquire_with_usage` — `hymeko_wgpu/src/arena.rs`
 - `activation` — `hymeko_wgpu/src/operations/mod.rs`
+- `adjacency` — `hymeko_wgpu/src/operations/rotor_attention.rs`
 - `allocation_bytes` — `hymeko_wgpu/src/arena.rs`
 - `allocations` — `hymeko_wgpu/src/readback.rs`
 - `alpha` — `hymeko_wgpu/src/operations/activation.rs`
@@ -577,28 +607,45 @@ _No public symbols._
 - `build` — `hymeko_wgpu/src/backend.rs`
 - `build` — `hymeko_wgpu/src/testing.rs`
 - `builder` — `hymeko_wgpu/src/backend.rs`
+- `builds` — `hymeko_wgpu/src/testing.rs`
 - `bundle` — `hymeko_wgpu/src/pipeline.rs`
 - `bytes` — `hymeko_wgpu/src/arena.rs`
 - `capabilities` — `hymeko_wgpu/src/backend.rs`
 - `capacity` — `hymeko_wgpu/src/profiling.rs`
 - `capacity` — `hymeko_wgpu/src/readback.rs`
+- `carry` — `hymeko_wgpu/src/operations/highway.rs`
+- `centres` — `hymeko_wgpu/src/operations/star_rotor_spike.rs`
 - `chain_output` — `hymeko_wgpu/src/testing.rs`
 - `col_ind` — `hymeko_wgpu/src/resources.rs`
 - `completed` — `hymeko_wgpu/src/completion.rs`
 - `config` — `hymeko_wgpu/src/arena.rs`
+- `counts` — `hymeko_wgpu/src/operations/scatter_mean.rs`
 - `create_readback_workspace` — `hymeko_wgpu/src/backend.rs`
 - `destination_capacity` — `hymeko_wgpu/src/readback.rs`
 - `device` — `hymeko_wgpu/src/backend.rs`
 - `device_bytes` — `hymeko_wgpu/src/arena.rs`
 - `dispatch_groups` — `hymeko_wgpu/src/operations/activation.rs`
+- `dispatch_groups` — `hymeko_wgpu/src/operations/highway.rs`
 - `dispatch_groups` — `hymeko_wgpu/src/operations/hsikan.rs`
+- `dispatch_groups` — `hymeko_wgpu/src/operations/scatter_mean.rs`
 - `dispatch_groups` — `hymeko_wgpu/src/operations/spmm.rs`
+- `edge_state` — `hymeko_wgpu/src/operations/scatter_mean.rs`
 - `elapsed` — `hymeko_wgpu/src/profiling.rs`
 - `elements` — `hymeko_wgpu/src/operations/activation.rs`
+- `elements` — `hymeko_wgpu/src/operations/global_entropy_pool.rs`
+- `elements` — `hymeko_wgpu/src/operations/highway.rs`
 - `elements` — `hymeko_wgpu/src/operations/hsikan.rs`
+- `elements` — `hymeko_wgpu/src/operations/rotor_attention.rs`
+- `elements` — `hymeko_wgpu/src/operations/scatter_mean.rs`
+- `elements` — `hymeko_wgpu/src/operations/star_rotor_spike.rs`
 - `encode` — `hymeko_wgpu/src/operations/activation.rs`
+- `encode` — `hymeko_wgpu/src/operations/global_entropy_pool.rs`
+- `encode` — `hymeko_wgpu/src/operations/highway.rs`
 - `encode` — `hymeko_wgpu/src/operations/hsikan.rs`
+- `encode` — `hymeko_wgpu/src/operations/rotor_attention.rs`
+- `encode` — `hymeko_wgpu/src/operations/scatter_mean.rs`
 - `encode` — `hymeko_wgpu/src/operations/spmm.rs`
+- `encode` — `hymeko_wgpu/src/operations/star_rotor_spike.rs`
 - `encode_chain` — `hymeko_wgpu/src/testing.rs`
 - `encode_spmm_profiled` — `hymeko_wgpu/src/profiling.rs`
 - `encoder` — `hymeko_wgpu/src/arena.rs`
@@ -610,15 +657,21 @@ _No public symbols._
 - `feature_dim` — `hymeko_wgpu/src/operations/spmm.rs`
 - `features` — `hymeko_wgpu/src/backend.rs`
 - `features` — `hymeko_wgpu/src/operations/hsikan.rs`
+- `features` — `hymeko_wgpu/src/operations/star_rotor_spike.rs`
 - `from_features` — `hymeko_wgpu/src/profiling.rs`
 - `from_parts` — `hymeko_wgpu/src/resources.rs`
 - `fused_activation` — `hymeko_wgpu/src/operations/spmm.rs`
+- `gate` — `hymeko_wgpu/src/operations/highway.rs`
 - `gate_bias` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `gate_weight` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `get` — `hymeko_wgpu/src/completion.rs`
+- `get_or_init` — `hymeko_wgpu/src/testing.rs`
+- `global_entropy_pool` — `hymeko_wgpu/src/operations/mod.rs`
+- `highway_identity` — `hymeko_wgpu/src/operations/mod.rs`
 - `hit_rate` — `hymeko_wgpu/src/arena.rs`
 - `hsikan` — `hymeko_wgpu/src/operations/mod.rs`
 - `in_place` — `hymeko_wgpu/src/operations/activation.rs`
+- `incidence` — `hymeko_wgpu/src/operations/scatter_mean.rs`
 - `inner_control` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `input` — `hymeko_wgpu/src/operations/activation.rs`
 - `input` — `hymeko_wgpu/src/operations/spmm.rs`
@@ -629,15 +682,28 @@ _No public symbols._
 - `is_empty` — `hymeko_wgpu/src/pipeline.rs`
 - `is_in_place` — `hymeko_wgpu/src/operations/activation.rs`
 - `is_transcendental` — `hymeko_wgpu/src/operations/activation.rs`
+- `kappa` — `hymeko_wgpu/src/operations/rotor_attention.rs`
+- `kappa` — `hymeko_wgpu/src/operations/star_rotor_spike.rs`
 - `kernel` — `hymeko_wgpu/src/operations/activation.rs`
+- `kernel` — `hymeko_wgpu/src/operations/global_entropy_pool.rs`
+- `kernel` — `hymeko_wgpu/src/operations/highway.rs`
 - `kernel` — `hymeko_wgpu/src/operations/hsikan.rs`
+- `kernel` — `hymeko_wgpu/src/operations/rotor_attention.rs`
+- `kernel` — `hymeko_wgpu/src/operations/scatter_mean.rs`
 - `kernel` — `hymeko_wgpu/src/operations/spmm.rs`
+- `kernel` — `hymeko_wgpu/src/operations/star_rotor_spike.rs`
+- `keys` — `hymeko_wgpu/src/operations/rotor_attention.rs`
 - `kind` — `hymeko_wgpu/src/backend.rs`
 - `kind` — `hymeko_wgpu/src/operations/activation.rs`
 - `label` — `hymeko_wgpu/src/backend.rs`
 - `label` — `hymeko_wgpu/src/operations/activation.rs`
+- `label` — `hymeko_wgpu/src/operations/global_entropy_pool.rs`
+- `label` — `hymeko_wgpu/src/operations/highway.rs`
 - `label` — `hymeko_wgpu/src/operations/hsikan.rs`
+- `label` — `hymeko_wgpu/src/operations/rotor_attention.rs`
+- `label` — `hymeko_wgpu/src/operations/scatter_mean.rs`
 - `label` — `hymeko_wgpu/src/operations/spmm.rs`
+- `label` — `hymeko_wgpu/src/operations/star_rotor_spike.rs`
 - `latest` — `hymeko_wgpu/src/completion.rs`
 - `layout` — `hymeko_wgpu/src/pipeline.rs`
 - `layout_count` — `hymeko_wgpu/src/pipeline.rs`
@@ -655,12 +721,18 @@ _No public symbols._
 - `new` — `hymeko_wgpu/src/profiling.rs`
 - `new` — `hymeko_wgpu/src/readback.rs`
 - `new` — `hymeko_wgpu/src/resources.rs`
+- `new` — `hymeko_wgpu/src/testing.rs`
+- `next` — `hymeko_wgpu/src/operations/highway.rs`
+- `node_state` — `hymeko_wgpu/src/operations/scatter_mean.rs`
 - `operations` — `hymeko_wgpu/src/backend.rs`
 - `operations_encoded` — `hymeko_wgpu/src/arena.rs`
 - `outer_control` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `output` — `hymeko_wgpu/src/operations/activation.rs`
+- `output` — `hymeko_wgpu/src/operations/global_entropy_pool.rs`
 - `output` — `hymeko_wgpu/src/operations/hsikan.rs`
+- `output` — `hymeko_wgpu/src/operations/rotor_attention.rs`
 - `output` — `hymeko_wgpu/src/operations/spmm.rs`
+- `output` — `hymeko_wgpu/src/operations/star_rotor_spike.rs`
 - `owns_device` — `hymeko_wgpu/src/arena.rs`
 - `pass_writes` — `hymeko_wgpu/src/profiling.rs`
 - `passes` — `hymeko_wgpu/src/profiling.rs`
@@ -671,9 +743,17 @@ _No public symbols._
 - `poll` — `hymeko_wgpu/src/completion.rs`
 - `poll_completion` — `hymeko_wgpu/src/arena.rs`
 - `power_preference` — `hymeko_wgpu/src/backend.rs`
+- `preferred` — `hymeko_wgpu/src/operations/rotor_attention.rs`
 - `prepare` — `hymeko_wgpu/src/operations/activation.rs`
+- `prepare` — `hymeko_wgpu/src/operations/global_entropy_pool.rs`
+- `prepare` — `hymeko_wgpu/src/operations/highway.rs`
 - `prepare` — `hymeko_wgpu/src/operations/hsikan.rs`
+- `prepare` — `hymeko_wgpu/src/operations/rotor_attention.rs`
+- `prepare` — `hymeko_wgpu/src/operations/scatter_mean.rs`
 - `prepare` — `hymeko_wgpu/src/operations/spmm.rs`
+- `prepare` — `hymeko_wgpu/src/operations/star_rotor_spike.rs`
+- `projection` — `hymeko_wgpu/src/operations/star_rotor_spike.rs`
+- `queries` — `hymeko_wgpu/src/operations/rotor_attention.rs`
 - `queue` — `hymeko_wgpu/src/backend.rs`
 - `read` — `hymeko_wgpu/src/profiling.rs`
 - `read_tensor` — `hymeko_wgpu/src/backend.rs`
@@ -683,20 +763,27 @@ _No public symbols._
 - `reserve` — `hymeko_wgpu/src/readback.rs`
 - `resolve` — `hymeko_wgpu/src/profiling.rs`
 - `resources` — `hymeko_wgpu/src/backend.rs`
+- `response` — `hymeko_wgpu/src/operations/global_entropy_pool.rs`
+- `rotor_attention` — `hymeko_wgpu/src/operations/mod.rs`
 - `row_ptr` — `hymeko_wgpu/src/resources.rs`
+- `scatter_mean` — `hymeko_wgpu/src/operations/mod.rs`
 - `session` — `hymeko_wgpu/src/arena.rs`
 - `shader_name` — `hymeko_wgpu/src/pipeline.rs`
 - `shape` — `hymeko_wgpu/src/arena.rs`
 - `shape` — `hymeko_wgpu/src/resources.rs`
+- `shared_backend` — `hymeko_wgpu/src/testing.rs`
 - `signs` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `size_bytes` — `hymeko_wgpu/src/resources.rs`
 - `source` — `hymeko_wgpu/src/pipeline.rs`
+- `spatial_shape` — `hymeko_wgpu/src/operations/global_entropy_pool.rs`
 - `spmm` — `hymeko_wgpu/src/operations/mod.rs`
 - `spmm_workgroup_for` — `hymeko_wgpu/src/operations/spmm.rs`
 - `staging_allocations` — `hymeko_wgpu/src/readback.rs`
 - `staging_buffer` — `hymeko_wgpu/src/resources.rs`
 - `staging_capacity` — `hymeko_wgpu/src/readback.rs`
+- `star_rotor_spike` — `hymeko_wgpu/src/operations/mod.rs`
 - `stats` — `hymeko_wgpu/src/arena.rs`
+- `step` — `hymeko_wgpu/src/operations/highway.rs`
 - `submit` — `hymeko_wgpu/src/arena.rs`
 - `submit` — `hymeko_wgpu/src/backend.rs`
 - `submit` — `hymeko_wgpu/src/completion.rs`
@@ -715,15 +802,23 @@ _No public symbols._
 - `upload_i32_tensor` — `hymeko_wgpu/src/resources.rs`
 - `upload_tensor` — `hymeko_wgpu/src/resources.rs`
 - `upload_u32_tensor` — `hymeko_wgpu/src/resources.rs`
+- `upload_validated_csr` — `hymeko_wgpu/src/resources.rs`
 - `usage` — `hymeko_wgpu/src/arena.rs`
+- `values` — `hymeko_wgpu/src/operations/rotor_attention.rs`
 - `values` — `hymeko_wgpu/src/resources.rs`
 - `vertices` — `hymeko_wgpu/src/operations/hsikan.rs`
+- `vertices` — `hymeko_wgpu/src/operations/star_rotor_spike.rs`
 - `wait` — `hymeko_wgpu/src/backend.rs`
 - `wait_for` — `hymeko_wgpu/src/completion.rs`
 - `with_capacity` — `hymeko_wgpu/src/readback.rs`
 - `workgroup` — `hymeko_wgpu/src/operations/activation.rs`
+- `workgroup` — `hymeko_wgpu/src/operations/global_entropy_pool.rs`
+- `workgroup` — `hymeko_wgpu/src/operations/highway.rs`
 - `workgroup` — `hymeko_wgpu/src/operations/hsikan.rs`
+- `workgroup` — `hymeko_wgpu/src/operations/rotor_attention.rs`
+- `workgroup` — `hymeko_wgpu/src/operations/scatter_mean.rs`
 - `workgroup` — `hymeko_wgpu/src/operations/spmm.rs`
+- `workgroup` — `hymeko_wgpu/src/operations/star_rotor_spike.rs`
 - `write` — `hymeko_wgpu/src/profiling.rs`
 - `write_tensor` — `hymeko_wgpu/src/resources.rs`
 - `zeroed_tensor` — `hymeko_wgpu/src/resources.rs`

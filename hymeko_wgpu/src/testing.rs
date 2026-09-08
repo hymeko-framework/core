@@ -56,6 +56,101 @@ pub fn backend_or_skip(context: &str) -> Option<WgpuBackend> {
     }
 }
 
+/// A suite-wide backend slot: built at most once, however many tests ask for it.
+///
+/// # Why a cell and not another function
+///
+/// `backend_or_skip` builds a device per call. A suite whose tests each call it constructs several
+/// `WgpuBackend`s in rapid succession, and this repository already records what that costs on Linux:
+/// "concurrent `WgpuBackend` construction deadlocks in the Vulkan loader". Measured on 2026-09-08 it
+/// is worse than a deadlock — a segmentation fault under the resulting device create/drop churn.
+///
+/// A `BackendCell` removes the churn instead of documenting a run-mode workaround: the `OnceLock`
+/// guarantees one construction per process, and the value is shared read-only afterwards.
+///
+/// # Why it is a type rather than one function
+///
+/// Suites do not all want the *same* device. The profiling suite needs timestamp features; the rest
+/// want the default. Both are `BackendCell`s — a suite declares its own `static` and supplies the
+/// builder — so the skip/failure classification stays in **one** place instead of being hand-copied
+/// per suite with its own subtly different error handling.
+///
+/// `WgpuBackend` is `Send + Sync`, so sharing one is sound. Nothing here locks or otherwise changes
+/// production `WgpuBackend::build()`.
+pub struct BackendCell {
+    cell: std::sync::OnceLock<Option<WgpuBackend>>,
+    builds: std::sync::atomic::AtomicUsize,
+}
+
+impl Default for BackendCell {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl BackendCell {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            cell: std::sync::OnceLock::new(),
+            builds: std::sync::atomic::AtomicUsize::new(0),
+        }
+    }
+
+    /// The suite's backend, building it on first use with `build`.
+    ///
+    /// The classification is central and identical for every suite: a missing adapter is a
+    /// **skip** (`None`), and any other initialisation error is a **failure** (panic), so a broken
+    /// backend cannot masquerade as an absent one.
+    ///
+    /// # Returns
+    /// `None` when the machine has no adapter — decided once, not per test.
+    pub fn get_or_init(
+        &'static self,
+        context: &str,
+        build: impl FnOnce() -> Result<WgpuBackend, ComputeError>,
+    ) -> Option<&'static WgpuBackend> {
+        self.cell
+            .get_or_init(|| {
+                self.builds
+                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                match build() {
+                    Ok(b) => Some(b),
+                    Err(ComputeError::BackendUnavailable { reason, .. }) => {
+                        eprintln!("[{context}] SKIPPED - no GPU adapter: {reason}");
+                        None
+                    }
+                    Err(other) => {
+                        panic!("[{context}] backend init failed (not availability): {other}")
+                    }
+                }
+            })
+            .as_ref()
+    }
+
+    /// How many times this cell actually invoked its builder.
+    ///
+    /// The observable receipt behind the one-device claim: a suite asserting `== 1` after all its
+    /// tests have run is measuring the construction count, not asserting it in prose.
+    #[must_use]
+    pub fn builds(&self) -> usize {
+        self.builds.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+/// The default shared backend for a test binary — one device, whatever the test count.
+///
+/// # Returns
+/// `None` when the machine has no adapter, with the same skip contract as [`backend_or_skip`].
+/// Any other initialisation error still panics.
+#[must_use]
+pub fn shared_backend(context: &str) -> Option<&'static WgpuBackend> {
+    static SHARED: BackendCell = BackendCell::new();
+    SHARED.get_or_init(context, || {
+        WgpuBackend::builder().label("hymeko-test").build()
+    })
+}
+
 /// A CSR matrix and dense input uploaded to the device, plus the shapes derived
 /// from them.
 ///
