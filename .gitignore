@@ -17,3 +17,4 @@ deliverables/
 # here ignored Python bytecode before.
 __pycache__/
 *.pyc
+/reports/

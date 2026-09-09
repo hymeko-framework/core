@@ -146,12 +146,17 @@ fn corpus_hierarchy_index_coherence_survey() {
 /// Corpus-wide frozen digest: v1 over every lowerable fixture, folded in a
 /// deterministic order. This is the broadest protection for the Part E rewrite
 /// — it covers real declaration shapes the synthetic vectors do not reach.
-fn corpus_digest() -> (usize, String) {
+fn corpus_digest(include_course_regressions: bool) -> (usize, String) {
     let files = require_fixtures();
 
     let mut h = blake3::Hasher::new();
     let mut n = 0usize;
     for f in &files {
+        // This fixture first becomes lowerable with complete transitive imports.
+        // Keep the old 102-file KAT intact and freeze the expanded corpus separately.
+        if !include_course_regressions && f.ends_with("robotics/tasks/pick_place_scenario.hymeko") {
+            continue;
+        }
         if let Ok((store, compiled)) = crate::test_helpers::load_and_lower(f) {
             let d = canonical_program_hash(CanonHashCfg::default(), &compiled.ir, &store.it);
             // Include the file name so a reordering or omission is detected.
@@ -179,7 +184,25 @@ const KAT_CORPUS_DIGEST: &str = "8938b37b221ba015f1a52f318f8b9d9ac9aab65777ee070
 
 #[test]
 fn print_corpus_digest_for_capture() {
-    let (n, d) = corpus_digest();
+    for file in require_fixtures() {
+        let relative = file
+            .strip_prefix(PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap())
+            .unwrap();
+        match crate::test_helpers::load_and_lower(&file) {
+            Ok((_, program)) => eprintln!(
+                "COURSE_CORPUS {} {}",
+                relative.display(),
+                program
+                    .canon_hash
+                    .0
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<String>()
+            ),
+            Err(error) => eprintln!("COURSE_CORPUS_ERROR {} {error:?}", relative.display()),
+        }
+    }
+    let (n, d) = corpus_digest(true);
     eprintln!("[frozen] corpus_count {n}");
     eprintln!("[frozen] corpus_digest {d}");
 }
@@ -187,7 +210,7 @@ fn print_corpus_digest_for_capture() {
 /// The corpus gate. Protects v1 across the Part E rewrite over real programs.
 #[test]
 fn v1_corpus_digest_is_unchanged() {
-    let (n, d) = corpus_digest();
+    let (n, d) = corpus_digest(false);
     assert_eq!(
         n, KAT_CORPUS_COUNT,
         "the number of lowerable fixtures changed ({n} vs {KAT_CORPUS_COUNT}); \
@@ -197,6 +220,16 @@ fn v1_corpus_digest_is_unchanged() {
         d, KAT_CORPUS_DIGEST,
         "FROZEN v1 CORPUS DIGEST CHANGED. algo_version=1 output moved on real \
          programs — the traversal rewrite is not output-preserving."
+    );
+}
+
+#[test]
+fn course_transitive_imports_extend_the_frozen_corpus() {
+    let (count, digest) = corpus_digest(true);
+    assert_eq!(count, 103);
+    assert_eq!(
+        digest,
+        "9fc05f39100d67ea259655b4f53630caf93d542827f27cbfc3e9e57ab114b3b6"
     );
 }
 #[test]

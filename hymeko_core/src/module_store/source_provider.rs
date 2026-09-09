@@ -40,6 +40,14 @@ impl StdFsProvider {
 
 impl SourceProvider for StdFsProvider {
     fn canonicalize(&self, p: &Path) -> Result<PathBuf, String> {
+        let absolute = if p.is_absolute() {
+            p.to_path_buf()
+        } else {
+            std::env::current_dir().map_err(|e| e.to_string())?.join(p)
+        };
+        // Validate traversal at the filesystem root, but let the filesystem resolve
+        // symlinks before parent components; lexical collapse must not change that.
+        normalize_path(&absolute)?;
         std::fs::canonicalize(p).map_err(|e| e.to_string())
     }
 
@@ -83,41 +91,47 @@ pub struct MemProvider {
 
 impl MemProvider {
     pub fn insert_file(&mut self, path: impl Into<PathBuf>, content: impl Into<Arc<str>>) {
-        self.files.insert(path.into(), content.into());
+        let path = path.into();
+        self.files
+            .insert(normalize_path(&path).unwrap_or(path), content.into());
     }
 
     pub fn with_file(mut self, path: impl Into<PathBuf>, content: impl Into<Arc<str>>) -> Self {
-        self.files.insert(path.into(), content.into());
+        self.insert_file(path, content);
         self
     }
 
     pub fn read_count(&self, p: impl AsRef<Path>) -> usize {
         let m = self.reads.lock().unwrap();
-        *m.get(p.as_ref()).unwrap_or(&0)
+        normalize_path(p.as_ref())
+            .ok()
+            .and_then(|path| m.get(&path).copied())
+            .unwrap_or(0)
     }
 }
 
 impl SourceProvider for MemProvider {
     fn canonicalize(&self, p: &Path) -> Result<PathBuf, String> {
-        // Tesztben elég az identity. (Ha akarsz, itt normalizálhatsz.)
-        Ok(p.to_path_buf())
+        normalize_path(p)
     }
 
     fn read(&mut self, p: &Path) -> Result<Arc<str>, String> {
+        let p = self.canonicalize(p)?;
         {
             let mut m = self.reads.lock().unwrap();
-            *m.entry(p.to_path_buf()).or_insert(0) += 1;
+            *m.entry(p.clone()).or_insert(0) += 1;
         }
         self.files
-            .get(p)
+            .get(&p)
             .cloned()
             .ok_or_else(|| format!("file not found: {}", p.display()))
     }
 
     fn version(&self, path: &Path) -> Result<u64, String> {
+        let path = self.canonicalize(path)?;
         let s = self
             .files
-            .get(path)
+            .get(&path)
             .ok_or_else(|| format!("file not found: {}", path.display()))?;
 
         // content-hash → u64 version
@@ -127,4 +141,32 @@ impl SourceProvider for MemProvider {
             b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
         ]))
     }
+}
+
+fn normalize_path(path: &Path) -> Result<PathBuf, String> {
+    normalize_components(path.components())
+        .map_err(|reason| format!("{reason}: {}", path.display()))
+}
+
+pub(crate) fn normalize_components<'a>(
+    components: impl Iterator<Item = std::path::Component<'a>>,
+) -> Result<PathBuf, &'static str> {
+    use std::path::Component;
+    let mut normalized = PathBuf::new();
+    for component in components {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if !matches!(
+                    normalized.components().next_back(),
+                    Some(Component::Normal(_))
+                ) {
+                    return Err("path escapes provider root");
+                }
+                normalized.pop();
+            }
+            _ => normalized.push(component.as_os_str()),
+        }
+    }
+    Ok(normalized)
 }

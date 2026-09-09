@@ -16,6 +16,10 @@ pub struct Index {
     /// Alias map from `using path as alias` statements.
     #[serde(default)]
     pub aliases: FxHashMap<SymId, Vec<SymId>>,
+    /// Module-local environments, keyed by their contiguous named declaration ranges.
+    /// An empty environment still isolates a dependency from the entry's aliases.
+    #[serde(skip)]
+    pub(crate) module_aliases: Vec<(std::ops::Range<usize>, FxHashMap<SymId, Vec<SymId>>)>,
 }
 
 impl Index {
@@ -107,6 +111,48 @@ pub fn apply_usings(
         }
     }
     Ok(())
+}
+
+pub(crate) fn module_aliases(
+    idx: &Index,
+    usings: &[UsingStmt<SymId>],
+    prefix: &[SymId],
+    imports: &[(SymId, SymId)],
+    it: &Interner,
+) -> Result<FxHashMap<SymId, Vec<SymId>>, ResolveError> {
+    let mut aliases: FxHashMap<_, _> = imports
+        .iter()
+        .map(|&(local, linked)| (local, vec![linked]))
+        .collect();
+    for u in usings {
+        let mut candidates = Vec::new();
+        // A qualified local import name names its linked module even when another
+        // module used the same name for a different file.
+        if let Some((&first, tail)) = u.path.path.split_first() {
+            if let Some(base) = aliases.get(&first) {
+                let mut path = base.clone();
+                path.extend_from_slice(tail);
+                candidates.push(path);
+            }
+        }
+        for &(_, linked) in imports {
+            let mut path = vec![linked];
+            path.extend_from_slice(&u.path.path);
+            candidates.push(path);
+        }
+        let mut local = prefix.to_vec();
+        local.extend_from_slice(&u.path.path);
+        candidates.push(local);
+        let resolved = candidates
+            .into_iter()
+            .find(|path| idx.by_path.contains_key(path.as_slice()))
+            .ok_or_else(|| ResolveError::UnresolvedRef {
+                from_scope: "<using>".into(),
+                target: fmt_path_from_slice(&u.path.path, it),
+            })?;
+        aliases.insert(u.alias, resolved);
+    }
+    Ok(aliases)
 }
 
 pub fn build_index_sym_with_prefix<'a>(
@@ -259,10 +305,24 @@ pub fn resolve_ref_to_declid(
     target: &Ref<SymId>,
     it: &Interner,
 ) -> Result<DeclId, ResolveError> {
+    let owner = (0..=scope.len())
+        .rev()
+        .find_map(|end| idx.by_path.get(&scope[..end]));
+    let aliases = owner
+        .and_then(|id| {
+            let module = idx
+                .module_aliases
+                .partition_point(|(range, _)| range.end <= id.raw());
+            idx.module_aliases
+                .get(module)
+                .filter(|(range, _)| range.contains(&id.raw()))
+                .map(|(_, aliases)| aliases)
+        })
+        .unwrap_or(&idx.aliases);
     // ── Alias expansion ──────────────────────────────────────
     let expanded;
     let effective = if !target.path.is_empty() {
-        if let Some(exp) = idx.aliases.get(&target.path[0]) {
+        if let Some(exp) = aliases.get(&target.path[0]) {
             let mut p = exp.clone();
             p.extend_from_slice(&target.path[1..]);
             expanded = Ref { path: p };
