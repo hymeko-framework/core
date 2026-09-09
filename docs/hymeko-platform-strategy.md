@@ -417,7 +417,7 @@ Transformation, Tensor; Parser a szintaxis tulajdonosa, Python/JS/WASM vékony k
 | Lépés | Feladat | Elfogadási feltétel | Állapot |
 |---|---|---|---|
 | PERF-1 | A mért optimalizációk integrálása a kurzusjavításokkal | Rögzített Parser/Core/SDK revíziók; helyesség és hash-paritás; ugyanazon forrásverzió natív/WASM ellenőrzése; érintett teljesítménymérések; GitHub és LAN Git publikálás | kész; részleges mérési bizonytalanság |
-| PERF-2 | AST-felépítés és második bejárás költségének csökkentése | Profil által indokolt változás, azonos kimenet és diagnosztika; AST és saját tulajdonú rekordok külön mérve | tervezett |
+| PERF-2 | AST-felépítés és második bejárás költségének csökkentése | Profil által indokolt változás, azonos kimenet és diagnosztika; AST és saját tulajdonú rekordok külön mérve | kész a Parser kimenetépítési határán; mérési korlátok alább |
 | PERF-3 | Közös gráfbenchmark külső könyvtárral, első jelölt petgraph | Azonos algoritmus, cél, súly, eredmény; hipergráf-leképezés és indexépítés külön költség | tervezett |
 | PERF-4 | CPU/WGPU/CUDA numerikus összevetés | Azonos művelet és numerikus oracle; cold setup, H2D, resident kernel, D2H és teljes idő külön | tervezett |
 
@@ -480,4 +480,58 @@ Az alapágak nem lettek merge-ölve; az önálló sparse/GPU commit megmaradt.
 Részletes, nyers mintákkal és ábrával igazolt eredmény:
 `reports/2026-09-07-compiler-repeated-work.md`, PERF-1 szakasz;
 Samba: `\\192.168.1.228\hymeko\reports`.
-Következő külön végrehajtási lépés: PERF-2; még nem indult el.
+A PERF-1 lezárásakor következő lépés a PERF-2 volt; eredménye alább.
+
+
+### PERF-2 első kontroll — 2026-09-09
+
+Az AST-konstruktorok összevonási próbája lezárult, elfogadott optimalizáció nélkül.
+A három konstruktor együttes inliningja túl nagy parsergenerálási költséget okozott;
+a szűkített arc-változat 72 mérési cellában, változatlan AST- és hibadiagnosztikai
+oracle mellett került összevetésre. Linked 50k: AST medián 189,530 → 181,593 ms,
+saját tulajdonú rekordok 244,712 → 243,135 ms; a bináris mérete +54,43%.
+Regressziós kapu: 2 pass, 10 inconclusive. A jelölt visszavonva; az új teszt megmarad.
+121 natív teszt és 1 doctest sikeres; a kiadott Parser/Core/SDK működés változatlan.
+
+A PERF-2 még nem kész. Következő vizsgálandó irány: ugyanazon teljes LALRPOP-nyelvtan
+által hajtott, típusos kimenetépítés, amely a saját tulajdonú rekordokhoz elhagyja a
+teljes köztes AST-t és annak második bejárását. A meglévő AST/API és diagnosztika
+megőrzése kötelező; nincs külön benchmark-parser. Natív AST, közvetlen rekordok,
+memória és kódméret külön kontroll, majd csak elfogadott nyereség után consumer-pin.
+Bizonyíték: ../parser/reports/2026-09-07-format-comparison.md, PERF-2 szakasz;
+nyers adatok: format-comparison/optimization/ast-construction a Parser riportarchívumban.
+
+
+### PERF-2 lezárás — 2026-09-09
+
+Az egyetlen LALRPOP nyelvtan `OutputBuilder` paramétert kapott. Az új
+`parse_description_with` belépési pont redukció közben építi a fogyasztó kimenetét;
+az alapértelmezett `AstBuilder` a változatlan natív AST-t adja. Az AST és lexer
+forrása változatlan. Az eredeti AST-ből rekordot építő adapter külön oracle maradt.
+A közvetlen rekordépítő elhagyja a teljes köztes AST-t és annak második bejárását.
+
+Azonos saját tulajdonú 50k rekordok, natív Amaterasu: flat medián −10,11%, Unicode
+−10,75%, stabil kontrollokkal. Linked −15,40%, de a memóriaingadozás miatt a gate
+bizonytalan. Long-text +2,33%, nested −1,96%; ezekből nincs általános gyorsulási
+állítás. A JSON-időhöz viszonyított arány 1,40–2,64; a Unicode JSON-kontroll maga
+is ingadozik. A hagyományos AST belépési pont nem lett gyorsabb. Windows mind a
+12 gate-je bizonytalan; Linux 8 pass / 4 bizonytalan, nincs igazolt regresszió.
+A két teljes mátrixot ezért nem minősítjük mindenütt stabilnak.
+
+123 Parser natív teszt + 2 doctest, 11 Python teszt, 20 nagy bemenetes formátum-
+visszaolvasás és 457 Core teszt + 7 doctest sikeres. A WASM könyvtár compile-check
+sikeres; új böngészős futás és SDK-kiadás nincs. A Core kompatibilitási teszt
+ideiglenes helyi Parser-patch-et használt; a kiadott Core/SDK függőségpin változatlan.
+A benchmark bináris mérete +14,93%; ez nem SDK/WASM méretadat.
+
+A PERF-2 a Parser kimenetépítési határán lezárult. A közvetlen Core IR/internálási
+builder bekötése külön feladat; a Graph összevetés (PERF-3) és GPU-mérés (PERF-4)
+továbbra is tervezett. A mérési eredmény nem jelent automatikus Core runtime-
+gyorsulást. A publikált Parser-revíziót a következő sor rögzíti.
+
+Bizonyíték: `../parser/reports/2026-09-07-format-comparison.md`, PERF-2 delivery;
+nyers mérések: `format-comparison/optimization/ast-construction/typed-output/compatible`.
+Riportarchívum: `\\192.168.1.228\hymeko\reports`; GitHub és LAN Git:
+`fix/course-module-compilation`, alapági merge nélkül.
+
+Publikált PERF-2 Parser: `eb23ca839103946a3c639474ee8ecfebc8dc1e59` (privát GitHub és LAN Git).
