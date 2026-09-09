@@ -1,0 +1,18 @@
+flowchart TD
+    S[Source: generation excluded] --> P[Parse and intern]
+    P --> K[Resolve constants]
+    K --> C[Borrow cached root AST]
+    C --> I[Index and aliases]
+    I --> L[Lower references: resolve values once]
+    L --> W[Reuse resolved values for weights; preserve IR layout]
+    L --> H[Legacy hash; build canonical paths once]
+    H --> N[Validate namespace and hash using shared paths]
+    N --> E[Compact Pruefer: degree and neighbor XOR]
+    E --> R[Compiled program cache]
+    R --> Q[Prepared execution]
+    C -.profile.-> D[Choose measurable optimization]
+    L -.profile.-> D
+    H -.profile.-> D
+    D --> V[Parity + before/after latency and memory]
+
+%% PERF-1 2026-09-09T18:54:44+02:00: released course control -> measured optimization integration -> native/WASM parity -> GitHub/LAN publication.

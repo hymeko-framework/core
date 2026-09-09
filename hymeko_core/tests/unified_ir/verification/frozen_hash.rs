@@ -151,6 +151,57 @@ fn v1_known_answer_vectors_are_unchanged() {
              be bumped deliberately."
         );
     }
+
+    // Captured before compacting Pruefer elimination state. The generated
+    // forests exercise root/leaf transitions, degree > 2, dense-ID gaps from
+    // anonymous arcs, and the hash configuration in the synthetic root label.
+    let mut aggregate = blake3::Hasher::new();
+    for shape in 0..4 {
+        for count in [0, 1, 2, 3, 8, 31, 128] {
+            let mut t = TestIr::new();
+            let mut vertices = Vec::new();
+            let mut paths: Vec<Vec<String>> = Vec::new();
+            for i in 0..count {
+                let parent = if i == 0 || (shape == 3 && i % 5 == 0) {
+                    None
+                } else {
+                    Some(match shape {
+                        0 => 0,
+                        2 => (i - 1) / 3,
+                        _ => i - 1,
+                    })
+                };
+                let mut path = parent.map(|p| paths[p].clone()).unwrap_or_default();
+                path.push(format!("v{i}"));
+                let names: Vec<&str> = path.iter().map(String::as_str).collect();
+                let parent_id = parent.map(|p| vertices[p]).unwrap_or(DeclId::NONE);
+                let did = if i % 3 == 2 {
+                    let edge = t.edge(&names, parent_id);
+                    t.arc(edge, &[(edge, S::Plus)]);
+                    edge
+                } else {
+                    t.node(&names, parent_id)
+                };
+                paths.push(path);
+                vertices.push(did);
+            }
+            for cfg in [
+                CanonHashCfg::default(),
+                CanonHashCfg {
+                    schema_version: 2,
+                    algo_version: 7,
+                    flags: 13,
+                },
+            ] {
+                aggregate.update(&canonical_program_hash(cfg, &t.ir, &t.it).0);
+            }
+        }
+    }
+    assert_eq!(
+        aggregate.finalize().to_hex().as_str(),
+        "d8755d5b7caa5705e988a4c2fde385a71c1cb1343a4ef79b70c077e9d6075811",
+        "Pruefer elimination changed the frozen forest/configuration corpus"
+    );
 }
 
 /// U1 and U3 as hash-level contracts, independent of the frozen bytes.

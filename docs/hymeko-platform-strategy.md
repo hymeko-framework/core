@@ -1,6 +1,6 @@
 # HyMeKo platformstratégia
 
-**Stratégiaazonosító:** `HYMEKO-PLATFORM-2026-09-01-v1`  
+**Stratégiaazonosító:** `HYMEKO-PLATFORM-2026-09-01-v1.1`
 **Állapot:** irányadó, verziózott architektúra- és végrehajtási keret  
 **Bizonyítékhatár:** 2026-09-01 18:11 CEDT  
 **Részletes terv:** `docs/plans/2026-09-01-hymeko-platform-strategy/`
@@ -367,7 +367,7 @@ Minden új Claude/Codex feladat eleje tartalmazza ezt:
 
 ```text
 GOVERNING-STRATEGY: docs/hymeko-platform-strategy.md
-STRATEGY-ID: HYMEKO-PLATFORM-2026-09-01-v1
+STRATEGY-ID: HYMEKO-PLATFORM-2026-09-01-v1.1
 ROADMAP-TASK: P<n> / <rövid slug>
 
 Olvasd végig a governing strategy-t, majd a CLAUDE.md, CORE.YAML és tools.yaml
@@ -405,3 +405,51 @@ commit/push engedélyt és a kötelező HARD STOP pontot.
 
 Ezek timestampelt bizonyítékok. Minden végrehajtási prompt a remote refeket újra
 ellenőrizze; ne feltételezze, hogy a táblázat örökké aktuális.
+
+
+## 15. Elfogadott teljesítmény-folytatás — 2026-09-09
+
+Rögzítve: 2026-09-09T18:54:44+02:00. A felhasználó elfogadta az alábbi sorrendet és az első
+lépés végrehajtását. Ez a jelenlegi teljesítménymunka prioritása; a korábbi
+architekturális invariánsokat megtartja. Négy fő repó: Core, Graph,
+Transformation, Tensor; Parser a szintaxis tulajdonosa, Python/JS/WASM vékony kötés.
+
+| Lépés | Feladat | Elfogadási feltétel | Állapot |
+|---|---|---|---|
+| PERF-1 | A mért optimalizációk integrálása a kurzusjavításokkal | Rögzített Parser/Core/SDK revíziók; helyesség és hash-paritás; ugyanazon forrásverzió natív/WASM ellenőrzése; érintett teljesítménymérések; GitHub és LAN Git publikálás | folyamatban |
+| PERF-2 | AST-felépítés és második bejárás költségének csökkentése | Profil által indokolt változás, azonos kimenet és diagnosztika; AST és saját tulajdonú rekordok külön mérve | tervezett |
+| PERF-3 | Közös gráfbenchmark külső könyvtárral, első jelölt petgraph | Azonos algoritmus, cél, súly, eredmény; hipergráf-leképezés és indexépítés külön költség | tervezett |
+| PERF-4 | CPU/WGPU/CUDA numerikus összevetés | Azonos művelet és numerikus oracle; cold setup, H2D, resident kernel, D2H és teljes idő külön | tervezett |
+
+### PERF-1 végrehajtási keret
+
+A már engedélyezett compiler-repeated-work és course-module-compilation munka
+összevezetése. Nincs új algoritmus, új AST/API vagy GPU-kernel ebben a lépésben.
+A kiadott kurzusjavítás a kontroll: Parser a528d98, Core 8623eb1, SDK b78a1bc.
+A helyi teljesítményváltozások forrása és korábbi profiljai a kapcsolt riportok.
+A Core LAN main külön sparse-tensor commitja (262fc0b) nem része e változásnak;
+a kiadási ág frissítése nem jelent alapági merge-et.
+
+Megőrzendő: modulonkénti aliasok, tranzitív importok, normalizált útvonalak,
+UTF-8, forrásproveniencia, DeclId/NodeId különbség, incidenciasorrend, előjel,
+súly, multiplicitás, strukturális és szemantikai hash, első-hiba sorrend.
+A natív és WASM buildprofil eltérhet; forrásrevíziójuknak egyeznie kell.
+
+### Mérési és közlési szabály
+
+Generálás, I/O, parse, AST→IR, hash/validáció, indexépítés, runtime és teljes út
+külön határ. AST vs JSON DOM nem azonos rekorddekódolási feladat. Nem adunk össze
+külön mért mediánokat, és nem állítunk előnyt külső könyvtárral szemben belső
+A*/Dijkstra arányból. QEMU nem natív ARM eredmény. A kiadott és kísérleti
+változat a grafikonon azonosítható SHA-val szerepeljen.
+
+Az aktuális fejlesztői kiindulópont: saját tulajdonú rekordoknál 1,37–3,30-szoros
+JSON-idő a 2026-09-08-i natív 50k mediánokban; nested instabil. Ez nem a
+2026-09-09-i kurzuskiadás teljesítményígérete. Korábbi XML/YAML számokat az új
+változat eredményeként tilos feltüntetni.
+
+Bizonyítékok: ../parser/reports/2026-09-07-format-comparison.md,
+reports/2026-09-07-compiler-repeated-work.md,
+reports/2026-09-09-course-module-compilation.md.
+A nyers mérések és riportok gitignored állományok; minden feladat után a
+közös Samba-archívumba kerülnek. A stratégia és a terv Gitben marad.

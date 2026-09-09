@@ -1925,7 +1925,7 @@ dependencies = [
 [[package]]
 name = "parser"
 version = "0.1.0"
-source = "git+https://github.com/hymeko-framework/parser.git?rev=a528d98869b8919d1ff790fdcd5c93cd9501dd3e#a528d98869b8919d1ff790fdcd5c93cd9501dd3e"
+source = "git+https://github.com/hymeko-framework/parser.git?rev=0019eb0accdacb54c741524fae871793a0fac07c#0019eb0accdacb54c741524fae871793a0fac07c"
 dependencies = [
  "lalrpop",
  "lalrpop-util",

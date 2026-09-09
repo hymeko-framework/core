@@ -308,11 +308,13 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
         // reproduces the resolution Index hierarchy, ONCE, before the Index is
         // discarded. After this the Ir is the sole post-lowering authority and the
         // canonical hash reads no Index.
-        crate::ir::canonical_hash::validate_namespace_roots(&ir, &idx).map_err(|e| {
-            ModuleLoadError::Parse(format!("namespace boundary validation failed: {e}"))
-        })?;
-
-        let canon_hash = crate::ir::canonical_hash::canonical_program_hash(cfg, &ir, &self.it);
+        let canon_hash = {
+            let paths = crate::ir::canonical_hash::CanonicalPaths::new(&ir);
+            paths.validate(&idx).map_err(|e| {
+                ModuleLoadError::Parse(format!("namespace boundary validation failed: {e}"))
+            })?;
+            paths.hash(cfg, &self.it)
+        };
 
         // 9) bundle + cache
         let compiled = Arc::new(CompiledProgram {

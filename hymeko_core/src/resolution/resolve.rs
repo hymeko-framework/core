@@ -388,18 +388,11 @@ pub fn resolve_signed_refs<'a>(
 
         let anno_r = resolve_anno(idx, scope, &atom.anno, it)?;
 
-        let weights_r = match &atom.anno.value {
-            Some(Value::List(ws)) => {
-                let resolved = ws
-                    .iter()
-                    .map(|w| resolve_value(idx, scope, w, it))
-                    .collect::<Result<Vec<ValueR>, _>>()?;
-                Some(resolved)
-            }
-            Some(v) => {
-                let resolved = resolve_value(idx, scope, v, it)?;
-                Some(vec![resolved])
-            }
+        // Both IR fields own their values. Reuse the resolved payload instead
+        // of repeating scope lookups and string interning for every weight.
+        let weights_r = match &anno_r.value {
+            Some(ValueR::List(ws)) => Some(ws.clone()),
+            Some(v) => Some(vec![v.clone()]),
             None => None,
         };
 
