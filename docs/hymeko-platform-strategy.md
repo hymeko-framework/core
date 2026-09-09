@@ -416,7 +416,7 @@ Transformation, Tensor; Parser a szintaxis tulajdonosa, Python/JS/WASM vékony k
 
 | Lépés | Feladat | Elfogadási feltétel | Állapot |
 |---|---|---|---|
-| PERF-1 | A mért optimalizációk integrálása a kurzusjavításokkal | Rögzített Parser/Core/SDK revíziók; helyesség és hash-paritás; ugyanazon forrásverzió natív/WASM ellenőrzése; érintett teljesítménymérések; GitHub és LAN Git publikálás | folyamatban |
+| PERF-1 | A mért optimalizációk integrálása a kurzusjavításokkal | Rögzített Parser/Core/SDK revíziók; helyesség és hash-paritás; ugyanazon forrásverzió natív/WASM ellenőrzése; érintett teljesítménymérések; GitHub és LAN Git publikálás | kész; részleges mérési bizonytalanság |
 | PERF-2 | AST-felépítés és második bejárás költségének csökkentése | Profil által indokolt változás, azonos kimenet és diagnosztika; AST és saját tulajdonú rekordok külön mérve | tervezett |
 | PERF-3 | Közös gráfbenchmark külső könyvtárral, első jelölt petgraph | Azonos algoritmus, cél, súly, eredmény; hipergráf-leképezés és indexépítés külön költség | tervezett |
 | PERF-4 | CPU/WGPU/CUDA numerikus összevetés | Azonos művelet és numerikus oracle; cold setup, H2D, resident kernel, D2H és teljes idő külön | tervezett |
@@ -453,3 +453,31 @@ reports/2026-09-07-compiler-repeated-work.md,
 reports/2026-09-09-course-module-compilation.md.
 A nyers mérések és riportok gitignored állományok; minden feladat után a
 közös Samba-archívumba kerülnek. A stratégia és a terv Gitben marad.
+
+
+### PERF-1 lezárás — 2026-09-09
+
+Integrált, tesztelt revíziók: Parser `0019eb0accdacb54c741524fae871793a0fac07c`,
+Core `e1ebb415a9a818da69af111d58a0b49050554cd0`,
+SDK `c647ff37711ad37008fe60e5e1a757b76d36e1bc` (0.1.1).
+A natív és WASM fogyasztó ugyanazt a Core/Parser forrást használja; nincs
+kiszállított helyi path override. GitHub és LAN: `fix/course-module-compilation`.
+A Core e fejezetet rögzítő későbbi commitja csak dokumentációt módosít.
+Kiadás: https://github.com/hymeko-framework/hymeko_web/releases/tag/v0.1.1
+
+457 Core natív teszt + 7 doctest; 120 Parser natív teszt + 1 doctest;
+7 SDK Rust és 14 Node/böngésző/Worker teszt sikeres. A csomag tiszta, offline
+telepítésből is lefedi a három kurzusbelépési pontot.
+Windows, rögzített affinitás, azonos harness: az 50k numerikus/vegyes teljes
+fordítás a két páros összevetésben 17–22%-kal rövidebb. A parser új hat mérési
+esetéből egy stabilan átment, öt bizonytalan; ezeket nem minősítjük zöldnek.
+Korábbi profilok az integrált mechanizmusokat indokolják; nincs új általános
+parser- vagy GPU-gyorsulási állítás. A WASM 964 921 bájt, a csomag 237 396 bájt;
+a méretnövekedés a gyorsítás trade-offja, nem eltitkolt eredmény.
+
+A benchmark weboldal és a kurzusoldal telepítése nem része ennek az integrációnak.
+Az alapágak nem lettek merge-ölve; az önálló sparse/GPU commit megmaradt.
+Részletes, nyers mintákkal és ábrával igazolt eredmény:
+`reports/2026-09-07-compiler-repeated-work.md`, PERF-1 szakasz;
+Samba: `\\192.168.1.228\hymeko\reports`.
+Következő külön végrehajtási lépés: PERF-2; még nem indult el.
