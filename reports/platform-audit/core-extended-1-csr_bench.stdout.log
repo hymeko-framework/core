@@ -1,7 +1,0 @@
-csr_spmm_paths/serial/nnz16k/fd32
-                        time:   [48.795 µs 49.056 µs 49.268 µs]
-                        thrpt:  [10.627 Gelem/s 10.673 Gelem/s 10.730 Gelem/s]
-csr_spmm_paths/parallel/nnz16k/fd32
-                        time:   [26.501 µs 26.747 µs 26.980 µs]
-                        thrpt:  [19.406 Gelem/s 19.576 Gelem/s 19.757 Gelem/s]
-

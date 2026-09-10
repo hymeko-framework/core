@@ -1,0 +1,12 @@
+\begin{tikzpicture}[node distance=5mm, every node/.style={draw,rounded corners,font=\small},>=Stealth]
+\node (s) {Source (generation excluded)};
+\node (p) [below=of s] {Parse and intern; resolve constants};
+\node (c) [below=of p] {Borrow cached root AST and dependencies};
+\node (i) [below=of c] {Index, aliases; resolve values once, retain both IR fields};
+\node (h) [below=of i] {Legacy hash; shared canonical paths; compact Pruefer state};
+\node (r) [below=of h] {Cached compiled program; prepared execution};
+\draw[->] (s)--(p); \draw[->] (p)--(c); \draw[->] (c)--(i);
+\draw[->] (i)--(h); \draw[->] (h)--(r);
+\end{tikzpicture}
+
+% PERF-1 2026-09-09T18:54:44+02:00: released course control -> measured optimization integration -> native/WASM parity -> GitHub/LAN publication.

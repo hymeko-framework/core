@@ -1,2 +1,0 @@
-hymeko_graph v0.1.0 (ssh://git@amaterasu.local:2222/hymeko/graph.git?branch=main#9655f077)
-└── hymeko_nagare v0.1.0 (/workspace/nagare)

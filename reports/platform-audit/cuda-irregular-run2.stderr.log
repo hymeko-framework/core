@@ -1,2 +1,0 @@
-building workload: rows=200000 cols=200000 deg=32 fd=32 irregular
-nnz = 8730519

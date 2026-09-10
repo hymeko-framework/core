@@ -1,7 +1,0 @@
-﻿{
-    "source_sha256":  "A721CBD7BF2BEF3E77C084BC656810F8328D3E51E47133DDF527ABB739677B6A",
-    "mutation":  "Replace incomparable-target guard with False in a temporary proof copy",
-    "mutant_sha256":  "81A8126B3394141B0B657A3E36282C4F999272D40DFD6B89595D20A572AC9FE1",
-    "observed_exit":  1,
-    "expected_nonzero":  true
-}
