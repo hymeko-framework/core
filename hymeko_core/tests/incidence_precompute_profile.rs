@@ -128,6 +128,7 @@ fn irregular_high_cardinality_parity() {
 }
 
 #[test]
+#[ignore = "performance benchmark; opt in with --ignored --exact"]
 fn bench_operator_plan_decision_gate() {
     let (m, k) = (200_001usize, 5usize);
     let ir = windowed(m, k);
