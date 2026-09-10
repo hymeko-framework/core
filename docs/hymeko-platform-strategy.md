@@ -547,3 +547,8 @@ az indul? commit Git-blobjaib?l m?rve 460 kl?n / 9481 sor; a m?dos?t?sokkal
 460 kl?n / 9480 sor ad?dott. A baseline friss?t?se ezt a m?r megl?v? ?llapotot
 r?gz?ti, ?j duplik?ci? elfogad?sa n?lk?l. Core integr?ci?s tesztek: 321 pass,
 6 eleve ignored; `cargo test -p hymeko_core --test mod --locked`.
+
+A friss `origin/main` (`262fc0b`) sparse/WGPU v?ltoz?sainak beolvaszt?sa ut?n
+a m?r?s 484 kl?n / 10411 sor / 214 f?jl. A beolvasztott f??g ?nmag?ban
+484 kl?n / 10412 sort tartalmazott; a k?l?nbs?g tov?bbra is ?1 sor.
+A gener?lt szimb?lumjegyz?k a k?t ?g egyes?tett forr?s?b?l k?sz?lt ?jra.

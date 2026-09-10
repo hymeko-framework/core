@@ -137,12 +137,14 @@ pub use completion::{CompletionTracker, SubmissionEpoch};
 pub use operations::{
     ACTIVATION_INPLACE_SHADER, ACTIVATION_SHADER, ACTIVATION_WORKGROUP_SWEEP, ActivationBuilder,
     ActivationKind, DEFAULT_ACTIVATION_WORKGROUP, DEFAULT_GLOBAL_ENTROPY_POOL_WORKGROUP,
-    DEFAULT_HSIKAN_WORKGROUP, DEFAULT_ROTOR_ATTENTION_WORKGROUP,
-    DEFAULT_STAR_ROTOR_SPIKE_WORKGROUP, GLOBAL_ENTROPY_POOL_SHADER, GlobalEntropyPoolBuilder,
-    HSIKAN_SHADER, HsikanBuilder, OperationFactory, PreparedActivation, PreparedGlobalEntropyPool,
-    PreparedHsikan, PreparedRotorAttention, PreparedSpmm, PreparedStarRotorSpike,
-    ROTOR_ATTENTION_SHADER, RotorAttentionBuilder, SPMM_SHADER, STAR_ROTOR_SPIKE_SHADER,
-    SpmmBuilder, StarRotorSpikeBuilder, WorkgroupShape, spmm_workgroup_for,
+    DEFAULT_HIGHWAY_WORKGROUP, DEFAULT_HSIKAN_WORKGROUP, DEFAULT_ROTOR_ATTENTION_WORKGROUP,
+    DEFAULT_SCATTER_MEAN_WORKGROUP, DEFAULT_STAR_ROTOR_SPIKE_WORKGROUP, GLOBAL_ENTROPY_POOL_SHADER,
+    GlobalEntropyPoolBuilder, HIGHWAY_IDENTITY_SHADER, HSIKAN_SHADER, HighwayIdentityBuilder,
+    HsikanBuilder, OperationFactory, PreparedActivation, PreparedGlobalEntropyPool,
+    PreparedHighwayIdentity, PreparedHsikan, PreparedRotorAttention, PreparedScatterMean,
+    PreparedSpmm, PreparedStarRotorSpike, ROTOR_ATTENTION_SHADER, RotorAttentionBuilder,
+    SCATTER_MEAN_CSR_SHADER, SPMM_SHADER, STAR_ROTOR_SPIKE_SHADER, ScatterMeanBuilder, SpmmBuilder,
+    StarRotorSpikeBuilder, WorkgroupShape, spmm_workgroup_for,
 };
 pub use pipeline::{ActivationEntry, KernelId, LayoutId, PipelineBundle, PipelineCache};
 pub use readback::{ReadbackWorkspace, StagingStorage};

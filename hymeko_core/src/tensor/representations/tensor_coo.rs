@@ -151,3 +151,79 @@ impl<F: Real> TensorCoo<F> {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Sparse contract — additive. No field, signature or number above changes.
+// ---------------------------------------------------------------------------
+
+use crate::tensor::representations::sparse::{
+    Coalescing, SparseLayout, SparseShape, SparseTensorContract, SparseViolation, StoredOrder,
+    ValidatedSparse,
+};
+
+impl<F: Real> SparseTensorContract for TensorCoo<F> {
+    type Scalar = F;
+
+    fn layout(&self) -> SparseLayout {
+        SparseLayout::Coo
+    }
+
+    /// **Rank 3.** The slice axis `k` is the content of this format, so it is carried as a real
+    /// extent rather than folded into a matrix to match the CSR's arity.
+    fn shape(&self) -> SparseShape {
+        SparseShape::new(
+            vec![self.num_slices, self.dim_i, self.dim_j],
+            self.entries.len(),
+        )
+    }
+
+    /// The order entries were pushed. Never re-sorted, by this contract or by validation.
+    fn stored_order(&self) -> StoredOrder {
+        StoredOrder::Insertion
+    }
+
+    /// Validate the coordinate structure without touching it.
+    ///
+    /// # Postconditions
+    /// On `Ok`, every entry's `(k, i, j)` lies inside the declared extents. Duplicate coordinates
+    /// are **preserved** and insertion order is **preserved** — this neither coalesces nor sorts.
+    ///
+    /// # Errors
+    /// The first [`SparseViolation`] found, naming the entry index and the axis.
+    fn validate(&self) -> Result<ValidatedSparse<'_, Self>, SparseViolation> {
+        // A zero extent cannot hold an entry; declaring one and then storing entries is the
+        // metadata/entry disagreement rather than a per-coordinate fault.
+        if !self.entries.is_empty() && (self.num_slices == 0 || self.dim_i == 0 || self.dim_j == 0)
+        {
+            return Err(SparseViolation::MetadataInconsistent {
+                detail: "entries stored under a zero extent",
+            });
+        }
+        for (index, entry) in self.entries.iter().enumerate() {
+            for (axis, (coordinate, extent)) in [
+                (entry.k, self.num_slices),
+                (entry.i, self.dim_i),
+                (entry.j, self.dim_j),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                if coordinate >= extent {
+                    return Err(SparseViolation::CoordinateOutOfRange {
+                        axis,
+                        extent,
+                        index,
+                        actual: coordinate,
+                    });
+                }
+            }
+        }
+        Ok(ValidatedSparse::bind(
+            self,
+            SparseLayout::Coo,
+            self.shape(),
+            self.stored_order(),
+            Coalescing::Preserved,
+        ))
+    }
+}
