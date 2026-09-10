@@ -13,4 +13,4 @@ rayon = "1.11.0"
 arrow = "58.0.0"
 iceoryx2 = "0.8.1"
 log = "0.4.22"
-parser = { git = "https://github.com/hymeko-framework/parser.git", rev = "f11628591a8183586492807ecdf43c64e6d31c5f" }
+parser = { git = "ssh://git@192.168.1.228:2222/hymeko/parser.git", rev = "f11628591a8183586492807ecdf43c64e6d31c5f" }
