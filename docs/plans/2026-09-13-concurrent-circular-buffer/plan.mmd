@@ -1,0 +1,5 @@
+flowchart LR
+  P[Multiple producers] -->|push: retain rejected value| Q[Core util CircularBuffer: Crossbeam ArrayQueue]
+  P -->|force_push: return evicted value| Q
+  Q -->|pop: transfer ownership| C[Multiple consumers]
+  T[Targeted correctness qualification] -.-> Q

@@ -1,0 +1,7 @@
+\begin{tikzpicture}[every node/.style={draw,align=center}]
+\node (producers) at (0,0) {Producers};
+\node (buffer) at (5,0) {Core util CircularBuffer\\Crossbeam ArrayQueue};
+\node (consumers) at (10,0) {Consumers};
+\draw[->] (producers) -- node[above,draw=none]{push} (buffer);
+\draw[->] (buffer) -- node[above,draw=none]{pop} (consumers);
+\end{tikzpicture}

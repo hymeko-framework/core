@@ -1,0 +1,46 @@
+\documentclass{article}
+\usepackage[margin=25mm]{geometry}
+\usepackage{tikz}
+\begin{document}
+\section*{Core concurrent circular buffer}
+Created-at: 2026-09-13 03:42 +02:00. ETA: 25 minutes for integration,
+targeted correctness checks and publication; no performance run.
+
+\paragraph{Scope and authorization.} The user explicitly requests a qualified
+multithreaded circular buffer in Core, reusing Rust facilities where available.
+Expose Crossbeam's existing bounded MPMC implementation through Core util;
+do not maintain a second atomic algorithm. This request authorizes the scoped
+protected source and dependency edits. No existing callers require migration.
+
+\paragraph{Files.} hymeko\_core/Cargo.toml, Cargo.lock,
+hymeko\_core/src/util/mod.rs, hymeko\_core/tests/circular\_buffer.rs,
+SYMBOLS.md if generated output changes, this four-format plan, and the ignored
+reports/2026-09-13-concurrent-circular-buffer.md.
+Protected items: hymeko\_core source and manifest.
+
+\paragraph{Contract.} Re-export ArrayQueue as CircularBuffer, with exactly pinned
+crossbeam-queue 0.3.14. Positive fixed capacity; push returns the rejected value
+when full; force\_push explicitly evicts the oldest value; pop returns None when
+empty. Share across threads for Send payloads. Observations of length do not
+reserve slots. No fairness, real-time deadline, crash recovery or formal universal
+correctness claim. Allocation can fail; zero/excessive capacity can panic.
+
+\paragraph{Qualification.} Dedicated integration target only: FIFO and repeated
+slot reuse against VecDeque at capacities 1, 2, 3 and 7; overflow and eviction;
+exact ownership/drop accounting; concurrent delivery and producer order;
+small recorded operation histories checked against a sequential FIFO model
+with an iterative linearizability search and positive/negative oracle controls.
+No profiling, throughput loops, latency assertions or workspace aggregate.
+Run scoped Clippy, formatting, symbols, preflight and duplication checks.
+
+\paragraph{Resources and risks.} No performance budget is measured or claimed.
+Correctness fixtures are small, bounded workloads. Production risks include
+contention, starvation and unhandled rejection; callers must explicitly choose
+retry/backpressure or eviction. Tests do not exhaust hardware memory models,
+all schedules, stamp rollover or every target architecture.
+
+\paragraph{Rollback.} Revert this task's commit; no serialized format or existing
+behavior changes. Preserve pre-existing untracked LaTeX helper files.
+
+\input{plan.tikz}
+\end{document}
