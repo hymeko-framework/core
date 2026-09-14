@@ -1,3 +1,0 @@
-hymeko_wgpu v0.1.0 (ssh://git@amaterasu.local:2222/hymeko/core.git?branch=main#125472eb)
-[dev-dependencies]
-└── hymeko_nagare v0.1.0 (/workspace/nagare)

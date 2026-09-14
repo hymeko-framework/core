@@ -13,7 +13,7 @@ Extracted by grammar -- tree-sitter for Rust and C++, `ast` for Python -- so tha
 `pub(crate)`, a `pub fn` inside a private `mod`, and a `def` written inside a
 docstring are all excluded for a stated reason rather than by luck.
 
-**5 package(s), 765 public symbol(s).**
+**3 package(s), 779 public symbol(s).**
 
 ## docs (rust)
 
@@ -56,6 +56,7 @@ _No public symbols._
 - `CoherenceLimits` — `hymeko_core/src/ir/coherence.rs`
 - `CoherenceReport` — `hymeko_core/src/ir/coherence.rs`
 - `CommittedTransaction` — `hymeko_core/src/ir_stream/assembler.rs`
+- `CompiledModel` — `hymeko_core/src/module_store/execution.rs`
 - `CompiledProgram` — `hymeko_core/src/module_store/module_store.rs`
 - `CompiledProgramCache` — `hymeko_core/src/module_store/module_store.rs`
 - `Constant` — `hymeko_core/src/tensor/conv/weight_init/weight_init.rs`
@@ -72,6 +73,8 @@ _No public symbols._
 - `EdgeTag` — `hymeko_core/src/common/ids.rs`
 - `EdgeWScalar` — `hymeko_core/src/tensor/tensor_val.rs`
 - `EnvelopeDraft` — `hymeko_core/src/ir_stream/envelope.rs`
+- `ExecutionSnapshot` — `hymeko_core/src/module_store/execution.rs`
+- `ExecutionState` — `hymeko_core/src/module_store/execution.rs`
 - `ExpansionHeader` — `hymeko_core/src/tensor/shared_state.rs`
 - `ExpansionOffsets` — `hymeko_core/src/tensor/shared_state.rs`
 - `HashId` — `hymeko_core/src/ir/hash.rs`
@@ -108,6 +111,7 @@ _No public symbols._
 - `Ones` — `hymeko_core/src/tensor/conv/weight_init/weight_init.rs`
 - `OperatorContract` — `hymeko_core/src/ir/ir.rs`
 - `PathKey` — `hymeko_core/src/common/pathkey.rs`
+- `PreparedCompilation` — `hymeko_core/src/module_store/execution.rs`
 - `PreparedIr` — `hymeko_core/src/ir/incidence.rs`
 - `ProgramStructureHashV1` — `hymeko_core/src/ir/semantic_digest.rs`
 - `RealParser` — `hymeko_core/src/util/real_parser.rs`
@@ -171,6 +175,8 @@ _No public symbols._
 - `OperatorPlanError` — `hymeko_core/src/ir/incidence.rs`
 - `PathIndexError` — `hymeko_core/src/ir/canonical_hash.rs`
 - `PortDirection` — `hymeko_core/src/ir/ir.rs`
+- `PrepareError` — `hymeko_core/src/module_store/execution.rs`
+- `PublicationError` — `hymeko_core/src/module_store/execution.rs`
 - `ResolveError` — `hymeko_core/src/resolution/resolve.rs`
 - `ResyncReason` — `hymeko_core/src/ir_stream/assembler.rs`
 - `SectionKind` — `hymeko_core/src/ir_stream/section.rs`
@@ -233,6 +239,8 @@ _No public symbols._
 - `clamp01` — `hymeko_core/src/tensor/aggregation.rs`
 - `coalescing` — `hymeko_core/src/tensor/representations/sparse.rs`
 - `combinations` — `hymeko_core/src/generators.rs`
+- `commit` — `hymeko_core/src/module_store/execution.rs`
+- `compile` — `hymeko_core/src/module_store/execution.rs`
 - `compile` — `hymeko_core/src/module_store/module_store.rs`
 - `complete_uniform_design` — `hymeko_core/src/generators.rs`
 - `compute_degree` — `hymeko_core/src/tensor/conv/traits.rs`
@@ -311,6 +319,7 @@ _No public symbols._
 - `intern_ast` — `hymeko_core/src/resolution/intern_pass.rs`
 - `intern_ast_into` — `hymeko_core/src/resolution/intern_pass.rs`
 - `intern_ast_into_owned` — `hymeko_core/src/resolution/intern_pass.rs`
+- `interner` — `hymeko_core/src/module_store/execution.rs`
 - `interner` — `hymeko_core/src/writers/cbor_writer.rs`
 - `into_ir` — `hymeko_core/src/ir/incidence.rs`
 - `into_parts` — `hymeko_core/src/writers/cbor_writer.rs`
@@ -353,6 +362,7 @@ _No public symbols._
 - `lower_to_ir_with_meta` — `hymeko_core/src/ir/lower.rs`
 - `medium` — `hymeko_core/src/tensor/sparse_workload.rs`
 - `mode_k_unfold` — `hymeko_core/src/tensor/decomposition.rs`
+- `model` — `hymeko_core/src/module_store/execution.rs`
 - `model_facet` — `hymeko_core/src/ir/ir.rs`
 - `model_facet_table_len` — `hymeko_core/src/ir/ir.rs`
 - `msg_type` — `hymeko_core/src/ir_stream/envelope.rs`
@@ -365,6 +375,7 @@ _No public symbols._
 - `new` — `hymeko_core/src/ir_stream/assembler.rs`
 - `new` — `hymeko_core/src/ir_stream/envelope.rs`
 - `new` — `hymeko_core/src/ir_stream/version.rs`
+- `new` — `hymeko_core/src/module_store/execution.rs`
 - `new` — `hymeko_core/src/module_store/module_store.rs`
 - `new` — `hymeko_core/src/module_store/source_provider.rs`
 - `new` — `hymeko_core/src/resolution/interner.rs`
@@ -401,9 +412,11 @@ _No public symbols._
 - `payload_len` — `hymeko_core/src/ir_stream/envelope.rs`
 - `plain` — `hymeko_core/src/ir/ir.rs`
 - `preallocate_from_index` — `hymeko_core/src/ir/ir.rs`
+- `prepare` — `hymeko_core/src/module_store/execution.rs`
 - `prepare_operator` — `hymeko_core/src/ir/incidence.rs`
 - `pretty_print_compiled` — `hymeko_core/src/util/pretty_print.rs`
 - `print_dense_block` — `hymeko_core/src/tensor/util.rs`
+- `program` — `hymeko_core/src/module_store/execution.rs`
 - `program_structure_hash_v1` — `hymeko_core/src/ir/semantic_digest.rs`
 - `provider_mut` — `hymeko_core/src/module_store/module_store.rs`
 - `push` — `hymeko_core/src/tensor/representations/tensor_coo.rs`
@@ -430,6 +443,7 @@ _No public symbols._
 - `resolve_signed_refs` — `hymeko_core/src/resolution/resolve.rs`
 - `resuming_at` — `hymeko_core/src/ir_stream/assembler.rs`
 - `retained_bytes` — `hymeko_core/src/ir/incidence.rs`
+- `revision` — `hymeko_core/src/module_store/execution.rs`
 - `row_ptr_len` — `hymeko_core/src/tensor/compute/mod.rs`
 - `scalar_weight` — `hymeko_core/src/ir/incidence.rs`
 - `schema_expansion_2d` — `hymeko_core/src/tensor/arrow_schema.rs`
@@ -450,6 +464,7 @@ _No public symbols._
 - `size` — `hymeko_core/src/ir_stream/section.rs`
 - `size_usize` — `hymeko_core/src/ir_stream/section.rs`
 - `small` — `hymeko_core/src/tensor/sparse_workload.rs`
+- `snapshot` — `hymeko_core/src/module_store/execution.rs`
 - `spectral_entropy` — `hymeko_core/src/tensor/decomposition.rs`
 - `spmm` — `hymeko_core/src/tensor/representations/tensor_csr.rs`
 - `spmm_into` — `hymeko_core/src/tensor/representations/tensor_csr.rs`
@@ -822,21 +837,3 @@ _No public symbols._
 - `write` — `hymeko_wgpu/src/profiling.rs`
 - `write_tensor` — `hymeko_wgpu/src/resources.rs`
 - `zeroed_tensor` — `hymeko_wgpu/src/resources.rs`
-
-## reports (python)
-
-- **Root:** `reports`
-- **Manifest:** none -- inferred from sources
-- **Charter:** <no charter>
-
-### classes
-
-- `AuditSummary` — `reports/platform-audit/summarize.py`
-
-## reports (rust)
-
-- **Root:** `reports`
-- **Manifest:** none -- inferred from sources
-- **Charter:** <no charter>
-
-_No public symbols._

@@ -6,3 +6,7 @@ flowchart TD
     P --> T[Separate model proof from implementation evidence]
     C --> T
     T --> I[Dependency CI, browser and distributed consumer integration]
+    W[Concurrent workers: isolated ModuleStore preparation] --> CAND[Opaque candidates with base snapshot]
+    CAND --> PUB[Serialized base check and Arc publication]
+    PUB --> SNAP[Immutable IR plus matching interner]
+    SNAP --> READ[Concurrent readers retain their snapshot]

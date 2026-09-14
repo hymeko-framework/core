@@ -60,6 +60,8 @@ impl Default for CoherenceLimits {
 /// large payload back.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Finding {
+    /// Optional source-file metadata must cover declarations with valid file IDs.
+    InvalidSourceProvenance,
     /// The `Index` maps a path to a `DeclId` outside `decl_nodes`.
     IndexedDeclOutOfRange { decl: DeclId, decl_count: usize },
     /// Two different paths map to the same declaration.
@@ -153,6 +155,9 @@ pub fn validate_hierarchy_index_coherence(
         findings: Vec::new(),
         total: 0,
     };
+    if ir.validate_source_provenance().is_err() {
+        c.push(Finding::InvalidSourceProvenance);
+    }
 
     // --- parallel array lengths -------------------------------------------
     for (name, len) in [

@@ -73,5 +73,47 @@ Preserve and report any red runtime acceptance check. Keep the prior audit and
 Docker evidence unchanged. Local thematic commits are authorized by the
 continuing task; no push, merge, release or global host changes. Roll back only
 this branch's named changes, retaining failure evidence needed for review.
+\section*{2026-09-13: concurrent preparation and local publication}
+Created-at: 2026-09-13 17:05 +02:00. ETA: 20--35 minutes for the additive
+API, bounded concurrency regressions, proof model, gates and archival.
+The user authorized continuing the parallel execution model. This scopes the
+protected Core edit to the module-store execution boundary and its tests; no
+dependency change, compiler rewrite, benchmark or profiling is authorized.
+
+Reuse the current checkout at 67741f8 (fresh origin and GitHub main match).
+Preserve other workers' benchmark source/manifest and plan edits. Core owns
+compiled model snapshots and publication; consumers still own worker scheduling.
+The existing ModuleStore remains the only compilation implementation. A fresh
+store per preparation avoids its root-only cache returning old source. Move its
+interner together with the compiled program, retaining consistent symbol identity.
+
+New source: \path{hymeko_core/src/module_store/execution.rs} and
+\texttt{execution\_tests.rs}; export through the existing module store.
+API: CompiledModel, ExecutionSnapshot, ExecutionState, PreparedCompilation,
+PrepareError, PublicationError. Preparation compiles outside the publication lock.
+Commit consumes an opaque candidate, rejects foreign state and stale base, checks
+revision overflow, then replaces one Arc under a short write lock. Readers clone
+an Arc under a read lock and run outside it. Retained snapshots keep the IR and
+interner alive. No implicit retry, merging, latest-request-wins policy or fairness
+guarantee. A revision is local publication order, not a distributed version vector.
+
+Verification: only the new library test namespace; same-base concurrent writers,
+reader lifetime and reentrant publication, independent states, failed preparation,
+fresh source at the same path, poison and overflow. Compare compiled semantics
+with the existing ModuleStore and full semantic digest (not structural V1).
+Extend the existing Lean model with local scalar-revision admission laws; it is
+an abstraction, not a Rust memory-model or compiler-correctness proof.
+Run targeted rustfmt/Clippy and portable symbol/duplication/preflight gates.
+Preserve baseline and report external gate interference explicitly.
+
+Other affected files: these four plan artifacts, the existing
+\path{docs/verification/unified-ir/distributed-semantics.lean}, generated
+\texttt{SYMBOLS.md}, and ignored
+\texttt{reports/2026-09-13-parallel-execution.md}. Rollback only this task's
+named source and documentation edits. No commit/push requested.
+Memory risks: concurrent compilation and retained readers multiply live models;
+there is no automatic queue/backpressure, use bounded consumer workers. Tests use
+small fixed inputs under the host's 16 GiB ceiling. No performance measurement.
+
 \input{plan.tikz}
 \end{document}

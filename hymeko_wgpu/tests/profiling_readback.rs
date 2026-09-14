@@ -1,6 +1,9 @@
 //! Phase 7 instrument tests: timestamp query bounds, readback byte correctness
 //! across every staging/chunking/destination combination, and the staging
 //! buffer's reuse preconditions.
+//! These exercise live profiling instrumentation and require explicit
+//! selection with `-- --ignored --exact`; ordinary GPU correctness tests live
+//! in `readback_workspace.rs` and the operation-specific suites.
 //!
 //! # One configured device for the whole suite
 //!
@@ -70,6 +73,7 @@ fn pattern(elements: usize) -> Vec<f32> {
 // --- timestamp capability and query-set bounds ------------------------------
 
 #[test]
+#[ignore = "GPU profiling instrumentation; opt in with --ignored --exact"]
 fn timer_exists_exactly_when_the_device_reports_timestamp_support() {
     let Some(backend) = timed_backend("timer_capability") else {
         return;
@@ -89,6 +93,7 @@ fn timer_exists_exactly_when_the_device_reports_timestamp_support() {
 }
 
 #[test]
+#[ignore = "GPU profiling instrumentation; opt in with --ignored --exact"]
 fn timer_rejects_indices_and_counts_beyond_capacity() {
     let Some(backend) = timed_backend("timer_bounds") else {
         return;
@@ -136,6 +141,7 @@ fn timer_rejects_indices_and_counts_beyond_capacity() {
 // --- readback byte correctness ---------------------------------------------
 
 #[test]
+#[ignore = "GPU profiling instrumentation; opt in with --ignored --exact"]
 fn readback_returns_exact_bytes_for_every_staging_and_chunk_combination() {
     let Some(backend) = timed_backend("readback_bytes") else {
         return;
@@ -191,6 +197,7 @@ fn readback_returns_exact_bytes_for_every_staging_and_chunk_combination() {
 }
 
 #[test]
+#[ignore = "GPU profiling instrumentation; opt in with --ignored --exact"]
 fn readback_into_a_reused_destination_fills_it_and_returns_empty() {
     let Some(backend) = timed_backend("readback_dest") else {
         return;
@@ -226,6 +233,7 @@ fn readback_into_a_reused_destination_fills_it_and_returns_empty() {
 }
 
 #[test]
+#[ignore = "GPU profiling instrumentation; opt in with --ignored --exact"]
 fn readback_handles_zero_length_and_non_chunk_multiple_payloads() {
     let Some(backend) = timed_backend("readback_edges") else {
         return;
@@ -266,6 +274,7 @@ fn readback_handles_zero_length_and_non_chunk_multiple_payloads() {
 // --- staging storage growth and reuse ---------------------------------------
 
 #[test]
+#[ignore = "GPU profiling instrumentation; opt in with --ignored --exact"]
 fn staging_storage_grows_on_demand_and_never_shrinks() {
     let Some(backend) = timed_backend("staging_growth") else {
         return;
@@ -337,6 +346,7 @@ fn staging_storage_grows_on_demand_and_never_shrinks() {
 }
 
 #[test]
+#[ignore = "GPU profiling instrumentation; opt in with --ignored --exact"]
 fn staging_storage_can_be_presized() {
     let Some(backend) = timed_backend("staging_presize") else {
         return;
@@ -347,6 +357,7 @@ fn staging_storage_can_be_presized() {
 }
 
 #[test]
+#[ignore = "GPU profiling instrumentation; opt in with --ignored --exact"]
 fn staging_buffer_stays_correct_across_repeated_reuse() {
     let Some(backend) = timed_backend("staging_repeat") else {
         return;

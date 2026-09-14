@@ -30,6 +30,12 @@ pub struct Ir {
     // Unified Arena
     pub decl_nodes: Vec<DeclNode>,
 
+    /// Optional canonical source paths. Metadata, excluded from model hashes.
+    pub files: Vec<String>,
+    /// File-table indices keyed by DeclId, never NodeId. Empty means legacy IR
+    /// without provenance; u32::MAX means a synthetic declaration with no source.
+    pub decl_file: Vec<u32>,
+
     // “konkrét” táblák
     pub nodes: Vec<NodeRec>, // NodeId indexel
     pub edges: Vec<EdgeRec>, // EdgeId indexel
@@ -362,6 +368,17 @@ pub mod dispatch {
 }
 
 impl Ir {
+    pub(crate) fn validate_source_provenance(&self) -> Result<(), IrDecodeError> {
+        if self.files.is_empty() && self.decl_file.is_empty() {
+            return Ok(());
+        }
+        if self.decl_file.len() != self.decl_nodes.len()
+            || self.decl_file.iter().any(|&id| id != u32::MAX && id as usize >= self.files.len()) {
+            return Err(IrDecodeError::InvalidSourceProvenance);
+        }
+        Ok(())
+    }
+
     pub fn new(meta: Meta) -> Self {
         Self {
             meta: Some(meta),
@@ -496,6 +513,9 @@ impl Ir {
     #[inline]
     pub fn push_decl(&mut self, node: DeclNode) -> DeclId {
         let id = DeclId::new(self.decl_nodes.len());
+        if !self.files.is_empty() || !self.decl_file.is_empty() {
+            self.decl_file.push(u32::MAX);
+        }
         self.decl_nodes.push(node);
         self.decl_to_record.push(dispatch::NONE);
         // The facet table is grown lazily: it stays EMPTY for a document with no model facet, so a
@@ -601,6 +621,9 @@ impl Ir {
     }
 
     pub fn preallocate_from_index(&mut self, total_named_decls: usize) {
+        if !self.files.is_empty() || !self.decl_file.is_empty() {
+            self.decl_file.resize(total_named_decls, u32::MAX);
+        }
         let default_node = DeclNode {
             kind: DeclKind::Node,
             name: SymId::new(0),
@@ -622,6 +645,9 @@ impl Ir {
 
     pub fn push_anonymous_arc(&mut self) -> DeclId {
         let id = DeclId::new(self.decl_nodes.len());
+        if !self.files.is_empty() || !self.decl_file.is_empty() {
+            self.decl_file.push(u32::MAX);
+        }
         self.decl_nodes.push(DeclNode {
             kind: DeclKind::HyperArc,
             name: SymId::new(0),
@@ -819,6 +845,8 @@ use serde::ser::SerializeStruct as _;
 /// single `decl_to_record`. Ids-only, bounded, deterministic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IrDecodeError {
+    /// Source metadata has missing fields, mismatched lengths or invalid file IDs.
+    InvalidSourceProvenance,
     /// The three legacy maps do not all share the `decl_nodes` length.
     InvalidMapLength {
         decl_nodes: usize,
@@ -851,6 +879,7 @@ pub enum IrDecodeError {
 impl core::fmt::Display for IrDecodeError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
+            Self::InvalidSourceProvenance => write!(f, "invalid declaration source-file provenance"),
             Self::InvalidMapLength {
                 decl_nodes,
                 node,
@@ -917,6 +946,7 @@ struct NamespaceWireRef<'a> {
 
 impl Serialize for Ir {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        self.validate_source_provenance().map_err(serde::ser::Error::custom)?;
         // Reconstruct the three legacy maps for the wire -- the ONLY compat allocation.
         let n = self.decl_to_record.len();
         let mut d2n: Vec<Option<NodeId>> = vec![None; n];
@@ -942,7 +972,8 @@ impl Serialize for Ir {
         // `namespace_roots` precedent: a document with no facet emits the legacy field set, so its
         // bytes -- and the frozen serde KAT -- are unchanged.
         let has_model = self.decl_model.iter().any(Option::is_some);
-        let fields = 11 + usize::from(has_ns) + usize::from(has_model);
+        let has_sources = !self.files.is_empty() || !self.decl_file.is_empty();
+        let fields = 11 + usize::from(has_ns) + usize::from(has_model) + 2 * usize::from(has_sources);
         let mut st = s.serialize_struct("Ir", fields)?;
         st.serialize_field("meta", &self.meta)?;
         st.serialize_field("doc_hash", &self.doc_hash)?;
@@ -955,6 +986,10 @@ impl Serialize for Ir {
         st.serialize_field("decl_to_node", &d2n)?;
         st.serialize_field("decl_to_edge", &d2e)?;
         st.serialize_field("decl_to_arc", &d2a)?;
+        if has_sources {
+            st.serialize_field("files", &self.files)?;
+            st.serialize_field("decl_file", &self.decl_file)?;
+        }
         if has_model {
             st.serialize_field("decl_model", &self.decl_model)?;
         }
@@ -981,6 +1016,10 @@ struct NamespaceWire {
 /// Owned shadow with the legacy layout, used only to read the wire before compacting.
 #[derive(Deserialize)]
 struct IrWire {
+    #[serde(default)]
+    files: Option<Vec<String>>,
+    #[serde(default)]
+    decl_file: Option<Vec<u32>>,
     meta: Option<Meta>,
     doc_hash: Option<HashId>,
     decl_hash: Vec<Option<HashId>>,
@@ -1004,6 +1043,12 @@ impl Ir {
     /// Fail-closed compaction of the legacy three-map wire into the compact form.
     fn try_from_wire(w: IrWire) -> Result<Self, IrDecodeError> {
         let n = w.decl_nodes.len();
+        let (files, decl_file) = match (w.files, w.decl_file) {
+            (None, None) => (Vec::new(), Vec::new()),
+            (Some(files), Some(ids)) if ids.len() == n
+                && ids.iter().all(|&id| id == u32::MAX || (id as usize) < files.len()) => (files, ids),
+            _ => return Err(IrDecodeError::InvalidSourceProvenance),
+        };
         if w.decl_to_node.len() != n || w.decl_to_edge.len() != n || w.decl_to_arc.len() != n {
             return Err(IrDecodeError::InvalidMapLength {
                 decl_nodes: n,
@@ -1087,6 +1132,8 @@ impl Ir {
             }
         };
         Ok(Ir {
+            files,
+            decl_file,
             meta: w.meta,
             doc_hash: w.doc_hash,
             decl_hash: w.decl_hash,

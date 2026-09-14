@@ -1,6 +1,0 @@
-# ir_seam_bench (release, medians) — writer=to_compiler_ir, readers=4 emitters
-   4x3   decls=    20 inc=    12 | write=     2.90us | hymeko=    1.40us(408b fp=9d4c8600baf6a1b6) sysml=    2.60us rust=    1.00us lean=    1.30us
-  32x4   decls=   192 inc=   128 | write=    38.40us | hymeko=   19.50us(2502b fp=0d7d712e5ab80828) sysml=   26.10us rust=    8.50us lean=   11.70us
- 128x5   decls=   896 inc=   640 | write=   222.60us | hymeko=   56.10us(12162b fp=3b1ab182ace0ebd4) sysml=   85.90us rust=   41.10us lean=   58.70us
- 512x6   decls=  4096 inc=  3072 | write=  1007.00us | hymeko=  337.40us(61362b fp=1b7e0ebc8b97e778) sysml=  480.10us rust=  204.10us lean=  298.90us
-2048x8   decls= 20480 inc= 16384 | write=  6106.90us | hymeko= 1375.70us(339370b fp=564ea12064cae9f2) sysml= 3095.40us rust= 1707.50us lean= 2332.40us

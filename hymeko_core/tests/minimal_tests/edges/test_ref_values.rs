@@ -1,12 +1,12 @@
 #![cfg(test)]
 mod test_ref_values {
-    use hymeko::common::ids::DeclId;
+    use hymeko::common::ids::{DeclId, SymId};
     use hymeko::common::pathkey::PathKey;
-    use hymeko::ir::ir::{RefAtomR, SignedRefR, ValueR};
+    use hymeko::ir::ir::{PortDirection, RefAtomR, SignedRefR, ValueR};
     use hymeko::ir::lower::lower_to_ir;
     use hymeko::resolution::intern_pass::{Interned, intern_ast};
     use hymeko::resolution::interner::Interner;
-    use hymeko::resolution::resolve::{Index, build_index_sym};
+    use hymeko::resolution::resolve::{Index, ResolveError, build_index_sym, resolve_signed_refs};
 
     use crate::minimal_tests::constants::*;
     use crate::test_helpers::{log_test_footer, log_test_header};
@@ -276,6 +276,155 @@ mod test_ref_values {
             Some(start.elapsed()),
             "IR references matched expected targets and weights.",
         );
+    }
+
+    #[test]
+    fn signed_ref_values_preserve_shape_bits_and_symbol_order() {
+        // Expected IR values are independent of the resolver; exercise all signs
+        // and distinguish missing, empty, scalar and recursively nested payloads.
+        let target = SymId::new(0);
+        let tag = SymId::new(1);
+        let alias = SymId::new(2);
+        let reference = Ref { path: vec![alias] };
+        for (input, expected) in [
+            (None, None),
+            (Some(Value::List(vec![])), Some(ValueR::List(vec![]))),
+            (Some(Value::Num(-0.0)), Some(ValueR::Num(-0.0))),
+            (
+                Some(Value::Ref(reference.clone())),
+                Some(ValueR::Ref(DeclId::new(7))),
+            ),
+            (
+                Some(Value::Str("first".into())),
+                Some(ValueR::Str(SymId::new(3))),
+            ),
+            (
+                Some(Value::List(vec![
+                    Value::Str("first".into()),
+                    Value::List(vec![
+                        Value::Ref(reference.clone()),
+                        Value::Str("second".into()),
+                        Value::List(vec![]),
+                    ]),
+                ])),
+                Some(ValueR::List(vec![
+                    ValueR::Str(SymId::new(3)),
+                    ValueR::List(vec![
+                        ValueR::Ref(DeclId::new(7)),
+                        ValueR::Str(SymId::new(4)),
+                        ValueR::List(vec![]),
+                    ]),
+                ])),
+            ),
+        ] {
+            for sign in [-1, 0, 1] {
+                let mut it = Interner::new();
+                for name in ["target", "tag", "alias"] {
+                    it.intern(name);
+                }
+                let mut idx = Index::new();
+                idx.by_path.insert(PathKey(vec![target]), DeclId::new(7));
+                idx.aliases.insert(alias, vec![target]);
+                let atom = RefAtom {
+                    target: reference.clone(),
+                    anno: Anno {
+                        tags: vec![tag, tag],
+                        value: input.clone(),
+                    },
+                };
+                let signed = match sign {
+                    -1 => SignedRef::Minus(atom),
+                    0 => SignedRef::Neutral(atom),
+                    _ => SignedRef::Plus(atom),
+                };
+                let result = resolve_signed_refs(&idx, &[], &[signed], &mut it).unwrap();
+                assert_eq!(result[0].sign(), sign);
+                let atom = result[0].atom();
+                assert_eq!(atom.target, DeclId::new(7));
+                assert_eq!(atom.direction, PortDirection::Unspecified);
+                assert_eq!(atom.anno.tags, vec![tag, tag]);
+                assert_eq!(atom.anno.value, expected);
+                match expected.as_ref() {
+                    None => assert!(atom.weights.is_none()),
+                    Some(ValueR::List(xs)) => {
+                        assert_eq!(atom.weights.as_deref(), Some(xs.as_slice()))
+                    }
+                    Some(v) => assert_eq!(atom.weights.as_deref(), Some(std::slice::from_ref(v))),
+                }
+                if let Some(ValueR::Num(v)) = atom.anno.value.as_ref() {
+                    let ValueR::Num(w) = atom.weights.as_ref().unwrap()[0] else {
+                        panic!("scalar weight")
+                    };
+                    assert_eq!(v.to_bits(), (-0.0f64).to_bits());
+                    assert_eq!(w.to_bits(), v.to_bits());
+                }
+                if let Some(id) = it.get_id("first") {
+                    assert_eq!(id, SymId::new(3));
+                }
+                if let Some(id) = it.get_id("second") {
+                    assert_eq!(id, SymId::new(4));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn signed_ref_failures_preserve_first_error_and_interning() {
+        for failure in ["target", "ambiguous", "value"] {
+            let mut it = Interner::new();
+            let target = it.intern("target");
+            let scope = it.intern("scope");
+            let missing = it.intern("missing");
+            let mut idx = Index::new();
+            if failure != "target" {
+                idx.by_path.insert(PathKey(vec![target]), DeclId::new(7));
+            }
+            if failure == "ambiguous" {
+                idx.by_path
+                    .insert(PathKey(vec![scope, target]), DeclId::new(8));
+            }
+            let input = SignedRef::Plus(RefAtom {
+                target: Ref { path: vec![target] },
+                anno: Anno {
+                    tags: vec![],
+                    value: Some(Value::List(vec![
+                        Value::Str("before".into()),
+                        Value::Ref(Ref {
+                            path: vec![missing],
+                        }),
+                        Value::Str("after".into()),
+                    ])),
+                },
+            });
+            let error = resolve_signed_refs(&idx, &[scope], &[input], &mut it).unwrap_err();
+            match error {
+                ResolveError::AmbiguousRef {
+                    from_scope,
+                    target,
+                    candidates,
+                } => {
+                    assert_eq!(failure, "ambiguous");
+                    assert_eq!(from_scope, "scope");
+                    assert_eq!(target, "target");
+                    assert_eq!(candidates, ["scope.target", "target"]);
+                }
+                ResolveError::UnresolvedRef { from_scope, target } => {
+                    assert_ne!(failure, "ambiguous");
+                    assert_eq!(from_scope, "scope");
+                    assert_eq!(
+                        target,
+                        if failure == "value" {
+                            "missing"
+                        } else {
+                            "target"
+                        }
+                    );
+                }
+                other => panic!("unexpected {other:?}"),
+            }
+            assert_eq!(it.get_id("before").is_some(), failure == "value");
+            assert!(it.get_id("after").is_none());
+        }
     }
 
     fn decl_id_for_path(interner: &mut Interner, idx: &Index, segments: &[&str]) -> DeclId {

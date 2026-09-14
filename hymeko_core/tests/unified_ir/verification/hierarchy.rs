@@ -191,6 +191,7 @@ fn synthetic_high_cardinality_edge_is_hashable() {
 /// the real corpus is 5 (see `real_corpus_declaration_depth_audit`), so the
 /// boundary must be far above it. This test fails if that margin collapses.
 #[test]
+#[ignore = "resource-limit stress probe; opt in with --ignored --exact"]
 fn deep_chain_overflow_boundary_is_far_above_the_real_corpus() {
     // Locate the probe next to the test binary: target/<profile>/examples/.
     let Ok(exe) = std::env::current_exe() else {

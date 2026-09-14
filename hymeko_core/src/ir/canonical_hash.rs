@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::BinaryHeap;
 
 use crate::common::ids::DeclId;
 use crate::common::pathkey::PathKey;
@@ -43,18 +43,62 @@ impl Default for CanonHashCfg {
 /// # Postconditions
 /// Deterministic; independent of dense `DeclId` assignment (name/path-based).
 pub fn canonical_program_hash(cfg: CanonHashCfg, ir: &Ir, it: &Interner) -> HashId {
-    let did_to_path = build_did_to_path_from_ir(ir);
-    let (verts, parent, children, roots) = build_skeleton_forest_from_ir(ir);
-    let vhash = compute_subtree_hashes_with_kinds(cfg, &ir.decl_nodes, &roots, &children);
-    let vtie = compute_tiebreak(cfg, &verts, &did_to_path, it);
-    let prufer_bytes = prufer_from_forest(cfg, &verts, &parent, &roots, &vhash, &vtie);
-    let sk = canonical_chunk_hash(cfg, *b"SKELETON", &prufer_bytes);
-    let inc = canonical_incidence_hash(cfg, ir, &did_to_path, it);
-    let mut h = blake3::Hasher::new();
-    write_header(&mut h, cfg, *b"PROGRAM\0");
-    h.update(&sk.0);
-    h.update(&inc.0);
-    HashId(*h.finalize().as_bytes())
+    CanonicalPaths::new(ir).hash(cfg, it)
+}
+
+/// Transient canonical paths shared by lowering-boundary validation and hashing.
+/// Borrowing the IR prevents changes that would invalidate these derived paths.
+pub(crate) struct CanonicalPaths<'ir> {
+    ir: &'ir Ir,
+    did_to_path: Vec<Option<PathKey>>,
+}
+
+impl<'ir> CanonicalPaths<'ir> {
+    pub(crate) fn new(ir: &'ir Ir) -> Self {
+        Self {
+            ir,
+            did_to_path: build_did_to_path_from_ir(ir),
+        }
+    }
+
+    pub(crate) fn hash(&self, cfg: CanonHashCfg, it: &Interner) -> HashId {
+        let ir = self.ir;
+        let did_to_path = &self.did_to_path;
+        let (verts, parent, children, roots) = build_skeleton_forest_from_ir(ir);
+        let vhash = compute_subtree_hashes_with_kinds(cfg, &ir.decl_nodes, &roots, &children);
+        let vtie = compute_tiebreak(cfg, &verts, did_to_path, it);
+        let prufer_bytes = prufer_from_forest(cfg, &verts, &parent, &roots, &vhash, &vtie);
+        let sk = canonical_chunk_hash(cfg, *b"SKELETON", &prufer_bytes);
+        let inc = canonical_incidence_hash(cfg, ir, did_to_path, it);
+        let mut h = blake3::Hasher::new();
+        write_header(&mut h, cfg, *b"PROGRAM\0");
+        h.update(&sk.0);
+        h.update(&inc.0);
+        HashId(*h.finalize().as_bytes())
+    }
+
+    pub(crate) fn validate(&self, idx: &Index) -> Result<(), NamespaceError> {
+        let ir = self.ir;
+        let n = ir.decl_nodes.len();
+        let idx_paths = build_did_to_path(idx, n);
+        let link_paths = &self.did_to_path;
+        for i in 0..n {
+            if let (Some(ip), Some(lp)) = (&idx_paths[i], &link_paths[i]) {
+                if ip.0 != lp.0 {
+                    let did = DeclId::new(i);
+                    let p = ir.decl_nodes[i].parent;
+                    let is_root = p.is_none()
+                        || (p.0 < n
+                            && !matches!(ir.decl_nodes[p.0].kind, DeclKind::Node | DeclKind::Edge));
+                    if is_root && ir.namespace_prefix(did).is_none() && ip.0.len() > lp.0.len() {
+                        return Err(NamespaceError::MissingNamespaceMetadata { root: did });
+                    }
+                    return Err(NamespaceError::PathMismatch { decl: did });
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 // -----------------------------
@@ -167,12 +211,12 @@ fn canonical_chunk_hash(cfg: CanonHashCfg, domain: [u8; 8], payload: &[u8]) -> H
 // -----------------------------
 //  DeclId -> PathKey reverse map
 // -----------------------------
-fn build_did_to_path(idx: &Index, decl_count: usize) -> Vec<Option<PathKey>> {
+fn build_did_to_path(idx: &Index, decl_count: usize) -> Vec<Option<&PathKey>> {
     let mut v = vec![None; decl_count];
     for (k, &did) in &idx.by_path {
         let i = did.0 as usize;
         if i < v.len() && v[i].is_none() {
-            v[i] = Some(k.clone());
+            v[i] = Some(k);
         }
     }
     v
@@ -337,30 +381,34 @@ fn prufer_from_forest(
     vtie: &[u64],     // indexed by DeclId.0 as usize
 ) -> Vec<u8> {
     let n = verts.len();
-    let mut vidx: HashMap<usize, usize> = HashMap::new();
+    // DeclIds are already dense; anonymous declarations simply have no vertex.
+    let mut vidx = vec![usize::MAX; parent.len()];
     for (i, d) in verts.iter().enumerate() {
-        vidx.insert(d.0, i);
+        vidx[d.0] = i;
     }
     let super_idx = n;
 
-    // adjacency (undirected) for the super-rooted tree
-    let mut adj: Vec<Vec<usize>> = vec![Vec::new(); n + 1];
-
-    for &v_did in verts {
-        if let Some(p_did) = parent[v_did.0 as usize] {
-            let a = *vidx.get(&v_did.0).unwrap();
-            let b = *vidx.get(&p_did.0).unwrap();
-            adj[a].push(b);
-            adj[b].push(a);
+    // For a leaf, the XOR of its remaining neighbors is its sole neighbor.
+    // Removing (v, u) XORs v out of u. This retains the same undirected forest
+    // without per-vertex allocations or rescanning previously removed neighbors.
+    let mut neighbor_xor = vec![0usize; n + 1];
+    let mut deg = vec![0usize; n + 1];
+    for (a, v_did) in verts.iter().enumerate() {
+        if let Some(p_did) = parent[v_did.0] {
+            let b = vidx[p_did.0];
+            neighbor_xor[a] ^= b;
+            neighbor_xor[b] ^= a;
+            deg[a] += 1;
+            deg[b] += 1;
         }
     }
     for &r_did in roots {
-        let a = *vidx.get(&r_did.0).unwrap();
-        adj[a].push(super_idx);
-        adj[super_idx].push(a);
+        let a = vidx[r_did.0];
+        neighbor_xor[a] ^= super_idx;
+        neighbor_xor[super_idx] ^= a;
+        deg[a] += 1;
+        deg[super_idx] += 1;
     }
-
-    let mut deg: Vec<usize> = adj.iter().map(|xs| xs.len()).collect();
 
     #[derive(Copy, Clone)]
     struct Leaf {
@@ -429,11 +477,8 @@ fn prufer_from_forest(
         };
 
         let v = leaf.v;
-        let u = adj[v]
-            .iter()
-            .copied()
-            .find(|&u| alive[u])
-            .expect("leaf had no neighbor");
+        let u = neighbor_xor[v];
+        debug_assert!(u < total && alive[u], "leaf had no neighbor");
 
         // token = neighbor hash
         let (tok, _) = label(u);
@@ -442,6 +487,7 @@ fn prufer_from_forest(
         alive[v] = false;
         deg[v] = 0;
         deg[u] -= 1;
+        neighbor_xor[u] ^= v;
 
         if deg[u] == 1 {
             let (h, t) = label(u);
@@ -673,25 +719,7 @@ impl std::error::Error for NamespaceError {}
 /// prefix (an incomplete `Ir`); [`NamespaceError::PathMismatch`] on any other
 /// disagreement (corrupt metadata, malformed links).
 pub fn validate_namespace_roots(ir: &Ir, idx: &Index) -> Result<(), NamespaceError> {
-    let n = ir.decl_nodes.len();
-    let idx_paths = build_did_to_path(idx, n);
-    let link_paths = build_did_to_path_from_ir(ir);
-    for i in 0..n {
-        if let (Some(ip), Some(lp)) = (&idx_paths[i], &link_paths[i]) {
-            if ip.0 != lp.0 {
-                let did = DeclId::new(i);
-                let p = ir.decl_nodes[i].parent;
-                let is_root = p.is_none()
-                    || (p.0 < n
-                        && !matches!(ir.decl_nodes[p.0].kind, DeclKind::Node | DeclKind::Edge));
-                if is_root && ir.namespace_prefix(did).is_none() && ip.0.len() > lp.0.len() {
-                    return Err(NamespaceError::MissingNamespaceMetadata { root: did });
-                }
-                return Err(NamespaceError::PathMismatch { decl: did });
-            }
-        }
-    }
-    Ok(())
+    CanonicalPaths::new(ir).validate(idx)
 }
 
 // -----------------------------

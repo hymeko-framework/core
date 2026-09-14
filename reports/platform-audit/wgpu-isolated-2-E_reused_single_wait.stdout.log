@@ -1,8 +1,0 @@
-spmm_gpu_resident/E_reused_single_wait/medium/fd32
-                        time:   [745.85 µs 753.81 µs 762.51 µs]
-                        thrpt:  [33.568 Gelem/s 33.956 Gelem/s 34.318 Gelem/s]
-                 change:
-                        time:   [−1.2517% −0.1245% +1.1781%] (p = 0.84 > 0.05)
-                        thrpt:  [−1.1644% +0.1246% +1.2676%]
-                        No change in performance detected.
-

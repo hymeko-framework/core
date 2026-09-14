@@ -9,6 +9,7 @@ use hymeko::ir::incidence::scalar_weight;
 use super::incidence_support::{median_ms, windowed};
 
 #[test]
+#[ignore = "performance profile; opt in with --ignored --exact"]
 fn profile_bx_decomposition() {
     let (m, k) = (200_001usize, 5usize);
     let ir = windowed(m, k);

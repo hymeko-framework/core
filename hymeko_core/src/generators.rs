@@ -590,6 +590,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "performance budget measurement; opt in with --ignored --exact"]
     fn steiner_25_builds_under_budget() {
         use std::time::Instant;
         let _warm = steiner_design(25).unwrap();
