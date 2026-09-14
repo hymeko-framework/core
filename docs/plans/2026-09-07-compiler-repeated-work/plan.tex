@@ -166,4 +166,26 @@ current course branch without default-branch merge. Archive reports to Samba.
 Rollback uses previous published SHAs and retained original SDK; never reset
 or remove unrelated user work. PERF-2/3/4 remain planned at task completion.
 
+\section*{Current full-IR characterization, 2026-09-13}
+Created-at: 2026-09-13 15:37 +02:00. ETA: about 15 minutes for existing
+target builds, correctness, bounded cells and report. User explicitly requests
+the full IR benchmark and the compiled library size. No circular-buffer
+remeasurement, profiler, production change or second compilation pipeline.
+Reuse ModuleStore::compile through the existing interning benchmark: 50k numeric
+and mixed sources, cold compile and cache hit reported separately. Reuse existing
+canonical-CBOR corpus encode/decode cells as independent boundary measurements;
+do not add phase medians to claim an end-to-end result. Ten or more post-warmup
+Criterion samples, median/IQR/worst of per-sample iteration averages, no per-call
+p99 claim. Run the exact public-facade corpus round-trip correctness test first.
+Use existing measure\_peak\_memory.ps1 Program mode with explicitly built targets,
+at most 16 GiB observed working set and 180 seconds per process. A single
+same-scale smoke precedes repeated cells. Build/check work never overlaps timing.
+Fresh release library build: default-empty features, no IPC/Arrow/GPU; report
+rlib versus cdylib/PDB and inspect DLL exports. A small DLL without callable
+Core exports is not the full linked Rust dependency footprint.
+Affected tracked files: this existing plan.tex and rebuilt plan.pdf only.
+Append results to reports/2026-09-07-compiler-repeated-work.md and reuse its
+compiler-repeated-work evidence directory for raw samples, resource records and
+plots. Preserve the other session's uncommitted circular-buffer bench, manifest
+and plan changes. Rollback: revert this plan addendum; no runtime migration.
 \end{document}
