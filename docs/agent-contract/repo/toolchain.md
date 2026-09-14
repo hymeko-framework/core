@@ -76,7 +76,7 @@ Added 2026-09-04. This repository does **not** carry a copy of the gates. They a
 implementation in `hymeko/hymeko`, run from git and pinned to a revision in the hook
 files:
 
-    SPEC="git+ssh://git@192.168.1.228:2222/hymeko/hymeko.git@d02aa614bc06a348dbcbe3936dcd3b9285b8bdeb"
+    SPEC="git+ssh://git@192.168.1.228:2222/hymeko/hymeko.git@8871abe7ecc830965b97af1e0a0838fc688b27fc"
     sh tools/hooks/install.sh          # installs the pinned tool, installs the hooks
     sh tools/hooks/install.sh --status # .git/hooks is not tracked; check it
 
