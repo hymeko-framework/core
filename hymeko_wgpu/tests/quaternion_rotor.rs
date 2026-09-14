@@ -1,5 +1,6 @@
 use hymeko::tensor::compute::{SparseCsrShape, TensorShape};
-use hymeko_wgpu::{KernelId, WgpuBackend};
+use hymeko_wgpu::KernelId;
+use hymeko_wgpu::testing::shared_backend;
 
 const ABS_BOUND: f32 = 5.0e-4;
 const REL_BOUND: f32 = 1.0e-3;
@@ -77,7 +78,7 @@ fn attention_reference(
 
 #[test]
 fn sparse_rotor_attention_matches_the_predeclared_reference() {
-    let Ok(backend) = WgpuBackend::new() else {
+    let Some(backend) = shared_backend("suite") else {
         eprintln!("SKIP: no WGPU adapter");
         return;
     };
@@ -217,7 +218,7 @@ fn spike_reference(x: &[f32], centres: &[f32], vertices: &[u32], shape: SpikeSha
 
 #[test]
 fn star_rotor_spike_matches_the_predeclared_reference() {
-    let Ok(backend) = WgpuBackend::new() else {
+    let Some(backend) = shared_backend("suite") else {
         eprintln!("SKIP: no WGPU adapter");
         return;
     };
@@ -284,7 +285,7 @@ fn star_rotor_spike_matches_the_predeclared_reference() {
 
 #[test]
 fn invalid_restricted_shapes_are_rejected_before_dispatch() {
-    let Ok(backend) = WgpuBackend::new() else {
+    let Some(backend) = shared_backend("suite") else {
         eprintln!("SKIP: no WGPU adapter");
         return;
     };

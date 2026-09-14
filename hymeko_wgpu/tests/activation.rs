@@ -25,7 +25,7 @@
 use hymeko::tensor::compute::{ComputeError, TensorShape};
 use hymeko::tensor::representations::tensor_csr::TensorCsr;
 use hymeko_wgpu::testing::SparseSpec;
-use hymeko_wgpu::testing::backend_or_skip;
+use hymeko_wgpu::testing::{backend_or_skip, shared_backend};
 use hymeko_wgpu::{ActivationKind, GpuTensor, PreparedActivation, WgpuBackend};
 
 const POISON: f32 = -98765.5;
@@ -201,26 +201,26 @@ fn kinds() -> Vec<ActivationKind> {
 
 #[test]
 fn test_all_kinds_match_cpu_on_adversarial_values() {
-    let Some(backend) = backend_or_skip("kinds") else {
+    let Some(backend) = shared_backend("kinds") else {
         return;
     };
     let input = adversarial_input();
 
     for kind in kinds() {
-        let got = run_activation(&backend, kind, &input, 64);
+        let got = run_activation(backend, kind, &input, 64);
         assert_activation(&got, &input, kind, &format!("{kind}"));
     }
 }
 
 #[test]
 fn test_signed_zero_and_nan_contract_explicitly() {
-    let Some(backend) = backend_or_skip("signed_zero") else {
+    let Some(backend) = shared_backend("signed_zero") else {
         return;
     };
     let input = vec![-0.0f32, 0.0, f32::NAN, f32::NEG_INFINITY, f32::INFINITY];
 
     // Identity preserves -0.0 exactly.
-    let id = run_activation(&backend, ActivationKind::Identity, &input, 64);
+    let id = run_activation(backend, ActivationKind::Identity, &input, 64);
     assert!(
         id[0].is_sign_negative() && id[0] == 0.0,
         "identity lost -0.0"
@@ -228,7 +228,7 @@ fn test_signed_zero_and_nan_contract_explicitly() {
     assert!(id[2].is_nan(), "identity lost NaN");
 
     // ReLU collapses -0.0 and NaN to +0.0, and -Inf to +0.0.
-    let relu = run_activation(&backend, ActivationKind::Relu, &input, 64);
+    let relu = run_activation(backend, ActivationKind::Relu, &input, 64);
     assert_eq!(
         relu[0].to_bits(),
         0.0f32.to_bits(),
@@ -256,7 +256,7 @@ fn test_signed_zero_and_nan_contract_explicitly() {
 
     // LeakyReLU keeps the sign of zero and propagates NaN.
     let leaky = run_activation(
-        &backend,
+        backend,
         ActivationKind::LeakyRelu { alpha: 0.25 },
         &input,
         64,
@@ -277,7 +277,7 @@ fn test_signed_zero_and_nan_contract_explicitly() {
 fn test_subnormal_handling_is_characterised_not_assumed() {
     // Pins what this adapter actually does with subnormals, so the exception in
     // `subnormal_flushed_to_zero` rests on a measurement rather than folklore.
-    let Some(backend) = backend_or_skip("subnormal") else {
+    let Some(backend) = shared_backend("subnormal") else {
         return;
     };
 
@@ -286,7 +286,7 @@ fn test_subnormal_handling_is_characterised_not_assumed() {
     let input = vec![smallest_normal, -smallest_normal, subnormal, -subnormal];
 
     // Identity: does the GPU preserve a subnormal it merely copies?
-    let id = run_activation(&backend, ActivationKind::Identity, &input, 64);
+    let id = run_activation(backend, ActivationKind::Identity, &input, 64);
     eprintln!(
         "[subnormal] identity: in={:?} out={:?}",
         input.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
@@ -295,7 +295,7 @@ fn test_subnormal_handling_is_characterised_not_assumed() {
 
     // LeakyReLU(0.01) drives a normal input into the subnormal range.
     let kind = ActivationKind::LeakyRelu { alpha: 0.01 };
-    let leaky = run_activation(&backend, kind, &input, 64);
+    let leaky = run_activation(backend, kind, &input, 64);
     for (i, (&g, &v)) in leaky.iter().zip(input.iter()).enumerate() {
         let want = cpu_activation(kind, v);
         let ok = g.to_bits() == want.to_bits() || subnormal_flushed_to_zero(g, want);
@@ -324,7 +324,7 @@ fn test_subnormal_handling_is_characterised_not_assumed() {
 
 #[test]
 fn test_empty_and_singleton() {
-    let Some(backend) = backend_or_skip("empty") else {
+    let Some(backend) = shared_backend("empty") else {
         return;
     };
     let res = backend.resources();
@@ -347,22 +347,22 @@ fn test_empty_and_singleton() {
     assert!(backend.read_tensor(&empty_out).unwrap().is_empty());
 
     // Singleton.
-    let got = run_activation(&backend, ActivationKind::Relu, &[-3.0], 64);
+    let got = run_activation(backend, ActivationKind::Relu, &[-3.0], 64);
     assert_eq!(got, vec![0.0]);
-    let got = run_activation(&backend, ActivationKind::Relu, &[3.0], 64);
+    let got = run_activation(backend, ActivationKind::Relu, &[3.0], 64);
     assert_eq!(got, vec![3.0]);
 }
 
 #[test]
 fn test_lengths_not_divisible_by_workgroup() {
-    let Some(backend) = backend_or_skip("ragged") else {
+    let Some(backend) = shared_backend("ragged") else {
         return;
     };
     // Deliberately coprime with 64 / 128 / 256.
     for len in [1usize, 63, 65, 127, 129, 255, 257, 1000, 4097] {
         let input: Vec<f32> = (0..len).map(|i| (i as f32) - (len as f32) / 2.0).collect();
         for wg in [64u32, 128, 256] {
-            let got = run_activation(&backend, ActivationKind::Relu, &input, wg);
+            let got = run_activation(backend, ActivationKind::Relu, &input, wg);
             assert_activation(
                 &got,
                 &input,
@@ -375,13 +375,13 @@ fn test_lengths_not_divisible_by_workgroup() {
 
 #[test]
 fn test_all_workgroups_agree() {
-    let Some(backend) = backend_or_skip("workgroups") else {
+    let Some(backend) = shared_backend("workgroups") else {
         return;
     };
     let input: Vec<f32> = (0..5000).map(|i| ((i % 97) as f32) - 48.0).collect();
-    let reference = run_activation(&backend, ActivationKind::Relu, &input, 64);
+    let reference = run_activation(backend, ActivationKind::Relu, &input, 64);
     for wg in [128u32, 256] {
-        let got = run_activation(&backend, ActivationKind::Relu, &input, wg);
+        let got = run_activation(backend, ActivationKind::Relu, &input, wg);
         assert_eq!(got, reference, "workgroup {wg} disagreed with 64");
     }
 }
@@ -392,7 +392,7 @@ fn test_all_workgroups_agree() {
 
 #[test]
 fn test_shape_mismatch_and_missing_operands_rejected() {
-    let Some(backend) = backend_or_skip("validation") else {
+    let Some(backend) = shared_backend("validation") else {
         return;
     };
     let res = backend.resources();
@@ -476,7 +476,7 @@ fn test_in_place_activation() {
     // read_write operand of the out-of-place shader violates WebGPU's
     // usage-scope rule, so the builder selects a dedicated single-binding
     // pipeline when input and output are the same buffer.
-    let Some(backend) = backend_or_skip("in_place") else {
+    let Some(backend) = shared_backend("in_place") else {
         return;
     };
     let res = backend.resources();
@@ -512,7 +512,7 @@ fn test_in_place_activation() {
 
 #[test]
 fn test_in_place_and_out_of_place_agree() {
-    let Some(backend) = backend_or_skip("inplace_vs_out") else {
+    let Some(backend) = shared_backend("inplace_vs_out") else {
         return;
     };
     let res = backend.resources();
@@ -520,7 +520,7 @@ fn test_in_place_and_out_of_place_agree() {
     let shape = TensorShape::new(data.len(), 1);
 
     for kind in kinds() {
-        let out_of_place = run_activation(&backend, kind, &data, 64);
+        let out_of_place = run_activation(backend, kind, &data, 64);
 
         let t = res.upload_tensor("t", shape, &data).unwrap();
         let op = backend
@@ -555,7 +555,7 @@ fn test_in_place_and_out_of_place_agree() {
 
 #[test]
 fn test_repeated_dispatch_input_rewrite_and_poison() {
-    let Some(backend) = backend_or_skip("reuse") else {
+    let Some(backend) = shared_backend("reuse") else {
         return;
     };
     let res = backend.resources();
@@ -609,7 +609,7 @@ fn test_repeated_dispatch_input_rewrite_and_poison() {
 
 #[test]
 fn test_two_activations_one_encoder() {
-    let Some(backend) = backend_or_skip("two_acts") else {
+    let Some(backend) = shared_backend("two_acts") else {
         return;
     };
     let res = backend.resources();
@@ -651,7 +651,10 @@ fn test_two_activations_one_encoder() {
 
 #[test]
 fn test_pipeline_cache_reuse_across_kinds_and_workgroups() {
-    let Some(backend) = backend_or_skip("cache") else {
+    let Some(backend) = backend_or_skip(
+        // fresh device: this test asserts an EMPTY pipeline cache
+        "cache",
+    ) else {
         return;
     };
     let res = backend.resources();
@@ -742,7 +745,7 @@ fn handmade() -> TensorCsr<f32> {
 
 #[test]
 fn test_spmm_then_activation_in_one_encoder() {
-    let Some(backend) = backend_or_skip("chain") else {
+    let Some(backend) = shared_backend("chain") else {
         return;
     };
     let res = backend.resources();
@@ -825,7 +828,7 @@ fn test_spmm_then_activation_in_one_encoder() {
 fn test_spmm_then_in_place_activation() {
     // The pattern that matters for a real forward pass: activate the SpMM
     // output in place, so no third tensor is allocated.
-    let Some(backend) = backend_or_skip("chain_inplace") else {
+    let Some(backend) = shared_backend("chain_inplace") else {
         return;
     };
     let res = backend.resources();
@@ -893,7 +896,7 @@ fn test_spmm_then_in_place_activation() {
 
 #[test]
 fn test_two_spmm_activation_chains_one_submit() {
-    let Some(backend) = backend_or_skip("two_chains") else {
+    let Some(backend) = shared_backend("two_chains") else {
         return;
     };
     let res = backend.resources();
@@ -989,7 +992,7 @@ fn test_two_spmm_activation_chains_one_submit() {
 /// an element shows up as a wrong value, not merely a wrong count.
 #[test]
 fn test_count_exceeding_one_dispatch_grid() {
-    let Some(backend) = backend_or_skip("grid_stride") else {
+    let Some(backend) = shared_backend("grid_stride") else {
         return;
     };
     // 65_535 * 64 = 4_194_240 is the single-grid ceiling at wg=64. Take a
@@ -998,13 +1001,13 @@ fn test_count_exceeding_one_dispatch_grid() {
     let len = 4_194_240usize + 4097;
     let input: Vec<f32> = (0..len).map(|i| ((i % 211) as f32) - 105.0).collect();
 
-    let got = run_activation(&backend, ActivationKind::Relu, &input, 64);
+    let got = run_activation(backend, ActivationKind::Relu, &input, 64);
     assert_eq!(got.len(), len, "grid-stride run returned the wrong length");
     assert_activation(&got, &input, ActivationKind::Relu, "grid-stride wg=64");
 
     // Same data through a grid that *does* fit (256-wide needs 16 384 groups):
     // the stride path must agree bit-for-bit with the single-pass path.
-    let single_pass = run_activation(&backend, ActivationKind::Relu, &input, 256);
+    let single_pass = run_activation(backend, ActivationKind::Relu, &input, 256);
     assert_eq!(
         got, single_pass,
         "strided dispatch disagreed with a dispatch that fits in one grid"
@@ -1028,7 +1031,7 @@ fn test_count_exceeding_one_dispatch_grid() {
 /// tolerance, because of FMA contraction — that is a different question.)
 #[test]
 fn test_fused_matches_unfused_chain() {
-    let Some(backend) = backend_or_skip("fused") else {
+    let Some(backend) = shared_backend("fused") else {
         return;
     };
     let res = backend.resources();
@@ -1117,7 +1120,7 @@ fn test_fused_matches_unfused_chain() {
 /// than quietly compiling a second pipeline with identical behaviour.
 #[test]
 fn test_fused_identity_is_rejected() {
-    let Some(backend) = backend_or_skip("fused_identity") else {
+    let Some(backend) = shared_backend("fused_identity") else {
         return;
     };
     let res = backend.resources();
