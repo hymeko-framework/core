@@ -11,6 +11,7 @@
 //! and collapsing the two would let real regressions pass silently in CI.
 
 use hymeko::tensor::compute::{ComputeError, SparseCsrShape, TensorShape};
+use hymeko_wgpu::testing::shared_backend;
 use hymeko_wgpu::{KernelId, WgpuBackend};
 
 /// Acquire a backend, or return `None` if this environment has no adapter.
@@ -37,7 +38,7 @@ fn backend_or_skip(test: &str) -> Option<WgpuBackend> {
 /// constants with `immediate_size`.
 #[test]
 fn test_backend_reports_capabilities() {
-    let Some(backend) = backend_or_skip("capabilities") else {
+    let Some(backend) = shared_backend("capabilities") else {
         return;
     };
     let caps = backend.capabilities();
@@ -66,7 +67,7 @@ fn test_backend_reports_capabilities() {
 
 #[test]
 fn test_upload_tensor_validates_shape() {
-    let Some(backend) = backend_or_skip("upload_shape") else {
+    let Some(backend) = shared_backend("upload_shape") else {
         return;
     };
     let res = backend.resources();
@@ -92,7 +93,7 @@ fn test_upload_tensor_validates_shape() {
 
 #[test]
 fn test_upload_csr_validates_all_three_arrays() {
-    let Some(backend) = backend_or_skip("upload_csr") else {
+    let Some(backend) = shared_backend("upload_csr") else {
         return;
     };
     let res = backend.resources();
@@ -132,7 +133,7 @@ fn test_upload_csr_validates_all_three_arrays() {
 
 #[test]
 fn test_empty_shapes_do_not_allocate_zero_sized_buffers() {
-    let Some(backend) = backend_or_skip("empty_shapes") else {
+    let Some(backend) = shared_backend("empty_shapes") else {
         return;
     };
     let res = backend.resources();
@@ -359,7 +360,7 @@ fn test_two_dispatches_share_one_encoder_and_submit() {
 
 #[test]
 fn test_write_tensor_allows_redispatch_without_new_resources() {
-    let Some(backend) = backend_or_skip("rewrite_input") else {
+    let Some(backend) = shared_backend("rewrite_input") else {
         return;
     };
     let res = backend.resources();
@@ -516,7 +517,7 @@ fn pipeline_cache_converges_under_concurrent_misses() {
 /// of an error. These are cheap host-side checks paid once per upload.
 #[test]
 fn malformed_csr_is_refused_with_a_named_defect() {
-    let Some(backend) = backend_or_skip("csr_validation") else {
+    let Some(backend) = shared_backend("csr_validation") else {
         return;
     };
     let res = backend.resources();
@@ -557,7 +558,7 @@ fn malformed_csr_is_refused_with_a_named_defect() {
 /// A zero-row CSR is legal and must not trip the structural checks.
 #[test]
 fn degenerate_but_valid_csr_shapes_are_accepted() {
-    let Some(backend) = backend_or_skip("csr_degenerate") else {
+    let Some(backend) = shared_backend("csr_degenerate") else {
         return;
     };
     let res = backend.resources();
@@ -591,7 +592,7 @@ fn degenerate_but_valid_csr_shapes_are_accepted() {
 /// asking the driver for the memory.
 #[test]
 fn an_allocation_beyond_the_device_limit_is_refused_cheaply() {
-    let Some(backend) = backend_or_skip("size_limit") else {
+    let Some(backend) = shared_backend("size_limit") else {
         return;
     };
     let max = backend.capabilities().max_buffer_size;

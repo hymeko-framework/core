@@ -1,6 +1,7 @@
 use std::f32::consts::LN_2;
 
-use hymeko_wgpu::{KernelId, TensorShape, WgpuBackend};
+use hymeko_wgpu::testing::shared_backend;
+use hymeko_wgpu::{KernelId, TensorShape};
 
 const ABS_BOUND: f32 = 2.0e-5;
 const REL_BOUND: f32 = 2.0e-4;
@@ -24,7 +25,7 @@ fn close(actual: &[f32], expected: &[f32]) {
 
 #[test]
 fn blank_impulse_and_corner_channels_match_the_analytical_contract() {
-    let Ok(backend) = WgpuBackend::new() else {
+    let Some(backend) = shared_backend("suite") else {
         eprintln!("SKIP: no WGPU adapter");
         return;
     };
@@ -75,7 +76,7 @@ fn blank_impulse_and_corner_channels_match_the_analytical_contract() {
 
 #[test]
 fn spatial_and_output_shape_defects_are_rejected_before_dispatch() {
-    let Ok(backend) = WgpuBackend::new() else {
+    let Some(backend) = shared_backend("suite") else {
         eprintln!("SKIP: no WGPU adapter");
         return;
     };

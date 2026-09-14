@@ -1,4 +1,5 @@
-use hymeko_wgpu::{KernelId, TensorShape, WgpuBackend};
+use hymeko_wgpu::testing::shared_backend;
+use hymeko_wgpu::{KernelId, TensorShape};
 
 const ABS_BOUND: f32 = 5.0e-5;
 const REL_BOUND: f32 = 2.0e-4;
@@ -92,7 +93,7 @@ fn reference(f: &Fixture) -> Vec<f32> {
 
 #[test]
 fn fused_hsikan_matches_the_predeclared_cpu_reference() {
-    let Ok(backend) = WgpuBackend::new() else {
+    let Some(backend) = shared_backend("suite") else {
         eprintln!("SKIP: no WGPU adapter");
         return;
     };
@@ -158,7 +159,7 @@ fn fused_hsikan_matches_the_predeclared_cpu_reference() {
 
 #[test]
 fn shape_and_storage_limit_controls_are_rejected_before_dispatch() {
-    let Ok(backend) = WgpuBackend::new() else {
+    let Some(backend) = shared_backend("suite") else {
         eprintln!("SKIP: no WGPU adapter");
         return;
     };
