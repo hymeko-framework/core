@@ -42,5 +42,84 @@ all schedules, stamp rollover or every target architecture.
 \paragraph{Rollback.} Revert this task's commit; no serialized format or existing
 behavior changes. Preserve pre-existing untracked LaTeX helper files.
 
+\section*{Measurement addendum}
+Created-at: 2026-09-13 12:36 +02:00. ETA: about 60 minutes in total. Basis:
+20 minutes bench source and accounting preflight, 3 minutes release build, one
+calibration cell (tens of seconds), a bounded matrix with at most 25 minutes of
+measured wall (48 Criterion throughput cells of roughly 3.5 s each and 48 latency
+cells of 1--5 s each), and 15 minutes for analysis, report and archival. If the
+calibration cell projects more than 25 minutes, the matrix is reduced before launch
+and the reduction is recorded.
+
+\paragraph{Authorization.} The user's current-task delegation to run targeted
+benchmarks of the published Core concurrent circular buffer authorizes these
+measurements only, plus the minimal benchmark source and manifest registration.
+For this addendum it supersedes the ``no performance run'' statement above. No
+production source, algorithm or dependency change; no profiler; no other benchmark.
+
+\paragraph{Files.} New \texttt{hymeko\_core/benches/circular\_buffer\_bench.rs};
+\texttt{hymeko\_core/Cargo.toml} gains one \texttt{[[bench]]} entry with
+\texttt{harness = false} and \texttt{test = false} (protected, authorized above);
+this plan's four files; ignored \texttt{reports/2026-09-13-concurrent-circular-buffer.md}
+and \texttt{reports/2026-09-13-concurrent-circular-buffer/} (sidecar JSON, copied
+Criterion samples, \texttt{summarize.py}, CSV, plots, logs). \texttt{Cargo.lock}
+must stay byte-identical.
+
+\paragraph{Default-off execution.} \texttt{test = false} keeps ordinary
+\texttt{cargo test} from building the target. Additionally \texttt{main} returns
+before any measurement unless Cargo passed \texttt{--bench}, which also covers
+\texttt{--benches}/\texttt{--all-targets} test-mode invocations. The only launch is
+\texttt{cargo bench --manifest-path <core>/Cargo.toml -p hymeko\_core --bench
+circular\_buffer\_bench --offline}, from the user's Temp directory with
+\texttt{CARGO\_TARGET\_DIR=<core>/target}.
+
+\paragraph{Workload.} Payload \texttt{u64} = producer index shifted by 40 bits or
+sequence. Implementations: Core \texttt{CircularBuffer} (Crossbeam
+\texttt{ArrayQueue}) and a bounded \texttt{Mutex<VecDeque>} with the same
+rejecting push, evicting force\_push and FIFO pop contract; a sequential parity
+preflight compares both against each other before any timing. Modes:
+\emph{rejecting} (push retried with a fixed spin-then-yield backoff until accepted)
+and \emph{overwrite} (force\_push; every evicted value returned and counted).
+Capacities 1, 64, 1024. Producers = consumers in \{1, 2, 4, 8\}; 8P/8C only when
+available parallelism is at least 17.
+
+\paragraph{Round.} One persistent worker pool per cell; threads are spawned once and
+wait on a start barrier between rounds, outside timing. Timed window: start-barrier
+release to the last consumer's completion. Producers split $N$ items; a consumer
+stops only on an empty pop that began after it observed the producers-done flag.
+
+\paragraph{Accounting (every round, warm-up included).} Inserted $= N$. Rejecting:
+removed $= N$, evicted $= 0$. Overwrite: removed $+$ evicted $= N$, rejected $= 0$.
+Wrapping sum and SplitMix64 checksum of inserted values equal those of removed and
+evicted values; buffer empty after the round. Rejected pushes and empty pops are
+counted separately and never enter a throughput numerator.
+
+\paragraph{Throughput.} Criterion \texttt{iter\_custom}; one iteration is one
+produced item. Flat sampling, 1 s warm-up, 10 samples over 2 s (about 200 ms each).
+Per sample: transferred items/s (rejecting) or offered and delivered items/s
+(overwrite), reported as median, IQR and worst. Criterion \texttt{sample.json}
+iterations and times must equal the sidecar rounds exactly.
+
+\paragraph{Latency.} Separate pass with the same pool and a sampled probe. Every
+8th buffer call per thread is timed with RDTSC calibrated against \texttt{Instant}
+(the Windows QPC resolution is 100 ns), classified by operation and outcome
+(accepted/rejected push, inserting/evicting force\_push, removed/empty pop) into a
+log-linear histogram (16 sub-buckets per octave, at most 6.25\% bucket width) with
+exact maximum. One warm-up and 5 measured repetitions of $2^{18}$ items: p50, p90,
+p99, p99.9 and maximum, median/IQR/worst over repetitions; instrumentation floor
+reported.
+
+\paragraph{Budgets.} Peak RSS below 1 GiB (fixed buffers, about 8 KiB per
+operation class per thread). Measured wall at most 25 minutes. No overnight run.
+
+\paragraph{Risks.} Hybrid P/E cores and Windows scheduling without affinity;
+Balanced power plan; background processes are recorded, not killed; the backoff
+policy determines failed-attempt counts; the latency probe perturbs contention;
+worker wake-up latency lies inside the timed window (tens of microseconds against
+200 ms samples). Results do not generalize to other hosts, payloads or schedulers.
+
+\paragraph{Rollback.} Remove the benchmark file and its \texttt{[[bench]]} entry;
+no library behavior changes.
+
 \input{plan.tikz}
 \end{document}
