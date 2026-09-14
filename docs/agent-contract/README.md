@@ -1,9 +1,11 @@
 # Core's shared-contract adoption
 
 Core consumes `hymeko/hymeko` at provider revision
-`d02aa614bc06a348dbcbe3936dcd3b9285b8bdeb` (2026-09-05). Shared instructions and
+`8871abe7ecc830965b97af1e0a0838fc688b27fc` (2026-09-14). Shared instructions and
 implementations stay in the provider; Core carries entry points, pins and its
-project-specific rules.
+project-specific rules. The 2026-09-14 re-pin adopts gates that count only
+Git-visible files, so gitignored local reports no longer make `SYMBOLS.md` stale;
+see the provider plan `docs/plans/2026-09-14-nagare-gate-readiness`.
 
 Use sibling checkouts named `core` and `hymeko`. The active rules are
 [`global.md`](../../../hymeko/docs/agent-contract/global.md) and its subject
