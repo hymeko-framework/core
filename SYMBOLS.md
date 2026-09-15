@@ -13,7 +13,7 @@ Extracted by grammar -- tree-sitter for Rust and C++, `ast` for Python -- so tha
 `pub(crate)`, a `pub fn` inside a private `mod`, and a `def` written inside a
 docstring are all excluded for a stated reason rather than by luck.
 
-**3 package(s), 779 public symbol(s).**
+**3 package(s), 783 public symbol(s).**
 
 ## docs (rust)
 
@@ -119,6 +119,7 @@ _No public symbols._
 - `ScalarWeightExtractor` — `hymeko_core/src/tensor/tensor_val.rs`
 - `SectionEntry` — `hymeko_core/src/ir_stream/section.rs`
 - `SemanticModelDigestV2` — `hymeko_core/src/ir/semantic_digest.rs`
+- `SnapshotMessageDraft` — `hymeko_core/src/writers/cbor_writer/stream.rs`
 - `SnapshotVersion` — `hymeko_core/src/ir_stream/version.rs`
 - `SparseCsrShape` — `hymeko_core/src/tensor/compute/mod.rs`
 - `SparseShape` — `hymeko_core/src/tensor/representations/sparse.rs`
@@ -150,6 +151,7 @@ _No public symbols._
 - `AssemblerState` — `hymeko_core/src/ir_stream/assembler.rs`
 - `BackendKind` — `hymeko_core/src/tensor/compute/mod.rs`
 - `CborError` — `hymeko_core/src/writers/cbor_writer.rs`
+- `CborStreamError` — `hymeko_core/src/writers/cbor_writer/stream.rs`
 - `Coalescing` — `hymeko_core/src/tensor/representations/sparse.rs`
 - `ComputeError` — `hymeko_core/src/tensor/compute/mod.rs`
 - `ConstResolveError` — `hymeko_core/src/resolution/const_resolve.rs`
@@ -265,6 +267,7 @@ _No public symbols._
 - `decls` — `hymeko_core/src/ir/access.rs`
 - `decode` — `hymeko_core/src/ir_stream/envelope.rs`
 - `decode` — `hymeko_core/src/writers/cbor_writer.rs`
+- `decode_snapshot` — `hymeko_core/src/writers/cbor_writer/stream.rs`
 - `degree` — `hymeko_core/src/ir/incidence.rs`
 - `dense_block` — `hymeko_core/src/tensor/sparse_workload.rs`
 - `dense_vector` — `hymeko_core/src/tensor/sparse_workload.rs`
@@ -284,6 +287,7 @@ _No public symbols._
 - `encode` — `hymeko_core/src/writers/cbor_writer.rs`
 - `encode_compiled` — `hymeko_core/src/writers/cbor_writer.rs`
 - `encode_message` — `hymeko_core/src/ir_stream/codec.rs`
+- `encode_snapshot_messages` — `hymeko_core/src/writers/cbor_writer/stream.rs`
 - `entry` — `hymeko_core/src/ir_stream/section.rs`
 - `entry` — `hymeko_core/src/tensor/representations/tensor_coo.rs`
 - `envelope` — `hymeko_core/src/ir_stream/codec.rs`
