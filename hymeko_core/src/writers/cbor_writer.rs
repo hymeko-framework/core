@@ -4,11 +4,21 @@
 //! consumers call [`decode`] before using an IR. Decoding is fail-closed: the byte stream is
 //! allocation-preflighted, the string table and IDs are checked, the path index is rebuilt from the
 //! canonical IR, structural coherence is validated, and the canonical hash is recomputed.
+//!
+//! [`encode_snapshot_messages`] and [`decode_snapshot`] carry one encoded document through an
+//! `ir_stream` snapshot transaction in `CanonicalIrCbor` fragments; the consumer side ends in
+//! [`decode`].
 
 mod preflight;
+// APPROVED-CORE-EDIT: ir-stream-cbor-snapshot (2026-09-15, user chat).
+mod stream;
 #[cfg(test)]
 mod tests;
 mod validate;
+
+pub use stream::{
+    CborStreamError, SnapshotMessageDraft, decode_snapshot, encode_snapshot_messages,
+};
 
 use crate::common::ids::SymId;
 use crate::ir::canonical_hash::{CanonHashCfg, canonical_program_hash};

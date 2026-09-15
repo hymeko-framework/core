@@ -213,6 +213,25 @@ crates:
              the operator vocabulary stays with the consuming framework"
           - every mutation control proves it changed the intended field first
 
+      # APPROVED-CORE-EDIT: ir-stream-cbor-snapshot (2026-09-15, user chat)
+      - slug: ir-stream-cbor-snapshot
+        date: 2026-09-15
+        scope: >
+          Planned in docs/plans/2026-09-15-ir-stream-cbor-snapshot/.
+          hymeko_core/src/ir_stream/section.rs gains the critical, repeatable
+          SectionKind::CanonicalIrCbor (wire 11, Raw8 bodies) and its unit tests.
+          hymeko_core/src/writers/cbor_writer.rs declares and re-exports the new child
+          module writers/cbor_writer/stream.rs (SnapshotMessageDraft,
+          encode_snapshot_messages, decode_snapshot, CborStreamError);
+          writers/cbor_writer/tests.rs gains its unit tests. Integration gate in
+          hymeko_core/tests/ir_stream_cbor_snapshot.rs.
+        constraints:
+          - "the complete IR snapshot stays canonical CBOR (user decision: CBOR, not MessagePack); no new codec, dependency or manifest change"
+          - envelope, digest, section-table validation, assembler admission and limits unchanged apart from one more accepted section kind
+          - CBOR schema, wire bytes and canonical_program_hash untouched; decode_snapshot delegates to cbor_writer::decode
+          - the reassembled length is checked against DecodeLimits before the single reassembly allocation
+          - no installation into ExecutionState or CompiledModel, and no commit or push under this approval
+
   # `hymeko_hnn` was RELOCATED 2026-08-31 to hymeko/nagare (hymeko_nagare::hnn) and no longer
   # exists in this workspace (Cargo.toml members = [hymeko_core, hymeko_wgpu]; the directory is
   # gone). Its stale crate declaration was removed here on 2026-09-01 under
