@@ -96,6 +96,13 @@ pub enum SectionKind {
     FeatureRowPatch,
     /// Contiguous parameter range.
     ParamPatchRange,
+    // APPROVED-CORE-EDIT: ir-stream-cbor-snapshot (2026-09-15, user chat).
+    /// `Raw8` fragment of one canonical CBOR document (`hymeko/model/ir/cbor/v1`).
+    ///
+    /// Repeatable: the document is the concatenation of these bodies in staging order.
+    /// Carried only by snapshot transactions and interpreted by
+    /// `writers::cbor_writer::decode_snapshot`, never by this layer.
+    CanonicalIrCbor,
     /// A section this build does not know, at or above
     /// [`CRITICAL_SECTION_MAX`], preserved so a consumer can forward it.
     Unknown(u16),
@@ -121,6 +128,7 @@ impl SectionKind {
             8 => Self::WeightPatchRange,
             9 => Self::FeatureRowPatch,
             10 => Self::ParamPatchRange,
+            11 => Self::CanonicalIrCbor,
             other if other >= CRITICAL_SECTION_MAX => Self::Unknown(other),
             other => {
                 return Err(WireError::UnknownMandatorySection { index, kind: other });
@@ -142,6 +150,7 @@ impl SectionKind {
             Self::WeightPatchRange => 8,
             Self::FeatureRowPatch => 9,
             Self::ParamPatchRange => 10,
+            Self::CanonicalIrCbor => 11,
             Self::Unknown(raw) => raw,
         }
     }
@@ -761,6 +770,43 @@ mod tests {
         let secs = validate_sections(&p, &DecodeLimits::strict()).expect("skippable");
         assert_eq!(secs[0].kind(), SectionKind::Unknown(CRITICAL_SECTION_MAX));
         assert!(secs[0].kind().is_skippable());
+    }
+
+    // APPROVED-CORE-EDIT: ir-stream-cbor-snapshot (2026-09-15, user chat).
+    #[test]
+    fn canonical_ir_cbor_is_a_critical_repeatable_raw_byte_kind() {
+        assert_eq!(
+            SectionKind::try_from_wire(11, 0).expect("known kind"),
+            SectionKind::CanonicalIrCbor
+        );
+        assert_eq!(SectionKind::CanonicalIrCbor.to_wire(), 11);
+        assert!(SectionKind::CanonicalIrCbor.to_wire() < CRITICAL_SECTION_MAX);
+        assert!(!SectionKind::CanonicalIrCbor.is_singleton());
+        assert!(!SectionKind::CanonicalIrCbor.is_skippable());
+        assert!(matches!(
+            SectionKind::try_from_wire(12, 3),
+            Err(WireError::UnknownMandatorySection { index: 3, kind: 12 })
+        ));
+
+        // One document split over two sections of one message: both validate, in byte order.
+        let table_end = (TABLE_PREFIX_BYTES + 2 * ENTRY_BYTES) as u64;
+        let a = entry(
+            SectionKind::CanonicalIrCbor,
+            ElementKind::Raw8,
+            3,
+            table_end,
+        );
+        let b = entry(
+            SectionKind::CanonicalIrCbor,
+            ElementKind::Raw8,
+            5,
+            table_end + 4,
+        );
+        let p = payload_with(&[a, b], 12);
+        let secs = validate_sections(&p, &DecodeLimits::strict()).expect("repeatable kind");
+        assert_eq!(secs.len(), 2);
+        assert_eq!(secs[0].bytes().len(), 3);
+        assert_eq!(secs[1].bytes().len(), 5);
     }
 
     #[test]

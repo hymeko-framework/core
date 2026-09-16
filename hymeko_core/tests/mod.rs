@@ -42,6 +42,9 @@ mod sparse_workload_kat;
 
 mod ir_stream_admission;
 
+// APPROVED-CORE-EDIT: ir-stream-cbor-snapshot (2026-09-15): canonical CBOR over ir_stream.
+mod ir_stream_cbor_snapshot;
+
 // Shared incidence-test scaffolding (§6.1) used by the P2 + P2.1 suites below.
 #[path = "incidence_support.rs"]
 mod incidence_support;

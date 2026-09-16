@@ -13,7 +13,7 @@ Extracted by grammar -- tree-sitter for Rust and C++, `ast` for Python -- so tha
 `pub(crate)`, a `pub fn` inside a private `mod`, and a `def` written inside a
 docstring are all excluded for a stated reason rather than by luck.
 
-**3 package(s), 779 public symbol(s).**
+**3 package(s), 788 public symbol(s).**
 
 ## docs (rust)
 
@@ -119,6 +119,7 @@ _No public symbols._
 - `ScalarWeightExtractor` — `hymeko_core/src/tensor/tensor_val.rs`
 - `SectionEntry` — `hymeko_core/src/ir_stream/section.rs`
 - `SemanticModelDigestV2` — `hymeko_core/src/ir/semantic_digest.rs`
+- `SnapshotMessageDraft` — `hymeko_core/src/writers/cbor_writer/stream.rs`
 - `SnapshotVersion` — `hymeko_core/src/ir_stream/version.rs`
 - `SparseCsrShape` — `hymeko_core/src/tensor/compute/mod.rs`
 - `SparseShape` — `hymeko_core/src/tensor/representations/sparse.rs`
@@ -150,6 +151,7 @@ _No public symbols._
 - `AssemblerState` — `hymeko_core/src/ir_stream/assembler.rs`
 - `BackendKind` — `hymeko_core/src/tensor/compute/mod.rs`
 - `CborError` — `hymeko_core/src/writers/cbor_writer.rs`
+- `CborStreamError` — `hymeko_core/src/writers/cbor_writer/stream.rs`
 - `Coalescing` — `hymeko_core/src/tensor/representations/sparse.rs`
 - `ComputeError` — `hymeko_core/src/tensor/compute/mod.rs`
 - `ConstResolveError` — `hymeko_core/src/resolution/const_resolve.rs`
@@ -188,6 +190,8 @@ _No public symbols._
 - `TensorRole` — `hymeko_core/src/ir/ir.rs`
 - `TransactionKind` — `hymeko_core/src/ir_stream/assembler.rs`
 - `ValueR` — `hymeko_core/src/ir/ir.rs`
+- `ValueUpdate` — `hymeko_core/src/module_store/execution/value_updates.rs`
+- `ValueUpdateError` — `hymeko_core/src/module_store/execution/value_updates.rs`
 - `WeightAgg` — `hymeko_core/src/tensor/aggregation.rs`
 - `WireError` — `hymeko_core/src/ir_stream/error.rs`
 
@@ -265,6 +269,7 @@ _No public symbols._
 - `decls` — `hymeko_core/src/ir/access.rs`
 - `decode` — `hymeko_core/src/ir_stream/envelope.rs`
 - `decode` — `hymeko_core/src/writers/cbor_writer.rs`
+- `decode_snapshot` — `hymeko_core/src/writers/cbor_writer/stream.rs`
 - `degree` — `hymeko_core/src/ir/incidence.rs`
 - `dense_block` — `hymeko_core/src/tensor/sparse_workload.rs`
 - `dense_vector` — `hymeko_core/src/tensor/sparse_workload.rs`
@@ -284,6 +289,7 @@ _No public symbols._
 - `encode` — `hymeko_core/src/writers/cbor_writer.rs`
 - `encode_compiled` — `hymeko_core/src/writers/cbor_writer.rs`
 - `encode_message` — `hymeko_core/src/ir_stream/codec.rs`
+- `encode_snapshot_messages` — `hymeko_core/src/writers/cbor_writer/stream.rs`
 - `entry` — `hymeko_core/src/ir_stream/section.rs`
 - `entry` — `hymeko_core/src/tensor/representations/tensor_coo.rs`
 - `envelope` — `hymeko_core/src/ir_stream/codec.rs`
@@ -297,6 +303,7 @@ _No public symbols._
 - `first_child` — `hymeko_core/src/ir/ir.rs`
 - `first_child_of` — `hymeko_core/src/ir/access.rs`
 - `flags` — `hymeko_core/src/ir_stream/envelope.rs`
+- `from_decoded_cbor` — `hymeko_core/src/module_store/execution.rs`
 - `from_interner` — `hymeko_core/src/resolution/string_table.rs`
 - `from_le_bytes` — `hymeko_core/src/ir_stream/version.rs`
 - `from_vec` — `hymeko_core/src/resolution/string_table.rs`
@@ -413,6 +420,7 @@ _No public symbols._
 - `plain` — `hymeko_core/src/ir/ir.rs`
 - `preallocate_from_index` — `hymeko_core/src/ir/ir.rs`
 - `prepare` — `hymeko_core/src/module_store/execution.rs`
+- `prepare_model_at` — `hymeko_core/src/module_store/execution/value_updates.rs`
 - `prepare_operator` — `hymeko_core/src/ir/incidence.rs`
 - `pretty_print_compiled` — `hymeko_core/src/util/pretty_print.rs`
 - `print_dense_block` — `hymeko_core/src/tensor/util.rs`
@@ -525,6 +533,7 @@ _No public symbols._
 - `with_capacity` — `hymeko_core/src/tensor/representations/tensor_csr.rs`
 - `with_file` — `hymeko_core/src/module_store/source_provider.rs`
 - `with_meta` — `hymeko_core/src/tensor/representations/tensor_coo.rs`
+- `with_value_updates` — `hymeko_core/src/module_store/execution/value_updates.rs`
 - `write_all` — `hymeko_core/src/writers/ir_writer.rs`
 - `xavier_scale` — `hymeko_core/src/tensor/conv/weight_init/weight_init_impl.rs`
 
