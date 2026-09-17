@@ -1,0 +1,25 @@
+%% Created-at: 2026-09-17 15:49 +02:00 -- PlanOnly: shared Core semantic reads
+%% View 1: migration dependency order (provider -> consumer)
+flowchart LR
+  D[S1 user decisions D1-D5<br/>APPROVED-CORE-EDIT: ir-semantic-reads] --> C[S2 Core ir::semantics<br/>BaseView, FieldBinding, instance_slot<br/>A1-A13]
+  C --> Q[S3 Transformation Query/Geometry<br/>Predicate::isa, MatchContext effective mode<br/>A14-A15]
+  C --> R[S5 Robotics Schema, navigation, recording<br/>A17-A18]
+  Q --> F[S4 Formula worktree<br/>blocked on other-worker handover<br/>A16]
+  F --> S[S6 Simulator/XR/Web repin<br/>remove dirty path patch]
+  Q --> R
+  C -. no API change .-> H[AKOIRE / HIVE / Axon / Graph / Kawamirai]
+
+%% View 2 (separate diagram): runtime sequence for instance-local observation state
+%% sequenceDiagram
+%%   participant Cam as ArUco capture
+%%   participant Rob as Robotics recording
+%%   participant View as Core BaseView (snapshot n)
+%%   participant Core as Core CompiledModel / ExecutionState
+%%   participant Hive as HIVE (CBOR + ir_stream)
+%%   Cam->>Rob: detection
+%%   Rob->>View: instance_slot(marker, state|position)
+%%   View-->>Rob: local leaf DeclId or SlotError::Inherited
+%%   Rob->>Core: with_value_updates(Set/Text/Clear) on local DeclIds
+%%   Core->>Core: prepare_model_at(base n) + commit -> n+1 (no parser)
+%%   Core->>Hive: encode_snapshot_messages Begin/Chunk/Commit
+%%   Rob->>View: rebuild view for snapshot n+1 (same bindings, new values)
