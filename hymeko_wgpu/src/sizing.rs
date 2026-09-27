@@ -104,25 +104,6 @@ pub(crate) fn f32_extent_for(
     })
 }
 
-/// Round a byte count up to a power-of-two size class, without wrapping.
-///
-/// `u64::next_power_of_two` panics in debug and wraps to zero in release when
-/// the value exceeds `2^63`. A size class of zero would make an arena hand out
-/// a zero-sized buffer for an enormous request — a wrong-results bug, not an
-/// allocation failure. This reports instead.
-///
-/// # Errors
-///
-/// [`ComputeError::IndexOverflow`] when no power of two can hold `bytes`.
-pub(crate) fn checked_size_class(bytes: u64) -> Result<u64, ComputeError> {
-    bytes
-        .checked_next_power_of_two()
-        .ok_or(ComputeError::IndexOverflow {
-            what: "buffer size class exceeds the largest representable power of two",
-            value: usize::try_from(bytes).unwrap_or(usize::MAX),
-        })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -176,19 +157,5 @@ mod tests {
             }
             other => panic!("expected ShapeMismatch, got {other:?}"),
         }
-    }
-
-    #[test]
-    fn size_classes_round_up_and_refuse_to_wrap() {
-        assert_eq!(checked_size_class(1).expect("1"), 1);
-        assert_eq!(checked_size_class(5).expect("5"), 8);
-        assert_eq!(checked_size_class(1 << 20).expect("1 MiB"), 1 << 20);
-        // Above 2^63 there is no representable power of two. The old
-        // `next_power_of_two` wrapped to 0 here in release builds.
-        let err = checked_size_class((1u64 << 63) + 1).expect_err("must not wrap to zero");
-        assert!(
-            matches!(err, ComputeError::IndexOverflow { .. }),
-            "expected IndexOverflow, got {err:?}"
-        );
     }
 }

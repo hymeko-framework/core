@@ -60,3 +60,6 @@ mod prepared_ir_backbone;
 // Part-2 §4 Bx profile (temporary; autotests=false).
 #[path = "bx_profile.rs"]
 mod bx_profile;
+
+// APPROVED-CORE-EDIT: generic-arena-contract (2026-09-27): Pool<B> and HostArena.
+mod compute_arena;
