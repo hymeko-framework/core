@@ -12,7 +12,7 @@
 //! Both are ownership problems, not transfer problems. [`ReadbackWorkspace`] is
 //! the explicit carrier of that ownership: it holds the two reusable buffers
 //! and nothing else. It is **not** a second readback path — it is the same
-//! [`readback_into`] engine with the caller supplying storage that outlives the
+//! `readback_into` engine with the caller supplying storage that outlives the
 //! call instead of storage created and dropped inside it.
 //!
 //! # The single-mechanism rule
@@ -36,7 +36,7 @@
 //! No caller re-implements shape validation, staging growth, map, mapped-range
 //! validation, the byte copy, or unmap.
 //!
-//! The stage-decomposing profiling probe does not call [`readback_into`]: its
+//! The stage-decomposing profiling probe does not call `readback_into`: its
 //! whole purpose is to time the boundaries *between* the steps, and it must
 //! write GPU timestamps between the encode and the submit. It therefore calls
 //! the same step primitives in the same order with its own clocks interleaved.
@@ -430,7 +430,7 @@ impl ReadbackWorkspace {
     ///
     /// # Errors
     ///
-    /// As [`readback_extent`]: overflow, or a request beyond the device limit.
+    /// As `readback_extent`: overflow, or a request beyond the device limit.
     pub fn reserve(&mut self, backend: &WgpuBackend, elements: usize) -> Result<(), ComputeError> {
         let (elements, bytes) = readback_extent(
             TensorShape::new(elements, 1),
