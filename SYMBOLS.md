@@ -13,7 +13,7 @@ Extracted by grammar -- tree-sitter for Rust and C++, `ast` for Python -- so tha
 `pub(crate)`, a `pub fn` inside a private `mod`, and a `def` written inside a
 docstring are all excluded for a stated reason rather than by luck.
 
-**3 package(s), 818 public symbol(s).**
+**3 package(s), 827 public symbol(s).**
 
 ## docs (rust)
 
@@ -595,8 +595,10 @@ _No public symbols._
 - `DeviceCapabilities` — `hymeko_wgpu/src/backend.rs`
 - `ElapsedTicks` — `hymeko_wgpu/src/profiling.rs`
 - `Fixture` — `hymeko_wgpu/src/testing.rs`
+- `FreshGpu` — `hymeko_wgpu/src/testing.rs`
 - `GlobalEntropyPoolBuilder` — `hymeko_wgpu/src/operations/global_entropy_pool.rs`
 - `GpuCsrMatrix` — `hymeko_wgpu/src/resources.rs`
+- `GpuDiscipline` — `hymeko_wgpu/src/testing.rs`
 - `GpuTensor` — `hymeko_wgpu/src/resources.rs`
 - `GpuTimer` — `hymeko_wgpu/src/profiling.rs`
 - `HighwayIdentityBuilder` — `hymeko_wgpu/src/operations/highway.rs`
@@ -624,6 +626,8 @@ _No public symbols._
 - `RotorAttentionBuilder` — `hymeko_wgpu/src/operations/rotor_attention.rs`
 - `ScatterMeanBuilder` — `hymeko_wgpu/src/operations/scatter_mean.rs`
 - `SessionSubmittedOnce` — `hymeko_wgpu/src/scope.rs`
+- `SharedGpu` — `hymeko_wgpu/src/testing.rs`
+- `SiblingGpu` — `hymeko_wgpu/src/testing.rs`
 - `SpmmBuilder` — `hymeko_wgpu/src/operations/spmm.rs`
 - `StagingStorage` — `hymeko_wgpu/src/readback.rs`
 - `StarRotorSpikeBuilder` — `hymeko_wgpu/src/operations/star_rotor_spike.rs`
@@ -656,7 +660,6 @@ _No public symbols._
 - `allocations` — `hymeko_wgpu/src/readback.rs`
 - `alpha` — `hymeko_wgpu/src/operations/activation.rs`
 - `as_str` — `hymeko_wgpu/src/operations/activation.rs`
-- `backend_or_skip` — `hymeko_wgpu/src/testing.rs`
 - `backends` — `hymeko_wgpu/src/backend.rs`
 - `bind_group_layout` — `hymeko_wgpu/src/pipeline.rs`
 - `block_on` — `hymeko_wgpu/src/block_on.rs`
@@ -713,6 +716,8 @@ _No public symbols._
 - `features` — `hymeko_wgpu/src/backend.rs`
 - `features` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `features` — `hymeko_wgpu/src/operations/star_rotor_spike.rs`
+- `fresh` — `hymeko_wgpu/src/testing.rs`
+- `fresh_gpu` — `hymeko_wgpu/src/testing.rs`
 - `from_features` — `hymeko_wgpu/src/profiling.rs`
 - `from_parts` — `hymeko_wgpu/src/resources.rs`
 - `fused_activation` — `hymeko_wgpu/src/operations/spmm.rs`
@@ -825,7 +830,11 @@ _No public symbols._
 - `shader_name` — `hymeko_wgpu/src/pipeline.rs`
 - `shape` — `hymeko_wgpu/src/arena.rs`
 - `shape` — `hymeko_wgpu/src/resources.rs`
+- `shared` — `hymeko_wgpu/src/testing.rs`
 - `shared_backend` — `hymeko_wgpu/src/testing.rs`
+- `shared_gpu` — `hymeko_wgpu/src/testing.rs`
+- `shared_unguarded` — `hymeko_wgpu/src/testing.rs`
+- `sibling` — `hymeko_wgpu/src/testing.rs`
 - `signs` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `size_bytes` — `hymeko_wgpu/src/resources.rs`
 - `source` — `hymeko_wgpu/src/pipeline.rs`
