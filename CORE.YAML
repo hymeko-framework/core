@@ -232,6 +232,28 @@ crates:
           - the reassembled length is checked against DecodeLimits before the single reassembly allocation
           - no installation into ExecutionState or CompiledModel, and no commit or push under this approval
 
+      # APPROVED-CORE-EDIT: generic-arena-contract (2026-09-27, user chat)
+      - slug: generic-arena-contract
+        date: 2026-09-27
+        scope: >
+          Planned in nagare docs/plans/2026-09-27-p42-one-arena-contract-over-backends/.
+          New module hymeko_core/src/tensor/compute/arena/: mod.rs holds the
+          ArenaBackend and ArenaEpoch traits, ArenaConfig, ReusePolicy (plus
+          BestFit), ArenaStats and AllocationKey<C>; pool.rs the generic
+          reuse-policy core Pool<B> (free list, pending, retired, budgets,
+          deterministic eviction, statistics) extracted from hymeko_wgpu's
+          PoolInner with its semantics unchanged; host.rs the host deployment
+          HostArena<R> / HostLease<R> / HostResource. compute/mod.rs
+          declares the module and its header records the amendment. Tests in
+          hymeko_core/tests/compute_arena.rs, wired through tests/mod.rs.
+        constraints:
+          - no dependency and no manifest change; std only
+          - no wgpu type, device handle, or backend implementation other than the std host one
+          - generics only, no dynamic dispatch
+          - no CUDA code; the trait admits a CUDA backend without naming one
+          - "both consumers exist when this lands: hymeko_wgpu::TensorArena (Pool<WgpuBackend>) and Nagare HSiKAN (HostArena)"
+          - no commit or push beyond the feature branch the user merges
+
   # `hymeko_hnn` was RELOCATED 2026-08-31 to hymeko/nagare (hymeko_nagare::hnn) and no longer
   # exists in this workspace (Cargo.toml members = [hymeko_core, hymeko_wgpu]; the directory is
   # gone). Its stale crate declaration was removed here on 2026-09-01 under

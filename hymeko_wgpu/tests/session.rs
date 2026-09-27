@@ -10,7 +10,7 @@
 
 use hymeko::tensor::compute::TensorShape;
 use hymeko_wgpu::testing::SparseSpec;
-use hymeko_wgpu::testing::backend_or_skip;
+use hymeko_wgpu::testing::fresh_gpu;
 use hymeko_wgpu::{ActivationKind, TensorArenaConfig};
 
 /// Dropping a session without submitting must free its pending releases
@@ -18,7 +18,7 @@ use hymeko_wgpu::{ActivationKind, TensorArenaConfig};
 /// needs to complete first.
 #[test]
 fn test_session_dropped_without_submit_frees_pending_immediately() {
-    let Some(backend) = backend_or_skip("drop_no_submit") else {
+    let Some(backend) = fresh_gpu("drop_no_submit") else {
         return;
     };
     let arena = backend.tensor_arena(TensorArenaConfig::default());
@@ -57,7 +57,7 @@ fn test_session_dropped_without_submit_frees_pending_immediately() {
 /// force every caller into a conditional around "did I encode anything?".
 #[test]
 fn test_empty_session_submits_cleanly() {
-    let Some(backend) = backend_or_skip("empty") else {
+    let Some(backend) = fresh_gpu("empty") else {
         return;
     };
     let arena = backend.tensor_arena(TensorArenaConfig::default());
@@ -77,7 +77,7 @@ fn test_empty_session_submits_cleanly() {
 /// must not still believe a session is open.
 #[test]
 fn test_state_is_clean_after_submit() {
-    let Some(backend) = backend_or_skip("after_submit") else {
+    let Some(backend) = fresh_gpu("after_submit") else {
         return;
     };
     let arena = backend.tensor_arena(TensorArenaConfig::default());
@@ -105,7 +105,7 @@ fn test_state_is_clean_after_submit() {
 /// later — the whole point of the non-blocking design.
 #[test]
 fn test_in_flight_submission_is_reclaimed_by_a_later_poll() {
-    let Some(backend) = backend_or_skip("in_flight") else {
+    let Some(backend) = fresh_gpu("in_flight") else {
         return;
     };
     let spec = SparseSpec::small();
@@ -149,7 +149,7 @@ fn test_in_flight_submission_is_reclaimed_by_a_later_poll() {
 /// Several sessions in sequence, each submitted, with releases interleaved.
 #[test]
 fn test_sequential_sessions_keep_accounting_consistent() {
-    let Some(backend) = backend_or_skip("sequential") else {
+    let Some(backend) = fresh_gpu("sequential") else {
         return;
     };
     let arena = backend.tensor_arena(TensorArenaConfig::default());
@@ -183,7 +183,7 @@ fn test_sequential_sessions_keep_accounting_consistent() {
 /// rather than hand a slab from one session to the other.
 #[test]
 fn test_two_open_sessions_disable_same_session_reuse() {
-    let Some(backend) = backend_or_skip("two_sessions") else {
+    let Some(backend) = fresh_gpu("two_sessions") else {
         return;
     };
     let arena = backend.tensor_arena(TensorArenaConfig::default());
@@ -213,7 +213,7 @@ fn test_two_open_sessions_disable_same_session_reuse() {
 /// GPU is finished with them.
 #[test]
 fn test_arena_dropped_with_work_in_flight() {
-    let Some(backend) = backend_or_skip("arena_drop") else {
+    let Some(backend) = fresh_gpu("arena_drop") else {
         return;
     };
     let spec = SparseSpec::small();
@@ -250,7 +250,7 @@ fn test_arena_dropped_with_work_in_flight() {
 /// through the session, the plain one through its raw encoder, in one submit.
 #[test]
 fn test_mixed_scope_operations_in_one_session() {
-    let Some(backend) = backend_or_skip("mixed") else {
+    let Some(backend) = fresh_gpu("mixed") else {
         return;
     };
     let spec = SparseSpec::small();
@@ -307,7 +307,7 @@ fn test_mixed_scope_operations_in_one_session() {
 /// released mid-session and immediately reused by the session itself.
 #[test]
 fn test_intra_session_reuse_is_ordered_correctly() {
-    let Some(backend) = backend_or_skip("intra_reuse") else {
+    let Some(backend) = fresh_gpu("intra_reuse") else {
         return;
     };
     let spec = SparseSpec::small();

@@ -66,324 +66,79 @@
 //! | double release impossible | `Drop` consumes; the lease is not `Clone` |
 //! | arena drop needs no unsafe | `Rc<RefCell<..>>` + `Drop`, no raw pointers |
 //!
+//! # Where the policy lives
+//!
+//! The free list, pending and retired sets, budgets, eviction and statistics
+//! are `hymeko_core`'s generic [`Pool`], shared with the host arena
+//! ([`hymeko::tensor::compute::arena::HostArena`]). This module is the WGPU
+//! deployment of it: [`WgpuBackend`] as the [`ArenaBackend`], the completion
+//! tracker as the epoch source, the tracked sessions, and a lease that borrows
+//! the arena. The policy types are re-exported here under their former names.
+//!
 //! # Deliberate non-features (first version)
 //!
 //! No background thread. No automatic defragmentation. No suballocation from a
-//! large buffer — whole `wgpu::Buffer` objects only. No best-fit search without
-//! a measurement justifying it. Each of these is a real technique; none is
-//! justified by a measurement yet, and adding them now would be optimising
-//! before profiling.
+//! large buffer — whole `wgpu::Buffer` objects only. [`ReusePolicy::BestFit`]
+//! exists, for the host's ragged sizes; a buffer cannot grow, so here it only
+//! chooses the smallest fitting buffer. Each of these is a real technique; none
+//! is justified by a device measurement yet.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 
+use hymeko::tensor::compute::arena::{ArenaBackend, ArenaConfig, Pool};
 use hymeko::tensor::compute::{BackendKind, ComputeError, TensorShape};
 
 use crate::backend::WgpuBackend;
 use crate::completion::{CompletionTracker, SubmissionEpoch};
 use crate::resources::GpuTensor;
 
-/// How a request is matched against cached allocations.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub enum ReusePolicy {
-    /// Reuse only a byte-identical allocation.
-    ///
-    /// The default, and the right first choice: it makes reuse decisions
-    /// obvious, wastes nothing, and a layered chain reuses heavily under it
-    /// because every layer of a fixed feature dimension asks for the same size.
-    #[default]
-    ExactSize,
-    /// Reuse an allocation from the same power-of-two size class, provided it is
-    /// at least as large as the request.
-    ///
-    /// Trades internal fragmentation (up to 2×) for hit rate on ragged sizes.
-    /// Off by default: on the chain workloads measured, sizes repeat exactly, so
-    /// this would spend memory to buy nothing.
-    SizeClass,
-}
+pub use hymeko::tensor::compute::arena::{ArenaStats, ReusePolicy};
 
-/// Budget and policy for a [`TensorArena`].
+/// Budget and policy for a [`TensorArena`]: `hymeko_core`'s [`ArenaConfig`],
+/// whose default is this arena's measured budget (512 MiB / 64 buffers, exact
+/// size).
+pub type TensorArenaConfig = ArenaConfig;
+
+/// What the free list is indexed by: size and usage flags.
 ///
-/// # Preconditions
-///
-/// Both limits are ceilings on the **free list only**. Live leases and
-/// in-flight allocations are never evicted, so a chain that genuinely needs
-/// more memory than the budget still runs — the arena simply stops caching.
-#[derive(Clone, Copy, Debug)]
-pub struct TensorArenaConfig {
-    /// Ceiling on bytes held in the free list.
-    pub max_cached_bytes: u64,
-    /// Ceiling on the number of buffers held in the free list.
-    pub max_cached_buffers: usize,
-    pub reuse_policy: ReusePolicy,
-}
+/// Usage is the class, not a compatibility test: `wgpu` fixes a buffer's usage
+/// at creation, and binding a buffer for a usage it was not created with is a
+/// validation error.
+pub type AllocationKey = hymeko::tensor::compute::arena::AllocationKey<wgpu::BufferUsages>;
 
-impl Default for TensorArenaConfig {
-    /// 512 MiB / 64 buffers.
-    ///
-    /// Sized against the measured workload rather than picked round: the 8-layer
-    /// chain at 200 000 × 128 needs two live 102 MiB intermediates, so a 512 MiB
-    /// cache holds a comfortable multiple of the working set without approaching
-    /// the Phase 3 host peak.
-    fn default() -> Self {
-        Self {
-            max_cached_bytes: 512 * 1024 * 1024,
-            max_cached_buffers: 64,
-            reuse_policy: ReusePolicy::ExactSize,
-        }
+/// The device as the arena sees it: whole `wgpu::Buffer`s, classed by usage,
+/// dated by submission.
+impl ArenaBackend for WgpuBackend {
+    type Resource = wgpu::Buffer;
+    type Class = wgpu::BufferUsages;
+    type Epoch = SubmissionEpoch;
+
+    fn class_rank(usage: wgpu::BufferUsages) -> u64 {
+        u64::from(usage.bits())
+    }
+
+    fn create(&self, bytes: u64, usage: wgpu::BufferUsages) -> wgpu::Buffer {
+        self.device().create_buffer(&wgpu::BufferDescriptor {
+            label: Some("arena.tensor"),
+            size: bytes,
+            usage,
+            mapped_at_creation: false,
+        })
+    }
+
+    fn bytes(&self, buffer: &wgpu::Buffer) -> u64 {
+        buffer.size()
     }
 }
 
-/// What the free list is indexed by.
-///
-/// Usage flags are part of the key, not a compatibility test: `wgpu` fixes a
-/// buffer's usage at creation, and binding a buffer for a usage it was not
-/// created with is a validation error. Two allocations of equal size but
-/// different usage are therefore different resources.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct AllocationKey {
-    bytes: u64,
-    usage: wgpu::BufferUsages,
-}
-
-impl AllocationKey {
-    #[must_use]
-    pub const fn bytes(self) -> u64 {
-        self.bytes
-    }
-
-    #[must_use]
-    pub const fn usage(self) -> wgpu::BufferUsages {
-        self.usage
-    }
-}
-
-/// Counters describing what the arena has done. Every field is exact.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct ArenaStats {
-    /// `acquire` calls satisfied from the free list.
-    pub reuse_hits: u64,
-    /// `acquire` calls that had to create a `wgpu::Buffer`.
-    pub reuse_misses: u64,
-    /// `wgpu::Buffer` objects created over the arena's lifetime.
-    pub buffers_created: u64,
-    /// Buffers dropped because the budget was exceeded.
-    pub evictions: u64,
-    /// Bytes currently held by live leases.
-    pub active_bytes: u64,
-    /// Bytes retired but not yet known complete.
-    pub in_flight_bytes: u64,
-    /// Bytes sitting in the free list.
-    pub cached_bytes: u64,
-    /// Buffers in the free list.
-    pub cached_buffers: usize,
-    /// Highest value of `active + in_flight + cached` observed.
-    pub peak_arena_bytes: u64,
-    /// Sum of all `wgpu::Buffer` sizes the arena has ever created.
-    pub total_allocated_bytes: u64,
-}
-
-impl ArenaStats {
-    /// Bytes the arena currently holds on the device, in any state.
-    #[must_use]
-    pub const fn device_bytes(&self) -> u64 {
-        self.active_bytes + self.in_flight_bytes + self.cached_bytes
-    }
-
-    /// Hit rate over all acquires; `None` before the first acquire.
-    #[must_use]
-    pub fn hit_rate(&self) -> Option<f64> {
-        let total = self.reuse_hits + self.reuse_misses;
-        (total > 0).then(|| self.reuse_hits as f64 / total as f64)
-    }
-}
-
-/// One pooled allocation.
-struct Slab {
-    buffer: wgpu::Buffer,
-    bytes: u64,
-    usage: wgpu::BufferUsages,
-    /// Epoch that must complete before this slab may be handed out again.
-    safe_after: SubmissionEpoch,
-}
-
-/// Interior state, shared with every outstanding lease so `Drop` can return a
+/// The pool's state, shared with every outstanding lease so `Drop` can return a
 /// buffer without needing `&mut TensorArena`.
 ///
 /// `Rc<RefCell<..>>` rather than a raw pointer: invariant 9 requires the arena
 /// to drop without unsafe, and this is the safe construction. It is not global
 /// state — one instance per arena, created by the caller, dropped with it.
-struct PoolInner {
-    config: TensorArenaConfig,
-    free: HashMap<AllocationKey, Vec<Slab>>,
-    /// Released while a session was open: the epoch is not yet known.
-    ///
-    /// Each entry records WHICH session was open at release time, because a slab
-    /// may be safely re-handed out inside that same session but not to another
-    /// one -- see `TrackedSession::acquire`. `None` means the owning session was
-    /// ambiguous (two were open at once), which disables same-session reuse.
-    pending: Vec<(Option<u64>, Slab)>,
-    /// Released with a known epoch, waiting for the watermark to reach it.
-    retired: Vec<Slab>,
-    stats: ArenaStats,
-    open_encoders: usize,
-    /// The single open session, when exactly one is open.
-    current_session: Option<u64>,
-    next_session_id: u64,
-}
-
-impl PoolInner {
-    fn note_peak(&mut self) {
-        let now = self.stats.device_bytes();
-        if now > self.stats.peak_arena_bytes {
-            self.stats.peak_arena_bytes = now;
-        }
-    }
-
-    /// Whether a matching slab is available, WITHOUT removing it.
-    ///
-    /// Separate from `take_free` because the acquire path needs to probe before
-    /// deciding to poll; probing with `take_free` would consume the slab.
-    fn has_free(&self, key: AllocationKey, want_bytes: u64) -> bool {
-        self.free
-            .get(&key)
-            .is_some_and(|bucket| bucket.iter().any(|s| s.bytes >= want_bytes))
-    }
-
-    /// Take a matching slab from the free list, if one is available.
-    fn take_free(&mut self, key: AllocationKey, want_bytes: u64) -> Option<Slab> {
-        match self.config.reuse_policy {
-            ReusePolicy::ExactSize => {
-                let bucket = self.free.get_mut(&key)?;
-                let slab = bucket.pop()?;
-                if bucket.is_empty() {
-                    self.free.remove(&key);
-                }
-                Some(slab)
-            }
-            ReusePolicy::SizeClass => {
-                // The key's byte count is already class-rounded by `key_for`, so
-                // an exact bucket lookup finds the class. The extra check that
-                // the slab really is large enough guards against a rounding
-                // change making the two disagree.
-                let bucket = self.free.get_mut(&key)?;
-                let pos = bucket.iter().position(|s| s.bytes >= want_bytes)?;
-                let slab = bucket.swap_remove(pos);
-                if bucket.is_empty() {
-                    self.free.remove(&key);
-                }
-                Some(slab)
-            }
-        }
-    }
-
-    /// Move retired slabs whose epoch has completed onto the free list.
-    fn reclaim_completed(&mut self, watermark: SubmissionEpoch) {
-        let mut i = 0;
-        while i < self.retired.len() {
-            if self.retired[i].safe_after.is_complete_at(watermark) {
-                let slab = self.retired.swap_remove(i);
-                self.stats.in_flight_bytes -= slab.bytes;
-                self.push_free(slab);
-            } else {
-                i += 1;
-            }
-        }
-    }
-
-    /// Put a slab on the free list, evicting to stay inside the budget.
-    ///
-    /// Eviction is deterministic: the *incoming* slab is dropped first if it
-    /// alone exceeds the budget, otherwise the oldest cached slabs go. Never
-    /// touches leased or in-flight memory — those are not the arena's to free.
-    fn push_free(&mut self, slab: Slab) {
-        let key = AllocationKey {
-            bytes: slab.bytes,
-            usage: slab.usage,
-        };
-
-        let would_bytes = self.stats.cached_bytes + slab.bytes;
-        let would_buffers = self.stats.cached_buffers + 1;
-        if would_bytes > self.config.max_cached_bytes
-            || would_buffers > self.config.max_cached_buffers
-        {
-            self.evict_until_fits(slab.bytes);
-        }
-
-        // Re-check: eviction may not have been able to make room (e.g. the free
-        // list was already empty and this one slab exceeds the budget). Dropping
-        // the incoming slab is correct — it is unreferenced by construction.
-        if self.stats.cached_bytes + slab.bytes > self.config.max_cached_bytes
-            || self.stats.cached_buffers + 1 > self.config.max_cached_buffers
-        {
-            self.stats.evictions += 1;
-            drop(slab);
-            return;
-        }
-
-        self.stats.cached_bytes += slab.bytes;
-        self.stats.cached_buffers += 1;
-        self.free.entry(key).or_default().push(slab);
-    }
-
-    /// Drop cached slabs until `incoming` bytes would fit.
-    fn evict_until_fits(&mut self, incoming: u64) {
-        while (self.stats.cached_bytes + incoming > self.config.max_cached_bytes
-            || self.stats.cached_buffers + 1 > self.config.max_cached_buffers)
-            && self.stats.cached_buffers > 0
-        {
-            // Deterministic victim: the smallest key, first slab. Sorting by key
-            // rather than using HashMap order keeps eviction reproducible across
-            // runs, which matters for a test asserting eviction counts.
-            let victim_key = self
-                .free
-                .keys()
-                .copied()
-                .min_by_key(|k| (k.bytes, k.usage.bits()));
-            let Some(k) = victim_key else { break };
-            let Some(bucket) = self.free.get_mut(&k) else {
-                break;
-            };
-            let Some(slab) = bucket.pop() else {
-                self.free.remove(&k);
-                continue;
-            };
-            if bucket.is_empty() {
-                self.free.remove(&k);
-            }
-            self.stats.cached_bytes -= slab.bytes;
-            self.stats.cached_buffers -= 1;
-            self.stats.evictions += 1;
-            drop(slab);
-        }
-    }
-
-    /// Accept a released slab, routing it by whether an encoder is open.
-    fn release(&mut self, slab: Slab, latest_issued: SubmissionEpoch) {
-        self.stats.active_bytes -= slab.bytes;
-        if self.open_encoders > 0 {
-            // May be referenced by commands not yet submitted; the epoch is
-            // assigned at the next submit.
-            self.stats.in_flight_bytes += slab.bytes;
-            let owner = self.current_session;
-            self.pending.push((owner, slab));
-        } else {
-            let mut slab = slab;
-            slab.safe_after = latest_issued;
-            self.stats.in_flight_bytes += slab.bytes;
-            self.retired.push(slab);
-        }
-    }
-
-    /// Assign `epoch` to everything released while an encoder was open.
-    fn seal_pending(&mut self, epoch: SubmissionEpoch) {
-        for (_owner, mut slab) in self.pending.drain(..) {
-            slab.safe_after = epoch;
-            self.retired.push(slab);
-        }
-    }
-}
+type SharedPool = Rc<RefCell<Pool<WgpuBackend>>>;
 
 /// A pool of reusable GPU buffers bound to one [`WgpuBackend`].
 ///
@@ -391,7 +146,7 @@ impl PoolInner {
 /// no singleton, and no arena handle is stored in any tensor type.
 pub struct TensorArena<'b> {
     backend: &'b WgpuBackend,
-    inner: Rc<RefCell<PoolInner>>,
+    inner: SharedPool,
     tracker: CompletionTracker,
 }
 
@@ -400,29 +155,20 @@ impl<'b> TensorArena<'b> {
     pub fn new(backend: &'b WgpuBackend, config: TensorArenaConfig) -> Self {
         Self {
             backend,
-            inner: Rc::new(RefCell::new(PoolInner {
-                config,
-                free: HashMap::new(),
-                pending: Vec::new(),
-                retired: Vec::new(),
-                stats: ArenaStats::default(),
-                open_encoders: 0,
-                current_session: None,
-                next_session_id: 0,
-            })),
+            inner: Rc::new(RefCell::new(Pool::new(config))),
             tracker: CompletionTracker::new(),
         }
     }
 
     #[must_use]
     pub fn config(&self) -> TensorArenaConfig {
-        self.inner.borrow().config
+        self.inner.borrow().config()
     }
 
     /// Current counters. Cheap; copies a small struct.
     #[must_use]
     pub fn stats(&self) -> ArenaStats {
-        self.inner.borrow().stats
+        self.inner.borrow().stats()
     }
 
     /// Default storage usage for an intermediate tensor — matches what
@@ -431,24 +177,6 @@ impl<'b> TensorArena<'b> {
     pub const STORAGE_RW: wgpu::BufferUsages = wgpu::BufferUsages::STORAGE
         .union(wgpu::BufferUsages::COPY_DST)
         .union(wgpu::BufferUsages::COPY_SRC);
-
-    /// # Errors
-    ///
-    /// [`ComputeError::IndexOverflow`] when a size class would exceed the
-    /// largest representable power of two. The unchecked `next_power_of_two`
-    /// this replaced wrapped to zero there in release builds, which would have
-    /// handed out a zero-sized buffer for an enormous request.
-    fn key_for(
-        &self,
-        bytes: u64,
-        usage: wgpu::BufferUsages,
-    ) -> Result<AllocationKey, ComputeError> {
-        let bytes = match self.inner.borrow().config.reuse_policy {
-            ReusePolicy::ExactSize => bytes,
-            ReusePolicy::SizeClass => crate::sizing::checked_size_class(bytes)?,
-        };
-        Ok(AllocationKey { bytes, usage })
-    }
 
     /// Acquire an intermediate tensor of `shape` with the default storage usage.
     ///
@@ -492,7 +220,6 @@ impl<'b> TensorArena<'b> {
         let extent =
             crate::sizing::f32_extent_for(elements, self.backend.capabilities().max_buffer_size)?;
         let bytes = extent.padded_bytes;
-        let key = self.key_for(bytes, usage)?;
 
         // A miss is the one moment when polling is unambiguously worth it: the
         // alternative is `create_buffer`, which costs far more than a
@@ -503,7 +230,10 @@ impl<'b> TensorArena<'b> {
         //
         // Deliberately only on the miss path: polling on every acquire would tax
         // the hit path, which is meant to be nearly free.
-        if !self.inner.borrow().has_free(key, bytes) {
+        //
+        // `has_fitting` fails exactly when the request has no size class, before
+        // anything is polled or taken.
+        if !self.inner.borrow().has_fitting(bytes, usage)? {
             // Ignore a poll failure here: it is not fatal to the acquire, which
             // falls back to allocating. A genuine device fault surfaces at the
             // next submit or readback with a better message than this path could
@@ -511,51 +241,11 @@ impl<'b> TensorArena<'b> {
             let _ = self.poll_completion();
         }
 
-        let slab = {
-            let mut pool = self.inner.borrow_mut();
-            match pool.take_free(key, bytes) {
-                Some(slab) => {
-                    pool.stats.reuse_hits += 1;
-                    pool.stats.cached_bytes -= slab.bytes;
-                    pool.stats.cached_buffers -= 1;
-                    slab
-                }
-                None => {
-                    pool.stats.reuse_misses += 1;
-                    pool.stats.buffers_created += 1;
-                    pool.stats.total_allocated_bytes += key.bytes;
-                    let buffer = self
-                        .backend
-                        .device()
-                        .create_buffer(&wgpu::BufferDescriptor {
-                            label: Some("arena.tensor"),
-                            size: key.bytes,
-                            usage,
-                            mapped_at_creation: false,
-                        });
-                    Slab {
-                        buffer,
-                        bytes: key.bytes,
-                        usage,
-                        safe_after: SubmissionEpoch::NEVER,
-                    }
-                }
-            }
-        };
-
-        let mut pool = self.inner.borrow_mut();
-        pool.stats.active_bytes += slab.bytes;
-        pool.note_peak();
-        drop(pool);
-
-        Ok(ArenaTensor {
-            tensor: Some(GpuTensor::from_parts(slab.buffer, shape)),
-            bytes: slab.bytes,
-            usage: slab.usage,
-            pool: Rc::clone(&self.inner),
-            tracker: self.tracker.clone(),
-            _lifetime: std::marker::PhantomData,
-        })
+        let (buffer, key) = self
+            .inner
+            .borrow_mut()
+            .acquire(self.backend, bytes, usage)?;
+        Ok(ArenaTensor::lease(buffer, key, shape, self))
     }
 
     /// Create an encoder whose lifetime the arena tracks.
@@ -568,21 +258,7 @@ impl<'b> TensorArena<'b> {
     /// hand the buffer out again while the command buffer still reads it.
     #[must_use]
     pub fn session(&self, label: Option<&str>) -> TrackedSession<'_> {
-        let id = {
-            let mut pool = self.inner.borrow_mut();
-            pool.open_encoders += 1;
-            let id = pool.next_session_id;
-            pool.next_session_id += 1;
-            // Same-session reuse is only sound when exactly one session is open:
-            // two open sessions may be submitted in either order, so a slab
-            // released under one could be written by the other first.
-            pool.current_session = if pool.open_encoders == 1 {
-                Some(id)
-            } else {
-                None
-            };
-            id
-        };
+        let id = self.inner.borrow_mut().open_session();
         TrackedSession {
             id,
             arena: self,
@@ -632,12 +308,7 @@ impl<'b> TensorArena<'b> {
     /// Only touches the free list: leased and in-flight allocations are not the
     /// arena's to free, and are left alone.
     pub fn trim(&self) {
-        let mut pool = self.inner.borrow_mut();
-        let freed = pool.stats.cached_buffers;
-        pool.free.clear();
-        pool.stats.cached_bytes = 0;
-        pool.stats.cached_buffers = 0;
-        pool.stats.evictions += freed as u64;
+        self.inner.borrow_mut().trim();
     }
 
     /// The completion tracker, for callers coordinating their own submissions.
@@ -713,7 +384,7 @@ pub struct TrackedSession<'a> {
     id: u64,
     arena: &'a TensorArena<'a>,
     encoder: Option<wgpu::CommandEncoder>,
-    pool: Rc<RefCell<PoolInner>>,
+    pool: SharedPool,
     tracker: CompletionTracker,
     device: &'a wgpu::Device,
     queue: &'a wgpu::Queue,
@@ -767,16 +438,9 @@ impl<'a> TrackedSession<'a> {
             .take()
             .expect("TrackedSession::submit consumes self, so this cannot run twice");
         let (index, epoch) = self.tracker.submit(self.queue, encoder);
-        {
-            let mut pool = self.pool.borrow_mut();
-            pool.open_encoders = pool.open_encoders.saturating_sub(1);
-            if pool.open_encoders == 0 {
-                pool.current_session = None;
-            }
-            pool.seal_pending(epoch);
-        }
-        // `Drop` still runs, but `encoder` is now None and `open_encoders` is
-        // already decremented, so it takes the no-op path.
+        self.pool.borrow_mut().submit_session(epoch);
+        // `Drop` still runs, but `encoder` is now None and the session is
+        // already closed, so it takes the no-op path.
         (index, epoch)
     }
 
@@ -804,16 +468,7 @@ impl Drop for TrackedSession<'_> {
         // session was open needs no epoch to complete: freeing it immediately is
         // correct, and stranding it would be a leak.
         if self.encoder.is_some() {
-            let mut pool = self.pool.borrow_mut();
-            pool.open_encoders = pool.open_encoders.saturating_sub(1);
-            if pool.open_encoders == 0 {
-                pool.current_session = None;
-            }
-            let unsubmitted: Vec<(Option<u64>, Slab)> = pool.pending.drain(..).collect();
-            for (_owner, mut slab) in unsubmitted {
-                slab.safe_after = SubmissionEpoch::NEVER;
-                pool.retired.push(slab);
-            }
+            self.pool.borrow_mut().abandon_session();
         }
     }
 }
@@ -838,11 +493,29 @@ impl Drop for TrackedSession<'_> {
 /// release is unrepresentable rather than checked.
 pub struct ArenaTensor<'a> {
     tensor: Option<GpuTensor<f32>>,
-    bytes: u64,
-    usage: wgpu::BufferUsages,
-    pool: Rc<RefCell<PoolInner>>,
+    /// Size and usage the pool accounted the buffer under; handed back on drop.
+    key: AllocationKey,
+    backend: &'a WgpuBackend,
+    pool: SharedPool,
     tracker: CompletionTracker,
-    _lifetime: std::marker::PhantomData<&'a ()>,
+}
+
+impl<'a> ArenaTensor<'a> {
+    /// A lease on `buffer`, which the pool handed out under `key`.
+    fn lease(
+        buffer: wgpu::Buffer,
+        key: AllocationKey,
+        shape: TensorShape,
+        arena: &TensorArena<'a>,
+    ) -> Self {
+        Self {
+            tensor: Some(GpuTensor::from_parts(buffer, shape)),
+            key,
+            backend: arena.backend,
+            pool: Rc::clone(&arena.inner),
+            tracker: arena.tracker.clone(),
+        }
+    }
 }
 
 impl ArenaTensor<'_> {
@@ -877,12 +550,12 @@ impl ArenaTensor<'_> {
     /// under [`ReusePolicy::SizeClass`].
     #[must_use]
     pub const fn allocation_bytes(&self) -> u64 {
-        self.bytes
+        self.key.bytes()
     }
 
     #[must_use]
-    pub const fn usage(&self) -> wgpu::BufferUsages {
-        self.usage
+    pub fn usage(&self) -> wgpu::BufferUsages {
+        self.key.class()
     }
 }
 
@@ -901,13 +574,12 @@ impl Drop for ArenaTensor<'_> {
         let Some(tensor) = self.tensor.take() else {
             return;
         };
-        let slab = Slab {
-            buffer: tensor.into_buffer(),
-            bytes: self.bytes,
-            usage: self.usage,
-            safe_after: SubmissionEpoch::NEVER,
-        };
-        self.pool.borrow_mut().release(slab, self.tracker.latest());
+        self.pool.borrow_mut().release(
+            self.backend,
+            tensor.into_buffer(),
+            self.key,
+            self.tracker.latest(),
+        );
     }
 }
 
@@ -966,33 +638,11 @@ impl<'a> TrackedSession<'a> {
             self.arena.backend.capabilities().max_buffer_size,
         )?;
         let bytes = extent.padded_bytes;
-        let key = self.arena.key_for(bytes, usage)?;
 
         // Try this session's own pending releases first.
-        let reclaimed = {
-            let mut pool = self.pool.borrow_mut();
-            let found = pool.pending.iter().position(|(owner, slab)| {
-                *owner == Some(self.id) && slab.usage == usage && slab.bytes >= key.bytes
-            });
-            found.map(|i| {
-                let (_owner, slab) = pool.pending.swap_remove(i);
-                pool.stats.in_flight_bytes -= slab.bytes;
-                pool.stats.active_bytes += slab.bytes;
-                pool.stats.reuse_hits += 1;
-                pool.note_peak();
-                slab
-            })
-        };
-
-        if let Some(slab) = reclaimed {
-            return Ok(ArenaTensor {
-                tensor: Some(GpuTensor::from_parts(slab.buffer, shape)),
-                bytes: slab.bytes,
-                usage: slab.usage,
-                pool: Rc::clone(&self.pool),
-                tracker: self.tracker.clone(),
-                _lifetime: std::marker::PhantomData,
-            });
+        let reclaimed = self.pool.borrow_mut().take_pending(self.id, bytes, usage)?;
+        if let Some((buffer, key)) = reclaimed {
+            return Ok(ArenaTensor::lease(buffer, key, shape, self.arena));
         }
 
         self.arena.acquire_with_usage(shape, usage)
@@ -1067,14 +717,8 @@ mod tests {
 
     #[test]
     fn allocation_key_distinguishes_usage() {
-        let a = AllocationKey {
-            bytes: 256,
-            usage: wgpu::BufferUsages::STORAGE,
-        };
-        let b = AllocationKey {
-            bytes: 256,
-            usage: wgpu::BufferUsages::UNIFORM,
-        };
+        let a = AllocationKey::new(256, wgpu::BufferUsages::STORAGE);
+        let b = AllocationKey::new(256, wgpu::BufferUsages::UNIFORM);
         assert_ne!(
             a, b,
             "same size but different usage must not share a bucket"

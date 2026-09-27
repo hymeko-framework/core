@@ -118,6 +118,15 @@ impl SubmissionEpoch {
     }
 }
 
+/// The arena dates a release with the submission that may still read it.
+impl hymeko::tensor::compute::arena::ArenaEpoch for SubmissionEpoch {
+    const NEVER: Self = Self::NEVER;
+
+    fn is_complete_at(self, watermark: Self) -> bool {
+        Self::is_complete_at(self, watermark)
+    }
+}
+
 impl core::fmt::Display for SubmissionEpoch {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "e{}", self.0)

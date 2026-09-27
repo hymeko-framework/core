@@ -67,7 +67,7 @@
 //! kernel with no measured consumer would be precisely that.
 
 use crate::testing::SparseSpec;
-use crate::testing::backend_or_skip;
+use crate::testing::fresh_gpu;
 use crate::{ActivationKind, ArenaTensor, TensorArenaConfig, TrackedSession, WgpuBackend};
 use hymeko::tensor::representations::tensor_csr::TensorCsr;
 
@@ -258,7 +258,7 @@ fn assert_close(got: &[f32], want: &[f32], ctx: &str) {
 /// a four-tensor diamond, and produce the CPU answer.
 #[test]
 fn test_diamond_reaches_liveness_minimum_and_matches_cpu() {
-    let Some(backend) = backend_or_skip("diamond") else {
+    let Some(backend) = fresh_gpu("diamond") else {
         return;
     };
     let alpha = 0.01f32;
@@ -376,7 +376,7 @@ fn test_diamond_reaches_liveness_minimum_and_matches_cpu() {
 /// the baseline the arena's three is measured against.
 #[test]
 fn test_naive_diamond_needs_four_buffers() {
-    let Some(backend) = backend_or_skip("diamond_naive") else {
+    let Some(backend) = fresh_gpu("diamond_naive") else {
         return;
     };
     let alpha = 0.01f32;
@@ -445,7 +445,7 @@ fn test_naive_diamond_needs_four_buffers() {
 /// the new tenant wrote.
 #[test]
 fn test_shared_tensor_survives_both_branches() {
-    let Some(backend) = backend_or_skip("shared_liveness") else {
+    let Some(backend) = fresh_gpu("shared_liveness") else {
         return;
     };
     let spec = SparseSpec::small();
@@ -515,7 +515,7 @@ fn test_shared_tensor_survives_both_branches() {
 /// allocation — whatever the reuse policy.
 #[test]
 fn test_branch_outputs_never_alias() {
-    let Some(backend) = backend_or_skip("branch_alias") else {
+    let Some(backend) = fresh_gpu("branch_alias") else {
         return;
     };
     let spec = SparseSpec::small();
@@ -586,7 +586,7 @@ fn test_branch_outputs_never_alias() {
 /// reuse them rather than allocate.
 #[test]
 fn test_branch_buffers_are_reusable_after_merge() {
-    let Some(backend) = backend_or_skip("post_merge") else {
+    let Some(backend) = fresh_gpu("post_merge") else {
         return;
     };
     let spec = SparseSpec::small();
