@@ -31,9 +31,7 @@
 use blake3::Hasher;
 
 use crate::common::ids::{DeclId, HyperArcId};
-use crate::ir::canonical_hash::{
-    CanonHashCfg, DerivedPathIndex, build_path_index, canonical_program_hash,
-};
+use crate::ir::canonical_hash::Canon;
 use crate::ir::hash::HashId;
 use crate::ir::ir::{
     AnnoR, DType, DeclKind, Extent, Ir, ModelFacet, PortDirection, SignedRefR, TensorRole, ValueR,
@@ -60,60 +58,52 @@ pub struct ProgramStructureHashV1(pub HashId);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct SemanticModelDigestV2(pub HashId);
 
-/// Delegates to V1 unchanged, including its configuration and byte layout.
-#[must_use]
-pub fn program_structure_hash_v1(
-    cfg: CanonHashCfg,
-    ir: &Ir,
-    it: &Interner,
-) -> ProgramStructureHashV1 {
-    ProgramStructureHashV1(canonical_program_hash(cfg, ir, it))
-}
-
-/// Return one contribution per declaration, in DeclId order.
-///
-/// This diagnostic table includes each declaration's bound record, when present.
-/// Use `semantic_model_digest_v2` for whole-model coverage of unbound records.
-/// # Preconditions
-/// The module's valid-index preconditions apply.
-/// # Postconditions
-/// Pure and deterministic; neither reads nor writes the IR's cached hash tables.
-/// # Panics
-/// Invalid symbol or bound-record indices may panic.
-#[must_use]
-pub fn semantic_declaration_hashes(ir: &Ir, it: &Interner) -> Vec<HashId> {
-    let context = SemanticContext::new(ir, it);
-    let records = context.record_hashes();
-    context.declaration_hashes(&records)
-}
-
-/// Return the whole-model digest, with complete concrete-record coverage.
-///
-/// # Preconditions
-/// The module's valid-index preconditions apply. Reindexing invariance is only
-/// promised in canonical mode; raw-ID fallback is explicitly domain-separated.
-/// # Postconditions
-/// Pure, deterministic and idempotent, independent of cached hash tables.
-/// Per-kind aggregation is unordered; incidence slots, arc slots, tags, bases,
-/// weights and value lists retain their order and multiplicity.
-/// # Panics
-/// Invalid symbol or bound-record indices may panic.
-#[must_use]
-pub fn semantic_model_digest_v2(ir: &Ir, it: &Interner) -> SemanticModelDigestV2 {
-    let context = SemanticContext::new(ir, it);
-    let mut records = context.record_hashes();
-    let mut declarations = context.declaration_hashes(&records);
-    let mut h = context.header(DOMAIN_MODEL);
-    for (domain, hashes) in [
-        (DOMAIN_DECL, &mut declarations),
-        (DOMAIN_NODE, &mut records.nodes),
-        (DOMAIN_EDGE, &mut records.edges),
-        (DOMAIN_ARC, &mut records.arcs),
-    ] {
-        h.update(domain);
-        write_sorted_hashes(&mut h, hashes);
+impl Canon<'_> {
+    /// Return one contribution per declaration, in DeclId order.
+    ///
+    /// This diagnostic table includes each declaration's bound record, when present.
+    /// Use [`Canon::hash`] for whole-model coverage of unbound records.
+    /// # Preconditions
+    /// The module's valid-index preconditions apply.
+    /// # Postconditions
+    /// Pure and deterministic; neither reads nor writes the IR's cached hash tables.
+    /// # Panics
+    /// Invalid symbol or bound-record indices may panic.
+    #[must_use]
+    pub fn declaration_hashes(&self) -> Vec<HashId> {
+        let context = SemanticContext::new(self);
+        let records = context.record_hashes();
+        context.declaration_hashes(&records)
     }
-    SemanticModelDigestV2(HashId(*h.finalize().as_bytes()))
+
+    /// Return the whole-model digest, with complete concrete-record coverage.
+    ///
+    /// # Preconditions
+    /// The module's valid-index preconditions apply. Reindexing invariance is only
+    /// promised in canonical mode; raw-ID fallback is explicitly domain-separated.
+    /// # Postconditions
+    /// Pure, deterministic and idempotent, independent of cached hash tables.
+    /// Per-kind aggregation is unordered; incidence slots, arc slots, tags, bases,
+    /// weights and value lists retain their order and multiplicity.
+    /// # Panics
+    /// Invalid symbol or bound-record indices may panic.
+    #[must_use]
+    pub fn hash(&self) -> SemanticModelDigestV2 {
+        let context = SemanticContext::new(self);
+        let mut records = context.record_hashes();
+        let mut declarations = context.declaration_hashes(&records);
+        let mut h = context.header(DOMAIN_MODEL);
+        for (domain, hashes) in [
+            (DOMAIN_DECL, &mut declarations),
+            (DOMAIN_NODE, &mut records.nodes),
+            (DOMAIN_EDGE, &mut records.edges),
+            (DOMAIN_ARC, &mut records.arcs),
+        ] {
+            h.update(domain);
+            write_sorted_hashes(&mut h, hashes);
+        }
+        SemanticModelDigestV2(HashId(*h.finalize().as_bytes()))
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -141,14 +131,15 @@ struct RecordHashes {
 struct SemanticContext<'a> {
     ir: &'a Ir,
     it: &'a Interner,
-    paths: Option<DerivedPathIndex>,
+    /// The canonical view whose paths name every target.
+    canon: &'a Canon<'a>,
     first_owner_slots: Vec<Option<usize>>,
     scheme: TargetScheme,
 }
 
 impl<'a> SemanticContext<'a> {
-    fn new(ir: &'a Ir, it: &'a Interner) -> Self {
-        let paths = build_path_index(ir).ok();
+    fn new(canon: &'a Canon<'a>) -> Self {
+        let (ir, it) = (canon.ir(), canon.interner());
         let mut first_owner_slots = vec![None; ir.arcs.len()];
         // Use the owner's actual dispatch binding, never an orphan EdgeRec that
         // happens to carry the same declaration backlink.
@@ -166,7 +157,8 @@ impl<'a> SemanticContext<'a> {
                 }
             }
         }
-        let mut canonical = paths.is_some() && first_owner_slots.iter().all(Option::is_some);
+        let mut canonical =
+            canon.unique_paths().is_ok() && first_owner_slots.iter().all(Option::is_some);
         let mut declared = vec![false; ir.arcs.len()];
         for (di, declaration) in ir.decl_nodes.iter().enumerate() {
             if declaration.kind != DeclKind::HyperArc {
@@ -183,7 +175,7 @@ impl<'a> SemanticContext<'a> {
         Self {
             ir,
             it,
-            paths,
+            canon,
             first_owner_slots,
             scheme: if canonical {
                 TargetScheme::Path
@@ -297,7 +289,7 @@ impl<'a> SemanticContext<'a> {
             return;
         }
         if self.scheme == TargetScheme::Path {
-            if let Some(path) = self.paths.as_ref().and_then(|paths| paths.path_of(d)) {
+            if let Some(path) = self.canon.path_of(d) {
                 h.update(&[1]);
                 write_len(h, path.0.len());
                 for symbol in path.iter() {

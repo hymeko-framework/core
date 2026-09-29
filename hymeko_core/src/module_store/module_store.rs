@@ -1,5 +1,5 @@
 use crate::common::ids::SymId;
-use crate::ir::hash::HashId;
+use crate::ir::canonical_hash::{Canon, CanonicalIdentity};
 #[allow(deprecated)]
 use crate::ir::hash_pass::compute_merkle_hashes;
 use crate::ir::ir::Ir;
@@ -32,8 +32,8 @@ pub struct ModuleEntry {
 pub struct CompiledProgram {
     pub root: ModuleKey,
     /// The resolution `Index`. **Non-authoritative after U2.2**: the canonical
-    /// hash and all post-lowering path consumers read the `Ir`
-    /// (`canonical_program_hash(cfg, ir, it)`, `canonical_hash::build_path_index`).
+    /// identity and all post-lowering path consumers read the `Ir`
+    /// (`canonical_hash::Canon`, `canonical_hash::build_path_index`).
     /// This is a resolution-time artifact retained for external/test consumers;
     /// its removal is planned for a breaking release once they migrate to the
     /// derived path index. It is NOT re-validated against the `Ir` after the
@@ -42,7 +42,9 @@ pub struct CompiledProgram {
     pub ir: Ir,
     // extra debug/teszt kényelmesség:
     pub imports: Vec<(SymId, ModuleKey)>, // (namespace, module key)
-    pub canon_hash: HashId,
+    /// The program's canonical identity, computed once here: `canon.hash()` is its semantic
+    /// digest, `canon.structure()` its structural hash.
+    pub canon: CanonicalIdentity,
 }
 
 #[derive(Debug)]
@@ -282,7 +284,7 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
         // no consumer has been shown to use them as an identity. Changing what this call stores is
         // therefore a wire-content change with no established consumer contract, so it is left
         // exactly as it was and classified `ambiguous -> blocked`. The sound identity is
-        // `ir::semantic_digest::semantic_model_digest_v2`, which is pure and writes nothing.
+        // `ir::canonical_hash::Canon::hash`, which is pure, writes nothing, and is computed below.
         #[allow(deprecated)]
         compute_merkle_hashes(&mut ir, &self.it);
 
@@ -294,13 +296,14 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
         // U2.2 lowering boundary: prove the Ir (namespace_roots + intrusive links)
         // reproduces the resolution Index hierarchy, ONCE, before the Index is
         // discarded. After this the Ir is the sole post-lowering authority and the
-        // canonical hash reads no Index.
-        let canon_hash = {
-            let paths = crate::ir::canonical_hash::CanonicalPaths::new(&ir);
-            paths.validate(&idx).map_err(|e| {
+        // canonical identity reads no Index. One canonical view serves the check and both
+        // identities, so the paths are derived once.
+        let canon = {
+            let canon = Canon::new(&ir, &self.it);
+            canon.validate(&idx).map_err(|e| {
                 ModuleLoadError::Parse(format!("namespace boundary validation failed: {e}"))
             })?;
-            paths.hash(cfg, &self.it)
+            CanonicalIdentity::of(&canon, cfg)
         };
 
         // 9) bundle + cache
@@ -309,7 +312,7 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
             idx,
             ir,
             imports: imports_map,
-            canon_hash,
+            canon,
         });
 
         self.last_compiled = Some(compiled.clone());

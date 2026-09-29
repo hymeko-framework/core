@@ -9,12 +9,11 @@
 //! boundary between the two must be explicit.
 
 use hymeko::common::ids::DeclId;
-use hymeko::ir::canonical_hash::{CanonHashCfg, canonical_program_hash};
+use hymeko::ir::canonical_hash::{Canon, CanonHashCfg};
 use hymeko::ir::coherence::{ModelFinding, validate_model_contract};
 use hymeko::ir::ir::{
     DType, DeclKind, Extent, ModelFacet, OperatorContract, TensorContract, TensorRole,
 };
-use hymeko::ir::semantic_digest::semantic_model_digest_v2;
 
 use crate::unified_ir::support::builder::{S, TestIr};
 
@@ -74,11 +73,14 @@ fn model() -> (TestIr, [DeclId; 4]) {
 }
 
 fn v2(t: &TestIr) -> [u8; 32] {
-    semantic_model_digest_v2(&t.ir, &t.it).0.0
+    Canon::new(&t.ir, &t.it).hash().0.0
 }
 
 fn v1(t: &TestIr) -> [u8; 32] {
-    canonical_program_hash(CanonHashCfg::default(), &t.ir, &t.it).0
+    Canon::new(&t.ir, &t.it)
+        .structure(CanonHashCfg::default())
+        .0
+        .0
 }
 
 fn roundtrip(t: &TestIr) -> hymeko::ir::ir::Ir {
@@ -123,7 +125,7 @@ fn a_pre_facet_payload_decodes_as_no_model() {
     json.as_object_mut().expect("object").remove("decl_model");
     let back: hymeko::ir::ir::Ir = serde_json::from_value(json).expect("legacy payload decodes");
     assert!(!back.declares_executable_model());
-    assert_eq!(v2(&t), semantic_model_digest_v2(&back, &t.it).0.0);
+    assert_eq!(v2(&t), Canon::new(&back, &t.it).hash().0.0);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -171,7 +173,7 @@ fn the_round_trip_preserves_the_typed_contract_and_the_digest() {
     assert_eq!(back.model_facet(x), t.ir.model_facet(x));
     assert_eq!(back.model_facet(e), t.ir.model_facet(e));
     assert_eq!(
-        semantic_model_digest_v2(&back, &t.it).0.0,
+        Canon::new(&back, &t.it).hash().0.0,
         v2(&t),
         "the digest must survive the wire"
     );
@@ -580,7 +582,7 @@ fn the_round_trip_preserves_both_axes() {
             "sign at slot {slot}"
         );
     }
-    assert_eq!(semantic_model_digest_v2(&back, &t.it).0.0, v2(&t));
+    assert_eq!(Canon::new(&back, &t.it).hash().0.0, v2(&t));
 }
 
 /// A pre-direction payload decodes to `Unspecified` and is not judged against the port rules.

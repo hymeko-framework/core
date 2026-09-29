@@ -13,7 +13,7 @@ Extracted by grammar -- tree-sitter for Rust and C++, `ast` for Python -- so tha
 `pub(crate)`, a `pub fn` inside a private `mod`, and a `def` written inside a
 docstring are all excluded for a stated reason rather than by luck.
 
-**3 package(s), 827 public symbol(s).**
+**3 package(s), 834 public symbol(s).**
 
 ## docs (rust)
 
@@ -57,7 +57,9 @@ _No public symbols._
 - `ArenaConfig` — `hymeko_core/src/tensor/compute/arena/mod.rs`
 - `ArenaStats` — `hymeko_core/src/tensor/compute/arena/mod.rs`
 - `AssemblerLimits` — `hymeko_core/src/ir_stream/assembler.rs`
+- `Canon` — `hymeko_core/src/ir/canonical_hash.rs`
 - `CanonHashCfg` — `hymeko_core/src/ir/canonical_hash.rs`
+- `CanonicalIdentity` — `hymeko_core/src/ir/canonical_hash.rs`
 - `CborPayload` — `hymeko_core/src/writers/cbor_writer.rs`
 - `ChildDecls` — `hymeko_core/src/ir/access.rs`
 - `CoherenceLimits` — `hymeko_core/src/ir/coherence.rs`
@@ -249,7 +251,6 @@ _No public symbols._
 - `bytes` — `hymeko_core/src/tensor/compute/arena/mod.rs`
 - `calculate_required_bytes` — `hymeko_core/src/tensor/shared_state.rs`
 - `canonical_hash` — `hymeko_core/src/writers/cbor_writer.rs`
-- `canonical_program_hash` — `hymeko_core/src/ir/canonical_hash.rs`
 - `canonicalize_path` — `hymeko_core/src/module_store/module_store.rs`
 - `carries_sections` — `hymeko_core/src/ir_stream/envelope.rs`
 - `changes_topology` — `hymeko_core/src/ir_stream/assembler.rs`
@@ -284,6 +285,7 @@ _No public symbols._
 - `decl_node` — `hymeko_core/src/ir/ir.rs`
 - `decl_node_unchecked` — `hymeko_core/src/ir/ir.rs`
 - `decl_of` — `hymeko_core/src/ir/canonical_hash.rs`
+- `declaration_hashes` — `hymeko_core/src/ir/semantic_digest.rs`
 - `declares_executable_model` — `hymeko_core/src/ir/ir.rs`
 - `decls` — `hymeko_core/src/ir/access.rs`
 - `decode` — `hymeko_core/src/ir_stream/envelope.rs`
@@ -331,6 +333,8 @@ _No public symbols._
 - `get_id` — `hymeko_core/src/resolution/interner.rs`
 - `has_fitting` — `hymeko_core/src/tensor/compute/arena/pool.rs`
 - `has_open_transaction` — `hymeko_core/src/ir_stream/assembler.rs`
+- `hash` — `hymeko_core/src/ir/canonical_hash.rs`
+- `hash` — `hymeko_core/src/ir/semantic_digest.rs`
 - `hash_decl` — `hymeko_core/src/ir/hash.rs`
 - `hash_doc` — `hymeko_core/src/ir/hash.rs`
 - `header_bytes` — `hymeko_core/src/ir_stream/envelope.rs`
@@ -348,12 +352,14 @@ _No public symbols._
 - `intern_ast` — `hymeko_core/src/resolution/intern_pass.rs`
 - `intern_ast_into` — `hymeko_core/src/resolution/intern_pass.rs`
 - `intern_ast_into_owned` — `hymeko_core/src/resolution/intern_pass.rs`
+- `interner` — `hymeko_core/src/ir/canonical_hash.rs`
 - `interner` — `hymeko_core/src/module_store/execution.rs`
 - `interner` — `hymeko_core/src/writers/cbor_writer.rs`
 - `into_ir` — `hymeko_core/src/ir/incidence.rs`
 - `into_parts` — `hymeko_core/src/writers/cbor_writer.rs`
 - `into_soa` — `hymeko_core/src/tensor/representations/tensor_coo.rs`
 - `inv_sqrt_degree` — `hymeko_core/src/tensor/conv/traits.rs`
+- `ir` — `hymeko_core/src/ir/canonical_hash.rs`
 - `ir` — `hymeko_core/src/ir/incidence.rs`
 - `ir` — `hymeko_core/src/writers/cbor_writer.rs`
 - `is_comparable_to` — `hymeko_core/src/ir_stream/version.rs`
@@ -400,6 +406,7 @@ _No public symbols._
 - `n_edges` — `hymeko_core/src/generators.rs`
 - `namespace_prefix` — `hymeko_core/src/ir/ir.rs`
 - `new` — `hymeko_core/src/common/ids.rs`
+- `new` — `hymeko_core/src/ir/canonical_hash.rs`
 - `new` — `hymeko_core/src/ir/incidence.rs`
 - `new` — `hymeko_core/src/ir/ir.rs`
 - `new` — `hymeko_core/src/ir/meta.rs`
@@ -433,6 +440,7 @@ _No public symbols._
 - `now_ms` — `hymeko_core/src/ir/time.rs`
 - `now_ns` — `hymeko_core/src/ir/time.rs`
 - `now_ns_u128` — `hymeko_core/src/ir/time.rs`
+- `of` — `hymeko_core/src/ir/canonical_hash.rs`
 - `of` — `hymeko_core/src/ir_stream/assembler.rs`
 - `open_session` — `hymeko_core/src/tensor/compute/arena/pool.rs`
 - `output_shape` — `hymeko_core/src/tensor/compute/mod.rs`
@@ -452,7 +460,6 @@ _No public symbols._
 - `pretty_print_compiled` — `hymeko_core/src/util/pretty_print.rs`
 - `print_dense_block` — `hymeko_core/src/tensor/util.rs`
 - `program` — `hymeko_core/src/module_store/execution.rs`
-- `program_structure_hash_v1` — `hymeko_core/src/ir/semantic_digest.rs`
 - `provider_mut` — `hymeko_core/src/module_store/module_store.rs`
 - `push` — `hymeko_core/src/tensor/representations/tensor_coo.rs`
 - `push_anonymous_arc` — `hymeko_core/src/ir/ir.rs`
@@ -491,8 +498,6 @@ _No public symbols._
 - `section` — `hymeko_core/src/ir_stream/codec.rs`
 - `sections` — `hymeko_core/src/ir_stream/assembler.rs`
 - `sections` — `hymeko_core/src/ir_stream/codec.rs`
-- `semantic_declaration_hashes` — `hymeko_core/src/ir/semantic_digest.rs`
-- `semantic_model_digest_v2` — `hymeko_core/src/ir/semantic_digest.rs`
 - `seq` — `hymeko_core/src/ir_stream/assembler.rs`
 - `seq` — `hymeko_core/src/ir_stream/envelope.rs`
 - `set_model_facet` — `hymeko_core/src/ir/ir.rs`
@@ -525,6 +530,7 @@ _No public symbols._
 - `stream_id` — `hymeko_core/src/ir_stream/envelope.rs`
 - `strict` — `hymeko_core/src/ir_stream/assembler.rs`
 - `strict` — `hymeko_core/src/ir_stream/limits.rs`
+- `structure` — `hymeko_core/src/ir/canonical_hash.rs`
 - `submit_session` — `hymeko_core/src/tensor/compute/arena/pool.rs`
 - `sunflower_design` — `hymeko_core/src/generators.rs`
 - `take_last_ir` — `hymeko_core/src/module_store/module_store.rs`
@@ -553,6 +559,7 @@ _No public symbols._
 - `txn_id` — `hymeko_core/src/ir_stream/assembler.rs`
 - `txn_id` — `hymeko_core/src/ir_stream/envelope.rs`
 - `unbounded` — `hymeko_core/src/tensor/compute/arena/mod.rs`
+- `unique_paths` — `hymeko_core/src/ir/canonical_hash.rs`
 - `unit_f32` — `hymeko_core/src/tensor/sparse_workload.rs`
 - `validate` — `hymeko_core/src/ir/incidence.rs`
 - `validate_all_refs_modules` — `hymeko_core/src/module_store/module_view.rs`
