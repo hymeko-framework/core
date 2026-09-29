@@ -367,6 +367,15 @@ pub mod dispatch {
     }
 }
 
+/// Every table of an [`Ir`]: the one list [`Ir::shrink_to_fit`] and its test read, so neither can
+/// miss a table the other has.
+macro_rules! ir_tables {
+    ($apply:ident!($($arg:tt)*)) => {
+        $apply!($($arg)*; decl_hash, arc_hash, decl_nodes, files, decl_file, nodes, edges, arcs,
+            decl_to_record, namespace_roots, decl_model)
+    };
+}
+
 impl Ir {
     pub(crate) fn validate_source_provenance(&self) -> Result<(), IrDecodeError> {
         if self.files.is_empty() && self.decl_file.is_empty() {
@@ -618,6 +627,25 @@ impl Ir {
         );
         self.decl_to_record[d.raw()] = slot;
         Ok(())
+    }
+
+    /// Release every table's spare capacity (APPROVED-CORE-EDIT: ir-shrink-after-lowering,
+    /// 2026-09-29).
+    ///
+    /// Lowering sizes the declaration tables for the named declarations and then appends the
+    /// anonymous arcs, and the record tables grow as they are filled, so a lowered IR carries
+    /// spare capacity of up to its own size: 354 MiB for a 424k-hyperedge graph a consumer kept
+    /// after moving it out of its compiled program. Each table is reallocated to its length; the
+    /// allocator shrinks a block in place (glibc splits it, or remaps a large block's pages), so
+    /// no element is copied to compact the IR, and none changes.
+    ///
+    /// # Postconditions
+    /// Every table's capacity equals its length; every element and every identity is unchanged.
+    pub fn shrink_to_fit(&mut self) {
+        macro_rules! shrink {
+            ($ir:expr; $($table:ident),*) => { $( $ir.$table.shrink_to_fit(); )* };
+        }
+        ir_tables!(shrink!(self));
     }
 
     pub fn preallocate_from_index(&mut self, total_named_decls: usize) {
@@ -1252,3 +1280,39 @@ mod compaction_coverage {
         assert!(serde_json::to_string(&ir).is_err());
     }
 }
+
+#[cfg(test)]
+mod shrink_coverage {
+    use super::*;
+
+    /// `shrink_to_fit` leaves every table, the crate-private ones included, at capacity equal to
+    /// length, and changes no element (ir-shrink-after-lowering).
+    #[test]
+    fn a_shrunk_ir_keeps_its_elements_and_no_spare_capacity() {
+        let mut ir = Ir::default();
+        ir.preallocate_from_index(3);
+        for _ in 0..5 {
+            ir.push_anonymous_arc();
+        }
+        // Slack in public and crate-private tables alike, as a growing lowering leaves it.
+        ir.decl_nodes.reserve(32);
+        ir.decl_to_record.reserve(32);
+        ir.arcs.reserve(16);
+        ir.arc_hash.reserve(64);
+        ir.files.reserve(16);
+        let before = serde_json::to_string(&ir).expect("serializes");
+        assert!(ir.decl_nodes.capacity() > ir.decl_nodes.len());
+        assert!(ir.decl_to_record.capacity() > ir.decl_to_record.len());
+        ir.shrink_to_fit();
+        assert_eq!(serde_json::to_string(&ir).expect("serializes"), before);
+        macro_rules! capacities {
+            ($ir:expr; $($table:ident),*) => {
+                [$( (stringify!($table), $ir.$table.capacity(), $ir.$table.len()) ),*]
+            };
+        }
+        for (table, capacity, len) in ir_tables!(capacities!(ir)) {
+            assert_eq!(capacity, len, "{table}");
+        }
+    }
+}
+

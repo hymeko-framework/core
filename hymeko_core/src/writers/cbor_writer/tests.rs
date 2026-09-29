@@ -1,7 +1,7 @@
 use super::*;
 use crate::common::ids::{DeclId, HyperArcId, NodeId, SymId};
 use crate::common::pathkey::PathKey;
-use crate::ir::canonical_hash::{CanonHashCfg, canonical_program_hash};
+use crate::ir::canonical_hash::{Canon, CanonHashCfg, CanonicalIdentity};
 use crate::ir::hash::HashId;
 use crate::ir::ir::{AnnoR, ArcRec, DeclKind, DeclNode, Ir, NodeRec, RefAtomR, SignedRefR};
 use crate::ir_stream::DecodeLimits;
@@ -53,7 +53,9 @@ fn facade_round_trips_usable_ir_interner_and_hash() {
     assert_eq!(decoded.interner().resolve(SymId::new(0)), "charge");
     assert_eq!(
         decoded.canonical_hash(),
-        canonical_program_hash(CanonHashCfg::default(), decoded.ir(), decoded.interner())
+        Canon::new(decoded.ir(), decoded.interner())
+            .structure(CanonHashCfg::default())
+            .0
     );
 }
 
@@ -61,6 +63,7 @@ fn facade_round_trips_usable_ir_interner_and_hash() {
 fn compiled_program_facade_makes_paths_workspace_relative() {
     let workspace = PathBuf::from("workspace");
     let (ir, index, interner) = fixture();
+    let canon = CanonicalIdentity::of(&Canon::new(&ir, &interner), CanonHashCfg::default());
     let program = CompiledProgram {
         root: ModuleKey(workspace.join("models/charge.hymeko")),
         idx: index,
@@ -69,7 +72,7 @@ fn compiled_program_facade_makes_paths_workspace_relative() {
             SymId::new(0),
             ModuleKey(workspace.join("library/electrical.hymeko")),
         )],
-        canon_hash: HashId([0; 32]),
+        canon,
     };
 
     let bytes = encode_compiled(&workspace, &program, &interner).unwrap();

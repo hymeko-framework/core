@@ -173,7 +173,7 @@ impl WgpuBackendBuilder {
     /// Acquire instance, adapter and device.
     ///
     /// Blocking: wgpu's init futures resolve without an event loop on native
-    /// backends (see [`crate::block_on`]).
+    /// backends (see `crate::block_on`).
     ///
     /// # Errors
     /// [`ComputeError::BackendUnavailable`] when no adapter matches, or the

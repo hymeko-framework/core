@@ -1,8 +1,6 @@
 use super::{CBOR_SCHEMA_VERSION, CborError, CborPayload, DecodedCborPayload};
 use crate::common::ids::{DeclId, SymId};
-use crate::ir::canonical_hash::{
-    CanonHashCfg, build_path_index, canonical_program_hash, validate_namespace_roots,
-};
+use crate::ir::canonical_hash::{Canon, CanonHashCfg, build_path_index, validate_namespace_roots};
 use crate::ir::coherence::{CoherenceLimits, validate_hierarchy_index_coherence};
 use crate::ir::ir::{AnnoR, SignedRefR, ValueR};
 use crate::ir_stream::DecodeLimits;
@@ -67,7 +65,9 @@ pub(super) fn payload(
     payload.index = rebuilt;
 
     if verify_hash {
-        let expected = canonical_program_hash(CanonHashCfg::default(), &payload.ir, &interner);
+        let expected = Canon::new(&payload.ir, &interner)
+            .structure(CanonHashCfg::default())
+            .0;
         if expected != payload.canon_hash {
             return Err(CborError::CanonicalHashMismatch {
                 expected,

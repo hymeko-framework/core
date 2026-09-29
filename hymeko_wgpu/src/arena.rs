@@ -38,7 +38,7 @@
 //! * **an arena encoder is open** — the buffer may have been encoded into
 //!   commands not yet submitted, so tagging with the latest issued epoch would
 //!   free it too early. It is held *pending* instead and receives the epoch of
-//!   the next [`TensorArena::submit`].
+//!   the next [`TrackedSession::submit`].
 //!
 //! That second case is the one a naive pool gets wrong, and it is not
 //! hypothetical: `acquire → encode → drop lease → submit` is a perfectly natural
@@ -253,7 +253,7 @@ impl<'b> TensorArena<'b> {
     /// **Use this rather than [`WgpuBackend::encoder`] when encoding arena
     /// tensors.** While the returned guard is alive the arena treats every
     /// released lease as possibly-referenced-but-not-yet-submitted, and defers
-    /// its epoch to the next [`Self::submit`]. Encoding arena tensors into an
+    /// its epoch to the next [`TrackedSession::submit`]. Encoding arena tensors into an
     /// untracked encoder and releasing them before submitting would let the pool
     /// hand the buffer out again while the command buffer still reads it.
     #[must_use]
@@ -483,9 +483,10 @@ impl Drop for TrackedSession<'_> {
 /// buffer came from the pool, and the operation could then be encoded anywhere.
 ///
 /// Operations accept the lease directly (it implements
-/// [`crate::TensorOperand`]). Where a raw tensor is genuinely wanted — a
-/// readback, a host write — [`Self::tensor`] provides it explicitly, which is
-/// greppable rather than invisible.
+/// [`crate::TensorOperand`]). Where the data is genuinely wanted — a readback,
+/// a host write — [`crate::WgpuBackend::read_tensor`] and
+/// [`crate::ResourceFactory::write_tensor`] take the lease itself, which is
+/// greppable rather than invisible; no method hands out the raw tensor.
 ///
 /// # Why there is no `release()` method
 ///

@@ -11,13 +11,12 @@
 //! (`assert_changed`). A comparison over two identical IRs is rejected as vacuous.
 
 use hymeko::common::ids::DeclId;
-use hymeko::ir::canonical_hash::CanonHashCfg;
+use hymeko::ir::canonical_hash::{Canon, CanonHashCfg};
 use hymeko::ir::hash_pass::compute_merkle_hashes;
 use hymeko::ir::ir::{AnnoR, Ir, RefAtomR, SignedRefR, ValueR};
 use hymeko::ir::semantic_digest::{
     ProgramStructureHashV1, SEMANTIC_DIGEST_ALGO_VERSION, SEMANTIC_DIGEST_SCHEMA_VERSION,
-    SemanticModelDigestV2, program_structure_hash_v1, semantic_declaration_hashes,
-    semantic_model_digest_v2,
+    SemanticModelDigestV2,
 };
 
 use crate::unified_ir::support::builder::{S, TestIr};
@@ -145,11 +144,11 @@ fn legacy(t: &mut TestIr) -> Vec<Option<[u8; 32]>> {
 }
 
 fn v2(t: &TestIr) -> SemanticModelDigestV2 {
-    semantic_model_digest_v2(&t.ir, &t.it)
+    Canon::new(&t.ir, &t.it).hash()
 }
 
 fn v1(t: &TestIr) -> ProgramStructureHashV1 {
-    program_structure_hash_v1(CanonHashCfg::default(), &t.ir, &t.it)
+    Canon::new(&t.ir, &t.it).structure(CanonHashCfg::default())
 }
 
 fn assert_distinct_models(left: &TestIr, right: &TestIr, changed: &str, message: &str) {
@@ -394,8 +393,9 @@ fn v2_is_invariant_under_a_semantically_irrelevant_construction_order() {
 #[test]
 fn program_structure_hash_v1_is_the_unchanged_v1_value() {
     let t = program(Some(ValueR::Ref(A)));
-    let direct =
-        hymeko::ir::canonical_hash::canonical_program_hash(CanonHashCfg::default(), &t.ir, &t.it);
+    let direct = Canon::new(&t.ir, &t.it)
+        .structure(CanonHashCfg::default())
+        .0;
     let wrapped: ProgramStructureHashV1 = v1(&t);
     assert_eq!(
         wrapped.0, direct,
@@ -409,7 +409,7 @@ fn program_structure_hash_v1_is_the_unchanged_v1_value() {
 fn v1_and_v2_are_domain_and_version_separated() {
     let t = program(Some(ValueR::Ref(A)));
     let v1 = v1(&t);
-    let v2v = semantic_model_digest_v2(&t.ir, &t.it);
+    let v2v = Canon::new(&t.ir, &t.it).hash();
     assert_ne!(
         v1.0.0, v2v.0.0,
         "a shared value would mean a shared domain header"
@@ -443,7 +443,7 @@ fn v1_still_does_not_cover_annotations_and_v2_does() {
 #[test]
 fn semantic_declaration_hashes_covers_every_declaration() {
     let t = program(Some(ValueR::Ref(A)));
-    let table = semantic_declaration_hashes(&t.ir, &t.it);
+    let table = Canon::new(&t.ir, &t.it).declaration_hashes();
     assert_eq!(table.len(), t.ir.decl_nodes.len());
     let mut sorted: Vec<_> = table.iter().map(|h| h.0).collect();
     sorted.sort_unstable();
