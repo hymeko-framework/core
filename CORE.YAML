@@ -315,6 +315,22 @@ crates:
           - no dependency and no manifest change
           - no commit or push beyond the feature branch the user merges
 
+      # APPROVED-CORE-EDIT: ir-shrink-after-lowering (2026-09-29, user chat)
+      - slug: ir-shrink-after-lowering
+        date: 2026-09-29
+        scope: >
+          hymeko_core/src/ir/ir.rs gains Ir::shrink_to_fit over the one table list
+          ir_tables! (every Vec table, crate-private ones included) and its unit test;
+          hymeko_core/src/ir/lower.rs calls it once at the end of lower_program_to_ir, so a
+          lowered IR carries no growth slack (declaration tables sized for the named
+          declarations then grown by the anonymous arcs; record tables grown as filled).
+          Compile-level test in test_module_store.rs.
+        constraints:
+          - no element and no identity byte changes
+          - the allocator shrinks in place; nothing is copied to compact the IR
+          - no dependency and no manifest change
+          - no commit or push beyond the feature branch the user merges
+
   # `hymeko_hnn` was RELOCATED 2026-08-31 to hymeko/nagare (hymeko_nagare::hnn) and no longer
   # exists in this workspace (Cargo.toml members = [hymeko_core, hymeko_wgpu]; the directory is
   # gone). Its stale crate declaration was removed here on 2026-09-01 under

@@ -267,6 +267,9 @@ pub fn lower_program_to_ir_with_meta(
     for (ns, dep_ast) in imported {
         lower_into_ir(&mut ir, dep_ast, idx, it, &[*ns])?;
     }
+    // The tables are complete: their growth slack goes now, in place, rather than riding along
+    // with every consumer that keeps the IR (ir-shrink-after-lowering, 2026-09-29).
+    ir.shrink_to_fit();
     Ok(ir)
 }
 

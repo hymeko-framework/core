@@ -276,6 +276,38 @@ mod mod_test_module_store {
         assert!(diagnostic.contains("c.subject"));
     }
 
+    /// A compiled program's IR holds no spare capacity: lowering appends the anonymous arcs after
+    /// sizing the declaration tables for the named ones, and then shrinks every table in place
+    /// (ir-shrink-after-lowering, 2026-09-29), so a consumer that keeps the IR keeps its size.
+    #[test]
+    fn a_compiled_ir_holds_no_spare_capacity() {
+        let mut graph = String::from("g\n{}\ngraph\n{\n");
+        for v in 0..40 {
+            graph += &format!("    v{v:02} <vertex> {{ vertex_index {v}; }}\n");
+        }
+        for e in 0..60 {
+            let (a, b) = (e % 40, (e * 7 + 3) % 40);
+            graph += &format!("    @e{e:02} <hyperedge> {{ slot \"s\"; ( + <in> v{a:02}, - <out> v{b:02} ); }}\n");
+        }
+        graph += "}\n";
+        let mut store = ModuleStore::new(
+            MemProvider::default().with_file("g.hymeko", graph),
+            hymeko::util::real_parser::RealParser,
+        );
+        let program = store.compile(Path::new("g.hymeko")).unwrap();
+        let ir = &program.ir;
+        assert_eq!(ir.arcs.len(), 60);
+        for (name, capacity, len) in [
+            ("decl_nodes", ir.decl_nodes.capacity(), ir.decl_nodes.len()),
+            ("decl_hash", ir.decl_hash.capacity(), ir.decl_hash.len()),
+            ("nodes", ir.nodes.capacity(), ir.nodes.len()),
+            ("edges", ir.edges.capacity(), ir.edges.len()),
+            ("arcs", ir.arcs.capacity(), ir.arcs.len()),
+        ] {
+            assert_eq!(capacity, len, "{name}");
+        }
+    }
+
     /// A compile keeps both identities of what it compiled (canonical-identity, 2026-09-29): the
     /// structural hash is blind to annotation values, the semantic digest is not. Two graphs that
     /// differ only in a vertex index, or only in a hyperedge's slot, share `canon.structure()` and
