@@ -204,8 +204,10 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
 
         let imports_map = self.linked_imports(&root);
 
-        // Borrow cached syntax independently of the mutable interner. Compilation
-        // reads ASTs; cloning the root and dependency list adds no semantics.
+        // Borrow cached syntax independently of the mutable interner: the entries and the
+        // interner are disjoint fields, so every module's AST is read in place. Compilation
+        // only reads them, and a dependency is not copied (a 424k-hyperedge graph module's
+        // AST was 364 MiB of the compile's peak; module-store-borrowed-asts, 2026-09-29).
         let root_entry = self
             .entries
             .get(&root)
@@ -213,15 +215,15 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
         let root_ast = &root_entry.ast;
 
         // 4) imported list (alias opcionális: ns = alias || dep_ast.name)
-        let mut imported: Vec<(SymId, AstSym<'static>)> = Vec::new();
+        let mut imported: Vec<(SymId, &AstSym<'static>)> = Vec::with_capacity(imports_map.len());
         for &(ns, ref dep_key) in &imports_map {
-            let dep_ast = self
+            let dep_ast = &self
+                .entries
                 .get(dep_key)
                 .ok_or_else(|| {
                     ModuleLoadError::Parse(format!("dep missing: {}", dep_key.0.display()))
                 })?
-                .ast
-                .clone();
+                .ast;
 
             imported.push((ns, dep_ast));
         }

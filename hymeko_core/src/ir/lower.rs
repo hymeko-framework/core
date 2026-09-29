@@ -254,7 +254,7 @@ pub fn lower_into_ir(
 
 pub fn lower_program_to_ir_with_meta(
     root: &AstSym,
-    imported: &[(SymId, AstSym)],
+    imported: &[(SymId, &AstSym)],
     idx: &Index,
     it: &mut Interner,
     meta: Meta,
@@ -272,7 +272,7 @@ pub fn lower_program_to_ir_with_meta(
 
 pub fn lower_program_to_ir(
     root: &AstSym,
-    imported: &[(SymId, AstSym)],
+    imported: &[(SymId, &AstSym)],
     idx: &Index,
     it: &mut Interner,
 ) -> Result<Ir, ResolveError> {

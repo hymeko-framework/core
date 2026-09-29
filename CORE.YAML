@@ -299,6 +299,22 @@ crates:
           - no dependency and no manifest change
           - no commit or push beyond the feature branch the user merges
 
+      # APPROVED-CORE-EDIT: module-store-borrowed-asts (2026-09-29, user chat: "of course borrow
+      # them. Don't violate the zero copy rule. Also be gentle on memory")
+      - slug: module-store-borrowed-asts
+        date: 2026-09-29
+        scope: >
+          ModuleStore::compile reads every dependency module's AST in place instead of cloning
+          it: the entries and the interner are disjoint fields, so the borrow needs no copy.
+          lower_program_to_ir(_with_meta) takes the imports as (SymId, &AstSym); ModuleStore::compile
+          is its only caller in the ecosystem. Measured (massif, CogInfoCom Alpha): the clone was
+          364 MiB of the compile's heap peak.
+        constraints:
+          - zero copy: no module AST is cloned by a compile
+          - the lowered Ir and every identity byte unchanged
+          - no dependency and no manifest change
+          - no commit or push beyond the feature branch the user merges
+
   # `hymeko_hnn` was RELOCATED 2026-08-31 to hymeko/nagare (hymeko_nagare::hnn) and no longer
   # exists in this workspace (Cargo.toml members = [hymeko_core, hymeko_wgpu]; the directory is
   # gone). Its stale crate declaration was removed here on 2026-09-01 under
