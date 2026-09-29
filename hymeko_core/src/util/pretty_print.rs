@@ -158,7 +158,14 @@ fn fmt_edge_arcs(
 
 pub fn pretty_print_compiled(it: &Interner, compiled: &CompiledProgram) {
     println!("=== HyMeKo compile ===");
-    println!("Canonical program hash: {}", to_hex(&compiled.canon_hash.0));
+    println!(
+        "Canonical program hash: {}",
+        to_hex(&compiled.canon.structure().0.0)
+    );
+    println!(
+        "Semantic digest:        {}",
+        to_hex(&compiled.canon.hash().0.0)
+    );
     println!("Root: {}", compiled.root.0.display());
 
     println!("\nImports (namespace -> file):");

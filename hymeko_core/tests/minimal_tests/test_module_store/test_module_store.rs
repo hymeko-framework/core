@@ -5,7 +5,7 @@ mod mod_test_module_store {
     use crate::test_helpers::{log_test_footer, log_test_header};
     use hymeko::common::pathkey::PathKey;
     use hymeko::ir::canonical_hash::{
-        CanonHashCfg, NamespaceError, canonical_program_hash, validate_namespace_roots,
+        Canon, CanonHashCfg, CanonicalIdentity, NamespaceError, validate_namespace_roots,
     };
     use hymeko::module_store::module_store::ModuleStore;
     use hymeko::module_store::source_provider::MemProvider;
@@ -181,9 +181,12 @@ mod mod_test_module_store {
             let mut store = ModuleStore::new(provider, TestParser);
             let compiled = store.compile(Path::new(MODULE_STORE_ROOT_FILE)).unwrap();
             assert_eq!(
-                compiled.canon_hash,
-                canonical_program_hash(CanonHashCfg::default(), &compiled.ir, &store.it),
-                "shared and standalone canonical paths: {name}"
+                compiled.canon,
+                CanonicalIdentity::of(
+                    &Canon::new(&compiled.ir, &store.it),
+                    CanonHashCfg::default()
+                ),
+                "the compile's identity is its IR's canonical identity: {name}"
             );
             assert_eq!(
                 validate_namespace_roots(&compiled.ir, &compiled.idx),
@@ -273,23 +276,91 @@ mod mod_test_module_store {
         assert!(diagnostic.contains("c.subject"));
     }
 
+    /// A compiled program's IR holds no spare capacity: lowering appends the anonymous arcs after
+    /// sizing the declaration tables for the named ones, and then shrinks every table in place
+    /// (ir-shrink-after-lowering, 2026-09-29), so a consumer that keeps the IR keeps its size.
+    #[test]
+    fn a_compiled_ir_holds_no_spare_capacity() {
+        let mut graph = String::from("g\n{}\ngraph\n{\n");
+        for v in 0..40 {
+            graph += &format!("    v{v:02} <vertex> {{ vertex_index {v}; }}\n");
+        }
+        for e in 0..60 {
+            let (a, b) = (e % 40, (e * 7 + 3) % 40);
+            graph += &format!("    @e{e:02} <hyperedge> {{ slot \"s\"; ( + <in> v{a:02}, - <out> v{b:02} ); }}\n");
+        }
+        graph += "}\n";
+        let mut store = ModuleStore::new(
+            MemProvider::default().with_file("g.hymeko", graph),
+            hymeko::util::real_parser::RealParser,
+        );
+        let program = store.compile(Path::new("g.hymeko")).unwrap();
+        let ir = &program.ir;
+        assert_eq!(ir.arcs.len(), 60);
+        for (name, capacity, len) in [
+            ("decl_nodes", ir.decl_nodes.capacity(), ir.decl_nodes.len()),
+            ("decl_hash", ir.decl_hash.capacity(), ir.decl_hash.len()),
+            ("nodes", ir.nodes.capacity(), ir.nodes.len()),
+            ("edges", ir.edges.capacity(), ir.edges.len()),
+            ("arcs", ir.arcs.capacity(), ir.arcs.len()),
+        ] {
+            assert_eq!(capacity, len, "{name}");
+        }
+    }
+
+    /// A compile keeps both identities of what it compiled (canonical-identity, 2026-09-29): the
+    /// structural hash is blind to annotation values, the semantic digest is not. Two graphs that
+    /// differ only in a vertex index, or only in a hyperedge's slot, share `canon.structure()` and
+    /// differ in `canon.hash()`; a changed arc sign moves both.
+    #[test]
+    fn a_compile_keeps_the_semantic_identity_the_structure_hash_cannot_see() {
+        let compile = |text: &str| {
+            let mut store = ModuleStore::new(
+                MemProvider::default().with_file("g.hymeko", text),
+                hymeko::util::real_parser::RealParser,
+            );
+            store.compile(Path::new("g.hymeko")).unwrap().canon
+        };
+        let graph = "g\n{}\ngraph\n{\n    v0 <vertex> { vertex_index 0; }\n    \
+                     v1 <vertex> { vertex_index 1; }\n    \
+                     @e0 <hyperedge> { slot \"s\"; ( + <in> v0, - <out> v1 ); }\n}\n";
+        let base = compile(graph);
+        for (change, value_only) in [
+            (graph.replace("vertex_index 1;", "vertex_index 7;"), true),
+            (graph.replace("slot \"s\"", "slot \"t\""), true),
+            (graph.replace("( + <in> v0", "( - <in> v0"), false),
+        ] {
+            let other = compile(&change);
+            assert_ne!(other.hash(), base.hash(), "{change}");
+            assert_eq!(
+                other.structure() == base.structure(),
+                value_only,
+                "{change}"
+            );
+        }
+        assert_eq!(
+            compile(graph),
+            base,
+            "an identity is a function of the source"
+        );
+    }
+
     #[test]
     fn course_source_metadata_is_optional_validated_and_hash_neutral() {
         use hymeko::ir::ir::Ir;
-        use hymeko::ir::semantic_digest::semantic_model_digest_v2;
         use hymeko::writers::cbor_writer;
         let mut store = ModuleStore::new(MemProvider::default()
             .with_file("plain.hymeko", "description{} model{a \"árvíztűrő 東京\";}"),
             hymeko::util::real_parser::RealParser);
         let compiled = store.compile(Path::new("plain.hymeko")).unwrap();
-        assert_eq!(compiled.canon_hash.0.iter().map(|b| format!("{b:02x}")).collect::<String>(),
+        assert_eq!(compiled.canon.structure().0.0.iter().map(|b| format!("{b:02x}")).collect::<String>(),
             "f004527060201656811f52eeaa7cbb2562961db352143971fcebc5e646ecc7b8");
-        let structural = compiled.canon_hash;
-        let semantic = semantic_model_digest_v2(&compiled.ir, &store.it);
+        let structural = compiled.canon.structure().0;
+        let semantic = compiled.canon.hash();
         let mut ir = compiled.ir.clone();
         ir.files[0] = "moved/lecture.hymeko".into();
-        assert_eq!(canonical_program_hash(CanonHashCfg::default(), &ir, &store.it), structural);
-        assert_eq!(semantic_model_digest_v2(&ir, &store.it), semantic);
+        assert_eq!(Canon::new(&ir, &store.it).structure(CanonHashCfg::default()).0, structural);
+        assert_eq!(Canon::new(&ir, &store.it).hash(), semantic);
         let wire = serde_json::to_value(&ir).unwrap();
         for key in ["files", "decl_file"] {
             let mut invalid = wire.clone();

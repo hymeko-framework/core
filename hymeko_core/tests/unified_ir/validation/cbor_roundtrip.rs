@@ -77,7 +77,7 @@ fn assert_round_trip(path: &Path) -> usize {
     );
     assert_eq!(
         decoded.canonical_hash(),
-        compiled.canon_hash,
+        compiled.canon.structure().0,
         "canonical hash on {}",
         path.display()
     );

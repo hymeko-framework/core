@@ -4,7 +4,7 @@
 use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_main};
 use hymeko::{
     ir::{
-        canonical_hash::{CanonHashCfg, canonical_program_hash, validate_namespace_roots},
+        canonical_hash::{Canon, CanonHashCfg, CanonicalIdentity, validate_namespace_roots},
         lower::lower_to_ir,
     },
     module_store::{module_store::ModuleStore, source_provider::MemProvider},
@@ -126,12 +126,12 @@ fn bench_compiler_phases(c: &mut Criterion) {
         expected.ir.edges.len(),
         expected.ir.arcs.len(),
         expected.ir.decl_nodes.len(),
-        expected.canon_hash,
+        expected.canon.structure().0,
     );
     assert_eq!(expected.ir.decl_nodes.len(), ir.decl_nodes.len());
     assert_eq!(
-        expected.canon_hash,
-        canonical_program_hash(CanonHashCfg::default(), &ir, &it)
+        expected.canon,
+        CanonicalIdentity::of(&Canon::new(&ir, &it), CanonHashCfg::default())
     );
     let scale = if nodes % 1000 == 0 {
         format!("{}k", nodes / 1000)
@@ -197,7 +197,11 @@ fn bench_compiler_phases(c: &mut Criterion) {
         b.iter(|| validate_namespace_roots(black_box(&ir), &idx).unwrap())
     });
     group.bench_function("canonical_hash", |b| {
-        b.iter(|| canonical_program_hash(CanonHashCfg::default(), black_box(&ir), &it))
+        b.iter(|| {
+            Canon::new(black_box(&ir), &it)
+                .structure(CanonHashCfg::default())
+                .0
+        })
     });
     group.bench_function("compile_cold", |b| {
         b.iter_batched(

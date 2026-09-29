@@ -1,0 +1,12 @@
+%% Core canonical identity: one object, computed once per compile.
+sequenceDiagram
+    participant S as ModuleStore::compile
+    participant C as Canon<'ir>
+    participant P as CompiledProgram
+    participant N as Nagare compile_sources
+    S->>C: Canon::new(&ir, &it) (paths derived once)
+    C-->>S: validate(&idx) at the lowering boundary
+    C-->>S: structure(cfg) (V1) and hash() (semantic V2)
+    S->>P: canon = CanonicalIdentity { structure, hash }
+    N->>P: program.canon.hash() as the source identity
+    N->>C: Canon::new(&materialised, &it).hash() as the model digest

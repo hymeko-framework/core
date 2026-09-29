@@ -1,6 +1,6 @@
 //! Bounded correctness tests; no timers, benchmark harness, or resource campaign.
 use super::*;
-use crate::ir::semantic_digest::semantic_model_digest_v2;
+use crate::ir::canonical_hash::Canon;
 use crate::module_store::source_provider::MemProvider;
 use crate::util::real_parser::RealParser as Parser;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -52,10 +52,10 @@ fn isolated_compilation_matches_the_canonical_pipeline() {
     let expected = oracle.compile(Path::new("model.hymeko")).unwrap();
     let actual = CompiledModel::compile(input, Parser, Path::new("model.hymeko")).unwrap();
     assert_eq!(
-        semantic_model_digest_v2(&actual.program().ir, actual.interner()),
-        semantic_model_digest_v2(&expected.ir, &oracle.it)
+        Canon::new(&actual.program().ir, actual.interner()).hash(),
+        Canon::new(&expected.ir, &oracle.it).hash()
     );
-    assert_eq!(actual.program().canon_hash, expected.canon_hash);
+    assert_eq!(actual.program().canon, expected.canon);
     assert_eq!(actual.program().ir.edges.len(), 1);
     assert_eq!(actual.program().ir.arcs.len(), 1);
     let state = ExecutionState::new(actual);

@@ -9,7 +9,7 @@
 //! other. The intrusive links (`DeclNode.parent`, `first_child`, `last_child`,
 //! `next_sibling`) describe one tree; the `Index` path keys describe another.
 //! Nothing enforces that they agree, and the two current hash systems disagree
-//! about which one is authoritative: `canonical_program_hash` reads *only* the
+//! about which one is authoritative: `Canon::structure` reads *only* the
 //! `Index` path prefixes, while `hash_pass::compute_merkle_hashes` walks *only*
 //! the intrusive child lists.
 //!
