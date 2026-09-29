@@ -282,6 +282,23 @@ crates:
           - no dependency and no manifest change
           - no commit or push beyond the feature branch the user merges
 
+      # APPROVED-CORE-EDIT: semantic-digest-path-cache (2026-09-29, user chat)
+      - slug: semantic-digest-path-cache
+        date: 2026-09-29
+        scope: >
+          A byte-identical speed-up of the semantic digest, hymeko_core/src/ir/semantic_digest.rs
+          only. Proposed as a per-declaration path cache; the profile then showed that blake3's
+          per-update bookkeeping, not path resolution, was the cost (5.2M updates for one
+          Bitcoin-OTC graph, 940M of write_target's 1079M instructions), so it is built as
+          DigestWriter: the digest's small writes go through a 256-byte stack buffer into one
+          blake3 update, with no per-declaration memory. Unit test
+          a_buffered_digest_is_the_stream_it_feeds.
+        constraints:
+          - every digest byte unchanged (blake3 streaming; 105 corpus files compared against 83ef0c1)
+          - no algorithm or schema version change, no wire change
+          - no dependency and no manifest change
+          - no commit or push beyond the feature branch the user merges
+
   # `hymeko_hnn` was RELOCATED 2026-08-31 to hymeko/nagare (hymeko_nagare::hnn) and no longer
   # exists in this workspace (Cargo.toml members = [hymeko_core, hymeko_wgpu]; the directory is
   # gone). Its stale crate declaration was removed here on 2026-09-01 under
