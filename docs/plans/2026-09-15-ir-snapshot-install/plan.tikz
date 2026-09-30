@@ -1,0 +1,7 @@
+\begin{tikzpicture}[every node/.style={draw,align=center}]
+\node (a) at (0,0) {Core CBOR decoder};
+\node (b) at (6,0) {Validated payload};
+\node (c) at (6,-2) {CompiledModel};
+\node (d) at (0,-2) {ExecutionState};
+\draw[->] (a)--(b);\draw[->] (b)--(c);\draw[->] (c)--(d);
+\end{tikzpicture}

@@ -6,14 +6,19 @@
 //! compilation or consumer computation. Scheduling and backpressure belong to
 //! consumers: each preparation and retained snapshot consumes model-sized memory.
 //!
-//! This is whole-model replacement, not delta application, automatic merging,
+//! Publication replaces complete models, prepared from source or checked leaf values.
+//! This is not general topology-delta application, automatic merging,
 //! distributed consensus, or a parallel rewrite of the compiler. Publication
 //! revisions are local counters, unrelated to `ir_stream::SnapshotVersion`.
 //! Concurrent candidates from one base compete: one commits; others are stale.
 //! Completion order is not submission order; there is no latest-request-wins rule.
 
+mod value_updates;
+pub use value_updates::{ValueUpdate, ValueUpdateError};
+
 use super::module_store::{CompiledProgram, HymekoParser, ModuleLoadError, ModuleStore};
 use super::source_provider::SourceProvider;
+use crate::ir::canonical_hash::{Canon, CanonHashCfg, CanonicalIdentity};
 use crate::resolution::interner::Interner;
 use std::fmt;
 use std::path::Path;
@@ -21,7 +26,8 @@ use std::sync::{Arc, RwLock};
 
 /// An inseparable, read-only compiled program and symbol table.
 ///
-/// Construction goes through the canonical compiler. No mutable program/interner
+/// Construction goes through the canonical compiler, validated snapshots or checked value updates.
+/// No mutable program/interner
 /// access or arbitrary pairing constructor is exposed.
 pub struct CompiledModel {
     program: Arc<CompiledProgram>,
@@ -48,6 +54,31 @@ impl CompiledModel {
             program,
             interner: store.it,
         })
+    }
+
+    /// Install a Core-validated canonical snapshot without parsing or lowering.
+    /// Consumes the checked payload and its matching interner together; declaration
+    /// IDs, imports, index and structural hash retain the decoder's identities; the
+    /// semantic digest, which the wire does not carry, is computed here once. The module
+    /// root stays workspace-relative and grants no source-provider access.
+    // APPROVED-CORE-EDIT: ir-snapshot-install (2026-09-15, user chat).
+    #[must_use]
+    pub fn from_decoded_cbor(snapshot: crate::writers::cbor_writer::DecodedCborPayload) -> Self {
+        let (payload, interner) = snapshot.into_parts();
+        let canon =
+            CanonicalIdentity::of(&Canon::new(&payload.ir, &interner), CanonHashCfg::default());
+        // The decoder recomputed the structural hash from this IR before accepting it.
+        debug_assert_eq!(canon.structure().0, payload.canon_hash);
+        Self {
+            program: Arc::new(CompiledProgram {
+                root: super::module_store::ModuleKey(payload.root_path),
+                idx: payload.index,
+                ir: payload.ir,
+                imports: payload.imports,
+                canon,
+            }),
+            interner,
+        }
     }
 
     /// The canonical compiler's result, borrowed for this model's lifetime.
@@ -223,3 +254,103 @@ impl ExecutionState {
 #[cfg(test)]
 #[path = "execution_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod snapshot_tests {
+    use super::*;
+    use crate::{
+        ir::ir::ValueR, ir_stream::DecodeLimits,
+        module_store::source_provider::MemProvider, writers::cbor_writer,
+    };
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[test]
+    fn validated_snapshot_install_moves_identity_and_publishes_without_parser_calls() {
+        let calls = AtomicUsize::new(0);
+        let original=CompiledModel::compile(MemProvider::default()
+            .with_file("types.hymeko", "description {} types { body {} }")
+            .with_file("scene.hymeko", "description { @\"types.hymeko\"; using types as t; } room { marker: t.body { gain 1.0; } }"),
+            tests::CallbackParser(|| { calls.fetch_add(1, Ordering::SeqCst); }), Path::new("scene.hymeko")).unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        let bytes =
+            cbor_writer::encode_compiled(Path::new(""), original.program(), original.interner())
+                .unwrap();
+        let decoded = cbor_writer::decode(&bytes, &DecodeLimits::default()).unwrap();
+        let nodes = decoded.ir().decl_nodes.as_ptr();
+        let imported = decoded.payload().imports.clone();
+        assert!(!imported.is_empty());
+        let digest = Canon::new(decoded.ir(), decoded.interner()).hash();
+        let installed = CompiledModel::from_decoded_cbor(decoded);
+        assert_eq!(installed.program().ir.decl_nodes.as_ptr(), nodes);
+        assert_eq!(installed.program().root.0, Path::new("scene.hymeko"));
+        assert_eq!(installed.program().imports, imported);
+        assert_eq!(installed.program().canon, original.program().canon);
+        assert_eq!(
+            Canon::new(&installed.program().ir, installed.interner()).hash(),
+            digest
+        );
+        assert_eq!(
+            cbor_writer::encode_compiled(Path::new(""), installed.program(), installed.interner())
+                .unwrap(),
+            bytes
+        );
+        let id = installed
+            .program()
+            .ir
+            .decls()
+            .find(|(_, d)| installed.interner().resolve(d.name) == "gain")
+            .unwrap()
+            .0;
+        let state = ExecutionState::new(installed);
+        let old = state.snapshot().unwrap();
+        let next = state
+            .prepare_model_at(
+                &old,
+                old.model()
+                    .with_value_updates(&[ValueUpdate::Set {
+                        declaration: id,
+                        value: ValueR::Num(3.),
+                    }])
+                    .unwrap(),
+            )
+            .unwrap();
+        let competing = state
+            .prepare_model_at(
+                &old,
+                CompiledModel::from_decoded_cbor(
+                    cbor_writer::decode(&bytes, &DecodeLimits::default()).unwrap(),
+                ),
+            )
+            .unwrap();
+        assert_eq!(state.commit(next).unwrap().revision(), 1);
+        assert_eq!(
+            state.commit(competing).err(),
+            Some(PublicationError::StaleBase {
+                expected: 0,
+                actual: 1
+            })
+        );
+        assert_eq!(
+            old.model().program().ir.decl_node(id).unwrap().anno.value,
+            Some(ValueR::Num(1.))
+        );
+        assert_eq!(
+            state
+                .snapshot()
+                .unwrap()
+                .model()
+                .program()
+                .ir
+                .decl_node(id)
+                .unwrap()
+                .anno
+                .value,
+            Some(ValueR::Num(3.))
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        for invalid in [&b"invalid"[..], &bytes[..bytes.len() / 2]] {
+            assert!(cbor_writer::decode(invalid, &DecodeLimits::default()).is_err());
+        }
+        assert_eq!(state.snapshot().unwrap().revision(), 1);
+    }
+}
