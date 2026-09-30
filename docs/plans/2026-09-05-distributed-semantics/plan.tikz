@@ -1,13 +1,13 @@
 \begin{center}
-\begin{tikzpicture}[node distance=10mm, every node/.style={draw,rounded corners,align=center,font=\small}, >=Stealth]
-\node (spec) {Existing Core specification};
-\node (model) [below left=of spec] {Lean admission model\\kernel-checked properties};
-\node (runtime) [below right=of spec] {Actual Core public API\\counterexample traces};
-\node (result) [below=23mm of spec] {Traceability: proved / observed / missing};
-\draw[->] (spec) -- (model);
-\draw[->] (spec) -- (runtime);
-\draw[->] (model) -- (result);
-\draw[->] (runtime) -- (result);
+\begin{tikzpicture}[node distance=8mm, every node/.style={draw,align=center,rounded corners,font=\small}, >=Stealth]
+\node (model) {Existing Lean model\\Replay safety and bounded oracle};
+\node[below=of model] (rust) {Real Rust wire and assembler\\Conformance and outcome preflight};
+\node[below left=10mm and 3mm of rust] (local) {Windows native};
+\node[below=of rust] (linux) {Amaterasu native};
+\node[below right=10mm and 3mm of rust] (arm) {Docker/QEMU ARM64};
+\node[below=19mm of linux] (report) {Identical workloads and locked source\\Raw samples, RSS, scoped conclusions};
+\draw[->] (model)--(rust); \draw[->] (rust)--(local); \draw[->] (rust)--(linux); \draw[->] (rust)--(arm);
+\draw[->] (local)--(report); \draw[->] (linux)--(report); \draw[->] (arm)--(report);
 \end{tikzpicture}
 \end{center}
 \begin{center}

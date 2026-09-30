@@ -1,0 +1,11 @@
+## HEAD (no branch)
+18f9908c991c32c1eaaec51927075fa87996e846
+4871f04cb0c24865c17ddf4507f83136c1c70caffeac6eaf27fc94acd075056c  Cargo.lock
+a4bba88e0902fd1a9ed2e0635f50622fd44cb87ae01d119cfec5878b54a67137  hymeko_core/benches/ir_stream_bench.rs
+f3759117dd2880b4744331e31c2c5c191848d48a55a1d85ca3491e0d91648bf4  hymeko_core/tests/ir_stream_admission.rs
+{"Status":"exited","Running":false,"Paused":false,"Restarting":false,"OOMKilled":false,"Dead":false,"Pid":0,"ExitCode":0,"Error":"","StartedAt":"2026-09-06T02:52:18.486367189Z","FinishedAt":"2026-09-06T02:52:32.410450475Z"}
+sha256:326930c465e5d47623a3de3d5e0253d521b91f144b336422fad32529ca567270 size_bytes=2342065215
+sha256:f853d66b5dc4d7432022f4f0da784bab8735e90f1ed66edceb9685a3e0bbfcb6 size_bytes=2326501137
+2713324541	/target
+33295633	target/distributed-bench
+187953	target/distributed-plan

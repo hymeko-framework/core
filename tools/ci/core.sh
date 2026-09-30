@@ -8,8 +8,8 @@ if [ "$#" -gt 1 ]; then
     exit 2
 fi
 case "$action" in
-    smoke|test|lint|bench-smoke|all) ;;
-    *) printf 'usage: hymeko-core-check [smoke|test|lint|bench-smoke|all]\n' >&2; exit 2 ;;
+    smoke|test|lint|bench-smoke|distributed-build|all) ;;
+    *) printf 'usage: hymeko-core-check [smoke|test|lint|bench-smoke|distributed-build|all]\n' >&2; exit 2 ;;
 esac
 
 # A bounded container is part of the execution contract, not a host convention.
@@ -67,6 +67,12 @@ case "$action" in
         ;;
     bench-smoke)
         run cbor-bench-smoke cargo bench -p hymeko_core --locked --offline --bench cbor_bench -- --test
+        ;;
+    distributed-build)
+        # CARGO_BUILD_TARGET selects an optional foreign target. Compilation is
+        # native; execute the resulting ELF separately in its declared runtime.
+        run admission-build cargo test -p hymeko_core --release --locked --offline --test mod --no-run
+        run admission-bench-build cargo bench -p hymeko_core --locked --offline --bench ir_stream_bench --no-run
         ;;
     all)
         rustc --version --verbose

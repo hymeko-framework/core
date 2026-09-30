@@ -1,0 +1,30 @@
+{
+    "timestamp":  "2026-09-06T04:55:15.2930105+02:00",
+    "cpu":  {
+                "Name":  "Intel(R) Core(TM) Ultra 9 275HX",
+                "NumberOfCores":  24,
+                "NumberOfLogicalProcessors":  24
+            },
+    "os":  {
+               "Caption":  "Microsoft Windows 11 Home",
+               "Version":  "10.0.26200",
+               "BuildNumber":  "26200",
+               "TotalVisibleMemorySize":  66501776
+           },
+    "rustc":  "rustc 1.97.1 (8bab26f4f 2026-07-14)\r\nbinary: rustc\r\ncommit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452\r\ncommit-date: 2026-07-14\r\nhost: x86_64-pc-windows-msvc\r\nrelease: 1.97.1\r\nLLVM version: 22.1.6\r\n",
+    "source":  "18f9908c991c32c1eaaec51927075fa87996e846",
+    "benchmark_blob":  "a58a105e5c4de7abd108eb0dc7bb8a141be3451a",
+    "production_tree":  "efea01dcb02dc5c1037962735e7403fddbe830e5",
+    "lock_blob":  "5c18822dd282f4be727c3cf7e4959c0911be6275",
+    "accepted_runs":  [
+                          1,
+                          2,
+                          4
+                      ],
+    "excluded_runs":  [
+                          {
+                              "run":  3,
+                              "reason":  "Overlapped a local integration-test compilation; retained for transparency, excluded from aggregation."
+                          }
+                      ]
+}

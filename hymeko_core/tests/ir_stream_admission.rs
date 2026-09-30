@@ -182,3 +182,104 @@ fn known_identity_survives_resync_and_replay() {
         ApplyOutcome::ExactDuplicate,
     );
 }
+
+#[test]
+fn installed_transaction_replay_after_advancing_suffix_preserves_state() {
+    let first = SnapshotVersion::new(1, 1, 1, 0);
+    for begin in [MessageType::SnapshotBegin, MessageType::DeltaBegin] {
+        for suffix_len in 1..=4 {
+            let mut assembler = TransactionAssembler::new(AssemblerLimits::strict());
+            let mut producer = Producer { seq: 0 };
+            assert!(matches!(
+                producer.transaction(&mut assembler, begin, ZERO, first),
+                ApplyOutcome::Committed(_)
+            ));
+            for level in 2..=suffix_len + 1 {
+                let target = SnapshotVersion::new(level, level, level, 0);
+                assert!(matches!(
+                    producer.transaction(&mut assembler, MessageType::SnapshotBegin, ZERO, target),
+                    ApplyOutcome::Committed(_)
+                ));
+            }
+            let version = assembler.current_version();
+            let digest = assembler.current_commit_digest().copied();
+            assert_eq!(
+                producer.transaction(&mut assembler, begin, ZERO, first),
+                ApplyOutcome::Superseded
+            );
+            assert_eq!(assembler.current_version(), version);
+            assert_eq!(assembler.current_commit_digest().copied(), digest);
+        }
+    }
+}
+
+/// The expected verdicts come from the independently executable Lean model,
+/// not a second Rust implementation of the admission guards. The same ordered
+/// levels are exercised at ordinary values and at the u64 boundary.
+#[test]
+fn admission_matches_lean_vectors_and_preserves_committed_state() {
+    const VECTORS: &str = include_str!("ir_stream_admission_vectors.tsv");
+    for levels in [[0, 1, 2], [0, 1, u64::MAX]] {
+        let version = |mut index: usize| {
+            let mut axis = [0; 4];
+            for value in &mut axis {
+                *value = levels[index % 3];
+                index /= 3;
+            }
+            SnapshotVersion::new(axis[0], axis[1], axis[2], axis[3])
+        };
+        let mut count = 0;
+        let mut verdict_counts = [0usize; 5];
+        for line in VECTORS.lines().filter(|line| !line.starts_with('#')) {
+            let fields: Vec<_> = line.split_ascii_whitespace().collect();
+            assert_eq!(fields.len(), 7, "malformed oracle row: {line}");
+            let current = version(fields[1].parse().unwrap());
+            let target = version(fields[2].parse().unwrap());
+            let begin = match fields[3] {
+                "S" => MessageType::SnapshotBegin,
+                "D" => MessageType::DeltaBegin,
+                other => panic!("unknown oracle transaction kind {other}"),
+            };
+            let base = if fields[4] == "1" { current } else { ZERO };
+            let mut assembler = match fields[0] {
+                "F" => TransactionAssembler::new(AssemblerLimits::strict()),
+                "R" => TransactionAssembler::resuming_at(current, AssemblerLimits::strict()),
+                other => panic!("unknown oracle state {other}"),
+            };
+            let outcome = Producer { seq: 0 }.transaction(&mut assembler, begin, base, target);
+            let (code, slot) = match &outcome {
+                ApplyOutcome::Committed(committed) => {
+                    assert_eq!(committed.target_version(), target);
+                    assert_eq!(assembler.current_version(), target);
+                    assert_eq!(assembler.current_commit_digest(), Some(committed.digest()));
+                    assert!(target.dominates(&current));
+                    ("C", 0)
+                }
+                ApplyOutcome::Superseded => ("S", 1),
+                ApplyOutcome::ReplayOutsideWindow { seq: 2 } => ("U", 2),
+                ApplyOutcome::ResyncRequired(ResyncReason::StaleBase { have, wanted }) => {
+                    assert_eq!((*have, *wanted), (current, base));
+                    ("B", 3)
+                }
+                ApplyOutcome::ResyncRequired(ResyncReason::IncoherentVersionBump {
+                    base: rejected_base,
+                    target: rejected_target,
+                }) => {
+                    assert_eq!(*rejected_base, version(fields[6].parse().unwrap()));
+                    assert_eq!(*rejected_target, target);
+                    ("I", 4)
+                }
+                other => panic!("unexpected admission {other:?} for {line}"),
+            };
+            assert_eq!(code, fields[5], "levels={levels:?}, row={line}");
+            if code != "C" {
+                assert_eq!(assembler.current_version(), current, "{line}");
+                assert_eq!(assembler.current_commit_digest(), None, "{line}");
+            }
+            verdict_counts[slot] += 1;
+            count += 1;
+        }
+        assert_eq!(count, 26_406);
+        assert_eq!(verdict_counts, [2525, 4860, 214, 1215, 17_592]);
+    }
+}

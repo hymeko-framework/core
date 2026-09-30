@@ -73,6 +73,69 @@ Preserve and report any red runtime acceptance check. Keep the prior audit and
 Docker evidence unchanged. Local thematic commits are authorized by the
 continuing task; no push, merge, release or global host changes. Roll back only
 this branch's named changes, retaining failure evidence needed for review.
+\clearpage
+\section*{Continuation: cross-platform admission verification}
+Created-at: 2026-09-06T04:28:31+02:00. ETA: 45--75 minutes.
+
+The user explicitly requests a new branch and continuation of the distributed
+technical/research work followed by benchmarks on Windows, Amaterasu native Linux,
+and Amaterasu Docker/QEMU ARM64. This supersedes the historical worktree and
+publication instructions above. Use only the existing canonical Core checkout,
+branch feat/core-distributed-verification-benchmarks, from main 92383b38. No new
+worktree or clone. Other repositories are excluded; the separate unmerged
+executable-model-contract-v3 branch is not silently adopted.
+
+\paragraph{Deliverable.}
+Extend the existing Lean admission model with safety of replaying an already
+installed transaction after an arbitrary admitted suffix. Generate a bounded
+reference matrix from that model and run it through the actual Rust
+encode/validate/assembler API. Preserve distinctions between model proof,
+finite conformance, framing admission and actual IR installation. Add strict
+benchmark outcome preflight and resumed/fresh/incomparable/stale admission cells
+in the existing Criterion target. No new production assembler, transport,
+scheduler, IR representation, dependency or canonical apply implementation.
+
+\paragraph{Files and authority.}
+Existing owners: docs/verification/unified-ir/distributed-semantics.lean;
+hymeko\_core/tests/ir\_stream\_admission.rs;
+hymeko\_core/benches/ir\_stream\_bench.rs; tools/ci/Dockerfile and core.sh;
+docs/core-container.md; scripts/dev/criterion\_report.ps1; the current plan bundle.
+New evidence: the Lean-generated admission vector table under the existing Core
+tests directory, and reports/2026-09-06-distributed-verification-benchmarks.md with
+its raw-data directory. User authorization is the explicit continuation of Core
+technical/research and benchmark work. No protected production-source change is
+planned; the previously approved monotone/resume fix remains the implementation.
+
+\paragraph{Execution.}
+Same source and lock, fixed workload, four jobs/threads. Use native cross-compilation
+for ARM64 and an explicit QEMU interpreter inside the ARM64 runtime container;
+do not register global binfmt handlers or run privileged setup. Reuse the existing
+Amaterasu Core checkout and Docker builder/target where compatible. Bound every
+runtime container at 16 GiB and four CPUs; reuse the existing six-CPU
+builder with four Cargo jobs, without changing its configuration. No added swap. Reuse native build artifacts;
+only the required ARM64 target/runtime may be new. Incremental storage budget 10 GiB;
+record actual sizes and remove task-only stopped containers and staging files.
+
+\paragraph{Measurement and interpretation.}
+Correctness and benchmark smoke precede measurements. Use Criterion raw samples,
+at least 30 samples per cell and warm-up, and three independent process runs per
+platform. Preserve per-run raw samples and provenance; report median/IQR/worst of
+iteration-batch means, and peak RSS separately. Record host, toolchain, source,
+lock, binary/image hashes and the explicit emulation boundary. QEMU results are
+portability/emulation costs, never native ARM hardware performance or distributed
+speedup. Reuse the existing reporting/peak-memory helpers. No broad A/B campaign
+or optimization without a discriminating profile.
+
+\paragraph{Acceptance and recovery.}
+Lean kernel/axiom checks and a falsifiable negative control; generated matrix
+matches Rust, full relevant Core gates, successful selected benchmark cells on
+all three targets with raw evidence and honest resource/architecture metadata.
+If a target fails, diagnose that exact environment before changing the source.
+Commit on the requested feature branch and publish it for exact remote source
+transfer; do not merge main or tag a release. Keep checkpoints in the existing
+report; rerun only failed/missing cells. Rollback is a normal revert of the named
+feature commits, preserving other workers and all existing data.
+
 \section*{2026-09-13: concurrent preparation and local publication}
 Created-at: 2026-09-13 17:05 +02:00. ETA: 20--35 minutes for the additive
 API, bounded concurrency regressions, proof model, gates and archival.
