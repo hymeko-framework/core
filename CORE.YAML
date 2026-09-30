@@ -331,6 +331,22 @@ crates:
           - no dependency and no manifest change
           - no commit or push beyond the feature branch the user merges
 
+      # APPROVED-CORE-EDIT: mycielskian-generator (2026-09-29, user chat)
+      - slug: mycielskian-generator
+        date: 2026-09-29
+        scope: >
+          Planned in nagare docs/plans/2026-09-29-p52-combinatorial-hypergraph-language-models/
+          (phase L0). hymeko_core/src/generators.rs gains one free function,
+          mycielskian(&HypergraphDesign) -> HypergraphDesign (Mycielski's construction on
+          graphs, one shadowed copy per member on hypergraphs, plus the apex edges), its
+          module-doc line, and its unit tests in the module's tests.
+        constraints:
+          - additive only: no existing signature, enum or variant changes, so no downstream match is affected
+          - infallible: the base design's own invariant is its precondition, and no GeneratorError variant is added
+          - HypergraphGenerator is not extended
+          - no dependency and no manifest change; std only
+          - no commit or push beyond the feature branch the user merges
+
   # `hymeko_hnn` was RELOCATED 2026-08-31 to hymeko/nagare (hymeko_nagare::hnn) and no longer
   # exists in this workspace (Cargo.toml members = [hymeko_core, hymeko_wgpu]; the directory is
   # gone). Its stale crate declaration was removed here on 2026-09-01 under
