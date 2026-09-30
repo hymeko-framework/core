@@ -4,14 +4,24 @@
 //! consumers call [`decode`] before using an IR. Decoding is fail-closed: the byte stream is
 //! allocation-preflighted, the string table and IDs are checked, the path index is rebuilt from the
 //! canonical IR, structural coherence is validated, and the canonical hash is recomputed.
+//!
+//! [`encode_snapshot_messages`] and [`decode_snapshot`] carry one encoded document through an
+//! `ir_stream` snapshot transaction in `CanonicalIrCbor` fragments; the consumer side ends in
+//! [`decode`].
 
 mod preflight;
+// APPROVED-CORE-EDIT: ir-stream-cbor-snapshot (2026-09-15, user chat).
+mod stream;
 #[cfg(test)]
 mod tests;
 mod validate;
 
+pub use stream::{
+    CborStreamError, SnapshotMessageDraft, decode_snapshot, encode_snapshot_messages,
+};
+
 use crate::common::ids::SymId;
-use crate::ir::canonical_hash::{CanonHashCfg, canonical_program_hash};
+use crate::ir::canonical_hash::{Canon, CanonHashCfg};
 use crate::ir::hash::HashId;
 use crate::ir::ir::Ir;
 use crate::ir_stream::DecodeLimits;
@@ -232,11 +242,9 @@ pub fn encode(
     };
     let validated = validate::payload(payload, false)?;
     let (mut payload, reconstructed_interner) = validated.into_parts();
-    payload.canon_hash = canonical_program_hash(
-        CanonHashCfg::default(),
-        &payload.ir,
-        &reconstructed_interner,
-    );
+    payload.canon_hash = Canon::new(&payload.ir, &reconstructed_interner)
+        .structure(CanonHashCfg::default())
+        .0;
 
     let mut bytes = Vec::new();
     ciborium::ser::into_writer(&payload, &mut bytes)

@@ -1,7 +1,0 @@
-{
-  "baseline_sha256": "07cb8fee393c60c69509e5f2052fc927691273315c469ca126ffee8158ef37fc",
-  "current_sha256": "20d319d14f5761385c2280c63cd9fea9876e6746900a6af09515531613f8ac5e",
-  "baseline_log": "admission-baseline.log",
-  "current_log": "admission-current.log",
-  "reconstruction": "Apply probe-refactor.patch in reverse to the current probe to reconstruct the original baseline source (LF)."
-}

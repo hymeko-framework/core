@@ -138,23 +138,26 @@ docs:
   latex:
     tool: pdflatex
     observed: null
-    status: absent
+    status: present
     notes: >
-      No TeX engine on this host (pdflatex / lualatex / xelatex / tectonic
-      / latexmk / MiKTeX all absent, checked 2026-08-24). `plan.tex` and
-      `plan.tikz` are authored as compilable sources but `plan.pdf` cannot
-      be rendered here. Every task that ships a plan under this condition
-      must declare the missing PDF as a waiver in its report (§9), not
-      omit it silently. Install tectonic or MiKTeX to clear the waiver.
+      MiKTeX provides pdflatex, lualatex and latexmk on this host
+      (`pdflatex --version`: "MiKTeX-pdfTeX 4.27 (MiKTeX 26.5)", checked
+      2026-09-14; tectonic absent). `observed` stays null because that
+      version string is not semver. Build `plan.pdf` with two
+      `pdflatex -interaction=nonstopmode -halt-on-error` passes and an
+      `-output-directory` outside the plan directory. The 2026-08-24 record
+      of no TeX engine, and the plan.pdf waiver it required, no longer apply.
 
   mermaid:
     tool: mermaid-cli
     observed: null
     status: absent
     notes: >
-      No node / npx on this host, so `plan.mmd` is authored as source and
-      not rendered. Same waiver rule as `latex` above. GitHub and most
-      editors render .mmd inline, so the source is not useless on its own.
+      node and npx are present (node v26.8.1, checked 2026-09-14), but
+      mermaid-cli (`mmdc`) is not installed, so `plan.mmd` is authored as
+      source and not rendered. Declare the missing render as a waiver in the
+      report (§9). GitHub and most editors render .mmd inline, so the source
+      is not useless on its own.
 
 # ---------------------------------------------------------------------
 # Cross-language reporting conventions

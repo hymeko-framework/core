@@ -717,6 +717,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "crossbeam-queue"
+version = "0.3.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "03e8bd762f7479489c70ed6c768ddca99d7296857de437a68dcb2a94365b3fae"
+dependencies = [
+ "crossbeam-utils",
+]
+
+[[package]]
 name = "crossbeam-utils"
 version = "0.8.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1131,6 +1140,7 @@ dependencies = [
  "blake3",
  "ciborium",
  "criterion",
+ "crossbeam-queue",
  "env_logger",
  "iceoryx2",
  "log",
@@ -1925,7 +1935,7 @@ dependencies = [
 [[package]]
 name = "parser"
 version = "0.1.0"
-source = "git+ssh://git@amaterasu.local:2222/hymeko/parser.git?branch=master#284c490d68232973a006bcba974279fed6f89ce8"
+source = "git+ssh://git@192.168.1.228:2222/hymeko/parser.git?rev=f11628591a8183586492807ecdf43c64e6d31c5f#f11628591a8183586492807ecdf43c64e6d31c5f"
 dependencies = [
  "lalrpop",
  "lalrpop-util",

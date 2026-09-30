@@ -77,7 +77,7 @@ fn assert_round_trip(path: &Path) -> usize {
     );
     assert_eq!(
         decoded.canonical_hash(),
-        compiled.canon_hash,
+        compiled.canon.structure().0,
         "canonical hash on {}",
         path.display()
     );
@@ -124,7 +124,7 @@ fn every_lowerable_corpus_program_round_trips_through_the_public_facade() {
             lowered += 1;
         }
     }
-    assert_eq!(lowered, 102, "the codec gate must cover the frozen corpus");
+    assert_eq!(lowered, 103, "the codec gate must include the newly lowerable transitive-import scenario");
 }
 
 #[test]
@@ -274,11 +274,9 @@ fn incidence_heavy_memory_fixture() -> (Ir, Index, Interner) {
 
         let refs = (0..ARITY)
             .map(|slot| {
-                SignedRefR::Neutral(RefAtomR {
-                    target: nodes[(edge_number * ARITY + slot) % nodes.len()],
-                    weights: None,
-                    anno: AnnoR::default(),
-                })
+                SignedRefR::Neutral(RefAtomR::plain(
+                    nodes[(edge_number * ARITY + slot) % nodes.len()],
+                ))
             })
             .collect();
         let arc_id = HyperArcId::new(ir.arcs.len());

@@ -109,6 +109,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "performance benchmark; opt in with --ignored --exact"]
     fn test_hash_doc_performance_benchmark() {
         let (mut it, paths) = setup_mock_env();
 
@@ -156,6 +157,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "performance benchmark; opt in with --ignored --exact"]
     fn test_hash_doc_performance_benchmark_multiple_nodes() {
         let (mut it, paths) = setup_mock_env();
         // Test hashing performance across a range of node counts to see how it scales

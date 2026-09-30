@@ -1,7 +1,7 @@
 // src/resolve.rs
 use crate::common::ids::{DeclId, SymId};
 use crate::common::pathkey::PathKey;
-use crate::ir::ir::{AnnoR, RefAtomR, SignedRefR, ValueR};
+use crate::ir::ir::{AnnoR, PortDirection, RefAtomR, SignedRefR, ValueR};
 use crate::resolution::interner::Interner;
 use crate::sym_ast::AstSym;
 use parser::ast::{
@@ -16,6 +16,10 @@ pub struct Index {
     /// Alias map from `using path as alias` statements.
     #[serde(default)]
     pub aliases: FxHashMap<SymId, Vec<SymId>>,
+    /// Module-local environments, keyed by their contiguous named declaration ranges.
+    /// An empty environment still isolates a dependency from the entry's aliases.
+    #[serde(skip)]
+    pub(crate) module_aliases: Vec<(std::ops::Range<usize>, FxHashMap<SymId, Vec<SymId>>)>,
 }
 
 impl Index {
@@ -107,6 +111,44 @@ pub fn apply_usings(
         }
     }
     Ok(())
+}
+
+pub(crate) fn module_aliases(
+    idx: &Index,
+    usings: &[UsingStmt<SymId>],
+    prefix: &[SymId],
+    imports: &[(SymId, SymId)],
+    it: &Interner,
+) -> Result<FxHashMap<SymId, Vec<SymId>>, ResolveError> {
+    let mut aliases: FxHashMap<_, _> = imports.iter()
+        .map(|&(local, linked)| (local, vec![linked])).collect();
+    for u in usings {
+        let mut candidates = Vec::new();
+        // A qualified local import name names its linked module even when another
+        // module used the same name for a different file.
+        if let Some((&first, tail)) = u.path.path.split_first() {
+            if let Some(base) = aliases.get(&first) {
+                let mut path = base.clone();
+                path.extend_from_slice(tail);
+                candidates.push(path);
+            }
+        }
+        for &(_, linked) in imports {
+            let mut path = vec![linked];
+            path.extend_from_slice(&u.path.path);
+            candidates.push(path);
+        }
+        let mut local = prefix.to_vec();
+        local.extend_from_slice(&u.path.path);
+        candidates.push(local);
+        let resolved = candidates.into_iter().find(|path| idx.by_path.contains_key(path.as_slice()))
+            .ok_or_else(|| ResolveError::UnresolvedRef {
+                from_scope: "<using>".into(),
+                target: fmt_path_from_slice(&u.path.path, it),
+            })?;
+        aliases.insert(u.alias, resolved);
+    }
+    Ok(aliases)
 }
 
 pub fn build_index_sym_with_prefix<'a>(
@@ -259,10 +301,18 @@ pub fn resolve_ref_to_declid(
     target: &Ref<SymId>,
     it: &Interner,
 ) -> Result<DeclId, ResolveError> {
+    let owner = (0..=scope.len()).rev()
+        .find_map(|end| idx.by_path.get(&scope[..end]));
+    let aliases = owner.and_then(|id| {
+        let module = idx.module_aliases.partition_point(|(range, _)| range.end <= id.raw());
+        idx.module_aliases.get(module).filter(|(range, _)| range.contains(&id.raw()))
+            .map(|(_, aliases)| aliases)
+    })
+        .unwrap_or(&idx.aliases);
     // ── Alias expansion ──────────────────────────────────────
     let expanded;
     let effective = if !target.path.is_empty() {
-        if let Some(exp) = idx.aliases.get(&target.path[0]) {
+        if let Some(exp) = aliases.get(&target.path[0]) {
             let mut p = exp.clone();
             p.extend_from_slice(&target.path[1..]);
             expanded = Ref { path: p };
@@ -328,18 +378,11 @@ pub fn resolve_signed_refs<'a>(
 
         let anno_r = resolve_anno(idx, scope, &atom.anno, it)?;
 
-        let weights_r = match &atom.anno.value {
-            Some(Value::List(ws)) => {
-                let resolved = ws
-                    .iter()
-                    .map(|w| resolve_value(idx, scope, w, it))
-                    .collect::<Result<Vec<ValueR>, _>>()?;
-                Some(resolved)
-            }
-            Some(v) => {
-                let resolved = resolve_value(idx, scope, v, it)?;
-                Some(vec![resolved])
-            }
+        // Both IR fields own their values. Reuse the resolved payload instead
+        // of repeating scope lookups and string interning for every weight.
+        let weights_r = match &anno_r.value {
+            Some(ValueR::List(ws)) => Some(ws.clone()),
+            Some(v) => Some(vec![v.clone()]),
             None => None,
         };
 
@@ -347,6 +390,9 @@ pub fn resolve_signed_refs<'a>(
             target: did,
             weights: weights_r,
             anno: anno_r,
+            // Lowering declares no direction yet: the surface syntax has no port-direction form, so
+            // inventing one here would be exactly the sign/direction conflation this axis prevents.
+            direction: PortDirection::Unspecified,
         };
 
         let sref_r = match sref {

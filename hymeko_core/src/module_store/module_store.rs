@@ -1,5 +1,5 @@
 use crate::common::ids::SymId;
-use crate::ir::hash::HashId;
+use crate::ir::canonical_hash::{Canon, CanonicalIdentity};
 #[allow(deprecated)]
 use crate::ir::hash_pass::compute_merkle_hashes;
 use crate::ir::ir::Ir;
@@ -8,7 +8,7 @@ use crate::module_store::source_provider::SourceProvider;
 use crate::resolution::const_resolve::resolve_consts;
 use crate::resolution::intern_pass::intern_ast_into_owned;
 use crate::resolution::interner::Interner;
-use crate::resolution::resolve::{Index, apply_usings, build_index_sym_with_prefix};
+use crate::resolution::resolve::{Index, build_index_sym_with_prefix, module_aliases};
 use parser::ast::AstStr;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -32,8 +32,8 @@ pub struct ModuleEntry {
 pub struct CompiledProgram {
     pub root: ModuleKey,
     /// The resolution `Index`. **Non-authoritative after U2.2**: the canonical
-    /// hash and all post-lowering path consumers read the `Ir`
-    /// (`canonical_program_hash(cfg, ir, it)`, `canonical_hash::build_path_index`).
+    /// identity and all post-lowering path consumers read the `Ir`
+    /// (`canonical_hash::Canon`, `canonical_hash::build_path_index`).
     /// This is a resolution-time artifact retained for external/test consumers;
     /// its removal is planned for a breaking release once they migrate to the
     /// derived path index. It is NOT re-validated against the `Ir` after the
@@ -42,7 +42,9 @@ pub struct CompiledProgram {
     pub ir: Ir,
     // extra debug/teszt kényelmesség:
     pub imports: Vec<(SymId, ModuleKey)>, // (namespace, module key)
-    pub canon_hash: HashId,
+    /// The program's canonical identity, computed once here: `canon.hash()` is its semantic
+    /// digest, `canon.structure()` its structural hash.
+    pub canon: CanonicalIdentity,
 }
 
 #[derive(Debug)]
@@ -117,7 +119,9 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
         })?;
 
         let key = ModuleKey(root_can);
-        self.ensure_loaded(&key)?;
+        let result = self.ensure_loaded(&key);
+        self.in_progress.clear();
+        result?;
         Ok(key)
     }
 
@@ -161,7 +165,8 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
         let mut deps = Vec::new();
 
         for imp in &ast_sym.imports {
-            let resolved = resolve_import_path(base_dir, imp.path.as_ref());
+            let resolved = resolve_import_path(base_dir, imp.path.as_ref())
+                .map_err(|e| io_diag("canonicalize", Path::new(imp.path.as_ref()), e))?;
             let canon = self
                 .fs
                 .canonicalize(&resolved)
@@ -197,31 +202,29 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
             }
         }
 
-        // 3) kivehetjük a root AST-t (clone, hogy ne legyen borrow fight)
-        let root_ast = self
-            .get(&root)
-            .ok_or_else(|| ModuleLoadError::Parse("root missing after load".into()))?
-            .ast
-            .clone();
+        let imports_map = self.linked_imports(&root);
 
-        let root_entry = self.get(&root).unwrap();
-        let deps = root_entry.deps.clone();
+        // Borrow cached syntax independently of the mutable interner: the entries and the
+        // interner are disjoint fields, so every module's AST is read in place. Compilation
+        // only reads them, and a dependency is not copied (a 424k-hyperedge graph module's
+        // AST was 364 MiB of the compile's peak; module-store-borrowed-asts, 2026-09-29).
+        let root_entry = self
+            .entries
+            .get(&root)
+            .ok_or_else(|| ModuleLoadError::Parse("root missing after load".into()))?;
+        let root_ast = &root_entry.ast;
 
         // 4) imported list (alias opcionális: ns = alias || dep_ast.name)
-        let mut imported: Vec<(SymId, AstSym<'static>)> = Vec::new();
-        let mut imports_map: Vec<(SymId, ModuleKey)> = Vec::new();
-
-        for (imp, dep_key) in root_ast.imports.iter().zip(deps.iter()) {
-            let dep_ast = self
+        let mut imported: Vec<(SymId, &AstSym<'static>)> = Vec::with_capacity(imports_map.len());
+        for &(ns, ref dep_key) in &imports_map {
+            let dep_ast = &self
+                .entries
                 .get(dep_key)
                 .ok_or_else(|| {
                     ModuleLoadError::Parse(format!("dep missing: {}", dep_key.0.display()))
                 })?
-                .ast
-                .clone();
+                .ast;
 
-            let ns = imp.alias.unwrap_or(dep_ast.name);
-            imports_map.push((ns, dep_key.clone()));
             imported.push((ns, dep_ast));
         }
 
@@ -229,36 +232,53 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
         let mut idx = Index::default();
         let mut next: usize = 0;
 
-        build_index_sym_with_prefix(&root_ast, &[], &self.it, &mut idx, &mut next)
+        build_index_sym_with_prefix(root_ast, &[], &self.it, &mut idx, &mut next)
             .map_err(|e| ModuleLoadError::Parse(format!("index root failed: {e:?}")))?;
 
+        let mut ranges = Vec::with_capacity(imported.len() + 1);
+        ranges.push(0..next);
+
         for (ns, dep_ast) in imported.iter() {
+            let start = next;
             build_index_sym_with_prefix(dep_ast, &[*ns], &self.it, &mut idx, &mut next)
                 .map_err(|e| ModuleLoadError::Parse(format!("index dep failed: {e:?}")))?;
+            ranges.push(start..next);
         }
 
-        // 6b) apply using aliases
-        let import_ns: Vec<SymId> = imported.iter().map(|(ns, _)| *ns).collect();
-        apply_usings(&mut idx, &root_ast.usings, &import_ns, &self.it)
-            .map_err(|e| ModuleLoadError::Parse(format!("using alias failed: {e:?}")))?;
-
-        // 6c) cross-profile instance references (APPROVED-CORE-EDIT: xprofile-instance-refs,
-        // 2026-06-19). Also apply each imported *profile*'s own `using` aliases into the shared
-        // index, so its arcs/bases lower and its instance decls become referenceable from the
-        // importer (e.g. `using <desc>.<content> as arr; (+ arr.dist)`). Best-effort and
-        // per-statement: an alias that does not resolve against the available import namespaces is
-        // skipped (a genuinely-needed one surfaces later as a clear UnresolvedRef on the dep's arc),
-        // so this is strictly additive — meta-only imports (no usings) are a no-op, and no existing
-        // program's resolution or canonical hash changes.
-        for (_ns, dep_ast) in imported.iter() {
-            for u in &dep_ast.usings {
-                let _ = apply_usings(&mut idx, std::slice::from_ref(u), &import_ns, &self.it);
-            }
+        // Each source owns its import bindings and using statements. Keep environments
+        // on named declaration ranges; lowering anonymous arcs resolves in their owner edge.
+        let modules: Vec<_> = std::iter::once((&root, Vec::new()))
+            .chain(imports_map.iter().map(|(ns, key)| (key, vec![*ns]))).collect();
+        let linked_names: HashMap<_, _> = imports_map.iter().map(|(ns, key)| (key, *ns)).collect();
+        for ((key, prefix), range) in modules.iter().zip(&ranges) {
+            let entry = &self.entries[*key];
+            let bindings: Vec<_> = entry.ast.imports.iter().zip(&entry.deps).map(|(imp, dep)| {
+                let local = imp.alias.unwrap_or(self.entries[dep].ast.name);
+                let linked = linked_names[dep];
+                (local, linked)
+            }).collect();
+            let aliases = module_aliases(&idx, &entry.ast.usings, prefix, &bindings, &self.it)
+                .map_err(|e| ModuleLoadError::Parse(format!("using alias failed: {e:?}")))?;
+            idx.module_aliases.push((range.clone(), aliases));
         }
+        idx.aliases = root_ast.usings.iter().map(|u|
+            (u.alias, idx.module_aliases[0].1[&u.alias].clone())).collect();
 
         // 7) lower program IR (2A) + merkle
-        let mut ir = lower_program_to_ir(&root_ast, &imported, &idx, &mut self.it)
+        let mut ir = lower_program_to_ir(root_ast, &imported, &idx, &mut self.it)
             .map_err(|e| ModuleLoadError::Parse(format!("lower failed: {e:?}")))?;
+
+        ir.files = modules.iter().map(|(key, _)| key.0.to_string_lossy().replace('\\', "/")).collect();
+        ir.decl_file = vec![u32::MAX; ir.decl_nodes.len()];
+        for (file, range) in ranges.iter().enumerate() {
+            ir.decl_file[range.clone()].fill(file as u32);
+        }
+        // Anonymous declarations are appended after named declarations. Their edge
+        // parents have already received ownership, including arcs inside nested edges.
+        for id in next..ir.decl_nodes.len() {
+            let parent = ir.decl_nodes[id].parent;
+            ir.decl_file[id] = ir.decl_file[parent.raw()];
+        }
 
         // AMBIGUOUS CONSUMER, DELIBERATELY NOT MIGRATED (semantic-model-digest-v2, 2026-09-05).
         // `Ir::decl_hash` is a serialized field: `Ir`'s serde impl writes it and both
@@ -266,7 +286,7 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
         // no consumer has been shown to use them as an identity. Changing what this call stores is
         // therefore a wire-content change with no established consumer contract, so it is left
         // exactly as it was and classified `ambiguous -> blocked`. The sound identity is
-        // `ir::semantic_digest::semantic_model_digest_v2`, which is pure and writes nothing.
+        // `ir::canonical_hash::Canon::hash`, which is pure, writes nothing, and is computed below.
         #[allow(deprecated)]
         compute_merkle_hashes(&mut ir, &self.it);
 
@@ -278,12 +298,15 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
         // U2.2 lowering boundary: prove the Ir (namespace_roots + intrusive links)
         // reproduces the resolution Index hierarchy, ONCE, before the Index is
         // discarded. After this the Ir is the sole post-lowering authority and the
-        // canonical hash reads no Index.
-        crate::ir::canonical_hash::validate_namespace_roots(&ir, &idx).map_err(|e| {
-            ModuleLoadError::Parse(format!("namespace boundary validation failed: {e}"))
-        })?;
-
-        let canon_hash = crate::ir::canonical_hash::canonical_program_hash(cfg, &ir, &self.it);
+        // canonical identity reads no Index. One canonical view serves the check and both
+        // identities, so the paths are derived once.
+        let canon = {
+            let canon = Canon::new(&ir, &self.it);
+            canon.validate(&idx).map_err(|e| {
+                ModuleLoadError::Parse(format!("namespace boundary validation failed: {e}"))
+            })?;
+            CanonicalIdentity::of(&canon, cfg)
+        };
 
         // 9) bundle + cache
         let compiled = Arc::new(CompiledProgram {
@@ -291,11 +314,42 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
             idx,
             ir,
             imports: imports_map,
-            canon_hash,
+            canon,
         });
 
         self.last_compiled = Some(compiled.clone());
         Ok(compiled)
+    }
+
+    fn linked_imports(&mut self, root: &ModuleKey) -> Vec<(SymId, ModuleKey)> {
+        // Breadth first preserves direct-import order. Each canonical file is linked
+        // once, so shared and diamond imports cannot multiply its declarations.
+        let mut modules = vec![root.clone()];
+        let mut seen = std::collections::HashSet::from([root.clone()]);
+        let mut namespaces = std::collections::HashSet::new();
+        let mut linked = Vec::new();
+        let mut cursor = 0;
+        while cursor < modules.len() {
+            let entry = &self.entries[&modules[cursor]];
+            for (import, key) in entry.ast.imports.iter().zip(&entry.deps) {
+                if !seen.insert(key.clone()) {
+                    continue;
+                }
+                let mut ns = import.alias.unwrap_or(self.entries[key].ast.name);
+                if !namespaces.insert(ns) {
+                    let mut suffix = linked.len();
+                    loop {
+                        ns = self.it.intern(&format!("__hymeko_module_{suffix}"));
+                        if namespaces.insert(ns) { break; }
+                        suffix += 1;
+                    }
+                }
+                linked.push((ns, key.clone()));
+                modules.push(key.clone());
+            }
+            cursor += 1;
+        }
+        linked
     }
 
     /// Consumes the store (or extracts the specific module) to return the owned Ir.
@@ -315,12 +369,16 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
     }
 }
 
-fn resolve_import_path(base_dir: &Path, import_path: &str) -> PathBuf {
+fn resolve_import_path(base_dir: &Path, import_path: &str) -> Result<PathBuf, String> {
     let p = Path::new(import_path);
     if p.is_absolute() {
-        p.to_path_buf()
+        Ok(p.to_path_buf())
     } else {
-        base_dir.join(p)
+        // Validate before PathBuf::join: Windows verbatim paths can collapse parent
+        // components during joining, hiding an attempt to move above the root.
+        crate::module_store::source_provider::normalize_components(base_dir.components().chain(p.components()))
+            .map_err(|e| format!("{e}: {import_path}"))?;
+        Ok(base_dir.join(p))
     }
 }
 

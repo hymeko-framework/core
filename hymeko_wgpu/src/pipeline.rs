@@ -81,8 +81,18 @@ pub enum LayoutId {
     ActivationOutOfPlace,
     /// data (read_write), params.
     ActivationInPlace,
+    /// Features, topology, spline/gate parameters, output and uniform shape.
+    Hsikan,
+    /// Queries, keys, values, preferred rotor, CSR, output and uniform shape.
+    RotorAttention,
+    /// Node features, star centres, membership, output and uniform shape.
+    StarRotorSpike,
     /// output (read_write), params.
     Fill,
+    /// Inverse-incidence CSR (offsets, edge index, counts), edge state, node state, params.
+    ScatterMeanCsr,
+    /// step (read), carry (read), gate (read), next (read_write), params.
+    HighwayIdentity,
 }
 
 impl LayoutId {
@@ -91,7 +101,12 @@ impl LayoutId {
             Self::Spmm => "spmm.layout",
             Self::ActivationOutOfPlace => "activation.layout",
             Self::ActivationInPlace => "activation.layout.in_place",
+            Self::Hsikan => "hsikan.layout",
+            Self::RotorAttention => "rotor_attention.layout",
+            Self::StarRotorSpike => "star_rotor_spike.layout",
             Self::Fill => "fill.layout",
+            Self::ScatterMeanCsr => "scatter_mean_csr.layout",
+            Self::HighwayIdentity => "highway_identity.layout",
         }
     }
 
@@ -113,6 +128,42 @@ impl LayoutId {
             Self::ActivationInPlace | Self::Fill => {
                 vec![storage_entry(0, false), uniform_entry(1)]
             }
+            Self::Hsikan => vec![
+                storage_entry(0, true),
+                storage_entry(1, true),
+                storage_entry(2, true),
+                storage_entry(3, true),
+                storage_entry(4, true),
+                storage_entry(5, true),
+                storage_entry(6, true),
+                storage_entry(7, false),
+                uniform_entry(8),
+            ],
+            Self::RotorAttention => vec![
+                storage_entry(0, true),
+                storage_entry(1, true),
+                storage_entry(2, true),
+                storage_entry(3, true),
+                storage_entry(4, true),
+                storage_entry(5, true),
+                storage_entry(6, false),
+                uniform_entry(7),
+            ],
+            Self::StarRotorSpike | Self::HighwayIdentity => vec![
+                storage_entry(0, true),
+                storage_entry(1, true),
+                storage_entry(2, true),
+                storage_entry(3, false),
+                uniform_entry(4),
+            ],
+            Self::ScatterMeanCsr => vec![
+                storage_entry(0, true),
+                storage_entry(1, true),
+                storage_entry(2, true),
+                storage_entry(3, true),
+                storage_entry(4, false),
+                uniform_entry(5),
+            ],
         }
     }
 }
@@ -158,6 +209,18 @@ pub enum KernelId {
     ActivationOutOfPlace(ActivationEntry),
     /// `data[i] = f(data[i])`.
     ActivationInPlace(ActivationEntry),
+    /// Signed HSiKAN Chebyshev--Catmull-Rom inference.
+    Hsikan,
+    /// Rotation-invariant spatial covariance and eigen-entropy pooling.
+    GlobalEntropyPool,
+    /// Sparse, single-head, untransported quaternion rotor attention.
+    RotorAttention,
+    /// Edge to node mean scatter as a node-indexed CSR gather. No atomics.
+    ScatterMeanCsr,
+    /// Per-channel identity-transport highway transition.
+    HighwayIdentity,
+    /// Star-centred rotor-spike orientation population code.
+    StarRotorSpike,
     /// Skeleton validation kernel. Not an operation; retained because
     /// `tests/skeleton.rs` exercises the encode/submit/readback machinery with
     /// it in isolation from any real kernel.
@@ -176,7 +239,13 @@ impl KernelId {
             Self::Spmm | Self::SpmmActivation(_) => "spmm",
             Self::ActivationOutOfPlace(_) => "activation",
             Self::ActivationInPlace(_) => "activation_inplace",
+            Self::Hsikan => "hsikan",
+            Self::GlobalEntropyPool => "global_entropy_pool",
+            Self::RotorAttention => "rotor_attention",
+            Self::StarRotorSpike => "star_rotor_spike",
             Self::Fill => "fill",
+            Self::ScatterMeanCsr => "scatter_mean_csr",
+            Self::HighwayIdentity => "highway_identity",
         }
     }
 
@@ -187,7 +256,13 @@ impl KernelId {
             Self::Spmm | Self::SpmmActivation(_) => crate::operations::SPMM_SHADER,
             Self::ActivationOutOfPlace(_) => crate::operations::ACTIVATION_SHADER,
             Self::ActivationInPlace(_) => crate::operations::ACTIVATION_INPLACE_SHADER,
+            Self::Hsikan => crate::operations::HSIKAN_SHADER,
+            Self::GlobalEntropyPool => crate::operations::GLOBAL_ENTROPY_POOL_SHADER,
+            Self::RotorAttention => crate::operations::ROTOR_ATTENTION_SHADER,
+            Self::StarRotorSpike => crate::operations::STAR_ROTOR_SPIKE_SHADER,
             Self::Fill => crate::FILL_SHADER,
+            Self::ScatterMeanCsr => crate::operations::SCATTER_MEAN_CSR_SHADER,
+            Self::HighwayIdentity => crate::operations::HIGHWAY_IDENTITY_SHADER,
         }
     }
 
@@ -199,6 +274,12 @@ impl KernelId {
             | Self::ActivationOutOfPlace(a)
             | Self::ActivationInPlace(a) => a.entry_point(),
             Self::Fill => "main",
+            Self::Hsikan => "main",
+            Self::GlobalEntropyPool => "main",
+            Self::RotorAttention => "main",
+            Self::StarRotorSpike => "main",
+            Self::ScatterMeanCsr => "main",
+            Self::HighwayIdentity => "main",
         }
     }
 
@@ -208,7 +289,13 @@ impl KernelId {
             Self::Spmm | Self::SpmmActivation(_) => LayoutId::Spmm,
             Self::ActivationOutOfPlace(_) => LayoutId::ActivationOutOfPlace,
             Self::ActivationInPlace(_) => LayoutId::ActivationInPlace,
+            Self::Hsikan => LayoutId::Hsikan,
+            Self::GlobalEntropyPool => LayoutId::ActivationOutOfPlace,
+            Self::RotorAttention => LayoutId::RotorAttention,
+            Self::StarRotorSpike => LayoutId::StarRotorSpike,
             Self::Fill => LayoutId::Fill,
+            Self::ScatterMeanCsr => LayoutId::ScatterMeanCsr,
+            Self::HighwayIdentity => LayoutId::HighwayIdentity,
         }
     }
 }
@@ -510,6 +597,10 @@ mod tests {
             KernelId::ActivationOutOfPlace(ActivationEntry::Relu),
             KernelId::ActivationInPlace(ActivationEntry::Relu),
             KernelId::ActivationOutOfPlace(ActivationEntry::Identity),
+            KernelId::Hsikan,
+            KernelId::GlobalEntropyPool,
+            KernelId::RotorAttention,
+            KernelId::StarRotorSpike,
             KernelId::Fill,
         ];
         for (i, a) in all.iter().enumerate() {
@@ -536,6 +627,9 @@ mod tests {
         assert_eq!(LayoutId::Spmm.entries().len(), 6);
         assert_eq!(LayoutId::ActivationOutOfPlace.entries().len(), 3);
         assert_eq!(LayoutId::ActivationInPlace.entries().len(), 2);
+        assert_eq!(LayoutId::Hsikan.entries().len(), 9);
+        assert_eq!(LayoutId::RotorAttention.entries().len(), 8);
+        assert_eq!(LayoutId::StarRotorSpike.entries().len(), 5);
         assert_eq!(LayoutId::Fill.entries().len(), 2);
         // SpMM binds Y writable and everything else read-only.
         let spmm = LayoutId::Spmm.entries();
@@ -551,5 +645,14 @@ mod tests {
                 "SpMM binding {i} must be read-only"
             );
         }
+    }
+
+    #[test]
+    fn global_entropy_pool_reuses_the_compatible_three_binding_layout() {
+        assert_eq!(
+            KernelId::GlobalEntropyPool.layout(),
+            LayoutId::ActivationOutOfPlace
+        );
+        assert_eq!(KernelId::GlobalEntropyPool.layout().entries().len(), 3);
     }
 }

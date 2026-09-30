@@ -364,6 +364,16 @@ Delta sections:
 | `TopologyEdgeAdd` / `TopologyEdgeRemove` | edge ids and their node lists |
 | `TopologyIncidenceAdd` / `TopologyIncidenceRemove` | `(edge, node)` pairs |
 
+The `Topology*` delta kinds above are specified but not implemented. The kinds a build accepts are
+those in `hymeko_core/src/ir_stream/section.rs`.
+
+Canonical IR document sections (snapshot transactions only; implemented 2026-09-15 under
+`APPROVED-CORE-EDIT: ir-stream-cbor-snapshot`):
+
+| kind | contents |
+|---|---|
+| `CanonicalIrCbor` | `Raw8` fragments of one canonical CBOR document (`hymeko/model/ir/cbor/v1`). Repeatable and critical; the document is the concatenation of the staged bodies in staging order. `writers::cbor_writer::encode_snapshot_messages` produces the transaction, and `decode_snapshot` runs the complete CBOR boundary on the reassembled bytes. Numeric sections are not mixed into such a transaction. |
+
 **Weight patch indices are always edge-major**, because edge-major is the
 transmitted orientation and therefore the only index space both sides share
 without ambiguity. The consumer maps them into node-major through the

@@ -1,3 +1,0 @@
-parser v0.1.0 (ssh://git@amaterasu.local:2222/hymeko/parser.git?branch=master#284c490d)
-└── hymeko_core v0.1.0 (/workspace/core/hymeko_core)
-    └── hymeko_wgpu v0.1.0 (/workspace/core/hymeko_wgpu)

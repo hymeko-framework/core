@@ -10,3 +10,12 @@
 \draw[->] (local)--(report); \draw[->] (linux)--(report); \draw[->] (arm)--(report);
 \end{tikzpicture}
 \end{center}
+\begin{center}
+\begin{tikzpicture}[node distance=10mm, every node/.style={draw,rounded corners,align=center,font=\small}, >=Stealth]
+\node (workers) {Concurrent preparation\\existing ModuleStore per worker};
+\node (commit) [below=of workers] {Check base and publish Arc\\short serialized critical section};
+\node (readers) [below=of commit] {Concurrent readers\\immutable IR + interner + local revision};
+\draw[->] (workers) -- (commit);
+\draw[->] (commit) -- (readers);
+\end{tikzpicture}
+\end{center}

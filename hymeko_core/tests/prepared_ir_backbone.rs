@@ -298,6 +298,7 @@ fn wrong_owner_index_is_rejected_by_bijection() {
 }
 
 #[test]
+#[ignore = "performance benchmark; opt in with --ignored --exact"]
 fn bench_representation_view_vs_index_and_o1_creation() {
     // §8 decision gate. Representations compared on the SAME data + math:
     //   A = borrowed `IncidenceIndex` (row/arcs/slots SoA borrowing the `Ir`);

@@ -11,13 +11,12 @@
 //! (`assert_changed`). A comparison over two identical IRs is rejected as vacuous.
 
 use hymeko::common::ids::DeclId;
-use hymeko::ir::canonical_hash::CanonHashCfg;
+use hymeko::ir::canonical_hash::{Canon, CanonHashCfg};
 use hymeko::ir::hash_pass::compute_merkle_hashes;
 use hymeko::ir::ir::{AnnoR, Ir, RefAtomR, SignedRefR, ValueR};
 use hymeko::ir::semantic_digest::{
     ProgramStructureHashV1, SEMANTIC_DIGEST_ALGO_VERSION, SEMANTIC_DIGEST_SCHEMA_VERSION,
-    SemanticModelDigestV2, program_structure_hash_v1, semantic_declaration_hashes,
-    semantic_model_digest_v2,
+    SemanticModelDigestV2,
 };
 
 use crate::unified_ir::support::builder::{S, TestIr};
@@ -31,11 +30,7 @@ use crate::unified_ir::support::builder::{S, TestIr};
 /// The shared builder's `S::wrap` is private and this module needs to replace one reference in an
 /// already-built arc, which no builder method does.
 fn plain(sign: S, target: DeclId) -> SignedRefR {
-    let atom = RefAtomR {
-        target,
-        anno: AnnoR::default(),
-        weights: None,
-    };
+    let atom = RefAtomR::plain(target);
     match sign {
         S::Plus => SignedRefR::Plus(atom),
         S::Minus => SignedRefR::Minus(atom),
@@ -149,11 +144,11 @@ fn legacy(t: &mut TestIr) -> Vec<Option<[u8; 32]>> {
 }
 
 fn v2(t: &TestIr) -> SemanticModelDigestV2 {
-    semantic_model_digest_v2(&t.ir, &t.it)
+    Canon::new(&t.ir, &t.it).hash()
 }
 
 fn v1(t: &TestIr) -> ProgramStructureHashV1 {
-    program_structure_hash_v1(CanonHashCfg::default(), &t.ir, &t.it)
+    Canon::new(&t.ir, &t.it).structure(CanonHashCfg::default())
 }
 
 fn assert_distinct_models(left: &TestIr, right: &TestIr, changed: &str, message: &str) {
@@ -398,8 +393,9 @@ fn v2_is_invariant_under_a_semantically_irrelevant_construction_order() {
 #[test]
 fn program_structure_hash_v1_is_the_unchanged_v1_value() {
     let t = program(Some(ValueR::Ref(A)));
-    let direct =
-        hymeko::ir::canonical_hash::canonical_program_hash(CanonHashCfg::default(), &t.ir, &t.it);
+    let direct = Canon::new(&t.ir, &t.it)
+        .structure(CanonHashCfg::default())
+        .0;
     let wrapped: ProgramStructureHashV1 = v1(&t);
     assert_eq!(
         wrapped.0, direct,
@@ -413,13 +409,18 @@ fn program_structure_hash_v1_is_the_unchanged_v1_value() {
 fn v1_and_v2_are_domain_and_version_separated() {
     let t = program(Some(ValueR::Ref(A)));
     let v1 = v1(&t);
-    let v2v = semantic_model_digest_v2(&t.ir, &t.it);
+    let v2v = Canon::new(&t.ir, &t.it).hash();
     assert_ne!(
         v1.0.0, v2v.0.0,
         "a shared value would mean a shared domain header"
     );
     assert_eq!(SEMANTIC_DIGEST_SCHEMA_VERSION, 2);
-    assert_eq!(SEMANTIC_DIGEST_ALGO_VERSION, 2);
+    // Algorithm 2 -> 3 on 2026-09-06 under APPROVED-CORE-EDIT: executable-model-contract. The
+    // covered set grew: the optional model facet (role, shape, dtype, operator identity) is folded
+    // into every declaration hash. The bump is safe because no artifact pins an absolute V2 value —
+    // every assertion in this file is relative — while the v1 goldens are untouched because v1 does
+    // not see the facet (`model_contract::v1_is_blind_to_the_model_facet`).
+    assert_eq!(SEMANTIC_DIGEST_ALGO_VERSION, 3);
 }
 
 /// V1's blind spot is unchanged: it still does not see annotations. Recorded so the two contracts
@@ -442,7 +443,7 @@ fn v1_still_does_not_cover_annotations_and_v2_does() {
 #[test]
 fn semantic_declaration_hashes_covers_every_declaration() {
     let t = program(Some(ValueR::Ref(A)));
-    let table = semantic_declaration_hashes(&t.ir, &t.it);
+    let table = Canon::new(&t.ir, &t.it).declaration_hashes();
     assert_eq!(table.len(), t.ir.decl_nodes.len());
     let mut sorted: Vec<_> = table.iter().map(|h| h.0).collect();
     sorted.sort_unstable();

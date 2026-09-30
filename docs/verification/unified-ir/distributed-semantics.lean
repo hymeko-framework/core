@@ -276,3 +276,77 @@ def main (args : List String) : IO Unit := do
   for ti in List.range 81 do
     for kind in [HyMeKo.Distributed.Kind.snapshot, .delta] do
       emit true 0 ti kind false
+
+/-!
+2026-09-13: process-local publication abstraction for module_store::execution.
+The write lock linearizes calls to publish. Owner tags model distinct live Arc
+identities; a monotonic nonwrapping revision models the opaque base pointer.
+Payload is the inseparable compiled IR/interner bundle. These assumptions are
+implementation obligations, not a proof of Rust, Arc/RwLock, compiler validity,
+source consistency, crash durability, scheduling fairness or memory bounds.
+-/
+namespace HyMeKo.LocalPublication
+
+structure Snapshot where
+  owner : Nat
+  revision : Nat
+  payload : Nat
+  deriving DecidableEq, Repr
+
+def publish (limit : Nat) (current : Snapshot) (owner base payload : Nat) : Snapshot :=
+  if owner = current.owner ∧ base = current.revision ∧ current.revision < limit then
+    ⟨current.owner, current.revision + 1, payload⟩
+  else current
+
+theorem foreign_preserves (limit : Nat) (s : Snapshot) (owner base payload : Nat)
+    (h : owner ≠ s.owner) : publish limit s owner base payload = s := by
+  simp [publish, h]
+
+theorem stale_preserves (limit : Nat) (s : Snapshot) (owner base payload : Nat)
+    (h : base ≠ s.revision) : publish limit s owner base payload = s := by
+  simp [publish, h]
+
+theorem exhausted_preserves (limit : Nat) (s : Snapshot) (owner base payload : Nat)
+    (h : limit ≤ s.revision) : publish limit s owner base payload = s := by
+  simp [publish, Nat.not_lt.mpr h]
+
+theorem accepted_replaces (limit : Nat) (s : Snapshot) (payload : Nat)
+    (h : s.revision < limit) :
+    publish limit s s.owner s.revision payload = ⟨s.owner, s.revision + 1, payload⟩ := by
+  simp [publish, h]
+
+theorem publication_monotone (limit : Nat) (s : Snapshot) (owner base payload : Nat) :
+    s.revision ≤ (publish limit s owner base payload).revision := by
+  unfold publish
+  split <;> simp_all
+
+theorem publication_bounded (limit : Nat) (s : Snapshot) (owner base payload : Nat)
+    (h : s.revision ≤ limit) : (publish limit s owner base payload).revision ≤ limit := by
+  unfold publish
+  split <;> simp_all <;> omega
+
+theorem same_base_keeps_first (limit : Nat) (s : Snapshot) (first second : Nat)
+    (h : s.revision < limit) :
+    publish limit (publish limit s s.owner s.revision first) s.owner s.revision second =
+      ⟨s.owner, s.revision + 1, first⟩ := by
+  rw [accepted_replaces limit s first h]
+  simp [publish]
+
+theorem competing_publications_noncommute (limit : Nat) (s : Snapshot) (p q : Nat)
+    (h : s.revision < limit) (different : p ≠ q) :
+    publish limit (publish limit s s.owner s.revision p) s.owner s.revision q ≠
+    publish limit (publish limit s s.owner s.revision q) s.owner s.revision p := by
+  rw [same_base_keeps_first limit s p q h, same_base_keeps_first limit s q p h]
+  intro equal
+  exact different (congrArg Snapshot.payload equal)
+
+#print axioms foreign_preserves
+#print axioms stale_preserves
+#print axioms exhausted_preserves
+#print axioms accepted_replaces
+#print axioms publication_monotone
+#print axioms publication_bounded
+#print axioms same_base_keeps_first
+#print axioms competing_publications_noncommute
+
+end HyMeKo.LocalPublication

@@ -8,7 +8,7 @@ use std::time::Instant;
 use hymeko::common::ids::{DeclId, NodeId, SymId};
 use hymeko::ir::incidence::{IncidenceIndex, scalar_weight};
 use hymeko::ir::ir::{
-    AnnoR, ArcRec, DeclKind, DeclNode, Ir, NodeRec, RefAtomR, SignedRefR, ValueR,
+    AnnoR, ArcRec, DeclKind, DeclNode, Ir, NodeRec, PortDirection, RefAtomR, SignedRefR, ValueR,
 };
 
 /// Median of `iters` timed calls (2 warm-ups first), in milliseconds.
@@ -49,6 +49,7 @@ pub(crate) fn r(target: usize, sign: i8, weights: Option<Vec<f64>>) -> SignedRef
         target: DeclId::new(target),
         anno: AnnoR::default(),
         weights: weights.map(|ws| ws.into_iter().map(ValueR::Num).collect()),
+        direction: PortDirection::Unspecified,
     };
     match sign {
         s if s < 0 => SignedRefR::Minus(atom),

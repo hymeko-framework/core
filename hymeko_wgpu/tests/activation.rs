@@ -25,7 +25,7 @@
 use hymeko::tensor::compute::{ComputeError, TensorShape};
 use hymeko::tensor::representations::tensor_csr::TensorCsr;
 use hymeko_wgpu::testing::SparseSpec;
-use hymeko_wgpu::testing::backend_or_skip;
+use hymeko_wgpu::testing::{fresh_gpu, shared_gpu};
 use hymeko_wgpu::{ActivationKind, GpuTensor, PreparedActivation, WgpuBackend};
 
 const POISON: f32 = -98765.5;
@@ -201,7 +201,7 @@ fn kinds() -> Vec<ActivationKind> {
 
 #[test]
 fn test_all_kinds_match_cpu_on_adversarial_values() {
-    let Some(backend) = backend_or_skip("kinds") else {
+    let Some(backend) = shared_gpu("kinds") else {
         return;
     };
     let input = adversarial_input();
@@ -214,7 +214,7 @@ fn test_all_kinds_match_cpu_on_adversarial_values() {
 
 #[test]
 fn test_signed_zero_and_nan_contract_explicitly() {
-    let Some(backend) = backend_or_skip("signed_zero") else {
+    let Some(backend) = shared_gpu("signed_zero") else {
         return;
     };
     let input = vec![-0.0f32, 0.0, f32::NAN, f32::NEG_INFINITY, f32::INFINITY];
@@ -277,7 +277,7 @@ fn test_signed_zero_and_nan_contract_explicitly() {
 fn test_subnormal_handling_is_characterised_not_assumed() {
     // Pins what this adapter actually does with subnormals, so the exception in
     // `subnormal_flushed_to_zero` rests on a measurement rather than folklore.
-    let Some(backend) = backend_or_skip("subnormal") else {
+    let Some(backend) = shared_gpu("subnormal") else {
         return;
     };
 
@@ -324,7 +324,7 @@ fn test_subnormal_handling_is_characterised_not_assumed() {
 
 #[test]
 fn test_empty_and_singleton() {
-    let Some(backend) = backend_or_skip("empty") else {
+    let Some(backend) = shared_gpu("empty") else {
         return;
     };
     let res = backend.resources();
@@ -355,7 +355,7 @@ fn test_empty_and_singleton() {
 
 #[test]
 fn test_lengths_not_divisible_by_workgroup() {
-    let Some(backend) = backend_or_skip("ragged") else {
+    let Some(backend) = shared_gpu("ragged") else {
         return;
     };
     // Deliberately coprime with 64 / 128 / 256.
@@ -375,7 +375,7 @@ fn test_lengths_not_divisible_by_workgroup() {
 
 #[test]
 fn test_all_workgroups_agree() {
-    let Some(backend) = backend_or_skip("workgroups") else {
+    let Some(backend) = shared_gpu("workgroups") else {
         return;
     };
     let input: Vec<f32> = (0..5000).map(|i| ((i % 97) as f32) - 48.0).collect();
@@ -392,7 +392,7 @@ fn test_all_workgroups_agree() {
 
 #[test]
 fn test_shape_mismatch_and_missing_operands_rejected() {
-    let Some(backend) = backend_or_skip("validation") else {
+    let Some(backend) = shared_gpu("validation") else {
         return;
     };
     let res = backend.resources();
@@ -476,7 +476,7 @@ fn test_in_place_activation() {
     // read_write operand of the out-of-place shader violates WebGPU's
     // usage-scope rule, so the builder selects a dedicated single-binding
     // pipeline when input and output are the same buffer.
-    let Some(backend) = backend_or_skip("in_place") else {
+    let Some(backend) = shared_gpu("in_place") else {
         return;
     };
     let res = backend.resources();
@@ -512,7 +512,7 @@ fn test_in_place_activation() {
 
 #[test]
 fn test_in_place_and_out_of_place_agree() {
-    let Some(backend) = backend_or_skip("inplace_vs_out") else {
+    let Some(backend) = shared_gpu("inplace_vs_out") else {
         return;
     };
     let res = backend.resources();
@@ -555,7 +555,7 @@ fn test_in_place_and_out_of_place_agree() {
 
 #[test]
 fn test_repeated_dispatch_input_rewrite_and_poison() {
-    let Some(backend) = backend_or_skip("reuse") else {
+    let Some(backend) = shared_gpu("reuse") else {
         return;
     };
     let res = backend.resources();
@@ -609,7 +609,7 @@ fn test_repeated_dispatch_input_rewrite_and_poison() {
 
 #[test]
 fn test_two_activations_one_encoder() {
-    let Some(backend) = backend_or_skip("two_acts") else {
+    let Some(backend) = shared_gpu("two_acts") else {
         return;
     };
     let res = backend.resources();
@@ -651,7 +651,10 @@ fn test_two_activations_one_encoder() {
 
 #[test]
 fn test_pipeline_cache_reuse_across_kinds_and_workgroups() {
-    let Some(backend) = backend_or_skip("cache") else {
+    let Some(backend) = fresh_gpu(
+        // fresh device: this test asserts an EMPTY pipeline cache
+        "cache",
+    ) else {
         return;
     };
     let res = backend.resources();
@@ -742,7 +745,7 @@ fn handmade() -> TensorCsr<f32> {
 
 #[test]
 fn test_spmm_then_activation_in_one_encoder() {
-    let Some(backend) = backend_or_skip("chain") else {
+    let Some(backend) = shared_gpu("chain") else {
         return;
     };
     let res = backend.resources();
@@ -825,7 +828,7 @@ fn test_spmm_then_activation_in_one_encoder() {
 fn test_spmm_then_in_place_activation() {
     // The pattern that matters for a real forward pass: activate the SpMM
     // output in place, so no third tensor is allocated.
-    let Some(backend) = backend_or_skip("chain_inplace") else {
+    let Some(backend) = shared_gpu("chain_inplace") else {
         return;
     };
     let res = backend.resources();
@@ -893,7 +896,7 @@ fn test_spmm_then_in_place_activation() {
 
 #[test]
 fn test_two_spmm_activation_chains_one_submit() {
-    let Some(backend) = backend_or_skip("two_chains") else {
+    let Some(backend) = shared_gpu("two_chains") else {
         return;
     };
     let res = backend.resources();
@@ -989,7 +992,7 @@ fn test_two_spmm_activation_chains_one_submit() {
 /// an element shows up as a wrong value, not merely a wrong count.
 #[test]
 fn test_count_exceeding_one_dispatch_grid() {
-    let Some(backend) = backend_or_skip("grid_stride") else {
+    let Some(backend) = shared_gpu("grid_stride") else {
         return;
     };
     // 65_535 * 64 = 4_194_240 is the single-grid ceiling at wg=64. Take a
@@ -1028,7 +1031,7 @@ fn test_count_exceeding_one_dispatch_grid() {
 /// tolerance, because of FMA contraction — that is a different question.)
 #[test]
 fn test_fused_matches_unfused_chain() {
-    let Some(backend) = backend_or_skip("fused") else {
+    let Some(backend) = shared_gpu("fused") else {
         return;
     };
     let res = backend.resources();
@@ -1117,7 +1120,7 @@ fn test_fused_matches_unfused_chain() {
 /// than quietly compiling a second pipeline with identical behaviour.
 #[test]
 fn test_fused_identity_is_rejected() {
-    let Some(backend) = backend_or_skip("fused_identity") else {
+    let Some(backend) = shared_gpu("fused_identity") else {
         return;
     };
     let res = backend.resources();
@@ -1148,7 +1151,7 @@ fn test_fused_identity_is_rejected() {
 /// the fused kernel is a distinct pipeline from the unfused one.
 #[test]
 fn test_fused_is_a_distinct_pipeline() {
-    let Some(backend) = backend_or_skip("fused_pipeline") else {
+    let Some(backend) = fresh_gpu("fused_pipeline") else {
         return;
     };
     let res = backend.resources();

@@ -955,11 +955,7 @@ mod fault_tests {
         ir.edges.push(EdgeRec::new(DeclId::new(2), Vec::new()));
         ir.bind_edge_decl(DeclId::new(2), EdgeId::new(0)).unwrap();
         let arc_decl = ir.push_anonymous_arc();
-        let atom = |t: usize| RefAtomR {
-            target: DeclId::new(t),
-            anno: AnnoR::default(),
-            weights: None,
-        };
+        let atom = |t: usize| RefAtomR::plain(DeclId::new(t));
         ir.arcs.push(ArcRec {
             anno: AnnoR::default(),
             in_edge: DeclId::new(2),

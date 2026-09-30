@@ -11,24 +11,8 @@
 //! and collapsing the two would let real regressions pass silently in CI.
 
 use hymeko::tensor::compute::{ComputeError, SparseCsrShape, TensorShape};
-use hymeko_wgpu::{KernelId, WgpuBackend};
-
-/// Acquire a backend, or return `None` if this environment has no adapter.
-///
-/// Only [`ComputeError::BackendUnavailable`] is treated as skippable.
-fn backend_or_skip(test: &str) -> Option<WgpuBackend> {
-    match WgpuBackend::builder().label("hymeko-test").build() {
-        Ok(b) => {
-            eprintln!("[{test}] adapter: {}", b.capabilities().summary());
-            Some(b)
-        }
-        Err(ComputeError::BackendUnavailable { reason, .. }) => {
-            eprintln!("[{test}] SKIPPED - no GPU adapter available: {reason}");
-            None
-        }
-        Err(other) => panic!("[{test}] backend init failed (not an availability problem): {other}"),
-    }
-}
+use hymeko_wgpu::KernelId;
+use hymeko_wgpu::testing::{fresh_gpu, shared_gpu};
 
 /// Bind group layout for `fill.wgsl`: one read-write storage buffer + params.
 /// Pipeline layout for `fill.wgsl`.
@@ -37,7 +21,7 @@ fn backend_or_skip(test: &str) -> Option<WgpuBackend> {
 /// constants with `immediate_size`.
 #[test]
 fn test_backend_reports_capabilities() {
-    let Some(backend) = backend_or_skip("capabilities") else {
+    let Some(backend) = shared_gpu("capabilities") else {
         return;
     };
     let caps = backend.capabilities();
@@ -66,7 +50,7 @@ fn test_backend_reports_capabilities() {
 
 #[test]
 fn test_upload_tensor_validates_shape() {
-    let Some(backend) = backend_or_skip("upload_shape") else {
+    let Some(backend) = shared_gpu("upload_shape") else {
         return;
     };
     let res = backend.resources();
@@ -92,7 +76,7 @@ fn test_upload_tensor_validates_shape() {
 
 #[test]
 fn test_upload_csr_validates_all_three_arrays() {
-    let Some(backend) = backend_or_skip("upload_csr") else {
+    let Some(backend) = shared_gpu("upload_csr") else {
         return;
     };
     let res = backend.resources();
@@ -132,7 +116,7 @@ fn test_upload_csr_validates_all_three_arrays() {
 
 #[test]
 fn test_empty_shapes_do_not_allocate_zero_sized_buffers() {
-    let Some(backend) = backend_or_skip("empty_shapes") else {
+    let Some(backend) = shared_gpu("empty_shapes") else {
         return;
     };
     let res = backend.resources();
@@ -165,7 +149,7 @@ fn test_empty_shapes_do_not_allocate_zero_sized_buffers() {
 
 #[test]
 fn test_pipeline_cache_builds_once_and_is_reused() {
-    let Some(backend) = backend_or_skip("pipeline_cache") else {
+    let Some(backend) = fresh_gpu("pipeline_cache") else {
         return;
     };
     let device = backend.device();
@@ -200,7 +184,7 @@ fn test_pipeline_cache_builds_once_and_is_reused() {
 
 #[test]
 fn test_encode_submit_readback_roundtrip() {
-    let Some(backend) = backend_or_skip("roundtrip") else {
+    let Some(backend) = fresh_gpu("roundtrip") else {
         return;
     };
     let device = backend.device();
@@ -277,7 +261,7 @@ fn test_encode_submit_readback_roundtrip() {
 
 #[test]
 fn test_two_dispatches_share_one_encoder_and_submit() {
-    let Some(backend) = backend_or_skip("single_submit") else {
+    let Some(backend) = fresh_gpu("single_submit") else {
         return;
     };
     let device = backend.device();
@@ -359,7 +343,7 @@ fn test_two_dispatches_share_one_encoder_and_submit() {
 
 #[test]
 fn test_write_tensor_allows_redispatch_without_new_resources() {
-    let Some(backend) = backend_or_skip("rewrite_input") else {
+    let Some(backend) = shared_gpu("rewrite_input") else {
         return;
     };
     let res = backend.resources();
@@ -395,7 +379,7 @@ fn test_write_tensor_allows_redispatch_without_new_resources() {
 /// express, because source is no longer a parameter — `KernelId` owns it.
 #[test]
 fn distinct_kernels_get_distinct_pipelines() {
-    let Some(backend) = backend_or_skip("kernel_identity") else {
+    let Some(backend) = fresh_gpu("kernel_identity") else {
         return;
     };
     let device = backend.device();
@@ -432,7 +416,7 @@ fn distinct_kernels_get_distinct_pipelines() {
 /// Raw and fused SpMM share a module and a layout but not a pipeline.
 #[test]
 fn raw_and_fused_spmm_share_layout_but_not_pipeline() {
-    let Some(backend) = backend_or_skip("spmm_layout_sharing") else {
+    let Some(backend) = fresh_gpu("spmm_layout_sharing") else {
         return;
     };
     let device = backend.device();
@@ -470,7 +454,7 @@ fn raw_and_fused_spmm_share_layout_but_not_pipeline() {
 /// first wins and everyone — including the loser — ends up with that `Arc`.
 #[test]
 fn pipeline_cache_converges_under_concurrent_misses() {
-    let Some(backend) = backend_or_skip("cache_concurrency") else {
+    let Some(backend) = fresh_gpu("cache_concurrency") else {
         return;
     };
     let device = backend.device();
@@ -516,7 +500,7 @@ fn pipeline_cache_converges_under_concurrent_misses() {
 /// of an error. These are cheap host-side checks paid once per upload.
 #[test]
 fn malformed_csr_is_refused_with_a_named_defect() {
-    let Some(backend) = backend_or_skip("csr_validation") else {
+    let Some(backend) = shared_gpu("csr_validation") else {
         return;
     };
     let res = backend.resources();
@@ -557,7 +541,7 @@ fn malformed_csr_is_refused_with_a_named_defect() {
 /// A zero-row CSR is legal and must not trip the structural checks.
 #[test]
 fn degenerate_but_valid_csr_shapes_are_accepted() {
-    let Some(backend) = backend_or_skip("csr_degenerate") else {
+    let Some(backend) = shared_gpu("csr_degenerate") else {
         return;
     };
     let res = backend.resources();
@@ -591,7 +575,7 @@ fn degenerate_but_valid_csr_shapes_are_accepted() {
 /// asking the driver for the memory.
 #[test]
 fn an_allocation_beyond_the_device_limit_is_refused_cheaply() {
-    let Some(backend) = backend_or_skip("size_limit") else {
+    let Some(backend) = shared_gpu("size_limit") else {
         return;
     };
     let max = backend.capabilities().max_buffer_size;

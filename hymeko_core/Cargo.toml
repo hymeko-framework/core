@@ -24,6 +24,7 @@ parser = { workspace = true }
 #
 serde = { workspace = true, features = ["derive"] }
 ciborium = "=0.2.2"
+crossbeam-queue = "=0.3.14"
 rustc-hash = "2.1.1"
 blake3 = {  workspace = true }
 nalgebra = "0.34.1"
@@ -49,6 +50,11 @@ serde_json = "1.0.149"
 [[test]]
 name = "mod"
 path = "tests/mod.rs"
+
+# Correctness only: isolated from the aggregate's opt-in profile modules.
+[[test]]
+name = "circular_buffer"
+path = "tests/circular_buffer.rs"
 
 [[bench]]
 name = "interning_bench"
@@ -78,3 +84,11 @@ harness = false
 [[bench]]
 name = "cbor_bench"
 harness = false
+
+# Delegated measurement (2026-09-13, user chat): opt-in Core circular buffer benchmark.
+# `test = false` keeps ordinary `cargo test` from building it; `main` additionally
+# refuses to measure unless Cargo passed `--bench`.
+[[bench]]
+name = "circular_buffer_bench"
+harness = false
+test = false

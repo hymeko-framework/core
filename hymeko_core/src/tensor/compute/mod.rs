@@ -27,6 +27,16 @@
 // f32 (`GpuTensor<f32>`), so the element type is carried by the type parameter
 // and a runtime dtype tag would have no consumer yet. Introduce it when a second
 // element type actually lands.
+//
+// APPROVED-CORE-EDIT: generic-arena-contract (2026-09-27, user chat) amends the
+// scope above by one module, `arena`: the reuse policy of allocations, generic
+// over the backend. The "resource repository" exclusion stood because no second
+// consumer existed; there are now two, measured — `hymeko_wgpu::TensorArena`
+// over `Pool<WgpuBackend>` and Nagare's HSiKAN host arena over `HostArena`. The
+// module still names no `wgpu` type, adds no dependency, and dispatches
+// statically.
+
+pub mod arena;
 
 use core::fmt;
 

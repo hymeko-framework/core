@@ -9,7 +9,7 @@
 //! other. The intrusive links (`DeclNode.parent`, `first_child`, `last_child`,
 //! `next_sibling`) describe one tree; the `Index` path keys describe another.
 //! Nothing enforces that they agree, and the two current hash systems disagree
-//! about which one is authoritative: `canonical_program_hash` reads *only* the
+//! about which one is authoritative: `Canon::structure` reads *only* the
 //! `Index` path prefixes, while `hash_pass::compute_merkle_hashes` walks *only*
 //! the intrusive child lists.
 //!
@@ -32,6 +32,7 @@
 
 use crate::common::ids::DeclId;
 use crate::ir::ir::{DeclKind, Ir, dispatch};
+use crate::ir::ir::{ModelFacet, PortDirection, TensorRole};
 use crate::resolution::interner::Interner;
 use crate::resolution::resolve::Index;
 
@@ -59,6 +60,8 @@ impl Default for CoherenceLimits {
 /// large payload back.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Finding {
+    /// Optional source-file metadata must cover declarations with valid file IDs.
+    InvalidSourceProvenance,
     /// The `Index` maps a path to a `DeclId` outside `decl_nodes`.
     IndexedDeclOutOfRange { decl: DeclId, decl_count: usize },
     /// Two different paths map to the same declaration.
@@ -152,6 +155,9 @@ pub fn validate_hierarchy_index_coherence(
         findings: Vec::new(),
         total: 0,
     };
+    if ir.validate_source_provenance().is_err() {
+        c.push(Finding::InvalidSourceProvenance);
+    }
 
     // --- parallel array lengths -------------------------------------------
     for (name, len) in [
@@ -354,5 +360,211 @@ pub fn validate_hierarchy_index_coherence(
             total: c.total,
             truncated,
         })
+    }
+}
+
+// =================================================================================================
+// Executable-model contract validation
+// APPROVED-CORE-EDIT: executable-model-contract (2026-09-06).
+// =================================================================================================
+
+/// A violation of the executable-model contract.
+///
+/// Ids and bounded numbers only; never caller-supplied text, so a hostile `Ir` cannot make the
+/// report echo a large payload.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ModelFinding {
+    /// A tensor facet sits on a declaration that is not a `Node`.
+    TensorFacetOnNonNode { decl: DeclId, kind: DeclKind },
+    /// An operator facet sits on a declaration that is not an `Edge`.
+    OperatorFacetOnNonEdge { decl: DeclId, kind: DeclKind },
+    /// The facet table disagrees in length with `decl_nodes`.
+    FacetTableLengthMismatch { len: usize, expected: usize },
+    /// The model declares no input tensor.
+    NoInput,
+    /// The model declares no output tensor.
+    NoOutput,
+    /// An operator's identity symbol resolves to the empty string.
+    EmptyOperatorIdentity { decl: DeclId },
+    /// A model input or a parameter is declared as an operator's *output* port.
+    ///
+    /// The control that detects a swapped port wiring: a model input is supplied, and a parameter
+    /// is learned, so neither is produced by an operator.
+    ProducedInputOrParameter {
+        arc: DeclId,
+        slot: usize,
+        target: DeclId,
+        role: TensorRole,
+    },
+    /// An operator declares port directions but not both an input and an output.
+    OperatorPortsIncomplete {
+        arc: DeclId,
+        has_in: bool,
+        has_out: bool,
+    },
+}
+
+impl core::fmt::Display for ModelFinding {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::TensorFacetOnNonNode { decl, kind } => write!(
+                f,
+                "declaration {} carries a tensor facet but is a {kind:?}",
+                decl.raw()
+            ),
+            Self::OperatorFacetOnNonEdge { decl, kind } => write!(
+                f,
+                "declaration {} carries an operator facet but is a {kind:?}",
+                decl.raw()
+            ),
+            Self::FacetTableLengthMismatch { len, expected } => {
+                write!(f, "facet table has {len} slots, expected {expected}")
+            }
+            Self::NoInput => f.write_str("the model declares no input tensor"),
+            Self::NoOutput => f.write_str("the model declares no output tensor"),
+            Self::EmptyOperatorIdentity { decl } => write!(
+                f,
+                "operator declaration {} has an empty identity",
+                decl.raw()
+            ),
+            Self::ProducedInputOrParameter {
+                arc,
+                slot,
+                target,
+                role,
+            } => write!(
+                f,
+                "arc {} slot {slot} declares declaration {} ({role:?}) as an output port",
+                arc.raw(),
+                target.raw()
+            ),
+            Self::OperatorPortsIncomplete {
+                arc,
+                has_in,
+                has_out,
+            } => write!(
+                f,
+                "arc {} declares directions but has_in={has_in} has_out={has_out}",
+                arc.raw()
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ModelFinding {}
+
+/// Validate the executable-model contract of an `Ir`.
+///
+/// # The switch
+///
+/// A document is an *executable model* exactly when at least one declaration carries a
+/// [`ModelFacet`]. **A document with no facet is not a model and is returned as `Ok` without any
+/// check** — the tracked corpus of service networks, robotics meta-graphs and P-graphs is exactly
+/// that case, and imposing model rules on it would be a category error.
+///
+/// # What is checked, once the document is a model
+///
+/// Facet placement against declaration kind, facet-table length, a non-empty operator identity, and
+/// the two document-level requirements that make a model executable at all: at least one input and
+/// at least one output.
+///
+/// # What is deliberately NOT checked here
+///
+/// Shape *inference* and operator-vocabulary meaning. Core owns that a declaration is an operator
+/// and which symbol is its identity; what `linear` computes is the consuming framework's contract.
+///
+/// # Errors
+/// Every violation found, in declaration order, then the document-level findings.
+pub fn validate_model_contract(ir: &Ir, it: &Interner) -> Result<(), Vec<ModelFinding>> {
+    if !ir.declares_executable_model() {
+        return Ok(());
+    }
+    let mut findings = Vec::new();
+    let n = ir.decl_nodes.len();
+    let table = ir.model_facet_table_len();
+    if table != n {
+        findings.push(ModelFinding::FacetTableLengthMismatch {
+            len: table,
+            expected: n,
+        });
+    }
+
+    let (mut has_input, mut has_output) = (false, false);
+    for i in 0..n {
+        let d = DeclId::new(i);
+        let Some(facet) = ir.model_facet(d) else {
+            continue;
+        };
+        let kind = ir.decl_nodes[i].kind;
+        match facet {
+            ModelFacet::Tensor(t) => {
+                if kind != DeclKind::Node {
+                    findings.push(ModelFinding::TensorFacetOnNonNode { decl: d, kind });
+                }
+                match t.role {
+                    TensorRole::Input => has_input = true,
+                    TensorRole::Output => has_output = true,
+                    _ => {}
+                }
+            }
+            ModelFacet::Operator(o) => {
+                if kind != DeclKind::Edge {
+                    findings.push(ModelFinding::OperatorFacetOnNonEdge { decl: d, kind });
+                }
+                if it.resolve(o.identity).is_empty() {
+                    findings.push(ModelFinding::EmptyOperatorIdentity { decl: d });
+                }
+            }
+        }
+    }
+    // Port-direction rules. They engage only where a direction was actually declared, so a legacy
+    // incidence -- every one of which is `Unspecified` -- is never judged against them.
+    for (ai, arc) in ir.arcs.iter().enumerate() {
+        let arc_decl = arc.in_edge;
+        let (mut saw_in, mut saw_out, mut declared) = (false, false, false);
+        for (slot, reference) in arc.refs.iter().enumerate() {
+            let atom = reference.atom();
+            match atom.direction {
+                PortDirection::Unspecified => continue,
+                PortDirection::In => {
+                    declared = true;
+                    saw_in = true;
+                }
+                PortDirection::Out => {
+                    declared = true;
+                    saw_out = true;
+                    if let Some(ModelFacet::Tensor(t)) = ir.model_facet(atom.target) {
+                        if matches!(t.role, TensorRole::Input | TensorRole::Parameter) {
+                            findings.push(ModelFinding::ProducedInputOrParameter {
+                                arc: DeclId::new(ai),
+                                slot,
+                                target: atom.target,
+                                role: t.role,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        if declared && !(saw_in && saw_out) {
+            findings.push(ModelFinding::OperatorPortsIncomplete {
+                arc: arc_decl,
+                has_in: saw_in,
+                has_out: saw_out,
+            });
+        }
+    }
+
+    if !has_input {
+        findings.push(ModelFinding::NoInput);
+    }
+    if !has_output {
+        findings.push(ModelFinding::NoOutput);
+    }
+
+    if findings.is_empty() {
+        Ok(())
+    } else {
+        Err(findings)
     }
 }

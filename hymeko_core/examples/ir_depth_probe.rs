@@ -28,7 +28,7 @@ use std::process::ExitCode;
 
 use hymeko::common::ids::{DeclId, EdgeId, HyperArcId, NodeId};
 use hymeko::common::pathkey::PathKey;
-use hymeko::ir::canonical_hash::{CanonHashCfg, canonical_program_hash};
+use hymeko::ir::canonical_hash::{Canon, CanonHashCfg};
 use hymeko::ir::ir::{
     AnnoR, ArcRec, DeclKind, DeclNode, EdgeRec, Ir, NodeRec, RefAtomR, SignedRefR,
 };
@@ -81,11 +81,7 @@ fn build_chain(depth: usize) -> (Ir, Index, Interner) {
     ir.arcs.push(ArcRec {
         anno: AnnoR::default(),
         in_edge: ed,
-        refs: vec![SignedRefR::Plus(RefAtomR {
-            target: last,
-            anno: AnnoR::default(),
-            weights: None,
-        })],
+        refs: vec![SignedRefR::Plus(RefAtomR::plain(last))],
     });
     ir.arc_hash.push(None);
     ir.edges[eid.raw()].arcs.push(aid);
@@ -123,7 +119,7 @@ fn main() -> ExitCode {
         // The recursive path. If it overflows, the process dies here and the
         // caller sees an abnormal exit status.
         eprintln!("probe: hashing (recursive subtree fold)…");
-        let h = canonical_program_hash(CanonHashCfg::default(), &ir, &it);
+        let h = Canon::new(&ir, &it).structure(CanonHashCfg::default()).0;
         eprintln!(
             "probe: hash_ok prefix={:02x}{:02x}{:02x}",
             h.0[0], h.0[1], h.0[2]

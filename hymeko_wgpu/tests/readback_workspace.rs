@@ -9,7 +9,7 @@
 //! `--test-threads=1`; concurrent `WgpuBackend` construction deadlocks in the
 //! Vulkan loader. That is a property of device creation, not of these tests.
 
-use hymeko_wgpu::testing::backend_or_skip;
+use hymeko_wgpu::testing::shared_backend;
 use hymeko_wgpu::{ComputeError, TensorShape, WgpuBackend};
 
 fn pattern(elements: usize) -> Vec<f32> {
@@ -27,11 +27,11 @@ fn upload(backend: &WgpuBackend, label: &str, elements: usize) -> hymeko_wgpu::G
 
 #[test]
 fn first_read_allocates_then_identical_sizes_allocate_nothing() {
-    let Some(backend) = backend_or_skip("ws_first_alloc") else {
+    let Some(backend) = shared_backend("ws_first_alloc") else {
         return;
     };
     let n = 4_096usize;
-    let t = upload(&backend, "t", n);
+    let t = upload(backend, "t", n);
     let mut ws = backend.create_readback_workspace();
 
     assert_eq!(ws.staging_allocations(), 0, "nothing allocated up front");
@@ -65,13 +65,13 @@ fn first_read_allocates_then_identical_sizes_allocate_nothing() {
 
 #[test]
 fn a_smaller_read_after_a_larger_one_reuses_both_buffers() {
-    let Some(backend) = backend_or_skip("ws_smaller_after_larger") else {
+    let Some(backend) = shared_backend("ws_smaller_after_larger") else {
         return;
     };
     let large = 32_768usize;
     let small = 512usize;
-    let l = upload(&backend, "l", large);
-    let s = upload(&backend, "s", small);
+    let l = upload(backend, "l", large);
+    let s = upload(backend, "s", small);
     let mut ws = backend.create_readback_workspace();
 
     let got = backend.read_tensor_into(&l, &mut ws).expect("large");
@@ -110,14 +110,14 @@ fn a_smaller_read_after_a_larger_one_reuses_both_buffers() {
 
 #[test]
 fn growth_is_safe_and_returns_correct_bytes() {
-    let Some(backend) = backend_or_skip("ws_growth") else {
+    let Some(backend) = shared_backend("ws_growth") else {
         return;
     };
     let mut ws = backend.create_readback_workspace();
     let mut previous_capacity = 0u64;
 
     for &n in &[64usize, 1_024, 16_384, 100_003] {
-        let t = upload(&backend, "grow", n);
+        let t = upload(backend, "grow", n);
         let got = backend.read_tensor_into(&t, &mut ws).expect("read");
         assert_eq!(got, pattern(n).as_slice(), "n={n} returned wrong bytes");
         assert!(
@@ -130,13 +130,13 @@ fn growth_is_safe_and_returns_correct_bytes() {
 
 #[test]
 fn reserve_moves_both_allocations_out_of_the_first_read() {
-    let Some(backend) = backend_or_skip("ws_reserve") else {
+    let Some(backend) = shared_backend("ws_reserve") else {
         return;
     };
     let n = 8_192usize;
-    let t = upload(&backend, "t", n);
+    let t = upload(backend, "t", n);
     let mut ws = backend.create_readback_workspace();
-    ws.reserve(&backend, n).expect("reserve");
+    ws.reserve(backend, n).expect("reserve");
 
     assert_eq!(ws.staging_allocations(), 1, "reserve allocates staging");
     assert!(ws.staging_capacity() >= (n * 4) as u64);
@@ -157,7 +157,7 @@ fn reserve_moves_both_allocations_out_of_the_first_read() {
 
 #[test]
 fn zero_element_tensor_yields_an_empty_slice() {
-    let Some(backend) = backend_or_skip("ws_zero") else {
+    let Some(backend) = shared_backend("ws_zero") else {
         return;
     };
     let empty = backend
@@ -177,7 +177,7 @@ fn zero_element_tensor_yields_an_empty_slice() {
     );
 
     // And the workspace still works afterwards.
-    let t = upload(&backend, "after", 128);
+    let t = upload(backend, "after", 128);
     let got = backend
         .read_tensor_into(&t, &mut ws)
         .expect("read after zero");
@@ -186,14 +186,14 @@ fn zero_element_tensor_yields_an_empty_slice() {
 
 #[test]
 fn non_page_and_non_chunk_multiple_lengths_round_trip_exactly() {
-    let Some(backend) = backend_or_skip("ws_odd_lengths") else {
+    let Some(backend) = shared_backend("ws_odd_lengths") else {
         return;
     };
     let mut ws = backend.create_readback_workspace();
     // 1: minimum; 3: sub-word; 1023/1025: astride a power of two;
     // 3_145_733: 20 bytes past an 8 MiB boundary.
     for &n in &[1usize, 3, 1_023, 1_025, 4_097, 3_145_733] {
-        let t = upload(&backend, "odd", n);
+        let t = upload(backend, "odd", n);
         let got = backend.read_tensor_into(&t, &mut ws).expect("read");
         assert_eq!(got.len(), n, "n={n} wrong length");
         assert_eq!(got, pattern(n).as_slice(), "n={n} wrong bytes");
@@ -202,13 +202,13 @@ fn non_page_and_non_chunk_multiple_lengths_round_trip_exactly() {
 
 #[test]
 fn a_stale_destination_cannot_masquerade_as_a_result() {
-    let Some(backend) = backend_or_skip("ws_stale") else {
+    let Some(backend) = shared_backend("ws_stale") else {
         return;
     };
     let big = 4_096usize;
     let small = 16usize;
-    let b = upload(&backend, "b", big);
-    let s = upload(&backend, "s", small);
+    let b = upload(backend, "b", big);
+    let s = upload(backend, "s", small);
     let mut ws = backend.create_readback_workspace();
 
     let first = backend.read_tensor_into(&b, &mut ws).expect("big").to_vec();
@@ -225,7 +225,7 @@ fn a_stale_destination_cannot_masquerade_as_a_result() {
 
 #[test]
 fn reusable_and_legacy_apis_agree_bit_for_bit() {
-    let Some(backend) = backend_or_skip("ws_vs_legacy") else {
+    let Some(backend) = shared_backend("ws_vs_legacy") else {
         return;
     };
     let mut ws = backend.create_readback_workspace();
@@ -236,7 +236,7 @@ fn reusable_and_legacy_apis_agree_bit_for_bit() {
                 .zeroed_tensor("z", TensorShape::new(0, 4))
                 .expect("zero")
         } else {
-            upload(&backend, "t", n)
+            upload(backend, "t", n)
         };
         let legacy = backend.read_tensor(&t).expect("legacy");
         let reused = backend.read_tensor_into(&t, &mut ws).expect("reusable");
@@ -250,7 +250,7 @@ fn reusable_and_legacy_apis_agree_bit_for_bit() {
 
 #[test]
 fn sequential_reads_of_different_tensors_do_not_bleed() {
-    let Some(backend) = backend_or_skip("ws_sequential") else {
+    let Some(backend) = shared_backend("ws_sequential") else {
         return;
     };
     let a = backend
@@ -281,11 +281,11 @@ fn sequential_reads_of_different_tensors_do_not_bleed() {
 
 #[test]
 fn independent_workspaces_do_not_share_state() {
-    let Some(backend) = backend_or_skip("ws_independent") else {
+    let Some(backend) = shared_backend("ws_independent") else {
         return;
     };
-    let a = upload(&backend, "a", 1_024);
-    let b = upload(&backend, "b", 8_192);
+    let a = upload(backend, "a", 1_024);
+    let b = upload(backend, "b", 8_192);
     let mut wa = backend.create_readback_workspace();
     let mut wb = backend.create_readback_workspace();
 
@@ -305,7 +305,7 @@ fn independent_workspaces_do_not_share_state() {
 
 #[test]
 fn an_arena_tensor_reads_back_without_any_raw_buffer_access() {
-    let Some(backend) = backend_or_skip("ws_arena") else {
+    let Some(backend) = shared_backend("ws_arena") else {
         return;
     };
     let arena = backend.tensor_arena(hymeko_wgpu::TensorArenaConfig::default());
@@ -326,7 +326,7 @@ fn an_arena_tensor_reads_back_without_any_raw_buffer_access() {
 
 #[test]
 fn a_transfer_beyond_the_device_limit_is_refused_by_name() {
-    let Some(backend) = backend_or_skip("ws_limit") else {
+    let Some(backend) = shared_backend("ws_limit") else {
         return;
     };
     let max = backend.capabilities().max_buffer_size;
@@ -340,7 +340,7 @@ fn a_transfer_beyond_the_device_limit_is_refused_by_name() {
     // Reached through the public API rather than a test-only accessor: reserve
     // performs the same extent validation a read does.
     let err = ws
-        .reserve(&backend, elements)
+        .reserve(backend, elements)
         .expect_err("a transfer past max_buffer_size must be refused");
     assert!(
         matches!(err, ComputeError::ShapeMismatch { .. }),
@@ -350,11 +350,11 @@ fn a_transfer_beyond_the_device_limit_is_refused_by_name() {
 
 #[test]
 fn a_workspace_remains_usable_after_a_rejected_read() {
-    let Some(backend) = backend_or_skip("ws_after_failure") else {
+    let Some(backend) = shared_backend("ws_after_failure") else {
         return;
     };
     let mut ws = backend.create_readback_workspace();
-    let good = upload(&backend, "good", 512);
+    let good = upload(backend, "good", 512);
 
     // Warm the workspace so the failure below has state to corrupt.
     assert_eq!(
@@ -370,7 +370,7 @@ fn a_workspace_remains_usable_after_a_rejected_read() {
     let max = backend.capabilities().max_buffer_size;
     if let Ok(too_many) = usize::try_from(max / 4 + 1) {
         assert!(
-            ws.reserve(&backend, too_many).is_err(),
+            ws.reserve(backend, too_many).is_err(),
             "an over-limit reserve must be refused"
         );
     }

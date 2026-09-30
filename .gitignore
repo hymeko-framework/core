@@ -17,3 +17,6 @@ deliverables/
 # here ignored Python bytecode before.
 __pycache__/
 *.pyc
+
+# Task reports are archived to Samba after each task.
+reports/

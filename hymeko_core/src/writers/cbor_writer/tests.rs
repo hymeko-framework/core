@@ -1,7 +1,7 @@
 use super::*;
 use crate::common::ids::{DeclId, HyperArcId, NodeId, SymId};
 use crate::common::pathkey::PathKey;
-use crate::ir::canonical_hash::{CanonHashCfg, canonical_program_hash};
+use crate::ir::canonical_hash::{Canon, CanonHashCfg, CanonicalIdentity};
 use crate::ir::hash::HashId;
 use crate::ir::ir::{AnnoR, ArcRec, DeclKind, DeclNode, Ir, NodeRec, RefAtomR, SignedRefR};
 use crate::ir_stream::DecodeLimits;
@@ -53,7 +53,9 @@ fn facade_round_trips_usable_ir_interner_and_hash() {
     assert_eq!(decoded.interner().resolve(SymId::new(0)), "charge");
     assert_eq!(
         decoded.canonical_hash(),
-        canonical_program_hash(CanonHashCfg::default(), decoded.ir(), decoded.interner())
+        Canon::new(decoded.ir(), decoded.interner())
+            .structure(CanonHashCfg::default())
+            .0
     );
 }
 
@@ -61,6 +63,7 @@ fn facade_round_trips_usable_ir_interner_and_hash() {
 fn compiled_program_facade_makes_paths_workspace_relative() {
     let workspace = PathBuf::from("workspace");
     let (ir, index, interner) = fixture();
+    let canon = CanonicalIdentity::of(&Canon::new(&ir, &interner), CanonHashCfg::default());
     let program = CompiledProgram {
         root: ModuleKey(workspace.join("models/charge.hymeko")),
         idx: index,
@@ -69,7 +72,7 @@ fn compiled_program_facade_makes_paths_workspace_relative() {
             SymId::new(0),
             ModuleKey(workspace.join("library/electrical.hymeko")),
         )],
-        canon_hash: HashId([0; 32]),
+        canon,
     };
 
     let bytes = encode_compiled(&workspace, &program, &interner).unwrap();
@@ -213,11 +216,7 @@ fn codec_rejects_positions_that_do_not_fit_canonical_hash_v1() {
     ));
 
     let mut payload: CborPayload = ciborium::de::from_reader(bytes.as_slice()).unwrap();
-    let reference = SignedRefR::Neutral(RefAtomR {
-        target: DeclId::new(0),
-        weights: None,
-        anno: AnnoR::default(),
-    });
+    let reference = SignedRefR::Neutral(RefAtomR::plain(DeclId::new(0)));
     payload.ir.arcs.push(ArcRec {
         anno: AnnoR::default(),
         in_edge: DeclId::new(0),
@@ -291,4 +290,271 @@ fn preflight_rejects_indefinite_items_and_trailing_bytes() {
         decode(&[0x00, 0x00], &DecodeLimits::strict()),
         Err(CborError::InvalidCbor(_))
     ));
+}
+
+// APPROVED-CORE-EDIT: ir-stream-cbor-snapshot (2026-09-15, user chat).
+mod snapshot_stream {
+    use super::*;
+    use crate::ir_stream::{
+        ApplyOutcome, AssemblerLimits, CommittedTransaction, ElementKind, EnvelopeDraft,
+        FLAG_LAST_CHUNK, MessageType, ResyncReason, SectionKind, SnapshotVersion,
+        TransactionAssembler, TransactionKind, encode_message, validate_message,
+    };
+    use crate::writers::cbor_writer::stream::single_section_payload;
+
+    const TARGET: SnapshotVersion = SnapshotVersion::new(1, 1, 1, 0);
+
+    fn draft(max_fragment_bytes: usize) -> SnapshotMessageDraft {
+        SnapshotMessageDraft {
+            stream_id: 7,
+            first_seq: 1,
+            txn_id: 1,
+            base_version: SnapshotVersion::ZERO,
+            target_version: TARGET,
+            max_fragment_bytes,
+        }
+    }
+
+    /// Drives the messages through the real validator and a fresh assembler: every message
+    /// before the last must be accepted, and the last must commit.
+    fn commit(messages: &[Vec<u8>]) -> CommittedTransaction {
+        let mut assembler = TransactionAssembler::new(AssemblerLimits::DEFAULT);
+        let (last, earlier) = messages.split_last().expect("a transaction has messages");
+        for bytes in earlier {
+            let message = validate_message(bytes, &DecodeLimits::DEFAULT).unwrap();
+            assert_eq!(assembler.apply(&message), ApplyOutcome::Accepted);
+        }
+        let message = validate_message(last, &DecodeLimits::DEFAULT).unwrap();
+        match assembler.apply(&message) {
+            ApplyOutcome::Committed(transaction) => transaction,
+            other => panic!("expected a commit, got {other:?}"),
+        }
+    }
+
+    /// A committed transaction of `kind` whose chunks carry exactly `chunk_payloads`.
+    fn transaction(kind: TransactionKind, chunk_payloads: &[Vec<u8>]) -> CommittedTransaction {
+        let (begin, chunk, target) = match kind {
+            TransactionKind::Snapshot => (
+                MessageType::SnapshotBegin,
+                MessageType::SnapshotChunk,
+                TARGET,
+            ),
+            TransactionKind::Delta => (
+                MessageType::DeltaBegin,
+                MessageType::DeltaChunk,
+                SnapshotVersion::new(0, 1, 0, 0),
+            ),
+        };
+        let mut seq = 0;
+        let mut message = |msg_type: MessageType, payload: &[u8]| {
+            seq += 1;
+            let envelope = EnvelopeDraft {
+                stream_id: 7,
+                seq,
+                txn_id: 1,
+                target_version: target,
+                ..EnvelopeDraft::new(msg_type)
+            };
+            encode_message(&envelope, payload)
+        };
+        let mut messages = vec![message(begin, &[0; 8])];
+        for payload in chunk_payloads {
+            messages.push(message(chunk, payload));
+        }
+        messages.push(message(MessageType::Commit, &[]));
+        commit(&messages)
+    }
+
+    #[test]
+    fn a_fragmented_snapshot_reassembles_to_the_directly_decoded_model() {
+        let bytes = encoded_fixture();
+        let direct = decode(&bytes, &DecodeLimits::strict()).unwrap();
+        for size in [1, 3, bytes.len(), bytes.len() + 1] {
+            let messages = encode_snapshot_messages(&bytes, &draft(size)).unwrap();
+            assert_eq!(
+                messages.len(),
+                bytes.len().div_ceil(size) + 2,
+                "size {size}"
+            );
+            let last = messages.len() - 1;
+            for (position, raw) in messages.iter().enumerate() {
+                let message = validate_message(raw, &DecodeLimits::strict()).unwrap();
+                let envelope = message.envelope();
+                assert_eq!(envelope.seq(), 1 + position as u64);
+                let expected = match position {
+                    0 => MessageType::SnapshotBegin,
+                    p if p == last => MessageType::Commit,
+                    _ => MessageType::SnapshotChunk,
+                };
+                assert_eq!(envelope.msg_type(), expected);
+                assert_eq!(
+                    envelope.flags() & FLAG_LAST_CHUNK != 0,
+                    position + 1 == last,
+                    "only the last chunk is flagged"
+                );
+                if expected == MessageType::SnapshotChunk {
+                    let [section] = message.sections() else {
+                        panic!("a chunk carries exactly one section");
+                    };
+                    assert_eq!(section.kind(), SectionKind::CanonicalIrCbor);
+                    assert_eq!(section.element_kind(), ElementKind::Raw8);
+                    assert!(section.bytes().len() <= size);
+                } else {
+                    assert!(message.sections().is_empty());
+                }
+            }
+            let decoded = decode_snapshot(&commit(&messages), &DecodeLimits::strict()).unwrap();
+            assert_eq!(
+                decoded.canonical_hash(),
+                direct.canonical_hash(),
+                "size {size}"
+            );
+            assert_eq!(decoded.payload().root_path, direct.payload().root_path);
+        }
+    }
+
+    #[test]
+    fn the_producer_rejects_empty_documents_empty_fragments_and_sequence_overflow() {
+        let bytes = encoded_fixture();
+        assert!(matches!(
+            encode_snapshot_messages(&[], &draft(8)),
+            Err(CborStreamError::EmptyDocument)
+        ));
+        assert!(matches!(
+            encode_snapshot_messages(&bytes, &draft(0)),
+            Err(CborStreamError::ZeroFragmentSize)
+        ));
+        // The Commit takes first_seq + chunks + 1: the largest first_seq that fits, then one more.
+        let chunks = bytes.len().div_ceil(8) as u64;
+        let fits = SnapshotMessageDraft {
+            first_seq: u64::MAX - chunks - 1,
+            ..draft(8)
+        };
+        assert!(encode_snapshot_messages(&bytes, &fits).is_ok());
+        let overflows = SnapshotMessageDraft {
+            first_seq: u64::MAX - chunks,
+            ..draft(8)
+        };
+        assert!(matches!(
+            encode_snapshot_messages(&bytes, &overflows),
+            Err(CborStreamError::SequenceOverflow)
+        ));
+    }
+
+    #[test]
+    fn a_topology_bump_without_weights_and_features_is_refused_by_the_assembler() {
+        let bytes = encoded_fixture();
+        let incoherent = SnapshotMessageDraft {
+            target_version: SnapshotVersion::new(1, 0, 0, 0),
+            ..draft(64)
+        };
+        let messages = encode_snapshot_messages(&bytes, &incoherent).unwrap();
+        let begin = validate_message(&messages[0], &DecodeLimits::strict()).unwrap();
+        assert!(matches!(
+            TransactionAssembler::new(AssemblerLimits::DEFAULT).apply(&begin),
+            ApplyOutcome::ResyncRequired(ResyncReason::IncoherentVersionBump { .. })
+        ));
+    }
+
+    #[test]
+    fn decode_snapshot_accepts_only_snapshot_transactions_of_raw_cbor_fragments() {
+        let bytes = encoded_fixture();
+        let limits = DecodeLimits::strict();
+        let fragment =
+            single_section_payload(SectionKind::CanonicalIrCbor, ElementKind::Raw8, &bytes);
+
+        let accepted = transaction(TransactionKind::Snapshot, std::slice::from_ref(&fragment));
+        assert!(decode_snapshot(&accepted, &limits).is_ok());
+
+        let delta = transaction(TransactionKind::Delta, std::slice::from_ref(&fragment));
+        assert!(matches!(
+            decode_snapshot(&delta, &limits),
+            Err(CborStreamError::NotASnapshot {
+                kind: TransactionKind::Delta
+            })
+        ));
+
+        let empty = transaction(TransactionKind::Snapshot, &[]);
+        assert!(matches!(
+            decode_snapshot(&empty, &limits),
+            Err(CborStreamError::NoFragments)
+        ));
+
+        let numeric = single_section_payload(
+            SectionKind::WeightPatchRange,
+            ElementKind::F32,
+            &1.0f32.to_le_bytes(),
+        );
+        let mixed = transaction(TransactionKind::Snapshot, &[fragment, numeric]);
+        assert!(matches!(
+            decode_snapshot(&mixed, &limits),
+            Err(CborStreamError::UnexpectedSection {
+                index: 1,
+                kind: SectionKind::WeightPatchRange
+            })
+        ));
+
+        let mistyped =
+            single_section_payload(SectionKind::CanonicalIrCbor, ElementKind::U32, &[0; 4]);
+        let mistyped = transaction(TransactionKind::Snapshot, &[mistyped]);
+        assert!(matches!(
+            decode_snapshot(&mistyped, &limits),
+            Err(CborStreamError::WrongElementKind {
+                index: 0,
+                got: ElementKind::U32
+            })
+        ));
+    }
+
+    #[test]
+    fn the_reassembled_length_is_limited_before_it_is_allocated() {
+        let bytes = encoded_fixture();
+        let messages = encode_snapshot_messages(&bytes, &draft(16)).unwrap();
+        let length = bytes.len() as u64;
+        let limits = DecodeLimits {
+            max_message_bytes: length - 1,
+            ..DecodeLimits::strict()
+        };
+        assert!(matches!(
+            decode_snapshot(&commit(&messages), &limits),
+            Err(CborStreamError::TooLarge { got, max }) if got == length && max == length - 1
+        ));
+    }
+
+    #[test]
+    fn missing_or_reordered_fragments_fail_the_cbor_boundary() {
+        let bytes = encoded_fixture();
+        // A fragment boundary near the middle, so 3-byte fragments line up with the edits.
+        let middle = bytes.len() / 2 / 3 * 3;
+
+        let mut missing = bytes.clone();
+        missing.drain(middle..middle + 3);
+        let mut reordered = bytes.clone();
+        reordered[middle..middle + 6].rotate_left(3);
+        assert_ne!(reordered, bytes, "the swapped fragments must differ");
+
+        for document in [missing, reordered] {
+            let messages = encode_snapshot_messages(&document, &draft(3)).unwrap();
+            assert!(matches!(
+                decode_snapshot(&commit(&messages), &DecodeLimits::strict()),
+                Err(CborStreamError::Cbor(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn stream_errors_name_the_rule_and_keep_the_cbor_cause() {
+        assert!(
+            CborStreamError::NoFragments
+                .to_string()
+                .contains("CanonicalIrCbor")
+        );
+        let wrapped: CborStreamError = CborError::IndexMismatch.into();
+        assert!(matches!(
+            wrapped,
+            CborStreamError::Cbor(CborError::IndexMismatch)
+        ));
+        assert!(std::error::Error::source(&wrapped).is_some());
+        assert!(std::error::Error::source(&CborStreamError::EmptyDocument).is_none());
+    }
 }

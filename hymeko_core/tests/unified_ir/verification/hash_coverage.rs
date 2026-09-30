@@ -18,7 +18,7 @@
 
 use blake3::Hasher;
 use hymeko::common::ids::DeclId;
-use hymeko::ir::canonical_hash::{CanonHashCfg, canonical_program_hash};
+use hymeko::ir::canonical_hash::{Canon, CanonHashCfg};
 use hymeko::ir::hash::HashId;
 use hymeko::ir::hash_pass::compute_merkle_hashes;
 use hymeko::ir::ir::{AnnoR, SignedRefR, ValueR};
@@ -55,7 +55,9 @@ fn fold_decl_hashes(t: &TestIr) -> [u8; 32] {
 pub fn probe(t: &mut TestIr) -> Probe {
     compute_merkle_hashes(&mut t.ir, &t.it);
     Probe {
-        v1: canonical_program_hash(CanonHashCfg::default(), &t.ir, &t.it),
+        v1: Canon::new(&t.ir, &t.it)
+            .structure(CanonHashCfg::default())
+            .0,
         merkle: fold_decl_hashes(t),
         oracle: semantic_form(t, Ordering::Ordered),
     }

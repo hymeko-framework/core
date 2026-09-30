@@ -28,14 +28,12 @@
 //! Invalid symbol or bound-record indices may panic. Bounded path construction
 //! does not make an arbitrary malformed IR valid.
 
-use blake3::Hasher;
-
 use crate::common::ids::{DeclId, HyperArcId};
-use crate::ir::canonical_hash::{
-    CanonHashCfg, DerivedPathIndex, build_path_index, canonical_program_hash,
-};
+use crate::ir::canonical_hash::Canon;
 use crate::ir::hash::HashId;
-use crate::ir::ir::{AnnoR, DeclKind, Ir, SignedRefR, ValueR};
+use crate::ir::ir::{
+    AnnoR, DType, DeclKind, Extent, Ir, ModelFacet, PortDirection, SignedRefR, TensorRole, ValueR,
+};
 use crate::resolution::interner::Interner;
 
 const MAGIC: &[u8; 8] = b"HYMEKOCN";
@@ -48,7 +46,7 @@ const DOMAIN_ARC: &[u8; 8] = b"SEMARC\0\0";
 /// Version of the intended semantic field set.
 pub const SEMANTIC_DIGEST_SCHEMA_VERSION: u16 = 2;
 /// Encoding version. Algorithm 2 corrects coverage and canonicalization defects.
-pub const SEMANTIC_DIGEST_ALGO_VERSION: u16 = 2;
+pub const SEMANTIC_DIGEST_ALGO_VERSION: u16 = 3;
 
 /// V1 structural identity: excludes annotation values and incidence weights.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -58,60 +56,52 @@ pub struct ProgramStructureHashV1(pub HashId);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct SemanticModelDigestV2(pub HashId);
 
-/// Delegates to V1 unchanged, including its configuration and byte layout.
-#[must_use]
-pub fn program_structure_hash_v1(
-    cfg: CanonHashCfg,
-    ir: &Ir,
-    it: &Interner,
-) -> ProgramStructureHashV1 {
-    ProgramStructureHashV1(canonical_program_hash(cfg, ir, it))
-}
-
-/// Return one contribution per declaration, in DeclId order.
-///
-/// This diagnostic table includes each declaration's bound record, when present.
-/// Use `semantic_model_digest_v2` for whole-model coverage of unbound records.
-/// # Preconditions
-/// The module's valid-index preconditions apply.
-/// # Postconditions
-/// Pure and deterministic; neither reads nor writes the IR's cached hash tables.
-/// # Panics
-/// Invalid symbol or bound-record indices may panic.
-#[must_use]
-pub fn semantic_declaration_hashes(ir: &Ir, it: &Interner) -> Vec<HashId> {
-    let context = SemanticContext::new(ir, it);
-    let records = context.record_hashes();
-    context.declaration_hashes(&records)
-}
-
-/// Return the whole-model digest, with complete concrete-record coverage.
-///
-/// # Preconditions
-/// The module's valid-index preconditions apply. Reindexing invariance is only
-/// promised in canonical mode; raw-ID fallback is explicitly domain-separated.
-/// # Postconditions
-/// Pure, deterministic and idempotent, independent of cached hash tables.
-/// Per-kind aggregation is unordered; incidence slots, arc slots, tags, bases,
-/// weights and value lists retain their order and multiplicity.
-/// # Panics
-/// Invalid symbol or bound-record indices may panic.
-#[must_use]
-pub fn semantic_model_digest_v2(ir: &Ir, it: &Interner) -> SemanticModelDigestV2 {
-    let context = SemanticContext::new(ir, it);
-    let mut records = context.record_hashes();
-    let mut declarations = context.declaration_hashes(&records);
-    let mut h = context.header(DOMAIN_MODEL);
-    for (domain, hashes) in [
-        (DOMAIN_DECL, &mut declarations),
-        (DOMAIN_NODE, &mut records.nodes),
-        (DOMAIN_EDGE, &mut records.edges),
-        (DOMAIN_ARC, &mut records.arcs),
-    ] {
-        h.update(domain);
-        write_sorted_hashes(&mut h, hashes);
+impl Canon<'_> {
+    /// Return one contribution per declaration, in DeclId order.
+    ///
+    /// This diagnostic table includes each declaration's bound record, when present.
+    /// Use [`Canon::hash`] for whole-model coverage of unbound records.
+    /// # Preconditions
+    /// The module's valid-index preconditions apply.
+    /// # Postconditions
+    /// Pure and deterministic; neither reads nor writes the IR's cached hash tables.
+    /// # Panics
+    /// Invalid symbol or bound-record indices may panic.
+    #[must_use]
+    pub fn declaration_hashes(&self) -> Vec<HashId> {
+        let context = SemanticContext::new(self);
+        let records = context.record_hashes();
+        context.declaration_hashes(&records)
     }
-    SemanticModelDigestV2(HashId(*h.finalize().as_bytes()))
+
+    /// Return the whole-model digest, with complete concrete-record coverage.
+    ///
+    /// # Preconditions
+    /// The module's valid-index preconditions apply. Reindexing invariance is only
+    /// promised in canonical mode; raw-ID fallback is explicitly domain-separated.
+    /// # Postconditions
+    /// Pure, deterministic and idempotent, independent of cached hash tables.
+    /// Per-kind aggregation is unordered; incidence slots, arc slots, tags, bases,
+    /// weights and value lists retain their order and multiplicity.
+    /// # Panics
+    /// Invalid symbol or bound-record indices may panic.
+    #[must_use]
+    pub fn hash(&self) -> SemanticModelDigestV2 {
+        let context = SemanticContext::new(self);
+        let mut records = context.record_hashes();
+        let mut declarations = context.declaration_hashes(&records);
+        let mut h = context.header(DOMAIN_MODEL);
+        for (domain, hashes) in [
+            (DOMAIN_DECL, &mut declarations),
+            (DOMAIN_NODE, &mut records.nodes),
+            (DOMAIN_EDGE, &mut records.edges),
+            (DOMAIN_ARC, &mut records.arcs),
+        ] {
+            h.update(domain);
+            write_sorted_hashes(&mut h, hashes);
+        }
+        SemanticModelDigestV2(HashId(*h.finalize().as_bytes()))
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -139,14 +129,15 @@ struct RecordHashes {
 struct SemanticContext<'a> {
     ir: &'a Ir,
     it: &'a Interner,
-    paths: Option<DerivedPathIndex>,
+    /// The canonical view whose paths name every target.
+    canon: &'a Canon<'a>,
     first_owner_slots: Vec<Option<usize>>,
     scheme: TargetScheme,
 }
 
 impl<'a> SemanticContext<'a> {
-    fn new(ir: &'a Ir, it: &'a Interner) -> Self {
-        let paths = build_path_index(ir).ok();
+    fn new(canon: &'a Canon<'a>) -> Self {
+        let (ir, it) = (canon.ir(), canon.interner());
         let mut first_owner_slots = vec![None; ir.arcs.len()];
         // Use the owner's actual dispatch binding, never an orphan EdgeRec that
         // happens to carry the same declaration backlink.
@@ -164,7 +155,8 @@ impl<'a> SemanticContext<'a> {
                 }
             }
         }
-        let mut canonical = paths.is_some() && first_owner_slots.iter().all(Option::is_some);
+        let mut canonical =
+            canon.unique_paths().is_ok() && first_owner_slots.iter().all(Option::is_some);
         let mut declared = vec![false; ir.arcs.len()];
         for (di, declaration) in ir.decl_nodes.iter().enumerate() {
             if declaration.kind != DeclKind::HyperArc {
@@ -181,7 +173,7 @@ impl<'a> SemanticContext<'a> {
         Self {
             ir,
             it,
-            paths,
+            canon,
             first_owner_slots,
             scheme: if canonical {
                 TargetScheme::Path
@@ -191,8 +183,8 @@ impl<'a> SemanticContext<'a> {
         }
     }
 
-    fn header(&self, domain: &[u8; 8]) -> Hasher {
-        let mut h = Hasher::new();
+    fn header(&self, domain: &[u8; 8]) -> DigestWriter {
+        let mut h = DigestWriter::new();
         h.update(MAGIC);
         h.update(domain);
         h.update(&SEMANTIC_DIGEST_SCHEMA_VERSION.to_le_bytes());
@@ -243,7 +235,12 @@ impl<'a> SemanticContext<'a> {
         RecordHashes { nodes, edges, arcs }
     }
 
-    fn record_header(&self, domain: &[u8; 8], declaration: DeclId, bases: &[SignedRefR]) -> Hasher {
+    fn record_header(
+        &self,
+        domain: &[u8; 8],
+        declaration: DeclId,
+        bases: &[SignedRefR],
+    ) -> DigestWriter {
         let mut h = self.header(domain);
         self.write_target(&mut h, declaration);
         self.write_signed_refs(&mut h, bases);
@@ -265,6 +262,11 @@ impl<'a> SemanticContext<'a> {
                 self.write_target(&mut h, d);
                 self.write_target(&mut h, declaration.parent);
                 self.write_anno(&mut h, &declaration.anno);
+                // APPROVED-CORE-EDIT: executable-model-contract (2026-09-06). The typed facet is
+                // part of the meaning, so it is part of the identity. Absence is folded as an
+                // explicit tag rather than as nothing, so "no facet" and "a facet that happens to
+                // encode to no bytes" can never collide.
+                self.write_model_facet(&mut h, self.ir.model_facet(d));
                 let record = match declaration.kind {
                     DeclKind::Node => self.ir.as_node(d).map(|id| &records.nodes[id.raw()]),
                     DeclKind::Edge => self.ir.as_edge(d).map(|id| &records.edges[id.raw()]),
@@ -284,13 +286,13 @@ impl<'a> SemanticContext<'a> {
             .collect()
     }
 
-    fn write_target(&self, h: &mut Hasher, d: DeclId) {
+    fn write_target(&self, h: &mut DigestWriter, d: DeclId) {
         if d.is_none() {
             h.update(&[0]);
             return;
         }
         if self.scheme == TargetScheme::Path {
-            if let Some(path) = self.paths.as_ref().and_then(|paths| paths.path_of(d)) {
+            if let Some(path) = self.canon.path_of(d) {
                 h.update(&[1]);
                 write_len(h, path.0.len());
                 for symbol in path.iter() {
@@ -308,7 +310,7 @@ impl<'a> SemanticContext<'a> {
         h.update(&(d.raw() as u64).to_le_bytes());
     }
 
-    fn write_arc_identity(&self, h: &mut Hasher, arc: HyperArcId) {
+    fn write_arc_identity(&self, h: &mut DigestWriter, arc: HyperArcId) {
         if self.scheme == TargetScheme::Path {
             h.update(&[0]);
             self.write_target(h, self.ir.arcs[arc.raw()].in_edge);
@@ -322,7 +324,56 @@ impl<'a> SemanticContext<'a> {
         }
     }
 
-    fn write_anno(&self, h: &mut Hasher, anno: &AnnoR) {
+    /// The optional executable-model facet, domain-tagged so absence is explicit.
+    ///
+    /// Every field is fixed-width or length-prefixed, so two different facets cannot produce the
+    /// same byte stream by concatenation. A `Symbolic` extent contributes the resolved symbol text,
+    /// not its `SymId`, so the digest stays independent of interner order.
+    fn write_model_facet(&self, h: &mut DigestWriter, facet: Option<&ModelFacet>) {
+        h.update(b"MODEL");
+        match facet {
+            None => h.update(&[0u8]),
+            Some(ModelFacet::Tensor(t)) => {
+                h.update(&[1u8]);
+                h.update(&[match t.role {
+                    TensorRole::Input => 1u8,
+                    TensorRole::Output => 2,
+                    TensorRole::Parameter => 3,
+                    TensorRole::State => 4,
+                    TensorRole::Intermediate => 5,
+                }]);
+                h.update(&[match t.dtype {
+                    DType::F32 => 1u8,
+                    DType::F64 => 2,
+                    DType::I32 => 3,
+                    DType::I64 => 4,
+                    DType::U8 => 5,
+                    DType::Bool => 6,
+                }]);
+                write_len(h, t.shape.len());
+                for extent in &t.shape {
+                    match extent {
+                        Extent::Static(v) => {
+                            h.update(&[1u8]);
+                            h.update(&v.to_le_bytes());
+                        }
+                        Extent::Symbolic(sym) => {
+                            h.update(&[2u8]);
+                            write_str(h, self.it.resolve(*sym));
+                        }
+                    }
+                }
+                h
+            }
+            Some(ModelFacet::Operator(o)) => {
+                h.update(&[2u8]);
+                write_str(h, self.it.resolve(o.identity));
+                h
+            }
+        };
+    }
+
+    fn write_anno(&self, h: &mut DigestWriter, anno: &AnnoR) {
         h.update(b"ANNO");
         write_len(h, anno.tags.len());
         for &tag in &anno.tags {
@@ -339,7 +390,7 @@ impl<'a> SemanticContext<'a> {
         }
     }
 
-    fn write_value(&self, h: &mut Hasher, value: &ValueR) {
+    fn write_value(&self, h: &mut DigestWriter, value: &ValueR) {
         // Iterator frames retain O(depth) state without recursive calls or
         // materializing a wide list's children. Every finite value is encoded.
         let mut frames = vec![std::slice::from_ref(value).iter()];
@@ -370,7 +421,7 @@ impl<'a> SemanticContext<'a> {
         }
     }
 
-    fn write_signed_refs(&self, h: &mut Hasher, refs: &[SignedRefR]) {
+    fn write_signed_refs(&self, h: &mut DigestWriter, refs: &[SignedRefR]) {
         write_len(h, refs.len());
         for (slot, reference) in refs.iter().enumerate() {
             h.update(&(slot as u64).to_le_bytes());
@@ -381,6 +432,15 @@ impl<'a> SemanticContext<'a> {
             };
             h.update(&[sign]);
             let atom = reference.atom();
+            // APPROVED-CORE-EDIT: executable-model-contract (2026-09-06). Direction is folded under
+            // its OWN tag, immediately after the sign and never merged with it, so a sign change
+            // and a direction change are two distinct mutations of the digest.
+            h.update(b"DIR");
+            h.update(&[match atom.direction {
+                PortDirection::Unspecified => 0u8,
+                PortDirection::In => 1,
+                PortDirection::Out => 2,
+            }]);
             self.write_target(h, atom.target);
             self.write_anno(h, &atom.anno);
             match &atom.weights {
@@ -407,19 +467,106 @@ const fn kind_tag(kind: DeclKind) -> u8 {
     }
 }
 
-fn write_len(h: &mut Hasher, len: usize) {
+/// A blake3 hasher fed through a small stack buffer.
+///
+/// The digest writes many small fields -- tags, lengths, path segments -- and blake3's per-call
+/// bookkeeping, not its compression, was most of their cost: 5.2 million updates for one
+/// Bitcoin-OTC graph (APPROVED-CORE-EDIT: semantic-digest-path-cache, 2026-09-29). blake3 is a
+/// streaming hash, so the digest does not depend on how its input is split into updates, and every
+/// digest byte is unchanged.
+struct DigestWriter {
+    hasher: blake3::Hasher,
+    buffer: [u8; DigestWriter::CAPACITY],
+    len: usize,
+}
+
+impl DigestWriter {
+    /// Bytes buffered before one update: a record's fields usually fit, and the writer stays cheap
+    /// to move.
+    const CAPACITY: usize = 256;
+
+    fn new() -> Self {
+        Self {
+            hasher: blake3::Hasher::new(),
+            buffer: [0; Self::CAPACITY],
+            len: 0,
+        }
+    }
+
+    /// Append `bytes`; returns the writer, as `blake3::Hasher::update` does.
+    fn update(&mut self, bytes: &[u8]) -> &mut Self {
+        if self.len + bytes.len() > Self::CAPACITY {
+            self.flush();
+        }
+        if bytes.len() >= Self::CAPACITY {
+            self.hasher.update(bytes);
+        } else {
+            self.buffer[self.len..self.len + bytes.len()].copy_from_slice(bytes);
+            self.len += bytes.len();
+        }
+        self
+    }
+
+    fn flush(&mut self) {
+        self.hasher.update(&self.buffer[..self.len]);
+        self.len = 0;
+    }
+
+    fn finalize(mut self) -> blake3::Hash {
+        self.flush();
+        self.hasher.finalize()
+    }
+}
+
+fn write_len(h: &mut DigestWriter, len: usize) {
     h.update(&(len as u64).to_le_bytes());
 }
 
-fn write_str(h: &mut Hasher, value: &str) {
+fn write_str(h: &mut DigestWriter, value: &str) {
     write_len(h, value.len());
     h.update(value.as_bytes());
 }
 
-fn write_sorted_hashes(h: &mut Hasher, hashes: &mut [HashId]) {
+fn write_sorted_hashes(h: &mut DigestWriter, hashes: &mut [HashId]) {
     hashes.sort_unstable_by_key(|hash| hash.0);
     write_len(h, hashes.len());
     for hash in hashes {
         h.update(&hash.0);
+    }
+}
+
+#[cfg(test)]
+mod digest_writer_tests {
+    use super::DigestWriter;
+
+    /// The buffered writer is the blake3 stream it feeds, however the input is split: single
+    /// bytes, fields that fill the buffer exactly, fields longer than the buffer, and a mix across
+    /// every boundary. This is what keeps each semantic digest byte-identical.
+    #[test]
+    fn a_buffered_digest_is_the_stream_it_feeds() {
+        let capacity = DigestWriter::CAPACITY;
+        let input: Vec<u8> = (0..5 * capacity + 17)
+            .map(|i| (i * 31 % 251) as u8)
+            .collect();
+        let reference = blake3::hash(&input);
+        let splits: [&[usize]; 5] = [
+            &[1],
+            &[capacity],
+            &[capacity + 1, 3],
+            &[7, capacity - 7, 2 * capacity + 5, 1],
+            &[3, 5, 8, 13, 21, 34, 55, 89, 144, 233],
+        ];
+        for sizes in splits {
+            let mut writer = DigestWriter::new();
+            let (mut at, mut next) = (0, 0);
+            while at < input.len() {
+                let size = sizes[next % sizes.len()].min(input.len() - at);
+                writer.update(&input[at..at + size]);
+                at += size;
+                next += 1;
+            }
+            assert_eq!(writer.finalize(), reference, "splits {sizes:?}");
+        }
+        assert_eq!(DigestWriter::new().finalize(), blake3::hash(&[]));
     }
 }

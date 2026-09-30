@@ -1,0 +1,25 @@
+% Tier 2A/2B: the OPTIONAL executable-model facet on the general IR.
+% Blue = general IR, unchanged for every non-model document.
+% Green = the opt-in model facet (2A) and the port-direction axis (2B).
+\begin{tikzpicture}[
+  node distance=7mm and 12mm,
+  box/.style={draw,rounded corners,align=center,minimum width=40mm,minimum height=9mm,font=\small},
+  gen/.style={box,fill=blue!9},
+  new/.style={box,fill=green!10},
+  note/.style={align=left,font=\scriptsize,text width=52mm},
+  flow/.style={-{Latex[length=2mm]},thick}
+]
+\node[gen] (decl) {\texttt{DeclNode}\\\scriptsize kind $\cdot$ name $\cdot$ links $\cdot$ \texttt{AnnoR}};
+\node[new,below=of decl] (facet) {\texttt{model: Option<ModelFacet>}\\\scriptsize \textbf{2A} --- absent on every legacy decl};
+\node[new,below left=9mm and 6mm of facet] (tensor) {\texttt{Tensor\{role, shape, dtype\}}};
+\node[new,below right=9mm and 6mm of facet] (op) {\texttt{Operator\{identity\}}};
+\node[gen,right=26mm of decl] (atom) {\texttt{RefAtomR}\\\scriptsize target $\cdot$ anno $\cdot$ weights};
+\node[new,below=of atom] (dir) {\texttt{direction: PortDirection}\\\scriptsize \textbf{2B} --- orthogonal to the sign};
+\node[gen,below=9mm of dir] (sign) {\texttt{SignedRefR\{Plus,Minus,Neutral\}}\\\scriptsize the ALGEBRAIC axis, unchanged};
+\node[note,below=16mm of tensor,xshift=22mm] (rule) {\textbf{Two axes, never derived from one another.}\\A legacy incidence gets \texttt{Unspecified}, never an invented direction.};
+\draw[flow] (decl) -- (facet);
+\draw[flow] (facet) -- (tensor);
+\draw[flow] (facet) -- (op);
+\draw[flow] (atom) -- (dir);
+\draw[flow,dashed] (dir) -- node[right,font=\scriptsize]{orthogonal} (sign);
+\end{tikzpicture}

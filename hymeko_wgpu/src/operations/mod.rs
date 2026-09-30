@@ -5,23 +5,55 @@
 //! and bind groups an operation owns. Both are borrowed from a
 //! [`crate::WgpuBackend`], which is the only thing that owns a device.
 //!
-//! One operation exists so far. The factory is introduced now — rather than in
-//! Phase 1 — because there is finally a product to manufacture; adding it
-//! earlier would have been a factory with nothing to make.
+//! The factory owns the concrete SpMM, activation and signed-HSiKAN builders;
+//! it is not a dynamic operation registry.
 
 pub mod activation;
 pub(crate) mod dispatch;
+pub mod global_entropy_pool;
+pub mod highway;
+pub mod hsikan;
+pub mod rotor_attention;
+pub mod scatter_mean;
 pub mod spmm;
+pub mod star_rotor_spike;
 
 pub use activation::{
     ACTIVATION_INPLACE_SHADER, ACTIVATION_SHADER, ACTIVATION_WORKGROUP_SWEEP, ActivationBuilder,
     ActivationKind, DEFAULT_ACTIVATION_WORKGROUP, PreparedActivation,
 };
+pub use global_entropy_pool::{
+    DEFAULT_GLOBAL_ENTROPY_POOL_WORKGROUP, GLOBAL_ENTROPY_POOL_SHADER, GlobalEntropyPoolBuilder,
+    PreparedGlobalEntropyPool,
+};
+pub use highway::{
+    DEFAULT_HIGHWAY_WORKGROUP, HIGHWAY_IDENTITY_SHADER, HighwayIdentityBuilder,
+    PreparedHighwayIdentity,
+};
+pub use hsikan::{DEFAULT_HSIKAN_WORKGROUP, HSIKAN_SHADER, HsikanBuilder, PreparedHsikan};
+pub use rotor_attention::{
+    DEFAULT_ROTOR_ATTENTION_WORKGROUP, PreparedRotorAttention, ROTOR_ATTENTION_SHADER,
+    RotorAttentionBuilder,
+};
+pub use scatter_mean::{
+    DEFAULT_SCATTER_MEAN_WORKGROUP, PreparedScatterMean, SCATTER_MEAN_CSR_SHADER,
+    ScatterMeanBuilder,
+};
 pub use spmm::{PreparedSpmm, SPMM_SHADER, SpmmBuilder, WorkgroupShape, spmm_workgroup_for};
+pub use star_rotor_spike::{
+    DEFAULT_STAR_ROTOR_SPIKE_WORKGROUP, PreparedStarRotorSpike, STAR_ROTOR_SPIKE_SHADER,
+    StarRotorSpikeBuilder,
+};
 
 use crate::pipeline::PipelineCache;
 use activation::ActivationLimits;
+use global_entropy_pool::GlobalEntropyPoolLimits;
+use highway::HighwayLimits;
+use hsikan::HsikanLimits;
+use rotor_attention::RotorAttentionLimits;
+use scatter_mean::ScatterMeanLimits;
 use spmm::SpmmLimits;
+use star_rotor_spike::StarRotorSpikeLimits;
 
 /// Creates prepared operations bound to one device.
 #[derive(Clone, Copy)]
@@ -31,6 +63,12 @@ pub struct OperationFactory<'a> {
     cache: &'a PipelineCache,
     limits: SpmmLimits,
     activation_limits: ActivationLimits,
+    global_entropy_pool_limits: GlobalEntropyPoolLimits,
+    hsikan_limits: HsikanLimits,
+    scatter_mean_limits: ScatterMeanLimits,
+    highway_limits: HighwayLimits,
+    rotor_attention_limits: RotorAttentionLimits,
+    star_rotor_spike_limits: StarRotorSpikeLimits,
 }
 
 impl<'a> OperationFactory<'a> {
@@ -55,6 +93,35 @@ impl<'a> OperationFactory<'a> {
                 max_workgroups_per_dimension,
                 max_invocations_per_workgroup,
             },
+            global_entropy_pool_limits: GlobalEntropyPoolLimits {
+                max_workgroups_per_dimension,
+                max_invocations_per_workgroup,
+            },
+            hsikan_limits: HsikanLimits {
+                max_workgroups_per_dimension,
+                max_invocations_per_workgroup,
+                max_storage_buffers_per_stage,
+            },
+            scatter_mean_limits: ScatterMeanLimits {
+                max_workgroups_per_dimension,
+                max_invocations_per_workgroup,
+                max_storage_buffers_per_stage,
+            },
+            highway_limits: HighwayLimits {
+                max_workgroups_per_dimension,
+                max_invocations_per_workgroup,
+                max_storage_buffers_per_stage,
+            },
+            rotor_attention_limits: RotorAttentionLimits {
+                max_workgroups_per_dimension,
+                max_invocations_per_workgroup,
+                max_storage_buffers_per_stage,
+            },
+            star_rotor_spike_limits: StarRotorSpikeLimits {
+                max_workgroups_per_dimension,
+                max_invocations_per_workgroup,
+                max_storage_buffers_per_stage,
+            },
         }
     }
 
@@ -68,5 +135,64 @@ impl<'a> OperationFactory<'a> {
     #[must_use]
     pub fn activation(&self) -> ActivationBuilder<'a> {
         ActivationBuilder::new(self.device, self.queue, self.cache, self.activation_limits)
+    }
+
+    /// Begin building spatial global-entropy pooling over `(K,H,W)` responses.
+    #[must_use]
+    pub fn global_entropy_pool(&self) -> GlobalEntropyPoolBuilder<'a> {
+        GlobalEntropyPoolBuilder::new(
+            self.device,
+            self.queue,
+            self.cache,
+            self.global_entropy_pool_limits,
+        )
+    }
+
+    /// Begin building a fused signed HSiKAN inference dispatch.
+    #[must_use]
+    pub fn hsikan(&self) -> HsikanBuilder<'a> {
+        HsikanBuilder::new(self.device, self.queue, self.cache, self.hsikan_limits)
+    }
+
+    /// Begin building an edge-to-node mean scatter.
+    ///
+    /// Layout-independent by name: the operation is the pooling, not the storage. The first — and
+    /// currently only — physical lowering is the node-indexed CSR gather.
+    #[must_use]
+    pub fn scatter_mean(&self) -> ScatterMeanBuilder<'a> {
+        ScatterMeanBuilder::new(
+            self.device,
+            self.queue,
+            self.cache,
+            self.scatter_mean_limits,
+        )
+    }
+
+    /// Begin building an identity-transport highway transition.
+    #[must_use]
+    pub fn highway_identity(&self) -> HighwayIdentityBuilder<'a> {
+        HighwayIdentityBuilder::new(self.device, self.queue, self.cache, self.highway_limits)
+    }
+
+    /// Begin building sparse single-head quaternion rotor attention.
+    #[must_use]
+    pub fn rotor_attention(&self) -> RotorAttentionBuilder<'a> {
+        RotorAttentionBuilder::new(
+            self.device,
+            self.queue,
+            self.cache,
+            self.rotor_attention_limits,
+        )
+    }
+
+    /// Begin building a star rotor-spike orientation-code dispatch.
+    #[must_use]
+    pub fn star_rotor_spike(&self) -> StarRotorSpikeBuilder<'a> {
+        StarRotorSpikeBuilder::new(
+            self.device,
+            self.queue,
+            self.cache,
+            self.star_rotor_spike_limits,
+        )
     }
 }
