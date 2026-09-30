@@ -691,6 +691,12 @@ pub struct IncidenceView<'a, 'ir: 'a> {
 impl<'a, 'ir: 'a> IncidenceView<'a, 'ir> {
     incidence_accessors!('a,);
 
+    /// Pair an `Ir` with the index derived from it. Crate-private: only the owners that hold
+    /// both ([`PreparedIr`], `CompiledModel`) pair them, so no view spans a foreign `Ir`.
+    pub(crate) fn pair(ir: &'ir Ir, data: &'a IncidenceIndexData) -> Self {
+        Self { ir, data }
+    }
+
     /// A zero-allocation handle to the signed star operator.
     #[must_use]
     pub fn star(&self) -> StarOperator<'a, 'ir> {

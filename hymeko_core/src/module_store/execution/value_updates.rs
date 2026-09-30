@@ -155,6 +155,14 @@ impl CompiledModel {
             }),
             interner,
             semantic: std::sync::OnceLock::from(semantic),
+            // `set_leaf_values` edits leaf annotations and compaction renumbers symbols; no
+            // declaration, arc or slot moves, so a derived incidence index stays exact.
+            incidence: self
+                .incidence
+                .get()
+                .map_or_else(std::sync::OnceLock::new, |built| {
+                    std::sync::OnceLock::from(built.clone())
+                }),
         })
     }
 
