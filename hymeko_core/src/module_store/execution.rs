@@ -18,8 +18,8 @@ pub use value_updates::{ValueUpdate, ValueUpdateError};
 
 use super::module_store::{CompiledProgram, HymekoParser, ModuleLoadError, ModuleStore};
 use super::source_provider::SourceProvider;
-use crate::ir::semantic_digest::{SemanticDigestState, SemanticModelDigestV2};
 use crate::ir::canonical_hash::{Canon, CanonHashCfg, CanonicalIdentity};
+use crate::ir::semantic_digest::{SemanticDigestState, SemanticModelDigestV2};
 use crate::resolution::interner::Interner;
 use std::fmt;
 use std::path::Path;
@@ -276,8 +276,8 @@ mod tests;
 mod snapshot_tests {
     use super::*;
     use crate::{
-        ir::ir::ValueR, ir_stream::DecodeLimits,
-        module_store::source_provider::MemProvider, writers::cbor_writer,
+        ir::ir::ValueR, ir_stream::DecodeLimits, module_store::source_provider::MemProvider,
+        writers::cbor_writer,
     };
     use std::sync::atomic::{AtomicUsize, Ordering};
 

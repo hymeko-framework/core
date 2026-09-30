@@ -339,7 +339,9 @@ mod tests {
     fn symbol_lifetime_covers_all_typed_symbol_positions_and_is_idempotent() {
         let mut f = Fixture::new();
         let semantic = Canon::new(&f.ir, &f.strings).hash();
-        let structural = Canon::new(&f.ir, &f.strings).structure(CanonHashCfg::default()).0;
+        let structural = Canon::new(&f.ir, &f.strings)
+            .structure(CanonHashCfg::default())
+            .0;
         let declaration_names =
             f.ir.decl_nodes
                 .iter()
@@ -356,7 +358,9 @@ mod tests {
         );
         assert_eq!(Canon::new(&f.ir, &compact.interner).hash(), semantic);
         assert_eq!(
-            Canon::new(&f.ir, &compact.interner).structure(CanonHashCfg::default()).0,
+            Canon::new(&f.ir, &compact.interner)
+                .structure(CanonHashCfg::default())
+                .0,
             structural
         );
         assert_eq!(

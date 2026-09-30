@@ -435,7 +435,9 @@ mod mod_test_module_store {
         }
         for e in 0..60 {
             let (a, b) = (e % 40, (e * 7 + 3) % 40);
-            graph += &format!("    @e{e:02} <hyperedge> {{ slot \"s\"; ( + <in> v{a:02}, - <out> v{b:02} ); }}\n");
+            graph += &format!(
+                "    @e{e:02} <hyperedge> {{ slot \"s\"; ( + <in> v{a:02}, - <out> v{b:02} ); }}\n"
+            );
         }
         graph += "}\n";
         let mut store = ModuleStore::new(
@@ -502,13 +504,27 @@ mod mod_test_module_store {
             hymeko::util::real_parser::RealParser,
         );
         let compiled = store.compile(Path::new("plain.hymeko")).unwrap();
-        assert_eq!(compiled.canon.structure().0.0.iter().map(|b| format!("{b:02x}")).collect::<String>(),
-            "f004527060201656811f52eeaa7cbb2562961db352143971fcebc5e646ecc7b8");
+        assert_eq!(
+            compiled
+                .canon
+                .structure()
+                .0
+                .0
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>(),
+            "f004527060201656811f52eeaa7cbb2562961db352143971fcebc5e646ecc7b8"
+        );
         let structural = compiled.canon.structure().0;
         let semantic = compiled.canon.hash();
         let mut ir = compiled.ir.clone();
         ir.files[0] = "moved/lecture.hymeko".into();
-        assert_eq!(Canon::new(&ir, &store.it).structure(CanonHashCfg::default()).0, structural);
+        assert_eq!(
+            Canon::new(&ir, &store.it)
+                .structure(CanonHashCfg::default())
+                .0,
+            structural
+        );
         assert_eq!(Canon::new(&ir, &store.it).hash(), semantic);
         let wire = serde_json::to_value(&ir).unwrap();
         for key in ["files", "decl_file"] {

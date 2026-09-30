@@ -444,10 +444,7 @@ mod tests {
             let digest = next.semantic_digest();
             assert_eq!(next.semantic_digest(), digest);
             assert_eq!(take_hash_work(), [0; 4]);
-            assert_eq!(
-                digest,
-                Canon::new(&next.program.ir, next.interner()).hash()
-            );
+            assert_eq!(digest, Canon::new(&next.program.ir, next.interner()).hash());
             assert_eq!(
                 next.program.canon.structure().0,
                 Canon::new(&next.program.ir, next.interner())

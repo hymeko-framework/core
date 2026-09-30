@@ -74,7 +74,11 @@ impl<'ir> Canon<'ir> {
     pub fn new(ir: &'ir Ir, it: &'ir Interner) -> Self {
         let paths = CanonicalPaths::new(ir);
         let duplicate = sorted_paths(&paths.did_to_path).err();
-        Self { paths, it, duplicate }
+        Self {
+            paths,
+            it,
+            duplicate,
+        }
     }
 
     /// The IR this view reads.

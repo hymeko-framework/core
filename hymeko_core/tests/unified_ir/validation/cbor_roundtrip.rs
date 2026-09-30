@@ -34,7 +34,10 @@ fn interned_strings(interner: &Interner) -> Vec<String> {
 
 /// A symbol list as text, through the interner that numbers it.
 fn texts(symbols: &[SymId], interner: &Interner) -> Vec<String> {
-    symbols.iter().map(|&symbol| interner.resolve(symbol).to_owned()).collect()
+    symbols
+        .iter()
+        .map(|&symbol| interner.resolve(symbol).to_owned())
+        .collect()
 }
 
 /// A path index as text: SymIds are snapshot-local (the CBOR boundary compacts unreachable
@@ -62,7 +65,8 @@ fn alias_texts(index: &Index, interner: &Interner) -> Vec<(String, Vec<String>)>
 /// Whether `part` is `whole` with some entries left out, in the same order.
 fn is_subsequence(part: &[String], whole: &[String]) -> bool {
     let mut rest = whole.iter();
-    part.iter().all(|entry| rest.any(|candidate| candidate == entry))
+    part.iter()
+        .all(|entry| rest.any(|candidate| candidate == entry))
 }
 
 fn rendered(ir: &hymeko::ir::ir::Ir, interner: &Interner) -> Vec<u8> {
@@ -86,7 +90,10 @@ fn expected_imports(
                 .0
                 .strip_prefix(&canonical_root)
                 .expect("corpus import must stay under the corpus root");
-            (interner.resolve(*namespace).to_owned(), ModuleKey(portable(relative)))
+            (
+                interner.resolve(*namespace).to_owned(),
+                ModuleKey(portable(relative)),
+            )
         })
         .collect()
 }
@@ -143,7 +150,12 @@ fn assert_round_trip(path: &Path) -> usize {
         .payload()
         .imports
         .iter()
-        .map(|(namespace, module)| (decoded.interner().resolve(*namespace).to_owned(), module.clone()))
+        .map(|(namespace, module)| {
+            (
+                decoded.interner().resolve(*namespace).to_owned(),
+                module.clone(),
+            )
+        })
         .collect();
     assert_eq!(
         decoded_imports,

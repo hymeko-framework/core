@@ -109,8 +109,5 @@ fn wrong_prefix_symbol_is_a_path_mismatch() {
 #[test]
 fn a_correct_imported_ir_validates_clean() {
     let (idx, ir, _json) = imported();
-    assert!(
-        validate_namespace_roots(&ir, &idx)
-            .is_ok()
-    );
+    assert!(validate_namespace_roots(&ir, &idx).is_ok());
 }

@@ -1602,4 +1602,3 @@ mod shrink_coverage {
         }
     }
 }
-

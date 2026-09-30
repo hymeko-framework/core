@@ -158,7 +158,9 @@ fn corpus_digest(include_course_regressions: bool) -> (usize, String) {
             continue;
         }
         if let Ok((store, compiled)) = crate::test_helpers::load_and_lower(f) {
-            let d = Canon::new(&compiled.ir, &store.it).structure(CanonHashCfg::default()).0;
+            let d = Canon::new(&compiled.ir, &store.it)
+                .structure(CanonHashCfg::default())
+                .0;
             // Include the file name so a reordering or omission is detected.
             h.update(
                 f.file_name()
@@ -189,8 +191,18 @@ fn print_corpus_digest_for_capture() {
             .strip_prefix(PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap())
             .unwrap();
         match crate::test_helpers::load_and_lower(&file) {
-            Ok((_, program)) => eprintln!("COURSE_CORPUS {} {}", relative.display(),
-                program.canon.structure().0.0.iter().map(|b| format!("{b:02x}")).collect::<String>()),
+            Ok((_, program)) => eprintln!(
+                "COURSE_CORPUS {} {}",
+                relative.display(),
+                program
+                    .canon
+                    .structure()
+                    .0
+                    .0
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<String>()
+            ),
             Err(error) => eprintln!("COURSE_CORPUS_ERROR {} {error:?}", relative.display()),
         }
     }
@@ -317,8 +329,12 @@ fn link_derived_hash_equals_index_hash_on_the_whole_corpus() {
         // (namespace prefix + links) reproduces the Index hierarchy exactly
         validate_namespace_roots(&compiled.ir, &compiled.idx)
             .unwrap_or_else(|e| panic!("namespace validation failed on {}: {e}", f.display()));
-        let vi = Canon::new(&compiled.ir, &store.it).structure(CanonHashCfg::default()).0;
-        let vl = Canon::new(&compiled.ir, &store.it).structure(CanonHashCfg::default()).0;
+        let vi = Canon::new(&compiled.ir, &store.it)
+            .structure(CanonHashCfg::default())
+            .0;
+        let vl = Canon::new(&compiled.ir, &store.it)
+            .structure(CanonHashCfg::default())
+            .0;
         assert_eq!(
             vl.0,
             vi.0,
