@@ -237,6 +237,29 @@ Phases 2--8 need re-planning against Canon, \code{CanonicalIdentity}, symbol com
 \item DC5: the approval slug (e.g. \code{model-incidence-cache}).
 \end{itemize}
 
+\section{Decisions and record (2026-09-30)}
+\begin{itemize}[nosep]
+\item \textbf{The recommended first steps.} The user answered ``OK''. Done:
+  \begin{itemize}[nosep]
+  \item tensor PR \#6, opened over SSH with Gitea AGit;
+  \item T1 \code{core-rustfmt} (\code{feat/core-rustfmt} \code{9e4ef8c}): 15 files, formatting only, 696/0/20;
+  \item C1 \code{model-incidence-cache} (\code{feat/model-incidence-cache} \code{079a9f4}):
+    \code{CompiledModel::incidences()}, shared with value-updated models, 699/0/20.
+  \end{itemize}
+  Both CORE.YAML approvals are recorded under those slugs.
+\item \textbf{DS0: owner of borrowed semantic queries.} The user answered ``Ds0 $\to$ query''.
+  \begin{itemize}[nosep]
+  \item S1/S2 moved to \code{hymeko\_query}, and Core needs no edit for them.
+  \item Transformation \code{feat/semantic-reads} \code{4fd905f} implements it
+    (\code{docs/plans/2026-09-30-semantic-reads}): one base walk \code{bases}/\code{is\_a(policy)} with
+    typed errors, \code{FieldBinding} provenance and \code{own\_child}. webxr now uses the walk.
+  \item The workspace \code{AGENTS.md} still assigns borrowed semantic queries to Core; its owner is
+    asked to update it.
+  \end{itemize}
+\item \textbf{Still open:} DR1--DR3 (the merges and the HIVE deployment), DS1 and DS2 (base policy and
+  diamond order), DT2--DT4, DC2--DC4.
+\end{itemize}
+
 \section{Order, verification, rollback}
 \begin{enumerate}[nosep]
 \item R needs no Core source edit and can start as soon as DR1--DR4 are decided.
