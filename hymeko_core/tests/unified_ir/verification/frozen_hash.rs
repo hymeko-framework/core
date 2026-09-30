@@ -19,7 +19,7 @@
 //! and read the `[frozen]` lines.
 
 use hymeko::common::ids::DeclId;
-use hymeko::ir::canonical_hash::{CanonHashCfg, canonical_program_hash};
+use hymeko::ir::canonical_hash::{Canon, CanonHashCfg};
 
 use crate::unified_ir::support::builder::{S, TestIr};
 
@@ -28,11 +28,9 @@ fn hex(h: &hymeko::ir::hash::HashId) -> String {
 }
 
 fn v1(t: &TestIr) -> String {
-    hex(&canonical_program_hash(
-        CanonHashCfg::default(),
-        &t.ir,
-        &t.it,
-    ))
+    hex(&Canon::new(&t.ir, &t.it)
+        .structure(CanonHashCfg::default())
+        .0)
 }
 
 // --- the five vectors -------------------------------------------------------
@@ -193,7 +191,7 @@ fn v1_known_answer_vectors_are_unchanged() {
                     flags: 13,
                 },
             ] {
-                aggregate.update(&canonical_program_hash(cfg, &t.ir, &t.it).0);
+                aggregate.update(&Canon::new(&t.ir, &t.it).structure(cfg).0.0);
             }
         }
     }
@@ -243,11 +241,9 @@ fn dense_permutation_does_not_change_v1() {
 // genuine DeclId permutation in the authority tests.
 
 fn v1_ir(t: &TestIr) -> String {
-    hex(&hymeko::ir::canonical_hash::canonical_program_hash(
-        CanonHashCfg::default(),
-        &t.ir,
-        &t.it,
-    ))
+    hex(&Canon::new(&t.ir, &t.it)
+        .structure(CanonHashCfg::default())
+        .0)
 }
 
 #[test]

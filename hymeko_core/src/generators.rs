@@ -12,6 +12,8 @@
 //!   (`n ≡ 1 mod 6`).
 //! * Sunflower / Δ-systems — `petals` edges sharing a common `core`.
 //! * Complete `r`-uniform K_n^(r) — every size-`r` subset of `n` vertices.
+//! * The Mycielskian of a hypergraph — shadows and an apex; on graphs it keeps
+//!   triangle-freeness and raises the chromatic number by one.
 //!
 //! The mirror of these generators in the web editor
 //! (`docs/editor/views/generators.js`) is validated by the same "every pair
@@ -346,6 +348,49 @@ pub fn sunflower_design(
 }
 
 // ---------------------------------------------------------------------------
+// Mycielskian
+// ---------------------------------------------------------------------------
+
+/// The Mycielskian of `base` as a [`HypergraphDesign`].
+///
+/// On a graph (every edge of arity 2) this is Mycielski's construction: it keeps
+/// the graph triangle-free and raises its chromatic number by one, so iterating
+/// it from `K_2` gives `C_5` and then the Grötzsch graph. On a hypergraph each
+/// edge is copied once more per member, with that member replaced by its shadow.
+///
+/// # Index layout (contract relied on by adapters)
+/// Vertices `0..n` are `base`'s, vertices `n..2n` their shadows (`n + i` is the
+/// shadow of `i`), and vertex `2n` the apex. For every base edge `e`, in order:
+/// `e` itself, then for each position `p` of `e` a copy with `e[p]` replaced by
+/// `n + e[p]`. Then the apex edges `[2n, n + i]` for every `i` in `0..n`.
+///
+/// # Postconditions
+/// `2n + 1` vertices and `|E| + Σ|e| + n` edges: `3|E| + n` on a graph.
+///
+/// # Preconditions
+/// [`HypergraphDesign`]'s invariant: every member index is below `n_vertices`.
+#[must_use]
+pub fn mycielskian(base: &HypergraphDesign) -> HypergraphDesign {
+    let n = base.n_vertices;
+    let copies: usize = base.edges.iter().map(|edge| 1 + edge.len()).sum();
+    let mut edges = Vec::with_capacity(copies + n);
+    for edge in &base.edges {
+        debug_assert!(edge.iter().all(|&v| v < n), "a member outside the base");
+        edges.push(edge.clone());
+        for p in 0..edge.len() {
+            let mut shadowed = edge.clone();
+            shadowed[p] += n;
+            edges.push(shadowed);
+        }
+    }
+    edges.extend((0..n).map(|i| vec![2 * n, n + i]));
+    HypergraphDesign {
+        n_vertices: 2 * n + 1,
+        edges,
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Complete r-uniform K_n^(r)
 // ---------------------------------------------------------------------------
 
@@ -446,6 +491,97 @@ fn every_pair_covered_once(n: usize, edges: &[Vec<usize>]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn edge_set(design: &HypergraphDesign) -> std::collections::BTreeSet<Vec<usize>> {
+        design
+            .edges
+            .iter()
+            .map(|edge| {
+                let mut edge = edge.clone();
+                edge.sort_unstable();
+                edge
+            })
+            .collect()
+    }
+
+    fn has_triangle(design: &HypergraphDesign) -> bool {
+        let edges = edge_set(design);
+        let n = design.n_vertices;
+        (0..n).any(|a| {
+            ((a + 1)..n).any(|b| {
+                edges.contains(&vec![a, b])
+                    && ((b + 1)..n)
+                        .any(|c| edges.contains(&vec![a, c]) && edges.contains(&vec![b, c]))
+            })
+        })
+    }
+
+    /// Whether the graph `design` has a proper colouring with `k` colours, by exhaustive search.
+    fn colourable(design: &HypergraphDesign, k: usize) -> bool {
+        fn extend(v: usize, colour: &mut Vec<usize>, adj: &[Vec<usize>], k: usize) -> bool {
+            if v == colour.len() {
+                return true;
+            }
+            (0..k).any(|c| {
+                if adj[v].iter().any(|&u| u < v && colour[u] == c) {
+                    return false;
+                }
+                colour[v] = c;
+                extend(v + 1, colour, adj, k)
+            })
+        }
+        let mut adj = vec![Vec::new(); design.n_vertices];
+        for edge in &design.edges {
+            adj[edge[0]].push(edge[1]);
+            adj[edge[1]].push(edge[0]);
+        }
+        extend(0, &mut vec![0; design.n_vertices], &adj, k)
+    }
+
+    /// Iterated from `K_2`, the Mycielskian is `C_5` and then the Grötzsch graph: vertex counts
+    /// 5 and 11, edge counts 5 and 20 (`3|E| + n`), triangle-free, and chromatic numbers 3 and 4.
+    #[test]
+    fn mycielskian_of_k2_is_c5_then_the_grotzsch_graph() {
+        let k2 = HypergraphDesign {
+            n_vertices: 2,
+            edges: vec![vec![0, 1]],
+        };
+        let c5 = mycielskian(&k2);
+        assert_eq!((c5.n_vertices, c5.n_edges()), (5, 5));
+        assert_eq!(
+            c5.edges,
+            vec![vec![0, 1], vec![2, 1], vec![0, 3], vec![4, 2], vec![4, 3]]
+        );
+        let grotzsch = mycielskian(&c5);
+        assert_eq!((grotzsch.n_vertices, grotzsch.n_edges()), (11, 20));
+        assert_eq!(edge_set(&grotzsch).len(), 20, "no edge repeated");
+        for (graph, chromatic) in [(&c5, 3), (&grotzsch, 4)] {
+            assert!(!has_triangle(graph));
+            assert!(!colourable(graph, chromatic - 1), "{chromatic} - 1 colours");
+            assert!(colourable(graph, chromatic), "{chromatic} colours");
+        }
+    }
+
+    /// On a hypergraph each edge is copied once per member with that member shadowed, and the
+    /// apex joins every shadow: `|E| + Σ|e| + n` edges over `2n + 1` vertices, every member valid.
+    #[test]
+    fn mycielskian_of_a_hypergraph_shadows_each_member_once() {
+        let fano = steiner_design(7).expect("the Fano plane");
+        let m = mycielskian(&fano);
+        assert_eq!(m.n_vertices, 15);
+        assert_eq!(m.n_edges(), 7 + 7 * 3 + 7);
+        assert!(m.edges.iter().flatten().all(|&v| v < m.n_vertices));
+        assert_eq!(
+            m.edges[..4],
+            [vec![0, 1, 3], vec![7, 1, 3], vec![0, 8, 3], vec![0, 1, 10]]
+        );
+        assert!(
+            m.edges[28..]
+                .iter()
+                .enumerate()
+                .all(|(i, e)| *e == vec![14, 7 + i])
+        );
+    }
 
     #[test]
     fn binom_matches_small_known_values() {

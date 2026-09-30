@@ -18,6 +18,7 @@ pub use value_updates::{ValueUpdate, ValueUpdateError};
 
 use super::module_store::{CompiledProgram, HymekoParser, ModuleLoadError, ModuleStore};
 use super::source_provider::SourceProvider;
+use crate::ir::canonical_hash::{Canon, CanonHashCfg, CanonicalIdentity};
 use crate::resolution::interner::Interner;
 use std::fmt;
 use std::path::Path;
@@ -57,19 +58,24 @@ impl CompiledModel {
 
     /// Install a Core-validated canonical snapshot without parsing or lowering.
     /// Consumes the checked payload and its matching interner together; declaration
-    /// IDs, imports, index and hashes retain the decoder's identities. The module
+    /// IDs, imports, index and structural hash retain the decoder's identities; the
+    /// semantic digest, which the wire does not carry, is computed here once. The module
     /// root stays workspace-relative and grants no source-provider access.
     // APPROVED-CORE-EDIT: ir-snapshot-install (2026-09-15, user chat).
     #[must_use]
     pub fn from_decoded_cbor(snapshot: crate::writers::cbor_writer::DecodedCborPayload) -> Self {
         let (payload, interner) = snapshot.into_parts();
+        let canon =
+            CanonicalIdentity::of(&Canon::new(&payload.ir, &interner), CanonHashCfg::default());
+        // The decoder recomputed the structural hash from this IR before accepting it.
+        debug_assert_eq!(canon.structure().0, payload.canon_hash);
         Self {
             program: Arc::new(CompiledProgram {
                 root: super::module_store::ModuleKey(payload.root_path),
                 idx: payload.index,
                 ir: payload.ir,
                 imports: payload.imports,
-                canon_hash: payload.canon_hash,
+                canon,
             }),
             interner,
         }
@@ -253,7 +259,7 @@ mod tests;
 mod snapshot_tests {
     use super::*;
     use crate::{
-        ir::ir::ValueR, ir::semantic_digest::semantic_model_digest_v2, ir_stream::DecodeLimits,
+        ir::ir::ValueR, ir_stream::DecodeLimits,
         module_store::source_provider::MemProvider, writers::cbor_writer,
     };
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -273,17 +279,14 @@ mod snapshot_tests {
         let nodes = decoded.ir().decl_nodes.as_ptr();
         let imported = decoded.payload().imports.clone();
         assert!(!imported.is_empty());
-        let digest = semantic_model_digest_v2(decoded.ir(), decoded.interner());
+        let digest = Canon::new(decoded.ir(), decoded.interner()).hash();
         let installed = CompiledModel::from_decoded_cbor(decoded);
         assert_eq!(installed.program().ir.decl_nodes.as_ptr(), nodes);
         assert_eq!(installed.program().root.0, Path::new("scene.hymeko"));
         assert_eq!(installed.program().imports, imported);
+        assert_eq!(installed.program().canon, original.program().canon);
         assert_eq!(
-            installed.program().canon_hash,
-            original.program().canon_hash
-        );
-        assert_eq!(
-            semantic_model_digest_v2(&installed.program().ir, installed.interner()),
+            Canon::new(&installed.program().ir, installed.interner()).hash(),
             digest
         );
         assert_eq!(

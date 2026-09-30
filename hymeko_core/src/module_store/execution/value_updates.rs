@@ -7,7 +7,7 @@ use super::{
 use crate::{
     common::ids::DeclId,
     ir::{
-        canonical_hash::{CanonHashCfg, canonical_program_hash},
+        canonical_hash::{Canon, CanonHashCfg, CanonicalIdentity},
         coherence::{CoherenceLimits, validate_hierarchy_index_coherence, validate_model_contract},
         ir::{DeclKind, ValueR},
     },
@@ -133,14 +133,14 @@ impl CompiledModel {
         )
         .map_err(|_| ValueUpdateError::InvalidModel)?;
         validate_model_contract(&ir, &interner).map_err(|_| ValueUpdateError::InvalidModel)?;
-        let canon_hash = canonical_program_hash(CanonHashCfg::default(), &ir, &interner);
+        let canon = CanonicalIdentity::of(&Canon::new(&ir, &interner), CanonHashCfg::default());
         Ok(Self {
             program: Arc::new(CompiledProgram {
                 root: self.program.root.clone(),
                 idx: self.program.idx.clone(),
                 ir,
                 imports: self.program.imports.clone(),
-                canon_hash,
+                canon,
             }),
             interner,
         })
@@ -208,7 +208,6 @@ mod tests {
     use super::*;
     use crate::{
         common::ids::SymId,
-        ir::semantic_digest::semantic_model_digest_v2,
         module_store::{module_store::HymekoParser, source_provider::MemProvider},
         util::real_parser::RealParser,
     };
@@ -252,7 +251,7 @@ mod tests {
         let state = id(&original, "state");
         let label = id(&original, "label");
         let position = id(&original, "position");
-        let digest = semantic_model_digest_v2(&original.program().ir, original.interner());
+        let digest = Canon::new(&original.program().ir, original.interner()).hash();
         let updated = original
             .with_value_updates(&[
                 ValueUpdate::Set {
@@ -284,13 +283,13 @@ mod tests {
             original.program().ir.node_count(),
             updated.program().ir.node_count()
         );
-        assert_ne!(
-            digest,
-            semantic_model_digest_v2(&updated.program().ir, updated.interner())
-        );
+        let recomputed = Canon::new(&updated.program().ir, updated.interner()).hash();
+        assert_ne!(digest, recomputed);
+        // The kept identity is the updated IR's, not the original's.
+        assert_eq!(updated.program().canon.hash(), recomputed);
         assert_eq!(
             digest,
-            semantic_model_digest_v2(&original.program().ir, original.interner())
+            Canon::new(&original.program().ir, original.interner()).hash()
         );
         assert!(updated.program().ir.decl_hash.iter().all(Option::is_none));
         assert!(updated.program().ir.doc_hash.is_none());

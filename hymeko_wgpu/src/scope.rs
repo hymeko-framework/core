@@ -139,7 +139,7 @@ pub type Joined<S, T> = <S as JoinScope<<T as TensorOperand>::Scope>>::Out;
 /// Anything an operation can take as a dense `f32` operand.
 ///
 /// **Sealed.** Implemented for exactly two types, and an external crate cannot
-/// add a third: the supertrait [`sealed::TensorAccess`] lives in a `pub(crate)`
+/// add a third: the supertrait `sealed::TensorAccess` lives in a `pub(crate)`
 /// module and is therefore unimplementable and uncallable from outside.
 ///
 /// # Why sealing is load-bearing rather than tidy

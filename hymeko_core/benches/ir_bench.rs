@@ -33,7 +33,7 @@ use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_m
 
 use hymeko::common::ids::{DeclId, EdgeId, HyperArcId, NodeId, SymId};
 use hymeko::common::pathkey::PathKey;
-use hymeko::ir::canonical_hash::{CanonHashCfg, canonical_program_hash};
+use hymeko::ir::canonical_hash::{Canon, CanonHashCfg};
 use hymeko::ir::ir::{
     AnnoR, ArcRec, DeclKind, DeclNode, EdgeRec, Ir, NodeRec, RefAtomR, SignedRefR,
 };
@@ -464,11 +464,11 @@ fn bench_ir_canonical_hash(c: &mut Criterion) {
             BenchmarkId::from_parameter(format!("n{nodes}_a{arity}")),
             |b| {
                 b.iter(|| {
-                    black_box(canonical_program_hash(
-                        CanonHashCfg::default(),
-                        black_box(&ir),
-                        black_box(&it),
-                    ))
+                    black_box(
+                        Canon::new(black_box(&ir), black_box(&it))
+                            .structure(CanonHashCfg::default())
+                            .0,
+                    )
                 });
             },
         );
