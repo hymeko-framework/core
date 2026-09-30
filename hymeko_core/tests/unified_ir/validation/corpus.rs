@@ -20,7 +20,7 @@ use crate::unified_ir::verification::coherence::label;
 use crate::unified_ir::verification::hierarchy::{DepthStats, depth_stats};
 
 use hymeko::common::ids::{DeclId, EdgeId, HyperArcId, NodeId};
-use hymeko::ir::canonical_hash::{CanonHashCfg, canonical_program_hash};
+use hymeko::ir::canonical_hash::{CanonHashCfg, CanonicalPaths, NamespaceValidator};
 use hymeko::ir::coherence::{CoherenceLimits, Finding, validate_hierarchy_index_coherence};
 
 use crate::unified_ir::support::corpus::require_fixtures;
@@ -158,7 +158,7 @@ fn corpus_digest(include_course_regressions: bool) -> (usize, String) {
             continue;
         }
         if let Ok((store, compiled)) = crate::test_helpers::load_and_lower(f) {
-            let d = canonical_program_hash(CanonHashCfg::default(), &compiled.ir, &store.it);
+            let d = CanonicalPaths::new(&compiled.ir).hash(CanonHashCfg::default(), &store.it);
             // Include the file name so a reordering or omission is detected.
             h.update(
                 f.file_name()
@@ -185,10 +185,20 @@ const KAT_CORPUS_DIGEST: &str = "8938b37b221ba015f1a52f318f8b9d9ac9aab65777ee070
 #[test]
 fn print_corpus_digest_for_capture() {
     for file in require_fixtures() {
-        let relative = file.strip_prefix(PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap()).unwrap();
+        let relative = file
+            .strip_prefix(PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap())
+            .unwrap();
         match crate::test_helpers::load_and_lower(&file) {
-            Ok((_, program)) => eprintln!("COURSE_CORPUS {} {}", relative.display(),
-                program.canon_hash.0.iter().map(|b| format!("{b:02x}")).collect::<String>()),
+            Ok((_, program)) => eprintln!(
+                "COURSE_CORPUS {} {}",
+                relative.display(),
+                program
+                    .canon_hash
+                    .0
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<String>()
+            ),
             Err(error) => eprintln!("COURSE_CORPUS_ERROR {} {error:?}", relative.display()),
         }
     }
@@ -217,7 +227,10 @@ fn v1_corpus_digest_is_unchanged() {
 fn course_transitive_imports_extend_the_frozen_corpus() {
     let (count, digest) = corpus_digest(true);
     assert_eq!(count, 103);
-    assert_eq!(digest, "9fc05f39100d67ea259655b4f53630caf93d542827f27cbfc3e9e57ab114b3b6");
+    assert_eq!(
+        digest,
+        "9fc05f39100d67ea259655b4f53630caf93d542827f27cbfc3e9e57ab114b3b6"
+    );
 }
 #[test]
 fn accessors_agree_with_direct_field_access_on_the_whole_corpus() {
@@ -310,14 +323,12 @@ fn link_derived_hash_equals_index_hash_on_the_whole_corpus() {
             continue;
         };
         // (namespace prefix + links) reproduces the Index hierarchy exactly
-        hymeko::ir::canonical_hash::validate_namespace_roots(&compiled.ir, &compiled.idx)
+        NamespaceValidator::new(&CanonicalPaths::new(&compiled.ir))
+            .validate(&compiled.idx)
             .unwrap_or_else(|e| panic!("namespace validation failed on {}: {e}", f.display()));
-        let vi = canonical_program_hash(CanonHashCfg::default(), &compiled.ir, &store.it);
-        let vl = hymeko::ir::canonical_hash::canonical_program_hash(
-            CanonHashCfg::default(),
-            &compiled.ir,
-            &store.it,
-        );
+        let vi = CanonicalPaths::new(&compiled.ir).hash(CanonHashCfg::default(), &store.it);
+        let vl = hymeko::ir::canonical_hash::CanonicalPaths::new(&compiled.ir)
+            .hash(CanonHashCfg::default(), &store.it);
         assert_eq!(
             vl.0,
             vi.0,
@@ -441,8 +452,8 @@ fn derived_path_index_round_trips_on_the_corpus() {
         let Ok((_s, c)) = crate::test_helpers::load_and_lower(f) else {
             continue;
         };
-        let pi = hymeko::ir::canonical_hash::build_path_index(&c.ir)
-            .unwrap_or_else(|e| panic!("build_path_index failed on {}: {e}", f.display()));
+        let pi = hymeko::ir::canonical_hash::DerivedPathIndex::new(&c.ir)
+            .unwrap_or_else(|e| panic!("DerivedPathIndex::new failed on {}: {e}", f.display()));
         assert_eq!(
             pi.len(),
             c.idx.by_path.len(),

@@ -17,9 +17,7 @@
 #     migrated (hymeko_query, hymeko_client, hymeko_daemon, rtl/, docs/spec/)
 #     are dropped rather than inherited as dead entries, and `hymeko_hnn` was
 #     relocated 2026-08-31 to hymeko/nagare (hymeko_nagare::hnn).
-#   * `nalgebra` is pinned to the version this workspace actually builds
-#     (0.34.1). The monorepo pin (=0.33.0) was stale here and tripped
-#     `on_dependency_drift`; see `dependencies.pinned.rust` below.
+#   * Numeric dependency ownership moved to tensor on 2026-09-23.
 
 schema_version: 1
 
@@ -54,10 +52,35 @@ crates:
     lockdown: full
     reason: >
       Foundational types: IR, interning/resolution, canonical hashing,
-      COO/CSR tensor primitives, the `Real` numeric trait. Any change
+      canonical IR-to-tensor adapters. Any change
       propagates to every downstream crate and invalidates published
       benchmarks.
     approved_edits:
+      # User chat, 2026-09-23: numeric tensor code belongs in the tensor repository.
+      - slug: tensor-numeric-owner-extraction
+        date: 2026-09-23
+        scope: >
+          Move generic numeric storage, kernels, contracts, tests and dependencies
+          to hymeko_tensor; Core retains only IR adapters. WGPU consumes Tensor
+          directly. Retire shared_state and its Iceoryx dependency.
+        constraints:
+          - one implementation per operation, no compatibility exports
+          - canonical IR and graph-aware adapters stay in their existing owners
+          - publish and pin the Tensor provider before the Core consumer
+
+      # User chat, 2026-09-23: implement incremental recomputation in Core.
+      - slug: incremental-semantic-digest
+        date: 2026-09-23
+        scope: >
+          CompiledModel-owned derived semantic contributions, reused across checked
+          leaf-value updates through the existing digest encoder. Reuse unchanged
+          structural hashes and migrate retained-model consumers to semantic_digest.
+        constraints:
+          - preserve semantic and structural digest bytes and algorithm versions
+          - keep caches out of serialized IR and behind immutable model ownership
+          - verify full/incremental parity and actual declaration rehash counts
+          - no dependency change, alternate IR or parallel hash implementation
+
       # APPROVED-CORE-EDIT: core-manifest-and-hymeko-core-clippy (2026-05-11)
       # Pre-existing, inherited from the monorepo. Targeted lint allows in
       # src/lib.rs and tests/mod.rs instead of one mega-refactor.
@@ -124,7 +147,7 @@ crates:
         date: 2026-09-05
         scope: >
           New module hymeko_core/src/ir/semantic_digest.rs owning the complete
-          semantic identity of an Ir (SemanticModelDigestV2) and the narrow
+          semantic identity of an Ir (SemanticModelDigest) and the narrow
           structural identity under its own name (ProgramStructureHashV1, a
           delegating wrapper over the unchanged canonical_program_hash).
           hymeko_core/src/ir/mod.rs gains the module declaration.
@@ -246,7 +269,7 @@ crates:
       APPROVED-ARCHITECTURE-EVOLUTION: hymeko-compute-framework-wgpu.
       Non-core by design: it is one backend among several planned
       (CUDA/FPGA later), and its churn must not be gated on core review.
-      Depends on hymeko_core only.
+      Depends on hymeko_tensor; no canonical-IR dependency.
       Feature set is deliberately minimal (dx12, vulkan, wgsl, std); GL,
       WebGPU and WebAssembly are OFF because enabling them pulls 26 extra
       crates (~32 MiB) into the shared vendor tree for no benefit here.
@@ -283,16 +306,6 @@ dependencies:
       - name: serde
         version: "1"
         reason: API-stable; minor bumps allowed, major requires approval.
-      - name: nalgebra
-        version: "0.34.1"
-        reason: >
-          Numerical core; FP behaviour must be reproducible. Re-pinned from
-          the monorepo's "=0.33.0" to the version this workspace has built
-          and tested against since the migration. Drift resolved 2026-08-24
-          under the manifest-creation approval rather than left latent.
-      - name: nalgebra-sparse
-        version: "0.11.0"
-        reason: Sparse companion to nalgebra; same reproducibility argument.
       - name: blake3
         version: "1"
         reason: >

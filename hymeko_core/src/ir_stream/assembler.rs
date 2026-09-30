@@ -702,8 +702,7 @@ impl TransactionAssembler {
     /// are retained: they are what the consumer still legitimately holds and
     /// what the producer needs in order to bring it current.
     pub fn reset_for_resync(&mut self) {
-        self.open = None;
-        self.discarding = None;
+        self.abandon();
         self.stream_id = None;
         self.last_seq = None;
         self.replay.clear();
@@ -717,6 +716,11 @@ impl TransactionAssembler {
     #[must_use]
     pub fn apply(&mut self, msg: &ValidatedMessage<'_>) -> ApplyOutcome {
         let outcome = self.apply_inner(msg);
+        // Capture diagnostics inside the machine before discarding either pending state.
+        // Every resync outcome has this single cleanup boundary; committed state survives.
+        if matches!(outcome, ApplyOutcome::ResyncRequired(_)) {
+            self.abandon();
+        }
         #[cfg(test)]
         self.debug_invariants();
         outcome
@@ -734,7 +738,6 @@ impl TransactionAssembler {
                     had: known,
                     got: id.stream_id,
                 };
-                self.abandon();
                 return ApplyOutcome::ResyncRequired(reason);
             }
             Some(_) => {}
@@ -764,7 +767,6 @@ impl TransactionAssembler {
                 return ApplyOutcome::SequenceExhausted;
             };
             if id.seq != expected {
-                self.abandon();
                 return ApplyOutcome::ResyncRequired(ResyncReason::SequenceGap {
                     expected,
                     got: id.seq,
@@ -791,6 +793,10 @@ impl TransactionAssembler {
     fn abandon(&mut self) {
         self.open = None;
         self.discarding = None;
+    }
+
+    fn staging_limit_exceeded(what: &'static str) -> ApplyOutcome {
+        ApplyOutcome::ResyncRequired(ResyncReason::StagingLimitExceeded { what })
     }
 
     fn dispatch(&mut self, msg: &ValidatedMessage<'_>, id: &MessageIdentity) -> ApplyOutcome {
@@ -821,9 +827,8 @@ impl TransactionAssembler {
         }
     }
 
-    fn unexpected(&mut self, msg_type: MessageType) -> ApplyOutcome {
+    fn unexpected(&self, msg_type: MessageType) -> ApplyOutcome {
         let state = self.state();
-        self.abandon();
         ApplyOutcome::ResyncRequired(ResyncReason::UnexpectedMessage { msg_type, state })
     }
 
@@ -915,16 +920,12 @@ impl TransactionAssembler {
         if let Some(d) = self.discarding.as_mut() {
             if d.txn_id == id.txn_id {
                 let Some(n) = d.messages.checked_add(1) else {
-                    self.abandon();
-                    return ApplyOutcome::ResyncRequired(ResyncReason::StagingLimitExceeded {
-                        what: "superseded drain message count overflowed",
-                    });
+                    return Self::staging_limit_exceeded(
+                        "superseded drain message count overflowed",
+                    );
                 };
                 if n > self.limits.max_chunks {
-                    self.abandon();
-                    return ApplyOutcome::ResyncRequired(ResyncReason::StagingLimitExceeded {
-                        what: "messages in a superseded transaction",
-                    });
+                    return Self::staging_limit_exceeded("messages in a superseded transaction");
                 }
                 d.messages = n;
                 return ApplyOutcome::Superseded;
@@ -954,41 +955,26 @@ impl TransactionAssembler {
         };
 
         let Some(messages) = open.messages.checked_add(1) else {
-            self.abandon();
-            return ApplyOutcome::ResyncRequired(ResyncReason::StagingLimitExceeded {
-                what: "message count overflowed",
-            });
+            return Self::staging_limit_exceeded("message count overflowed");
         };
         // `messages` starts at 1 for the Begin itself, so compare after the
         // increment that this staging call represents.
         if messages > self.limits.max_chunks.saturating_add(1) {
-            self.abandon();
-            return ApplyOutcome::ResyncRequired(ResyncReason::StagingLimitExceeded {
-                what: "chunks per transaction",
-            });
+            return Self::staging_limit_exceeded("chunks per transaction");
         }
         open.messages = messages;
 
         for section in msg.sections() {
             if open.sections.len() >= self.limits.max_staged_sections {
-                self.abandon();
-                return ApplyOutcome::ResyncRequired(ResyncReason::StagingLimitExceeded {
-                    what: "staged sections",
-                });
+                return Self::staging_limit_exceeded("staged sections");
             }
             let body = section.bytes();
             // Checked, and checked BEFORE the copy that would allocate.
             let Some(total) = open.staged_bytes.checked_add(body.len()) else {
-                self.abandon();
-                return ApplyOutcome::ResyncRequired(ResyncReason::StagingLimitExceeded {
-                    what: "staged byte count overflowed",
-                });
+                return Self::staging_limit_exceeded("staged byte count overflowed");
             };
             if total > self.limits.max_staged_bytes {
-                self.abandon();
-                return ApplyOutcome::ResyncRequired(ResyncReason::StagingLimitExceeded {
-                    what: "staged bytes",
-                });
+                return Self::staging_limit_exceeded("staged bytes");
             }
             open.staged_bytes = total;
             open.sections.push(StagedSection {
@@ -1180,11 +1166,108 @@ mod tests_support {
         }
     }
 
-    /// Drive bytes through the real validator, as production would.
-    pub fn apply(a: &mut TransactionAssembler, bytes: &[u8]) -> ApplyOutcome {
-        let m =
-            validate_message(bytes, &DecodeLimits::DEFAULT).expect("test message must be valid");
-        a.apply(&m)
+    /// Owns a producer/consumer pair and the shared wire-admission assertions.
+    pub struct AssemblerRunner {
+        pub consumer: TransactionAssembler,
+        pub producer: Producer,
+    }
+
+    impl AssemblerRunner {
+        pub fn new(limits: AssemblerLimits) -> Self {
+            Self::from_consumer(TransactionAssembler::new(limits))
+        }
+
+        pub fn resuming_at(version: SnapshotVersion, limits: AssemblerLimits) -> Self {
+            Self::from_consumer(TransactionAssembler::resuming_at(version, limits))
+        }
+
+        fn from_consumer(consumer: TransactionAssembler) -> Self {
+            Self {
+                consumer,
+                producer: Producer::new(),
+            }
+        }
+
+        /// Admit independently constructed bytes without rewriting them.
+        #[track_caller]
+        pub fn apply(&mut self, bytes: &[u8]) -> ApplyOutcome {
+            let m = validate_message(bytes, &DecodeLimits::DEFAULT)
+                .expect("test message must be valid");
+            let committed = (
+                self.consumer.current_version(),
+                self.consumer.current_commit_digest().copied(),
+                self.consumer.last_seq(),
+            );
+            let outcome = self.consumer.apply(&m);
+            if matches!(outcome, ApplyOutcome::ResyncRequired(_)) {
+                assert_eq!(
+                    self.consumer.state(),
+                    AssemblerState::Idle,
+                    "resync must clear both pending states"
+                );
+                assert_eq!(self.consumer.staged_bytes(), 0);
+                assert_eq!(
+                    (
+                        self.consumer.current_version(),
+                        self.consumer.current_commit_digest().copied(),
+                        self.consumer.last_seq()
+                    ),
+                    committed,
+                    "resync must preserve committed metadata and accepted sequence"
+                );
+            }
+            outcome
+        }
+
+        /// Produce and admit a fresh message; replay cases retain bytes explicitly.
+        #[track_caller]
+        pub fn step(
+            &mut self,
+            kind: MessageType,
+            txn: u64,
+            base: SnapshotVersion,
+            target: SnapshotVersion,
+            body: &[u8],
+        ) -> ApplyOutcome {
+            let bytes = self.producer.msg(kind, txn, base, target, body);
+            self.apply(&bytes)
+        }
+
+        #[track_caller]
+        pub fn accept(
+            &mut self,
+            kind: MessageType,
+            txn: u64,
+            base: SnapshotVersion,
+            target: SnapshotVersion,
+            body: &[u8],
+        ) {
+            assert_eq!(
+                self.step(kind, txn, base, target, body),
+                ApplyOutcome::Accepted
+            );
+        }
+
+        /// Complete a normal begin/commit pair; error cases use individual steps.
+        #[track_caller]
+        pub fn transaction(
+            &mut self,
+            kind: TransactionKind,
+            txn: u64,
+            base: SnapshotVersion,
+            target: SnapshotVersion,
+            body: &[u8],
+        ) -> CommittedTransaction {
+            let begin = match kind {
+                TransactionKind::Snapshot => MessageType::SnapshotBegin,
+                TransactionKind::Delta => MessageType::DeltaBegin,
+            };
+            self.accept(begin, txn, base, target, body);
+            match self.step(MessageType::Commit, txn, base, target, &[]) {
+                ApplyOutcome::Committed(committed) => committed,
+                other => panic!("expected Committed, got {other:?}"),
+            }
+        }
     }
 
     pub fn v(t: u64, w: u64, f: u64, p: u64) -> SnapshotVersion {
@@ -1202,32 +1285,29 @@ mod tests {
 
     #[test]
     fn a_snapshot_transaction_begins_chunks_and_commits() {
-        let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-        let mut p = Producer::new();
+        let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
         let target = v(1, 1, 1, 0);
 
-        let begin = p.msg(
+        a.accept(
             MessageType::SnapshotBegin,
             7,
             ZERO,
             target,
             &payload(SectionKind::EdgeOffsets, 4),
         );
-        assert_eq!(apply(&mut a, &begin), ApplyOutcome::Accepted);
-        assert!(a.has_open_transaction());
-        assert_eq!(a.current_version(), ZERO, "not yet visible");
+        assert!(a.consumer.has_open_transaction());
+        assert_eq!(a.consumer.current_version(), ZERO, "not yet visible");
 
-        let chunk = p.msg(
+        a.accept(
             MessageType::SnapshotChunk,
             7,
             ZERO,
             target,
             &payload(SectionKind::IncidenceWeights, 8),
         );
-        assert_eq!(apply(&mut a, &chunk), ApplyOutcome::Accepted);
 
-        let commit = p.msg(MessageType::Commit, 7, ZERO, target, &[]);
-        match apply(&mut a, &commit) {
+        match a.step(MessageType::Commit, 7, ZERO, target, &[]) {
             ApplyOutcome::Committed(c) => {
                 assert_eq!(c.txn_id(), 7);
                 assert_eq!(c.kind(), TransactionKind::Snapshot);
@@ -1246,62 +1326,58 @@ mod tests {
             }
             other => panic!("expected Committed, got {other:?}"),
         }
-        assert_eq!(a.current_version(), target, "visible only after commit");
-        assert!(!a.has_open_transaction());
+        assert_eq!(
+            a.consumer.current_version(),
+            target,
+            "visible only after commit"
+        );
+        assert!(!a.consumer.has_open_transaction());
     }
 
     #[test]
     fn a_weight_only_delta_commits_and_does_not_change_topology() {
-        let mut a = TransactionAssembler::resuming_at(v(3, 3, 3, 1), AssemblerLimits::strict());
-        let mut p = Producer::new();
         let base = v(3, 3, 3, 1);
         let target = v(3, 4, 3, 1);
-
-        let begin = p.msg(
-            MessageType::DeltaBegin,
+        let mut runner = AssemblerRunner::resuming_at(base, AssemblerLimits::strict());
+        let committed = runner.transaction(
+            TransactionKind::Delta,
             1,
             base,
             target,
             &payload(SectionKind::WeightPatchRange, 4),
         );
-        assert_eq!(apply(&mut a, &begin), ApplyOutcome::Accepted);
-        let commit = p.msg(MessageType::Commit, 1, base, target, &[]);
-        match apply(&mut a, &commit) {
-            ApplyOutcome::Committed(c) => {
-                assert_eq!(c.kind(), TransactionKind::Delta);
-                assert!(
-                    !c.changes_topology(),
-                    "a weight delta must not claim topology"
-                );
-            }
-            other => panic!("expected Committed, got {other:?}"),
-        }
+        assert_eq!(committed.kind(), TransactionKind::Delta);
+        assert!(
+            !committed.changes_topology(),
+            "a weight delta must not claim topology"
+        );
     }
 
     // --- staging isolation --------------------------------------------------
 
     #[test]
     fn an_abort_leaves_no_trace() {
-        let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-        let mut p = Producer::new();
+        let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
         let target = v(1, 1, 1, 0);
 
-        let begin = p.msg(
+        a.accept(
             MessageType::SnapshotBegin,
             5,
             ZERO,
             target,
             &payload(SectionKind::EdgeOffsets, 4),
         );
-        assert_eq!(apply(&mut a, &begin), ApplyOutcome::Accepted);
-        assert!(a.staged_bytes() > 0);
+        assert!(a.consumer.staged_bytes() > 0);
 
-        let abort = p.msg(MessageType::Abort, 5, ZERO, target, &[]);
-        assert_eq!(apply(&mut a, &abort), ApplyOutcome::Aborted);
-        assert!(!a.has_open_transaction());
-        assert_eq!(a.staged_bytes(), 0);
         assert_eq!(
-            a.current_version(),
+            a.step(MessageType::Abort, 5, ZERO, target, &[]),
+            ApplyOutcome::Aborted
+        );
+        assert!(!a.consumer.has_open_transaction());
+        assert_eq!(a.consumer.staged_bytes(), 0);
+        assert_eq!(
+            a.consumer.current_version(),
             ZERO,
             "an aborted transaction must not advance the version"
         );
@@ -1311,28 +1387,20 @@ mod tests {
     fn state_is_never_visible_before_commit() {
         // The section 6.1 property: no message other than Commit may advance
         // the version, whatever it claims.
-        let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-        let mut p = Producer::new();
+        let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
         let target = v(9, 9, 9, 9);
         for t in [MessageType::SnapshotBegin, MessageType::SnapshotChunk] {
-            let m = p.msg(t, 1, ZERO, target, &payload(SectionKind::EdgeNodes, 2));
-            let _ = apply(&mut a, &m);
-            assert_eq!(a.current_version(), ZERO, "{t:?} advanced the version");
+            let _ = a.step(t, 1, ZERO, target, &payload(SectionKind::EdgeNodes, 2));
+            assert_eq!(
+                a.consumer.current_version(),
+                ZERO,
+                "{t:?} advanced the version"
+            );
         }
     }
 
     // --- idempotence and duplicates ----------------------------------------
-
-    #[test]
-    fn a_replayed_sequence_number_is_a_duplicate() {
-        let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-        let mut p = Producer::new();
-        let m = p.msg(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
-        assert_eq!(apply(&mut a, &m), ApplyOutcome::Accepted);
-        // The very same bytes again.
-        assert_eq!(apply(&mut a, &m), ApplyOutcome::ExactDuplicate);
-        assert_eq!(apply(&mut a, &m), ApplyOutcome::ExactDuplicate);
-    }
 
     #[test]
     fn a_superseded_transaction_is_drained_not_orphaned() {
@@ -1340,34 +1408,41 @@ mod tests {
         // transaction, so its remaining messages arrived as unexplained orphans
         // and the Commit produced a spurious SequenceGap. Measured, then fixed:
         // the transaction is drained without staging.
-        let mut a = TransactionAssembler::resuming_at(v(5, 5, 5, 5), AssemblerLimits::strict());
-        let mut p = Producer::new();
+        let mut a = AssemblerRunner::resuming_at(v(5, 5, 5, 5), AssemblerLimits::strict());
+
         let old = v(4, 4, 4, 4);
 
-        let begin = p.msg(MessageType::SnapshotBegin, 1, ZERO, old, &[]);
-        assert_eq!(apply(&mut a, &begin), ApplyOutcome::Superseded);
-        assert_eq!(a.state(), AssemblerState::DiscardingSuperseded);
-        assert_eq!(a.staged_bytes(), 0, "a drained transaction stages nothing");
-
-        let chunk = p.msg(
-            MessageType::SnapshotChunk,
-            1,
-            ZERO,
-            old,
-            &payload(SectionKind::EdgeNodes, 64),
-        );
         assert_eq!(
-            apply(&mut a, &chunk),
+            a.step(MessageType::SnapshotBegin, 1, ZERO, old, &[]),
+            ApplyOutcome::Superseded
+        );
+        assert_eq!(a.consumer.state(), AssemblerState::DiscardingSuperseded);
+        assert_eq!(
+            a.consumer.staged_bytes(),
+            0,
+            "a drained transaction stages nothing"
+        );
+
+        assert_eq!(
+            a.step(
+                MessageType::SnapshotChunk,
+                1,
+                ZERO,
+                old,
+                &payload(SectionKind::EdgeNodes, 64),
+            ),
             ApplyOutcome::Superseded,
             "a following chunk must not become an orphan"
         );
-        assert_eq!(a.staged_bytes(), 0, "still nothing staged");
+        assert_eq!(a.consumer.staged_bytes(), 0, "still nothing staged");
 
-        let commit = p.msg(MessageType::Commit, 1, ZERO, old, &[]);
-        assert_eq!(apply(&mut a, &commit), ApplyOutcome::Superseded);
-        assert_eq!(a.state(), AssemblerState::Idle);
         assert_eq!(
-            a.current_version(),
+            a.step(MessageType::Commit, 1, ZERO, old, &[]),
+            ApplyOutcome::Superseded
+        );
+        assert_eq!(a.consumer.state(), AssemblerState::Idle);
+        assert_eq!(
+            a.consumer.current_version(),
             v(5, 5, 5, 5),
             "a superseded transaction must not change the version"
         );
@@ -1375,30 +1450,36 @@ mod tests {
 
     #[test]
     fn a_superseded_drain_can_be_aborted_and_is_bounded() {
-        let mut a = TransactionAssembler::resuming_at(v(5, 5, 5, 5), AssemblerLimits::strict());
-        let mut p = Producer::new();
+        let mut a = AssemblerRunner::resuming_at(v(5, 5, 5, 5), AssemblerLimits::strict());
+
         let old = v(4, 4, 4, 4);
-        let begin = p.msg(MessageType::SnapshotBegin, 1, ZERO, old, &[]);
-        assert_eq!(apply(&mut a, &begin), ApplyOutcome::Superseded);
-        let abort = p.msg(MessageType::Abort, 1, ZERO, old, &[]);
-        assert_eq!(apply(&mut a, &abort), ApplyOutcome::Aborted);
-        assert_eq!(a.state(), AssemblerState::Idle);
+        let begin = a
+            .producer
+            .msg(MessageType::SnapshotBegin, 1, ZERO, old, &[]);
+        assert_eq!(a.apply(&begin), ApplyOutcome::Superseded);
+
+        assert_eq!(
+            a.step(MessageType::Abort, 1, ZERO, old, &[]),
+            ApplyOutcome::Aborted
+        );
+        assert_eq!(a.consumer.state(), AssemblerState::Idle);
 
         // And the drain is bounded like any other transaction.
-        let mut a = TransactionAssembler::resuming_at(
+        let mut a = AssemblerRunner::resuming_at(
             v(5, 5, 5, 5),
             AssemblerLimits {
                 max_chunks: 2,
                 ..AssemblerLimits::strict()
             },
         );
-        let mut p = Producer::new();
-        let begin = p.msg(MessageType::SnapshotBegin, 1, ZERO, old, &[]);
-        assert_eq!(apply(&mut a, &begin), ApplyOutcome::Superseded);
+
+        let begin = a
+            .producer
+            .msg(MessageType::SnapshotBegin, 1, ZERO, old, &[]);
+        assert_eq!(a.apply(&begin), ApplyOutcome::Superseded);
         let mut last = ApplyOutcome::Accepted;
         for _ in 0..4 {
-            let c = p.msg(MessageType::SnapshotChunk, 1, ZERO, old, &[]);
-            last = apply(&mut a, &c);
+            last = a.step(MessageType::SnapshotChunk, 1, ZERO, old, &[]);
             if matches!(last, ApplyOutcome::ResyncRequired(_)) {
                 break;
             }
@@ -1406,22 +1487,34 @@ mod tests {
         assert!(
             matches!(
                 last,
-                ApplyOutcome::ResyncRequired(ResyncReason::StagingLimitExceeded { .. })
+                ApplyOutcome::ResyncRequired(ResyncReason::StagingLimitExceeded {
+                    what: "messages in a superseded transaction"
+                })
             ),
             "an endless superseded drain must be bounded, got {last:?}"
+        );
+        assert_eq!(a.consumer.state(), AssemblerState::Idle);
+        assert_eq!(a.consumer.current_version(), v(5, 5, 5, 5));
+        assert_eq!(
+            a.consumer.last_seq(),
+            Some(2),
+            "rejected chunk must not advance replay"
         );
     }
 
     #[test]
     fn a_drain_for_a_different_transaction_demands_resync() {
-        let mut a = TransactionAssembler::resuming_at(v(5, 5, 5, 5), AssemblerLimits::strict());
-        let mut p = Producer::new();
+        let mut a = AssemblerRunner::resuming_at(v(5, 5, 5, 5), AssemblerLimits::strict());
+
         let old = v(4, 4, 4, 4);
-        let begin = p.msg(MessageType::SnapshotBegin, 1, ZERO, old, &[]);
-        assert_eq!(apply(&mut a, &begin), ApplyOutcome::Superseded);
-        let alien = p.msg(MessageType::SnapshotChunk, 777, ZERO, old, &[]);
+
+        assert_eq!(
+            a.step(MessageType::SnapshotBegin, 1, ZERO, old, &[]),
+            ApplyOutcome::Superseded
+        );
+
         assert!(matches!(
-            apply(&mut a, &alien),
+            a.step(MessageType::SnapshotChunk, 777, ZERO, old, &[]),
             ApplyOutcome::ResyncRequired(ResyncReason::UnexpectedMessage { .. })
         ));
     }
@@ -1430,12 +1523,12 @@ mod tests {
 
     #[test]
     fn an_identical_message_at_a_seen_sequence_is_an_exact_duplicate() {
-        let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-        let mut p = Producer::new();
-        let m = p.msg(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
-        assert_eq!(apply(&mut a, &m), ApplyOutcome::Accepted);
-        assert_eq!(apply(&mut a, &m), ApplyOutcome::ExactDuplicate);
-        assert_eq!(apply(&mut a, &m), ApplyOutcome::ExactDuplicate);
+        let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
+        let m = a.producer.msg(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
+        assert_eq!(a.apply(&m), ApplyOutcome::Accepted);
+        assert_eq!(a.apply(&m), ApplyOutcome::ExactDuplicate);
+        assert_eq!(a.apply(&m), ApplyOutcome::ExactDuplicate);
     }
 
     #[test]
@@ -1455,14 +1548,13 @@ mod tests {
             ("payload", MessageType::Heartbeat, 1, ZERO, b"different"),
         ];
         for (what, ty, txn, target, body) in variants {
-            let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-            let mut p = Producer::new();
-            let first = p.msg(MessageType::Heartbeat, 1, ZERO, ZERO, b"");
-            assert_eq!(apply(&mut a, &first), ApplyOutcome::Accepted);
-            p.seq = 0;
-            let second = p.msg(ty, txn, ZERO, target, body);
+            let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
+            a.accept(MessageType::Heartbeat, 1, ZERO, ZERO, b"");
+            a.producer.seq = 0;
+
             assert_eq!(
-                apply(&mut a, &second),
+                a.step(ty, txn, ZERO, target, body),
                 ApplyOutcome::ConflictingReplay { seq: 1 },
                 "a differing {what} at a seen sequence must be a conflict"
             );
@@ -1472,16 +1564,15 @@ mod tests {
     #[test]
     fn a_replay_older_than_the_window_is_not_claimed_to_be_exact() {
         // The window is 16 in `strict`; push well past it.
-        let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-        let mut p = Producer::new();
-        let first = p.msg(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
-        assert_eq!(apply(&mut a, &first), ApplyOutcome::Accepted);
+        let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
+        let first = a.producer.msg(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
+        assert_eq!(a.apply(&first), ApplyOutcome::Accepted);
         for _ in 0..40 {
-            let m = p.msg(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
-            assert_eq!(apply(&mut a, &m), ApplyOutcome::Accepted);
+            a.accept(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
         }
         assert_eq!(
-            apply(&mut a, &first),
+            a.apply(&first),
             ApplyOutcome::ReplayOutsideWindow { seq: 1 },
             "an unauthenticatable replay must say so rather than claim exactness"
         );
@@ -1492,48 +1583,46 @@ mod tests {
         // Capacity 16: sequences 1 and 17 share a slot. A replay of 1 after 17
         // has been recorded must be reported as outside the window, never as an
         // exact duplicate of the entry that displaced it.
-        let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-        let mut p = Producer::new();
-        let first = p.msg(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
-        assert_eq!(apply(&mut a, &first), ApplyOutcome::Accepted);
+        let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
+        let first = a.producer.msg(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
+        assert_eq!(a.apply(&first), ApplyOutcome::Accepted);
         for _ in 0..16 {
-            let m = p.msg(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
-            assert_eq!(apply(&mut a, &m), ApplyOutcome::Accepted);
+            a.accept(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
         }
         assert_eq!(
-            apply(&mut a, &first),
+            a.apply(&first),
             ApplyOutcome::ReplayOutsideWindow { seq: 1 }
         );
     }
 
     #[test]
     fn a_zero_capacity_window_authenticates_nothing() {
-        let mut a = TransactionAssembler::new(AssemblerLimits {
+        let mut a = AssemblerRunner::new(AssemblerLimits {
             replay_capacity: 0,
             ..AssemblerLimits::strict()
         });
-        let mut p = Producer::new();
-        let m = p.msg(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
-        assert_eq!(apply(&mut a, &m), ApplyOutcome::Accepted);
+
+        let m = a.producer.msg(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
+        assert_eq!(a.apply(&m), ApplyOutcome::Accepted);
         assert_eq!(
-            apply(&mut a, &m),
+            a.apply(&m),
             ApplyOutcome::ReplayOutsideWindow { seq: 1 },
             "with no retained history nothing can be authenticated as exact"
         );
-        assert_eq!(a.replay_memory_bytes(), 0);
+        assert_eq!(a.consumer.replay_memory_bytes(), 0);
     }
 
     #[test]
     fn replay_memory_is_constant_with_stream_age() {
-        let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-        let before = a.replay_memory_bytes();
-        let mut p = Producer::new();
+        let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+        let before = a.consumer.replay_memory_bytes();
+
         for _ in 0..500 {
-            let m = p.msg(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
-            assert_eq!(apply(&mut a, &m), ApplyOutcome::Accepted);
+            a.accept(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
         }
         assert_eq!(
-            a.replay_memory_bytes(),
+            a.consumer.replay_memory_bytes(),
             before,
             "replay history must not grow with the stream"
         );
@@ -1541,23 +1630,26 @@ mod tests {
 
     #[test]
     fn a_resync_demanding_message_does_not_poison_replay_history() {
-        let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-        let mut p = Producer::new();
-        let m1 = p.msg(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
-        assert_eq!(apply(&mut a, &m1), ApplyOutcome::Accepted);
+        let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
+        a.accept(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
 
         // A gap: rejected, and must not be recorded.
-        p.seq += 5;
-        let gapped = p.msg(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
+        a.producer.seq += 5;
+        let gapped = a.producer.msg(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
         assert!(matches!(
-            apply(&mut a, &gapped),
+            a.apply(&gapped),
             ApplyOutcome::ResyncRequired(ResyncReason::SequenceGap { .. })
         ));
-        assert_eq!(a.last_seq(), Some(1), "a rejected message must not advance");
+        assert_eq!(
+            a.consumer.last_seq(),
+            Some(1),
+            "a rejected message must not advance"
+        );
 
         // The rejected identity must not be retrievable as an exact duplicate.
         assert_eq!(
-            apply(&mut a, &gapped),
+            a.apply(&gapped),
             ApplyOutcome::ResyncRequired(ResyncReason::SequenceGap {
                 expected: 2,
                 got: 7
@@ -1570,30 +1662,33 @@ mod tests {
 
     #[test]
     fn the_same_transaction_replayed_with_new_sequences_is_an_exact_duplicate() {
-        let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-        let mut p = Producer::new();
+        let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
         let t = v(1, 1, 1, 0);
 
-        let b = p.msg(MessageType::SnapshotBegin, 1, ZERO, t, &[]);
-        assert_eq!(apply(&mut a, &b), ApplyOutcome::Accepted);
-        let c = p.msg(MessageType::Commit, 1, ZERO, t, &[]);
-        assert!(matches!(apply(&mut a, &c), ApplyOutcome::Committed(_)));
-        let established = *a.current_commit_digest().expect("a commit was observed");
+        a.transaction(TransactionKind::Snapshot, 1, ZERO, t, &[]);
+        let established = *a
+            .consumer
+            .current_commit_digest()
+            .expect("a commit was observed");
 
         // The producer replays the whole transaction. New sequence numbers, same
         // content: identity must not depend on stream position.
-        let b2 = p.msg(MessageType::SnapshotBegin, 1, ZERO, t, &[]);
-        assert_eq!(apply(&mut a, &b2), ApplyOutcome::Accepted);
-        assert_eq!(a.state(), AssemblerState::RevalidatingReplay);
+
+        a.accept(MessageType::SnapshotBegin, 1, ZERO, t, &[]);
+        assert_eq!(a.consumer.state(), AssemblerState::RevalidatingReplay);
         assert_eq!(
-            a.current_version(),
+            a.consumer.current_version(),
             t,
             "nothing may be replaced before identity is established"
         );
-        let c2 = p.msg(MessageType::Commit, 1, ZERO, t, &[]);
-        assert_eq!(apply(&mut a, &c2), ApplyOutcome::ExactDuplicate);
+
         assert_eq!(
-            a.current_commit_digest(),
+            a.step(MessageType::Commit, 1, ZERO, t, &[]),
+            ApplyOutcome::ExactDuplicate
+        );
+        assert_eq!(
+            a.consumer.current_commit_digest(),
             Some(&established),
             "an exact replay must not disturb the committed identity"
         );
@@ -1603,26 +1698,22 @@ mod tests {
     fn a_different_transaction_at_the_same_version_is_a_conflict() {
         // The dangerous case Phase 10B1 accepted silently: two different
         // transactions claiming one version.
-        let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-        let mut p = Producer::new();
+        let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
         let t = v(1, 1, 1, 0);
 
-        let b = p.msg(MessageType::SnapshotBegin, 1, ZERO, t, &[]);
-        assert_eq!(apply(&mut a, &b), ApplyOutcome::Accepted);
-        let c = p.msg(MessageType::Commit, 1, ZERO, t, &[]);
-        assert!(matches!(apply(&mut a, &c), ApplyOutcome::Committed(_)));
-        let established = *a.current_commit_digest().expect("committed");
+        a.transaction(TransactionKind::Snapshot, 1, ZERO, t, &[]);
+        let established = *a.consumer.current_commit_digest().expect("committed");
 
-        let b2 = p.msg(
+        a.accept(
             MessageType::SnapshotBegin,
             1,
             ZERO,
             t,
             &payload(SectionKind::EdgeNodes, 4),
         );
-        assert_eq!(apply(&mut a, &b2), ApplyOutcome::Accepted);
-        let c2 = p.msg(MessageType::Commit, 1, ZERO, t, &[]);
-        match apply(&mut a, &c2) {
+
+        match a.step(MessageType::Commit, 1, ZERO, t, &[]) {
             ApplyOutcome::ResyncRequired(ResyncReason::ConflictingCommit {
                 version,
                 expected_digest,
@@ -1634,24 +1725,26 @@ mod tests {
             }
             other => panic!("expected ConflictingCommit, got {other:?}"),
         }
-        assert_eq!(a.current_version(), t, "a conflict must not change state");
-        assert_eq!(a.current_commit_digest(), Some(&established));
+        assert_eq!(
+            a.consumer.current_version(),
+            t,
+            "a conflict must not change state"
+        );
+        assert_eq!(a.consumer.current_commit_digest(), Some(&established));
     }
 
     #[test]
     fn transaction_digests_distinguish_content_order_and_count() {
         let t = v(1, 1, 1, 0);
         let commit_with = |bodies: &[Vec<u8>]| -> [u8; 32] {
-            let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-            let mut p = Producer::new();
-            let b = p.msg(MessageType::SnapshotBegin, 1, ZERO, t, &[]);
-            assert_eq!(apply(&mut a, &b), ApplyOutcome::Accepted);
+            let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
+            a.accept(MessageType::SnapshotBegin, 1, ZERO, t, &[]);
             for body in bodies {
-                let c = p.msg(MessageType::SnapshotChunk, 1, ZERO, t, body);
-                assert_eq!(apply(&mut a, &c), ApplyOutcome::Accepted);
+                a.accept(MessageType::SnapshotChunk, 1, ZERO, t, body);
             }
-            let c = p.msg(MessageType::Commit, 1, ZERO, t, &[]);
-            match apply(&mut a, &c) {
+            let c = a.producer.msg(MessageType::Commit, 1, ZERO, t, &[]);
+            match a.apply(&c) {
                 ApplyOutcome::Committed(x) => *x.digest(),
                 other => panic!("expected Committed, got {other:?}"),
             }
@@ -1681,35 +1774,37 @@ mod tests {
 
     #[test]
     fn the_sequence_boundary_is_handled_explicitly() {
-        let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-        let mut p = Producer::new();
+        let mut a = AssemblerRunner::new(AssemblerLimits::strict());
 
         // MAX - 1, then MAX: both legitimate.
-        p.seq = u64::MAX - 2;
-        let at_max_minus_one = p.msg(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
-        assert_eq!(apply(&mut a, &at_max_minus_one), ApplyOutcome::Accepted);
-        let at_max = p.msg(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
-        assert_eq!(apply(&mut a, &at_max), ApplyOutcome::Accepted);
-        assert_eq!(a.last_seq(), Some(u64::MAX));
+        a.producer.seq = u64::MAX - 2;
+
+        a.accept(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
+        let at_max = a.producer.msg(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
+        assert_eq!(a.apply(&at_max), ApplyOutcome::Accepted);
+        assert_eq!(a.consumer.last_seq(), Some(u64::MAX));
 
         // The identical message is still an exact replay.
-        assert_eq!(apply(&mut a, &at_max), ApplyOutcome::ExactDuplicate);
+        assert_eq!(a.apply(&at_max), ApplyOutcome::ExactDuplicate);
 
         // A different message at MAX is a conflict, not a duplicate.
-        p.seq = u64::MAX - 1;
-        let differing = p.msg(MessageType::Abort, 0, ZERO, ZERO, &[]);
+        a.producer.seq = u64::MAX - 1;
+
         assert_eq!(
-            apply(&mut a, &differing),
+            a.step(MessageType::Abort, 0, ZERO, ZERO, &[]),
             ApplyOutcome::ConflictingReplay { seq: u64::MAX }
         );
 
         // Anything unauthenticatable cannot be a continuation: no successor to
         // u64::MAX exists, so the stream is exhausted.
-        p.seq = 0;
-        let old = p.msg(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
-        assert_eq!(apply(&mut a, &old), ApplyOutcome::SequenceExhausted);
+        a.producer.seq = 0;
+
         assert_eq!(
-            a.current_version(),
+            a.step(MessageType::Heartbeat, 0, ZERO, ZERO, &[]),
+            ApplyOutcome::SequenceExhausted
+        );
+        assert_eq!(
+            a.consumer.current_version(),
             ZERO,
             "exhaustion must not change state"
         );
@@ -1719,118 +1814,114 @@ mod tests {
 
     #[test]
     fn a_sequence_gap_demands_resync_and_discards_staging() {
-        let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-        let mut p = Producer::new();
+        let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
         let target = v(1, 1, 1, 0);
-        let begin = p.msg(
+
+        a.accept(
             MessageType::SnapshotBegin,
             1,
             ZERO,
             target,
             &payload(SectionKind::EdgeNodes, 2),
         );
-        assert_eq!(apply(&mut a, &begin), ApplyOutcome::Accepted);
 
-        p.seq += 3; // three messages lost
-        let chunk = p.msg(MessageType::SnapshotChunk, 1, ZERO, target, &[]);
+        a.producer.seq += 3; // three messages lost
+
         assert_eq!(
-            apply(&mut a, &chunk),
+            a.step(MessageType::SnapshotChunk, 1, ZERO, target, &[]),
             ApplyOutcome::ResyncRequired(ResyncReason::SequenceGap {
                 expected: 2,
-                got: 5
+                got: 5,
             })
         );
         assert!(
-            !a.has_open_transaction(),
+            !a.consumer.has_open_transaction(),
             "staging must be discarded on a gap"
         );
-        assert_eq!(a.current_version(), ZERO);
+        assert_eq!(a.consumer.current_version(), ZERO);
     }
 
     #[test]
     fn a_delta_against_the_wrong_base_is_refused() {
-        let mut a = TransactionAssembler::resuming_at(v(2, 2, 2, 0), AssemblerLimits::strict());
-        let mut p = Producer::new();
-        let begin = p.msg(
-            MessageType::DeltaBegin,
-            1,
-            v(1, 1, 1, 0),
-            v(2, 3, 2, 0),
-            &[],
-        );
+        let mut a = AssemblerRunner::resuming_at(v(2, 2, 2, 0), AssemblerLimits::strict());
+
         assert_eq!(
-            apply(&mut a, &begin),
+            a.step(
+                MessageType::DeltaBegin,
+                1,
+                v(1, 1, 1, 0),
+                v(2, 3, 2, 0),
+                &[]
+            ),
             ApplyOutcome::ResyncRequired(ResyncReason::StaleBase {
                 have: v(2, 2, 2, 0),
-                wanted: v(1, 1, 1, 0)
+                wanted: v(1, 1, 1, 0),
             })
         );
-        assert!(!a.has_open_transaction());
+        assert!(!a.consumer.has_open_transaction());
     }
 
     #[test]
     fn a_changed_stream_identity_demands_resync() {
-        let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-        let mut p = Producer::new();
-        let m = p.msg(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
-        assert_eq!(apply(&mut a, &m), ApplyOutcome::Accepted);
+        let mut a = AssemblerRunner::new(AssemblerLimits::strict());
 
-        p.stream_id = 0x9999;
-        p.seq = 0;
-        let m2 = p.msg(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
+        a.accept(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
+
+        a.producer.stream_id = 0x9999;
+        a.producer.seq = 0;
+
         assert_eq!(
-            apply(&mut a, &m2),
+            a.step(MessageType::Heartbeat, 0, ZERO, ZERO, &[]),
             ApplyOutcome::ResyncRequired(ResyncReason::StreamChanged {
                 had: STREAM,
-                got: 0x9999
+                got: 0x9999,
             })
         );
     }
 
     #[test]
     fn a_chunk_without_an_open_transaction_is_refused() {
-        let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-        let mut p = Producer::new();
-        let chunk = p.msg(MessageType::SnapshotChunk, 3, ZERO, v(1, 1, 1, 0), &[]);
+        let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
         assert!(matches!(
-            apply(&mut a, &chunk),
+            a.step(MessageType::SnapshotChunk, 3, ZERO, v(1, 1, 1, 0), &[]),
             ApplyOutcome::ResyncRequired(ResyncReason::UnexpectedMessage { .. })
         ));
     }
 
     #[test]
     fn a_commit_for_a_different_transaction_is_refused_and_discards_staging() {
-        let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-        let mut p = Producer::new();
+        let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
         let target = v(1, 1, 1, 0);
-        let begin = p.msg(
+
+        a.accept(
             MessageType::SnapshotBegin,
             1,
             ZERO,
             target,
             &payload(SectionKind::EdgeNodes, 2),
         );
-        assert_eq!(apply(&mut a, &begin), ApplyOutcome::Accepted);
 
-        let commit = p.msg(MessageType::Commit, 999, ZERO, target, &[]);
         assert!(matches!(
-            apply(&mut a, &commit),
+            a.step(MessageType::Commit, 999, ZERO, target, &[]),
             ApplyOutcome::ResyncRequired(ResyncReason::UnexpectedMessage { .. })
         ));
-        assert!(!a.has_open_transaction());
-        assert_eq!(a.current_version(), ZERO);
+        assert!(!a.consumer.has_open_transaction());
+        assert_eq!(a.consumer.current_version(), ZERO);
     }
 
     #[test]
     fn a_second_begin_while_one_is_open_is_refused() {
-        let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-        let mut p = Producer::new();
+        let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
         let target = v(1, 1, 1, 0);
-        let b1 = p.msg(MessageType::SnapshotBegin, 1, ZERO, target, &[]);
-        assert_eq!(apply(&mut a, &b1), ApplyOutcome::Accepted);
-        let b2 = p.msg(MessageType::SnapshotBegin, 2, ZERO, v(2, 2, 2, 0), &[]);
+
+        a.accept(MessageType::SnapshotBegin, 1, ZERO, target, &[]);
+
         assert!(matches!(
-            apply(&mut a, &b2),
+            a.step(MessageType::SnapshotBegin, 2, ZERO, v(2, 2, 2, 0), &[]),
             ApplyOutcome::ResyncRequired(ResyncReason::UnexpectedMessage {
                 state: AssemblerState::Staging,
                 ..
@@ -1846,12 +1937,11 @@ mod tests {
             MessageType::ResyncRequest,
             MessageType::Credit,
         ] {
-            let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-            let mut p = Producer::new();
-            let m = p.msg(t, 0, ZERO, ZERO, &[]);
+            let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
             assert!(
                 matches!(
-                    apply(&mut a, &m),
+                    a.step(t, 0, ZERO, ZERO, &[]),
                     ApplyOutcome::ResyncRequired(ResyncReason::UnexpectedMessage { .. })
                 ),
                 "{t:?} must not be accepted by a consumer"
@@ -1863,11 +1953,10 @@ mod tests {
     fn a_topology_bump_without_weights_and_features_is_incoherent() {
         // Section 4: topology is dominant; weights and features are indexed by
         // it, so raising topology alone describes nothing coherent.
-        let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-        let mut p = Producer::new();
-        let begin = p.msg(MessageType::SnapshotBegin, 1, ZERO, v(1, 0, 0, 0), &[]);
+        let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
         assert!(matches!(
-            apply(&mut a, &begin),
+            a.step(MessageType::SnapshotBegin, 1, ZERO, v(1, 0, 0, 0), &[]),
             ApplyOutcome::ResyncRequired(ResyncReason::IncoherentVersionBump { .. })
         ));
     }
@@ -1876,125 +1965,106 @@ mod tests {
 
     #[test]
     fn staging_is_bounded_by_bytes() {
-        let mut a = TransactionAssembler::new(AssemblerLimits {
+        let mut a = AssemblerRunner::new(AssemblerLimits {
             max_staged_bytes: 32,
             ..AssemblerLimits::strict()
         });
-        let mut p = Producer::new();
+
         let target = v(1, 1, 1, 0);
-        let begin = p.msg(
-            MessageType::SnapshotBegin,
-            1,
-            ZERO,
-            target,
-            &payload(SectionKind::EdgeNodes, 64),
-        );
+
         assert!(matches!(
-            apply(&mut a, &begin),
+            a.step(
+                MessageType::SnapshotBegin,
+                1,
+                ZERO,
+                target,
+                &payload(SectionKind::EdgeNodes, 64),
+            ),
             ApplyOutcome::ResyncRequired(ResyncReason::StagingLimitExceeded {
                 what: "staged bytes"
             })
         ));
         assert!(
-            !a.has_open_transaction(),
+            !a.consumer.has_open_transaction(),
             "over-limit staging must be discarded"
+        );
+        assert_eq!(a.consumer.staged_bytes(), 0);
+        assert_eq!(a.consumer.current_version(), ZERO);
+        assert_eq!(
+            a.consumer.last_seq(),
+            None,
+            "rejected begin must not enter replay"
         );
     }
 
     #[test]
     fn staging_is_bounded_by_chunk_count() {
-        let mut a = TransactionAssembler::new(AssemblerLimits {
+        let mut a = AssemblerRunner::new(AssemblerLimits {
             max_chunks: 2,
             ..AssemblerLimits::strict()
         });
-        let mut p = Producer::new();
+
         let target = v(1, 1, 1, 0);
-        let begin = p.msg(MessageType::SnapshotBegin, 1, ZERO, target, &[]);
-        assert_eq!(apply(&mut a, &begin), ApplyOutcome::Accepted);
-        let c1 = p.msg(MessageType::SnapshotChunk, 1, ZERO, target, &[]);
-        assert_eq!(apply(&mut a, &c1), ApplyOutcome::Accepted);
-        let c2 = p.msg(MessageType::SnapshotChunk, 1, ZERO, target, &[]);
+
+        a.accept(MessageType::SnapshotBegin, 1, ZERO, target, &[]);
+
+        a.accept(MessageType::SnapshotChunk, 1, ZERO, target, &[]);
+
         assert!(matches!(
-            apply(&mut a, &c2),
+            a.step(MessageType::SnapshotChunk, 1, ZERO, target, &[]),
             ApplyOutcome::ResyncRequired(ResyncReason::StagingLimitExceeded {
                 what: "chunks per transaction"
             })
         ));
+        assert_eq!(a.consumer.state(), AssemblerState::Idle);
+        assert_eq!(a.consumer.current_version(), ZERO);
+        assert_eq!(
+            a.consumer.last_seq(),
+            Some(2),
+            "rejected chunk must not enter replay"
+        );
     }
 
     // --- recovery -----------------------------------------------------------
 
     #[test]
     fn resync_keeps_the_version_and_forgets_the_position() {
-        let mut a = TransactionAssembler::resuming_at(v(4, 4, 4, 4), AssemblerLimits::strict());
-        let mut p = Producer::new();
-        let m = p.msg(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
-        assert_eq!(apply(&mut a, &m), ApplyOutcome::Accepted);
+        let mut a = AssemblerRunner::resuming_at(v(4, 4, 4, 4), AssemblerLimits::strict());
 
-        a.reset_for_resync();
+        a.accept(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
+
+        a.consumer.reset_for_resync();
         assert_eq!(
-            a.current_version(),
+            a.consumer.current_version(),
             v(4, 4, 4, 4),
             "version is durable state"
         );
-        assert_eq!(a.last_seq(), None, "position is not");
-        assert!(!a.has_open_transaction());
+        assert_eq!(a.consumer.last_seq(), None, "position is not");
+        assert!(!a.consumer.has_open_transaction());
 
         // A different producer, sequence restarting from 1, is now acceptable.
         let mut p2 = Producer::new();
         p2.stream_id = 0x1234;
         let m2 = p2.msg(MessageType::Heartbeat, 0, ZERO, ZERO, &[]);
-        assert_eq!(apply(&mut a, &m2), ApplyOutcome::Accepted);
+        assert_eq!(a.apply(&m2), ApplyOutcome::Accepted);
     }
 
     #[test]
     fn a_full_snapshot_and_a_delta_chain_reach_the_same_version_and_content() {
-        // Claim C3 of the design note, at the version level: two routes from
-        // ZERO to one target must leave the consumer in the same state.
+        // Same final version and content through the original two message sequences.
         let target = v(1, 2, 1, 0);
-
-        let mut direct = TransactionAssembler::new(AssemblerLimits::strict());
-        let mut p = Producer::new();
-        let b = p.msg(
-            MessageType::SnapshotBegin,
-            1,
-            ZERO,
-            target,
-            &payload(SectionKind::IncidenceWeights, 4),
-        );
-        assert_eq!(apply(&mut direct, &b), ApplyOutcome::Accepted);
-        let c = p.msg(MessageType::Commit, 1, ZERO, target, &[]);
-        let direct_sections = match apply(&mut direct, &c) {
-            ApplyOutcome::Committed(t) => t.sections().to_vec(),
-            other => panic!("expected Committed, got {other:?}"),
-        };
-
-        let mut chained = TransactionAssembler::new(AssemblerLimits::strict());
-        let mut q = Producer::new();
         let mid = v(1, 1, 1, 0);
-        let b1 = q.msg(MessageType::SnapshotBegin, 1, ZERO, mid, &[]);
-        assert_eq!(apply(&mut chained, &b1), ApplyOutcome::Accepted);
-        let c1 = q.msg(MessageType::Commit, 1, ZERO, mid, &[]);
-        assert!(matches!(
-            apply(&mut chained, &c1),
-            ApplyOutcome::Committed(_)
-        ));
-        let b2 = q.msg(
-            MessageType::DeltaBegin,
-            2,
-            mid,
-            target,
-            &payload(SectionKind::IncidenceWeights, 4),
+        let body = payload(SectionKind::IncidenceWeights, 4);
+        let mut direct = AssemblerRunner::new(AssemblerLimits::strict());
+        let direct_commit = direct.transaction(TransactionKind::Snapshot, 1, ZERO, target, &body);
+        let mut chained = AssemblerRunner::new(AssemblerLimits::strict());
+        chained.transaction(TransactionKind::Snapshot, 1, ZERO, mid, &[]);
+        let chained_commit = chained.transaction(TransactionKind::Delta, 2, mid, target, &body);
+        assert_eq!(
+            direct.consumer.current_version(),
+            chained.consumer.current_version()
         );
-        assert_eq!(apply(&mut chained, &b2), ApplyOutcome::Accepted);
-        let c2 = q.msg(MessageType::Commit, 2, mid, target, &[]);
-        let chained_sections = match apply(&mut chained, &c2) {
-            ApplyOutcome::Committed(t) => t.sections().to_vec(),
-            other => panic!("expected Committed, got {other:?}"),
-        };
-
-        assert_eq!(direct.current_version(), chained.current_version());
-        assert_eq!(direct_sections, chained_sections);
+        assert_eq!(direct_commit.sections(), chained_commit.sections());
     }
 
     #[test]
@@ -2017,14 +2087,13 @@ mod tests {
         for first in types {
             for second in types {
                 for third in types {
-                    let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-                    let mut p = Producer::new();
+                    let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
                     for t in [first, second, third] {
-                        let m = p.msg(t, 1, ZERO, v(1, 1, 1, 0), &[]);
-                        let out = apply(&mut a, &m);
+                        let out = a.step(t, 1, ZERO, v(1, 1, 1, 0), &[]);
                         if matches!(out, ApplyOutcome::ResyncRequired(_)) {
-                            a.reset_for_resync();
-                            p.seq = 0;
+                            a.consumer.reset_for_resync();
+                            a.producer.seq = 0;
                         }
                     }
                 }
@@ -2074,140 +2143,144 @@ mod part_a_probe {
 
         // 1. same seq, byte-identical
         {
-            let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-            let mut p = Producer::new();
-            let m = p.msg(MessageType::Heartbeat, 0, z, z, &[]);
-            let _ = apply(&mut a, &m);
-            report.push(("1 same seq, byte-identical", label(&apply(&mut a, &m))));
+            let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
+            let m = a.producer.msg(MessageType::Heartbeat, 0, z, z, &[]);
+            let _ = a.apply(&m);
+            report.push(("1 same seq, byte-identical", label(&a.apply(&m))));
         }
         // 2. same seq, different message type
         {
-            let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-            let mut p = Producer::new();
-            let m1 = p.msg(MessageType::Heartbeat, 0, z, z, &[]);
-            let _ = apply(&mut a, &m1);
-            p.seq = 0;
-            let m2 = p.msg(MessageType::Abort, 0, z, z, &[]);
-            report.push(("2 same seq, different type", label(&apply(&mut a, &m2))));
+            let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
+            let _ = a.step(MessageType::Heartbeat, 0, z, z, &[]);
+            a.producer.seq = 0;
+
+            report.push((
+                "2 same seq, different type",
+                label(&a.step(MessageType::Abort, 0, z, z, &[])),
+            ));
         }
         // 3. same seq, different txn_id
         {
-            let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-            let mut p = Producer::new();
-            let m1 = p.msg(MessageType::Heartbeat, 1, z, z, &[]);
-            let _ = apply(&mut a, &m1);
-            p.seq = 0;
-            let m2 = p.msg(MessageType::Heartbeat, 999, z, z, &[]);
-            report.push(("3 same seq, different txn_id", label(&apply(&mut a, &m2))));
+            let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
+            let _ = a.step(MessageType::Heartbeat, 1, z, z, &[]);
+            a.producer.seq = 0;
+
+            report.push((
+                "3 same seq, different txn_id",
+                label(&a.step(MessageType::Heartbeat, 999, z, z, &[])),
+            ));
         }
         // 4. same seq, different version tuple
         {
-            let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-            let mut p = Producer::new();
-            let m1 = p.msg(MessageType::Heartbeat, 0, z, t1, &[]);
-            let _ = apply(&mut a, &m1);
-            p.seq = 0;
-            let m2 = p.msg(MessageType::Heartbeat, 0, z, v(9, 9, 9, 9), &[]);
-            report.push(("4 same seq, different versions", label(&apply(&mut a, &m2))));
+            let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
+            let _ = a.step(MessageType::Heartbeat, 0, z, t1, &[]);
+            a.producer.seq = 0;
+
+            report.push((
+                "4 same seq, different versions",
+                label(&a.step(MessageType::Heartbeat, 0, z, v(9, 9, 9, 9), &[])),
+            ));
         }
         // 5. same seq, different payload digest
         {
-            let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-            let mut p = Producer::new();
-            let m1 = p.msg(MessageType::Heartbeat, 0, z, z, b"AAAA");
-            let _ = apply(&mut a, &m1);
-            p.seq = 0;
-            let m2 = p.msg(MessageType::Heartbeat, 0, z, z, b"BBBB");
-            report.push(("5 same seq, different payload", label(&apply(&mut a, &m2))));
+            let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
+            let _ = a.step(MessageType::Heartbeat, 0, z, z, b"AAAA");
+            a.producer.seq = 0;
+
+            report.push((
+                "5 same seq, different payload",
+                label(&a.step(MessageType::Heartbeat, 0, z, z, b"BBBB")),
+            ));
         }
         // 6. fresh seq, target == current, identical transaction
         {
-            let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-            let mut p = Producer::new();
-            let b = p.msg(MessageType::SnapshotBegin, 1, z, t1, &[]);
-            let _ = apply(&mut a, &b);
-            let c = p.msg(MessageType::Commit, 1, z, t1, &[]);
-            let _ = apply(&mut a, &c);
+            let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
+            let _ = a.step(MessageType::SnapshotBegin, 1, z, t1, &[]);
+
+            let _ = a.step(MessageType::Commit, 1, z, t1, &[]);
             // replay the same transaction with fresh sequence numbers
-            let b2 = p.msg(MessageType::SnapshotBegin, 1, z, t1, &[]);
-            let at_begin = label(&apply(&mut a, &b2));
-            let c2 = p.msg(MessageType::Commit, 1, z, t1, &[]);
+
+            let at_begin = label(&a.step(MessageType::SnapshotBegin, 1, z, t1, &[]));
+            let c2 = a.producer.msg(MessageType::Commit, 1, z, t1, &[]);
             report.push(("6 same txn replayed: Begin", at_begin));
-            report.push(("6 same txn replayed: Commit", label(&apply(&mut a, &c2))));
+            report.push(("6 same txn replayed: Commit", label(&a.apply(&c2))));
         }
         // 7. fresh seq, target == current, DIFFERENT transaction
         {
-            let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-            let mut p = Producer::new();
-            let b = p.msg(MessageType::SnapshotBegin, 1, z, t1, &[]);
-            let _ = apply(&mut a, &b);
-            let c = p.msg(MessageType::Commit, 1, z, t1, &[]);
-            let _ = apply(&mut a, &c);
+            let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
+            let _ = a.step(MessageType::SnapshotBegin, 1, z, t1, &[]);
+
+            let _ = a.step(MessageType::Commit, 1, z, t1, &[]);
             // same target version, different txn id AND different content
-            let b2 = p.msg(
+
+            let at_begin = label(&a.step(
                 MessageType::SnapshotBegin,
                 77,
                 z,
                 t1,
                 &payload(SectionKind::EdgeNodes, 4),
-            );
-            let at_begin = label(&apply(&mut a, &b2));
-            let c2 = p.msg(MessageType::Commit, 77, z, t1, &[]);
-            report.push(("7 DIFFERENT txn, same target: Begin", at_begin));
-            report.push((
-                "7 DIFFERENT txn, same target: Commit",
-                label(&apply(&mut a, &c2)),
             ));
+            let c2 = a.producer.msg(MessageType::Commit, 77, z, t1, &[]);
+            report.push(("7 DIFFERENT txn, same target: Begin", at_begin));
+            report.push(("7 DIFFERENT txn, same target: Commit", label(&a.apply(&c2))));
         }
         // 8. target strictly dominated by current
         {
-            let mut a = TransactionAssembler::resuming_at(v(5, 5, 5, 5), AssemblerLimits::strict());
-            let mut p = Producer::new();
-            let b = p.msg(MessageType::SnapshotBegin, 1, z, v(4, 4, 4, 4), &[]);
-            let first = label(&apply(&mut a, &b));
+            let mut a = AssemblerRunner::resuming_at(v(5, 5, 5, 5), AssemblerLimits::strict());
+
+            let first = label(&a.step(MessageType::SnapshotBegin, 1, z, v(4, 4, 4, 4), &[]));
             // The chunks of that superseded transaction still arrive.
-            let ch = p.msg(MessageType::SnapshotChunk, 1, z, v(4, 4, 4, 4), &[]);
-            let second = label(&apply(&mut a, &ch));
-            let cm = p.msg(MessageType::Commit, 1, z, v(4, 4, 4, 4), &[]);
-            let third = label(&apply(&mut a, &cm));
+
+            let second = label(&a.step(MessageType::SnapshotChunk, 1, z, v(4, 4, 4, 4), &[]));
+
+            let third = label(&a.step(MessageType::Commit, 1, z, v(4, 4, 4, 4), &[]));
             report.push(("8 superseded Begin", first));
             report.push(("8 superseded following Chunk", second));
             report.push(("8 superseded following Commit", third));
         }
         // 9. replay older than any retained window
         {
-            let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-            let mut p = Producer::new();
-            let first = p.msg(MessageType::Heartbeat, 0, z, z, &[]);
-            let _ = apply(&mut a, &first);
+            let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
+            let first = a.producer.msg(MessageType::Heartbeat, 0, z, z, &[]);
+            let _ = a.apply(&first);
             for _ in 0..200 {
-                let m = p.msg(MessageType::Heartbeat, 0, z, z, &[]);
-                let _ = apply(&mut a, &m);
+                let _ = a.step(MessageType::Heartbeat, 0, z, z, &[]);
             }
-            report.push(("9 replay 200 behind", label(&apply(&mut a, &first))));
+            report.push(("9 replay 200 behind", label(&a.apply(&first))));
         }
         // 10. last_seq == u64::MAX
         {
-            let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-            let mut p = Producer::new();
-            p.seq = u64::MAX - 1;
-            let m = p.msg(MessageType::Heartbeat, 0, z, z, &[]); // seq = MAX
-            let at_max = label(&apply(&mut a, &m));
+            let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
+            a.producer.seq = u64::MAX - 1;
+            let m = a.producer.msg(MessageType::Heartbeat, 0, z, z, &[]); // seq = MAX
+            let at_max = label(&a.apply(&m));
             // Any continuation is impossible; what does it say?
-            p.seq = u64::MAX - 1;
-            let again = p.msg(MessageType::Heartbeat, 0, z, z, &[]); // seq = MAX, identical
-            let after = label(&apply(&mut a, &again));
+            a.producer.seq = u64::MAX - 1;
+            let again = a.producer.msg(MessageType::Heartbeat, 0, z, z, &[]); // seq = MAX, identical
+            let after = label(&a.apply(&again));
             // A DIFFERENT message at MAX: cannot be a continuation.
-            p.seq = u64::MAX - 1;
-            let differing = p.msg(MessageType::Abort, 0, z, z, &[]);
+            a.producer.seq = u64::MAX - 1;
+
             report.push((
                 "10 different message at MAX",
-                label(&apply(&mut a, &differing)),
+                label(&a.step(MessageType::Abort, 0, z, z, &[])),
             ));
             // And one outside the window entirely.
-            p.seq = 41;
-            let old = p.msg(MessageType::Heartbeat, 0, z, z, &[]);
-            report.push(("10 unauthenticatable at MAX", label(&apply(&mut a, &old))));
+            a.producer.seq = 41;
+
+            report.push((
+                "10 unauthenticatable at MAX",
+                label(&a.step(MessageType::Heartbeat, 0, z, z, &[])),
+            ));
             report.push(("10 seq == u64::MAX accepted as", at_max));
             report.push(("10 continuation after MAX", after));
         }
@@ -2314,9 +2387,8 @@ mod model {
     /// One randomized run over a mixed message stream.
     fn run(seed: u64, steps: usize, limits: AssemblerLimits) {
         let mut rng = Lcg::new(seed);
-        let mut a = TransactionAssembler::new(limits);
+        let mut a = AssemblerRunner::new(limits);
         let mut m = Model::default();
-        let mut p = Producer::new();
 
         // Retained so the run can replay an earlier message verbatim.
         let mut history: Vec<Vec<u8>> = Vec::new();
@@ -2335,11 +2407,13 @@ mod model {
                 // conflicting replay: reuse a sequence with different content
                 1 if !history.is_empty() => {
                     let back = rng.below(3) + 1;
-                    let s = p.seq.saturating_sub(back).max(1);
-                    let saved = p.seq;
-                    p.seq = s - 1;
-                    let msg = p.msg(MessageType::Abort, 0xDEAD, ZERO, ZERO, b"conflict");
-                    p.seq = saved;
+                    let s = a.producer.seq.saturating_sub(back).max(1);
+                    let saved = a.producer.seq;
+                    a.producer.seq = s - 1;
+                    let msg = a
+                        .producer
+                        .msg(MessageType::Abort, 0xDEAD, ZERO, ZERO, b"conflict");
+                    a.producer.seq = saved;
                     msg
                 }
                 // begin
@@ -2347,18 +2421,20 @@ mod model {
                     open = true;
                     topology += 1;
                     let t = v(topology, topology, topology, 0);
-                    p.msg(MessageType::SnapshotBegin, txn, ZERO, t, &[])
+                    a.producer
+                        .msg(MessageType::SnapshotBegin, txn, ZERO, t, &[])
                 }
                 // superseded begin
                 4 if !open && topology > 1 => {
                     open = true;
                     let t = v(topology - 1, topology - 1, topology - 1, 0);
-                    p.msg(MessageType::SnapshotBegin, txn, ZERO, t, &[])
+                    a.producer
+                        .msg(MessageType::SnapshotBegin, txn, ZERO, t, &[])
                 }
                 // chunk
                 5 | 6 if open => {
                     let t = v(topology, topology, topology, 0);
-                    p.msg(
+                    a.producer.msg(
                         MessageType::SnapshotChunk,
                         txn,
                         ZERO,
@@ -2370,7 +2446,7 @@ mod model {
                 7 | 8 if open => {
                     open = false;
                     let t = v(topology, topology, topology, 0);
-                    let msg = p.msg(MessageType::Commit, txn, ZERO, t, &[]);
+                    let msg = a.producer.msg(MessageType::Commit, txn, ZERO, t, &[]);
                     txn += 1;
                     msg
                 }
@@ -2378,24 +2454,24 @@ mod model {
                 9 if open => {
                     open = false;
                     let t = v(topology, topology, topology, 0);
-                    let msg = p.msg(MessageType::Abort, txn, ZERO, t, &[]);
+                    let msg = a.producer.msg(MessageType::Abort, txn, ZERO, t, &[]);
                     txn += 1;
                     msg
                 }
-                _ => p.msg(MessageType::Heartbeat, 0, ZERO, ZERO, &[]),
+                _ => a.producer.msg(MessageType::Heartbeat, 0, ZERO, ZERO, &[]),
             };
 
-            let out = apply(&mut a, &bytes);
-            m.observe(&out, a.current_version());
+            let out = a.apply(&bytes);
+            m.observe(&out, a.consumer.current_version());
 
             // Memory must stay within the configured bound whatever happens.
             assert!(
-                a.replay_memory_bytes()
+                a.consumer.replay_memory_bytes()
                     <= limits.replay_capacity * core::mem::size_of::<Option<MessageIdentity>>(),
                 "replay memory exceeded its bound at seed {seed}"
             );
             assert!(
-                a.staged_bytes() <= limits.max_staged_bytes,
+                a.consumer.staged_bytes() <= limits.max_staged_bytes,
                 "staged bytes exceeded the limit at seed {seed}"
             );
 
@@ -2403,8 +2479,8 @@ mod model {
                 out,
                 ApplyOutcome::ResyncRequired(_) | ApplyOutcome::SequenceExhausted
             ) {
-                a.reset_for_resync();
-                p.seq = 0;
+                a.consumer.reset_for_resync();
+                a.producer.seq = 0;
                 history.clear();
                 open = false;
             } else {
@@ -2440,24 +2516,24 @@ mod model {
     #[test]
     fn an_exact_replay_never_changes_state() {
         // Property, checked directly rather than through the random walk.
-        let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-        let mut p = Producer::new();
+        let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
         let t = v(1, 1, 1, 0);
-        let b = p.msg(MessageType::SnapshotBegin, 1, ZERO, t, &[]);
-        assert_eq!(apply(&mut a, &b), ApplyOutcome::Accepted);
-        let c = p.msg(MessageType::Commit, 1, ZERO, t, &[]);
-        assert!(matches!(apply(&mut a, &c), ApplyOutcome::Committed(_)));
+
+        a.accept(MessageType::SnapshotBegin, 1, ZERO, t, &[]);
+        let c = a.producer.msg(MessageType::Commit, 1, ZERO, t, &[]);
+        assert!(matches!(a.apply(&c), ApplyOutcome::Committed(_)));
 
         let before = (
-            a.current_version(),
-            *a.current_commit_digest().expect("digest"),
+            a.consumer.current_version(),
+            *a.consumer.current_commit_digest().expect("digest"),
         );
         for _ in 0..20 {
-            assert_eq!(apply(&mut a, &c), ApplyOutcome::ExactDuplicate);
+            assert_eq!(a.apply(&c), ApplyOutcome::ExactDuplicate);
             assert_eq!(
                 (
-                    a.current_version(),
-                    *a.current_commit_digest().expect("digest")
+                    a.consumer.current_version(),
+                    *a.consumer.current_commit_digest().expect("digest")
                 ),
                 before,
                 "an exact replay changed state"
@@ -2467,16 +2543,18 @@ mod model {
 
     #[test]
     fn at_most_one_commit_is_emitted_per_transaction_identity() {
-        let mut a = TransactionAssembler::new(AssemblerLimits::strict());
-        let mut p = Producer::new();
+        let mut a = AssemblerRunner::new(AssemblerLimits::strict());
+
         let t = v(1, 1, 1, 0);
         let mut commits = 0;
 
         for _ in 0..5 {
-            let b = p.msg(MessageType::SnapshotBegin, 1, ZERO, t, &[]);
-            let _ = apply(&mut a, &b);
-            let c = p.msg(MessageType::Commit, 1, ZERO, t, &[]);
-            if matches!(apply(&mut a, &c), ApplyOutcome::Committed(_)) {
+            let _ = a.step(MessageType::SnapshotBegin, 1, ZERO, t, &[]);
+
+            if matches!(
+                a.step(MessageType::Commit, 1, ZERO, t, &[]),
+                ApplyOutcome::Committed(_)
+            ) {
                 commits += 1;
             }
         }
@@ -2502,23 +2580,22 @@ mod model {
         for a1 in alphabet {
             for a2 in alphabet {
                 for a3 in alphabet {
-                    let mut asm = TransactionAssembler::new(AssemblerLimits::strict());
-                    let mut p = Producer::new();
+                    let mut asm = AssemblerRunner::new(AssemblerLimits::strict());
+
                     let mut version = SnapshotVersion::ZERO;
                     for ty in [a1, a2, a3] {
-                        let bytes = p.msg(ty, 1, ZERO, t, &[]);
-                        let out = apply(&mut asm, &bytes);
+                        let out = asm.step(ty, 1, ZERO, t, &[]);
                         assert!(
-                            asm.current_version().dominates(&version),
+                            asm.consumer.current_version().dominates(&version),
                             "version regressed on {ty:?}"
                         );
-                        version = asm.current_version();
+                        version = asm.consumer.current_version();
                         if matches!(
                             out,
                             ApplyOutcome::ResyncRequired(_) | ApplyOutcome::SequenceExhausted
                         ) {
-                            asm.reset_for_resync();
-                            p.seq = 0;
+                            asm.consumer.reset_for_resync();
+                            asm.producer.seq = 0;
                         }
                     }
                 }

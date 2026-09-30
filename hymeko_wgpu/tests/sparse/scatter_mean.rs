@@ -6,8 +6,8 @@
 
 use hymeko_wgpu::{KernelId, TensorShape};
 
-use hymeko::tensor::representations::sparse::SparseTensorContract;
-use hymeko::tensor::representations::tensor_csr::TensorCsr;
+use hymeko_tensor::representations::sparse::SparseTensorContract;
+use hymeko_tensor::representations::tensor_csr::TensorCsr;
 
 use crate::support::{assert_parity, series as raw_series};
 

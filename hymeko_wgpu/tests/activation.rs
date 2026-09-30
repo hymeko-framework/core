@@ -22,8 +22,8 @@
 //! convolution layers produce with `if val > zero { val } else { zero }`. That
 //! is a deliberate contract, not an accident of the shading language.
 
-use hymeko::tensor::compute::{ComputeError, TensorShape};
-use hymeko::tensor::representations::tensor_csr::TensorCsr;
+use hymeko_tensor::compute::{ComputeError, TensorShape};
+use hymeko_tensor::representations::tensor_csr::TensorCsr;
 use hymeko_wgpu::testing::SparseSpec;
 use hymeko_wgpu::testing::{backend_or_skip, shared_backend};
 use hymeko_wgpu::{ActivationKind, GpuTensor, PreparedActivation, WgpuBackend};

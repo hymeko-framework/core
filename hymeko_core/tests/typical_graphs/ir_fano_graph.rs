@@ -4,7 +4,6 @@ mod ir_fano_graph {
     use crate::typical_graphs::fano::constants::*;
     use hymeko::common::ids::{DeclId, SymId};
     use hymeko::common::pathkey::PathKey;
-    use hymeko::ir::common::ref_target;
     use hymeko::ir::lower::lower_to_ir;
     use hymeko::resolution::intern_pass::Interned;
     use hymeko::resolution::interner::Interner;
@@ -105,7 +104,7 @@ mod ir_fano_graph {
                     );
                     let arc = &ir.arcs[arc_ref.raw()];
                     for (j, r) in arc.refs.iter().enumerate() {
-                        let target_did = ref_target(r);
+                        let target_did = r.target();
                         let target_name = inv
                             .get(&target_did)
                             .cloned()
@@ -127,7 +126,7 @@ mod ir_fano_graph {
                 .refs
                 .iter()
                 .map(|r| {
-                    let did = ref_target(r);
+                    let did = r.target();
                     inv.get(&did)
                         .cloned()
                         .unwrap_or_else(|| format!("<unknown {did:?}>"))

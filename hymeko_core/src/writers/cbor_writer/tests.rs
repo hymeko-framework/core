@@ -1,7 +1,7 @@
 use super::*;
 use crate::common::ids::{DeclId, HyperArcId, NodeId, SymId};
 use crate::common::pathkey::PathKey;
-use crate::ir::canonical_hash::{CanonHashCfg, canonical_program_hash};
+use crate::ir::canonical_hash::{CanonHashCfg, CanonicalPaths};
 use crate::ir::hash::HashId;
 use crate::ir::ir::{AnnoR, ArcRec, DeclKind, DeclNode, Ir, NodeRec, RefAtomR, SignedRefR};
 use crate::ir_stream::DecodeLimits;
@@ -24,7 +24,6 @@ fn fixture() -> (Ir, Index, Interner) {
         next_sibling: DeclId::NONE,
         anno: AnnoR::default(),
     });
-    ir.decl_hash.push(None);
     ir.nodes.push(NodeRec::new(decl, Vec::new()));
     ir.bind_node_decl(decl, NodeId::new(0)).unwrap();
 
@@ -36,6 +35,44 @@ fn fixture() -> (Ir, Index, Interner) {
 fn encoded_fixture() -> Vec<u8> {
     let (ir, index, interner) = fixture();
     encode("models/charge.hymeko", &ir, &index, &interner, &[]).unwrap()
+}
+
+#[test]
+fn symbol_lifetime_cbor_omits_unreferenced_history_before_wire_limits() {
+    let (ir, index, mut interner) = fixture();
+    for i in 0..65536 {
+        interner.intern(&format!("unused-timestamp-{i}"));
+    }
+    let bytes = encode("models/charge.hymeko", &ir, &index, &interner, &[]).unwrap();
+    let decoded = decode(&bytes, &DecodeLimits::strict())
+        .expect("unused symbol history must not exhaust a valid snapshot's array limit");
+    assert_eq!(decoded.payload().interned_strings, vec!["charge"]);
+    assert_eq!(
+        interner.iter().count(),
+        65537,
+        "export must not mutate its source interner"
+    );
+}
+
+#[test]
+fn symbol_lifetime_admitted_old_payload_discards_unused_strings_but_still_checks_duplicates() {
+    let mut payload: CborPayload = ciborium::de::from_reader(encoded_fixture().as_slice()).unwrap();
+    let hash = payload.canon_hash;
+    payload
+        .interned_strings
+        .push("historical-unused-value".into());
+    let mut bytes = Vec::new();
+    ciborium::ser::into_writer(&payload, &mut bytes).unwrap();
+    let decoded = decode(&bytes, &DecodeLimits::strict()).unwrap();
+    assert_eq!(decoded.payload().interned_strings, vec!["charge"]);
+    assert_eq!(decoded.canonical_hash(), hash);
+    payload.interned_strings.push("charge".into());
+    bytes.clear();
+    ciborium::ser::into_writer(&payload, &mut bytes).unwrap();
+    assert!(matches!(
+        decode(&bytes, &DecodeLimits::strict()),
+        Err(CborError::DuplicateInternedString { .. })
+    ));
 }
 
 #[test]
@@ -53,7 +90,7 @@ fn facade_round_trips_usable_ir_interner_and_hash() {
     assert_eq!(decoded.interner().resolve(SymId::new(0)), "charge");
     assert_eq!(
         decoded.canonical_hash(),
-        canonical_program_hash(CanonHashCfg::default(), decoded.ir(), decoded.interner())
+        CanonicalPaths::new(decoded.ir()).hash(CanonHashCfg::default(), decoded.interner())
     );
 }
 

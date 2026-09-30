@@ -3,7 +3,6 @@ mod test_import_graphs {
     use crate::minimal_tests::TestParser;
     use crate::test_helpers::{log_test_footer, log_test_header};
     use hymeko::common::pathkey::PathKey;
-    use hymeko::ir::hash_pass::compute_merkle_hashes;
     use hymeko::ir::ir::{DeclKind, SignedRefR};
     use hymeko::ir::lower::lower_to_ir;
     use hymeko::module_store::module_store::ModuleStore;
@@ -29,8 +28,7 @@ mod test_import_graphs {
         assert_eq!(desc.name, "basic_library");
         let Interned { ast, mut interner } = intern_ast(&desc);
         let idx = build_index_sym(&ast, &mut interner).expect("index build failed");
-        let mut ir = lower_to_ir(&ast, &idx, &mut interner).expect("lower failed");
-        compute_merkle_hashes(&mut ir, &interner);
+        let ir = lower_to_ir(&ast, &idx, &mut interner).expect("lower failed");
 
         let sid_elements = interner.intern("elements");
         let sid_operand = interner.intern("operand");
@@ -210,15 +208,8 @@ mod test_import_graphs {
             referenced,
             "expected at least one arc ref to target basic_library.elements.operand"
         );
-        assert!(
-            compiled
-                .ir
-                .decl_hash
-                .get(did.raw())
-                .and_then(|x| *x)
-                .is_some(),
-            "expected decl hash for operand to be computed"
-        );
+        let hashes = hymeko::ir::semantic_digest::semantic_declaration_hashes(&compiled.ir, &ms.it);
+        assert_eq!(hashes.len(), compiled.ir.decl_nodes.len());
         info!(
             "Import compilation pulled {} namespaces and produced {} decls",
             compiled.imports.len(),

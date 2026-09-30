@@ -8,7 +8,7 @@
 //! and are documented as such at the bottom of this file rather than faked with a
 //! test that cannot fail.
 
-use hymeko::tensor::compute::TensorShape;
+use hymeko_tensor::compute::TensorShape;
 use hymeko_wgpu::testing::SparseSpec;
 use hymeko_wgpu::testing::backend_or_skip;
 use hymeko_wgpu::{ActivationKind, TensorArenaConfig};

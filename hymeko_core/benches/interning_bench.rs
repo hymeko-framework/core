@@ -4,13 +4,13 @@
 use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_main};
 use hymeko::{
     ir::{
-        canonical_hash::{CanonHashCfg, canonical_program_hash, validate_namespace_roots},
+        canonical_hash::{CanonHashCfg, CanonicalPaths, NamespaceValidator},
         lower::lower_to_ir,
     },
     module_store::{module_store::ModuleStore, source_provider::MemProvider},
     resolution::{
         const_resolve::resolve_consts,
-        intern_pass::{intern_ast, intern_ast_into_owned},
+        intern_pass::{intern_ast, intern_ast_into},
         interner::Interner,
         resolve::build_index_sym,
     },
@@ -102,7 +102,7 @@ fn bench_compiler_phases(c: &mut Criterion) {
     let parsed = parse_description(&input).unwrap();
     let intern = || {
         let mut it = Interner::new();
-        let ast = intern_ast_into_owned(&parsed, &mut it);
+        let ast = intern_ast_into(&parsed, &mut it);
         (ast, it)
     };
     let (mut ast, mut it) = intern();
@@ -131,7 +131,7 @@ fn bench_compiler_phases(c: &mut Criterion) {
     assert_eq!(expected.ir.decl_nodes.len(), ir.decl_nodes.len());
     assert_eq!(
         expected.canon_hash,
-        canonical_program_hash(CanonHashCfg::default(), &ir, &it)
+        CanonicalPaths::new(&ir).hash(CanonHashCfg::default(), &it)
     );
     let scale = if nodes % 1000 == 0 {
         format!("{}k", nodes / 1000)
@@ -156,7 +156,7 @@ fn bench_compiler_phases(c: &mut Criterion) {
             BatchSize::PerIteration,
         )
     });
-    group.bench_function("intern_owned", |b| {
+    group.bench_function("intern", |b| {
         b.iter_batched(|| (), |()| intern(), BatchSize::PerIteration)
     });
     group.bench_function("resolve_consts", |b| {
@@ -183,21 +183,15 @@ fn bench_compiler_phases(c: &mut Criterion) {
             BatchSize::PerIteration,
         )
     });
-    group.bench_function("legacy_hash", |b| {
-        b.iter_batched(
-            || ir.clone(),
-            |mut value| {
-                hymeko::ir::hash_pass::compute_merkle_hashes(&mut value, &it);
-                value
-            },
-            BatchSize::PerIteration,
-        )
-    });
     group.bench_function("namespace_validation", |b| {
-        b.iter(|| validate_namespace_roots(black_box(&ir), &idx).unwrap())
+        b.iter(|| {
+            NamespaceValidator::new(&CanonicalPaths::new(black_box(&ir)))
+                .validate(&idx)
+                .unwrap()
+        })
     });
     group.bench_function("canonical_hash", |b| {
-        b.iter(|| canonical_program_hash(CanonHashCfg::default(), black_box(&ir), &it))
+        b.iter(|| CanonicalPaths::new(black_box(&ir)).hash(CanonHashCfg::default(), &it))
     });
     group.bench_function("compile_cold", |b| {
         b.iter_batched(
@@ -221,5 +215,90 @@ fn bench_compiler_phases(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_interning_performance, bench_compiler_phases);
+// Characterize the public digest/update paths separately: the update includes
+// model copying and validation, so it is not an isolated hash microbenchmark.
+fn bench_semantic_digest(c: &mut Criterion) {
+    use hymeko::common::ids::DeclId;
+    use hymeko::ir::ir::ValueR;
+    use hymeko::ir::semantic_digest::semantic_model_digest;
+    use hymeko::module_store::execution::{CompiledModel, ValueUpdate};
+
+    let input: Arc<str> = generate_large_hypergraph(1_000, "[0.5]")
+        .replacen(
+            "Benchmark_Graph {",
+            "Benchmark_Graph { benchmark_value 0;",
+            1,
+        )
+        .into();
+    let path = Path::new("digest-benchmark.hymeko");
+    let model = CompiledModel::compile(
+        MemProvider::default().with_file(path, input.clone()),
+        RealParser,
+        path,
+    )
+    .unwrap();
+    let declaration = model
+        .program()
+        .ir
+        .decl_nodes
+        .iter()
+        .enumerate()
+        .find(|(_, node)| model.interner().resolve(node.name) == "benchmark_value")
+        .map(|(index, _)| DeclId::new(index))
+        .unwrap();
+    let updates = [ValueUpdate::Set {
+        declaration,
+        value: ValueR::Num(1.0),
+    }];
+    let before = model.semantic_digest();
+    assert_eq!(
+        before,
+        semantic_model_digest(&model.program().ir, model.interner())
+    );
+    let changed = model.with_value_updates(&updates).unwrap();
+    assert_ne!(before, changed.semantic_digest());
+    assert_eq!(
+        changed.semantic_digest(),
+        semantic_model_digest(&changed.program().ir, changed.interner())
+    );
+    eprintln!(
+        "DIGEST_FIXTURE nodes=1000 bytes={} blake3={} decls={}",
+        input.len(),
+        blake3::hash(input.as_bytes()),
+        model.program().ir.decl_nodes.len()
+    );
+
+    let mut group = c.benchmark_group("semantic_digest_1k");
+    group
+        .sample_size(20)
+        .warm_up_time(Duration::from_secs(1))
+        .measurement_time(Duration::from_secs(3));
+    group.bench_function("full", |b| {
+        b.iter(|| {
+            semantic_model_digest(black_box(&model.program().ir), black_box(model.interner()))
+        })
+    });
+    group.bench_function("cached", |b| b.iter(|| black_box(&model).semantic_digest()));
+    group.bench_function("checked_leaf_update", |b| {
+        b.iter_batched(
+            || (),
+            |()| {
+                let next = black_box(&model)
+                    .with_value_updates(black_box(&updates))
+                    .unwrap();
+                black_box(next.semantic_digest());
+                next
+            },
+            BatchSize::PerIteration,
+        )
+    });
+    group.finish();
+}
+
+criterion_group!(
+    benches,
+    bench_interning_performance,
+    bench_compiler_phases,
+    bench_semantic_digest
+);
 criterion_main!(benches);

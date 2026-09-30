@@ -6,11 +6,13 @@
 
 use std::sync::Arc;
 
-use hymeko::tensor::compute::{BackendKind, ComputeError, TensorShape, try_u32};
+use hymeko_tensor::compute::{BackendKind, ComputeError, TensorShape, try_u32};
 
+use super::OperandCheck;
+use super::OperationFactory;
 use crate::GpuTensor;
 use crate::operations::dispatch::PreparedDispatch;
-use crate::pipeline::{KernelId, PipelineCache};
+use crate::pipeline::KernelId;
 
 /// WGSL source owned by [`KernelId::Hsikan`].
 pub const HSIKAN_SHADER: &str = include_str!("../../shaders/hsikan.wgsl");
@@ -33,19 +35,9 @@ struct HsikanParams {
 
 const _: () = assert!(std::mem::size_of::<HsikanParams>() == 32);
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct HsikanLimits {
-    pub max_workgroups_per_dimension: u32,
-    pub max_invocations_per_workgroup: u32,
-    pub max_storage_buffers_per_stage: u32,
-}
-
 /// Builds one validated signed HSiKAN inference dispatch.
 pub struct HsikanBuilder<'a> {
-    device: &'a wgpu::Device,
-    queue: &'a wgpu::Queue,
-    cache: &'a PipelineCache,
-    limits: HsikanLimits,
+    factory: OperationFactory<'a>,
     x: Option<&'a GpuTensor<f32>>,
     vertices: Option<&'a GpuTensor<u32>>,
     signs: Option<&'a GpuTensor<i32>>,
@@ -59,17 +51,9 @@ pub struct HsikanBuilder<'a> {
 }
 
 impl<'a> HsikanBuilder<'a> {
-    pub(crate) fn new(
-        device: &'a wgpu::Device,
-        queue: &'a wgpu::Queue,
-        cache: &'a PipelineCache,
-        limits: HsikanLimits,
-    ) -> Self {
+    pub(crate) fn new(factory: OperationFactory<'a>) -> Self {
         Self {
-            device,
-            queue,
-            cache,
-            limits,
+            factory,
             x: None,
             vertices: None,
             signs: None,
@@ -145,80 +129,76 @@ impl<'a> HsikanBuilder<'a> {
 
     /// Validate every operand and prepare a repeatedly encodable dispatch.
     pub fn prepare(self) -> Result<PreparedHsikan<'a>, ComputeError> {
-        let x = supplied(self.x, "hsikan features")?;
-        let vertices = supplied(self.vertices, "hsikan vertices")?;
-        let signs = supplied(self.signs, "hsikan signs")?;
-        let inner = supplied(self.inner_control, "hsikan inner control")?;
-        let outer = supplied(self.outer_control, "hsikan outer control")?;
-        let gate_w = supplied(self.gate_w, "hsikan gate weight")?;
-        let gate_b = supplied(self.gate_b, "hsikan gate bias")?;
-        let output = supplied(self.output, "hsikan output")?;
+        let x = OperandCheck("hsikan features").supplied(self.x)?;
+        let vertices = OperandCheck("hsikan vertices").supplied(self.vertices)?;
+        let signs = OperandCheck("hsikan signs").supplied(self.signs)?;
+        let inner = OperandCheck("hsikan inner control").supplied(self.inner_control)?;
+        let outer = OperandCheck("hsikan outer control").supplied(self.outer_control)?;
+        let gate_w = OperandCheck("hsikan gate weight").supplied(self.gate_w)?;
+        let gate_b = OperandCheck("hsikan gate bias").supplied(self.gate_b)?;
+        let output = OperandCheck("hsikan output").supplied(self.output)?;
 
         let hidden = x.shape().cols;
         let n_nodes = x.shape().rows;
         let n_edges = vertices.shape().rows;
         let arity = vertices.shape().cols;
         if hidden == 0 || arity == 0 {
-            return shape_error("hsikan hidden and arity must be non-zero", 1, 0);
+            return OperandCheck("hsikan hidden and arity must be non-zero").mismatch(1, 0);
         }
         if signs.shape() != vertices.shape() {
-            return shape_error(
-                "hsikan signs shape",
+            return OperandCheck("hsikan signs shape").mismatch(
                 vertices.shape().checked_elements().unwrap_or(usize::MAX),
                 signs.shape().checked_elements().unwrap_or(usize::MAX),
             );
         }
         if output.shape() != TensorShape::new(n_edges, hidden) {
-            return shape_error(
-                "hsikan output shape",
+            return OperandCheck("hsikan output shape").mismatch(
                 n_edges.saturating_mul(hidden),
                 output.shape().checked_elements().unwrap_or(usize::MAX),
             );
         }
         let grid = inner.shape().cols;
         if grid < 3 || inner.shape().rows % hidden != 0 {
-            return shape_error("hsikan control shape", hidden.saturating_mul(3), 0);
+            return OperandCheck("hsikan control shape").mismatch(hidden.saturating_mul(3), 0);
         }
         let branches = inner.shape().rows / hidden;
         if !matches!(branches, 1 | 2) {
-            return shape_error("hsikan branch count", 2, branches);
+            return OperandCheck("hsikan branch count").mismatch(2, branches);
         }
         if outer.shape() != inner.shape() {
-            return shape_error(
-                "hsikan outer control shape",
+            return OperandCheck("hsikan outer control shape").mismatch(
                 inner.shape().checked_elements().unwrap_or(usize::MAX),
                 outer.shape().checked_elements().unwrap_or(usize::MAX),
             );
         }
         if gate_w.shape() != TensorShape::new(hidden, hidden) {
-            return shape_error(
-                "hsikan gate weight shape",
+            return OperandCheck("hsikan gate weight shape").mismatch(
                 hidden.saturating_mul(hidden),
                 gate_w.shape().checked_elements().unwrap_or(usize::MAX),
             );
         }
         if gate_b.shape() != TensorShape::new(hidden, 1) {
-            return shape_error(
-                "hsikan gate bias shape",
+            return OperandCheck("hsikan gate bias shape").mismatch(
                 hidden,
                 gate_b.shape().checked_elements().unwrap_or(usize::MAX),
             );
         }
-        if self.limits.max_storage_buffers_per_stage < 8 {
+        if self.factory.limits.max_storage_buffers_per_stage < 8 {
             return Err(ComputeError::Backend {
                 backend: BackendKind::Wgpu,
                 message: format!(
                     "hsikan requires 8 storage buffers, device exposes {}",
-                    self.limits.max_storage_buffers_per_stage
+                    self.factory.limits.max_storage_buffers_per_stage
                 ),
             });
         }
-        if self.workgroup == 0 || self.workgroup > self.limits.max_invocations_per_workgroup {
+        if self.workgroup == 0 || self.workgroup > self.factory.limits.max_invocations_per_workgroup
+        {
             return Err(ComputeError::Backend {
                 backend: BackendKind::Wgpu,
                 message: format!(
                     "hsikan workgroup {} outside 1..={}",
-                    self.workgroup, self.limits.max_invocations_per_workgroup
+                    self.workgroup, self.factory.limits.max_invocations_per_workgroup
                 ),
             });
         }
@@ -232,7 +212,7 @@ impl<'a> HsikanBuilder<'a> {
             })?;
         let count = try_u32("hsikan output element count", elements)?;
         let ideal_groups = count.div_ceil(self.workgroup);
-        let groups = ideal_groups.min(self.limits.max_workgroups_per_dimension);
+        let groups = ideal_groups.min(self.factory.limits.max_workgroups_per_dimension);
         let stride = groups
             .checked_mul(self.workgroup)
             .ok_or(ComputeError::IndexOverflow {
@@ -251,33 +231,32 @@ impl<'a> HsikanBuilder<'a> {
         };
 
         let kernel = KernelId::Hsikan;
-        let bundle = self.cache.bundle(self.device, kernel, self.workgroup, 1)?;
-        let params_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("hsikan.params"),
-            size: std::mem::size_of::<HsikanParams>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        self.queue
-            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
-        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("hsikan.bind_group"),
-            layout: bundle.bind_group_layout(),
-            entries: &[
-                entry(0, x),
-                entry(1, vertices),
-                entry(2, signs),
-                entry(3, inner),
-                entry(4, outer),
-                entry(5, gate_w),
-                entry(6, gate_b),
-                entry(7, output),
-                wgpu::BindGroupEntry {
-                    binding: 8,
-                    resource: params_buffer.as_entire_binding(),
-                },
-            ],
-        });
+        let bundle = self
+            .factory
+            .cache
+            .bundle(self.factory.device, kernel, self.workgroup, 1)?;
+        let params_buffer = self.factory.uniform("hsikan.params", &params);
+        let bind_group = self
+            .factory
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("hsikan.bind_group"),
+                layout: bundle.bind_group_layout(),
+                entries: &[
+                    x.binding(0),
+                    vertices.binding(1),
+                    signs.binding(2),
+                    inner.binding(3),
+                    outer.binding(4),
+                    gate_w.binding(5),
+                    gate_b.binding(6),
+                    output.binding(7),
+                    wgpu::BindGroupEntry {
+                        binding: 8,
+                        resource: params_buffer.as_entire_binding(),
+                    },
+                ],
+            });
         Ok(PreparedHsikan {
             _operands: core::marker::PhantomData,
             dispatch: PreparedDispatch::new(
@@ -291,33 +270,6 @@ impl<'a> HsikanBuilder<'a> {
             kernel,
             elements,
         })
-    }
-}
-
-fn supplied<'a, T>(value: Option<&'a T>, operand: &'static str) -> Result<&'a T, ComputeError> {
-    value.ok_or(ComputeError::ShapeMismatch {
-        operand,
-        expected: 1,
-        actual: 0,
-    })
-}
-
-fn shape_error<T>(
-    operand: &'static str,
-    expected: usize,
-    actual: usize,
-) -> Result<T, ComputeError> {
-    Err(ComputeError::ShapeMismatch {
-        operand,
-        expected,
-        actual,
-    })
-}
-
-fn entry<'a, T>(binding: u32, tensor: &'a GpuTensor<T>) -> wgpu::BindGroupEntry<'a> {
-    wgpu::BindGroupEntry {
-        binding,
-        resource: tensor.buffer().as_entire_binding(),
     }
 }
 

@@ -69,6 +69,35 @@
 use crate::common::ids::{DeclId, EdgeId, HyperArcId, NodeId};
 use crate::ir::ir::{ArcRec, DeclKind, DeclNode, EdgeRec, Ir, NodeRec};
 
+// The four record families share the same iteration/count/presence contract.
+// Typed lookups below remain the authority for membership and invalid ids.
+macro_rules! record_accessors {
+    ($table:ident, $id:ty, $record:ty, $lookup:ident, $iter:ident, $count:ident, $contains:ident) => {
+        /// Every live record, with its typed id. Order is deterministic for a
+        /// snapshot and is not part of program semantics.
+        pub fn $iter(&self) -> impl Iterator<Item = ($id, &$record)> + '_ {
+            self.$table
+                .iter()
+                .enumerate()
+                .map(|(i, record)| (<$id>::new(i), record))
+        }
+
+        /// Number of live records, not capacity.
+        #[inline]
+        #[must_use]
+        pub fn $count(&self) -> usize {
+            self.$table.len()
+        }
+
+        /// Whether the id names a live record. Rejects NONE and out-of-range ids.
+        #[inline]
+        #[must_use]
+        pub fn $contains(&self, id: $id) -> bool {
+            self.$lookup(id).is_some()
+        }
+    };
+}
+
 impl Ir {
     // -- record lookup by typed id -----------------------------------------
 
@@ -145,102 +174,42 @@ impl Ir {
         Some((aid, rec))
     }
 
-    // -- iteration ----------------------------------------------------------
-
-    /// Every live declaration, with its id.
-    ///
-    /// Order is deterministic for one snapshot and carries no meaning; see the
-    /// module documentation.
-    pub fn decls(&self) -> impl Iterator<Item = (DeclId, &DeclNode)> + '_ {
-        self.decl_nodes
-            .iter()
-            .enumerate()
-            .map(|(i, d)| (DeclId::new(i), d))
-    }
-
-    /// Every live node record, with its id.
-    pub fn node_records(&self) -> impl Iterator<Item = (NodeId, &NodeRec)> + '_ {
-        self.nodes
-            .iter()
-            .enumerate()
-            .map(|(i, r)| (NodeId::new(i), r))
-    }
-
-    /// Every live edge record, with its id.
-    pub fn edge_records(&self) -> impl Iterator<Item = (EdgeId, &EdgeRec)> + '_ {
-        self.edges
-            .iter()
-            .enumerate()
-            .map(|(i, r)| (EdgeId::new(i), r))
-    }
-
-    /// Every live arc record, with its id.
-    pub fn arc_records(&self) -> impl Iterator<Item = (HyperArcId, &ArcRec)> + '_ {
-        self.arcs
-            .iter()
-            .enumerate()
-            .map(|(i, r)| (HyperArcId::new(i), r))
-    }
-
-    // -- counts -------------------------------------------------------------
-
-    /// Number of **live declarations**, not capacity.
-    #[inline]
-    #[must_use]
-    pub fn decl_count(&self) -> usize {
-        self.decl_nodes.len()
-    }
-
-    /// Number of **live node records**, not capacity.
-    #[inline]
-    #[must_use]
-    pub fn node_count(&self) -> usize {
-        self.nodes.len()
-    }
-
-    /// Number of **live edge records**, not capacity.
-    #[inline]
-    #[must_use]
-    pub fn edge_count(&self) -> usize {
-        self.edges.len()
-    }
-
-    /// Number of **live arc records**, not capacity.
-    #[inline]
-    #[must_use]
-    pub fn arc_count(&self) -> usize {
-        self.arcs.len()
-    }
-
-    // -- containment --------------------------------------------------------
-
-    /// Whether `id` names a live declaration. Rejects `NONE` and out-of-range.
-    #[inline]
-    #[must_use]
-    pub fn contains_decl(&self, id: DeclId) -> bool {
-        self.decl_node(id).is_some()
-    }
-
-    /// Whether `id` names a live node record. Rejects `NONE` and out-of-range.
-    #[inline]
-    #[must_use]
-    pub fn contains_node(&self, id: NodeId) -> bool {
-        self.node(id).is_some()
-    }
-
-    /// Whether `id` names a live edge record. Rejects `NONE` and out-of-range.
-    #[inline]
-    #[must_use]
-    pub fn contains_edge(&self, id: EdgeId) -> bool {
-        self.edge(id).is_some()
-    }
-
-    /// Whether `id` names a live arc record. Rejects `NONE` and out-of-range.
-    #[inline]
-    #[must_use]
-    pub fn contains_arc(&self, id: HyperArcId) -> bool {
-        self.arc(id).is_some()
-    }
+    record_accessors!(
+        decl_nodes,
+        DeclId,
+        DeclNode,
+        decl_node,
+        decls,
+        decl_count,
+        contains_decl
+    );
+    record_accessors!(
+        nodes,
+        NodeId,
+        NodeRec,
+        node,
+        node_records,
+        node_count,
+        contains_node
+    );
+    record_accessors!(
+        edges,
+        EdgeId,
+        EdgeRec,
+        edge,
+        edge_records,
+        edge_count,
+        contains_edge
+    );
+    record_accessors!(
+        arcs,
+        HyperArcId,
+        ArcRec,
+        arc,
+        arc_records,
+        arc_count,
+        contains_arc
+    );
 
     // -- hierarchy, total ----------------------------------------------------
     //
@@ -302,12 +271,8 @@ impl Ir {
 
     /// The children of `id`, as a total iterator.
     ///
-    /// Differs from [`Ir::decl_children`] in more than naming: that iterator
-    /// resolves each step through [`Ir::next_sibling`], which indexes directly
-    /// and therefore panics if a sibling link points out of range. This one
-    /// stops instead. On a well-formed `Ir` the two yield the same sequence;
-    /// they differ only on malformed input, which is exactly when a read API
-    /// should not abort the process.
+    /// All child entry points delegate here. Stops at dangling links and is
+    /// bounded by the declaration count even when the sibling chain cycles.
     pub fn child_decls(&self, id: DeclId) -> ChildDecls<'_> {
         ChildDecls {
             ir: self,

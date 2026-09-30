@@ -21,7 +21,7 @@ pub use stream::{
 };
 
 use crate::common::ids::SymId;
-use crate::ir::canonical_hash::{CanonHashCfg, canonical_program_hash};
+use crate::ir::canonical_hash::{CanonHashCfg, CanonicalPaths};
 use crate::ir::hash::HashId;
 use crate::ir::ir::Ir;
 use crate::ir_stream::DecodeLimits;
@@ -53,6 +53,8 @@ pub struct CborPayload {
 }
 
 /// A payload that has passed every core-owned CBOR boundary check.
+/// Its table contains only referenced symbols. Dense symbol IDs may differ from
+/// the wire input; declaration IDs and canonical model meaning are preserved.
 pub struct DecodedCborPayload {
     payload: CborPayload,
     interner: Interner,
@@ -242,11 +244,8 @@ pub fn encode(
     };
     let validated = validate::payload(payload, false)?;
     let (mut payload, reconstructed_interner) = validated.into_parts();
-    payload.canon_hash = canonical_program_hash(
-        CanonHashCfg::default(),
-        &payload.ir,
-        &reconstructed_interner,
-    );
+    payload.canon_hash =
+        CanonicalPaths::new(&payload.ir).hash(CanonHashCfg::default(), &reconstructed_interner);
 
     let mut bytes = Vec::new();
     ciborium::ser::into_writer(&payload, &mut bytes)

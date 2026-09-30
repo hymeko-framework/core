@@ -5,7 +5,7 @@ mod mod_test_module_store {
     use crate::test_helpers::{log_test_footer, log_test_header};
     use hymeko::common::pathkey::PathKey;
     use hymeko::ir::canonical_hash::{
-        CanonHashCfg, NamespaceError, canonical_program_hash, validate_namespace_roots,
+        CanonHashCfg, CanonicalPaths, NamespaceError, NamespaceValidator,
     };
     use hymeko::module_store::module_store::ModuleStore;
     use hymeko::module_store::source_provider::MemProvider;
@@ -18,6 +18,56 @@ mod mod_test_module_store {
     use std::time::Instant;
 
     #[test]
+    fn compiler_and_validator_share_module_aliases_in_headers_and_values() {
+        let provider = MemProvider::default()
+            .with_file(
+                "root.hymeko",
+                r#"description {
+                @"dep.hymeko" -> dep;
+                using dep.vocab as el;
+                const K = 3.0;
+                header el.base;
+            }
+            root: el.base { n (K * 2.0); @edge el.base { (+root [el.base]); } }
+            "#,
+            )
+            .with_file(
+                "dep.hymeko",
+                "dependency { const D = 4.0; header (D / 2.0); } vocab { base {} }",
+            );
+        let mut store = ModuleStore::new(provider, hymeko::util::real_parser::RealParser);
+        let compiled = store.compile(Path::new("root.hymeko")).unwrap();
+        for (prefix, key) in std::iter::once((Vec::new(), &compiled.root))
+            .chain(compiled.imports.iter().map(|(ns, key)| (vec![*ns], key)))
+        {
+            let ast = store.get(key).unwrap().ast.clone();
+            validate_all_refs_sym_with_prefix(&ast, &prefix, &compiled.idx, &mut store.it).unwrap();
+        }
+        let header = compiled
+            .ir
+            .decls()
+            .find(|(_, node)| store.it.resolve(node.name) == "header")
+            .unwrap()
+            .1;
+        let Some(hymeko::ir::ir::ValueR::Ref(target)) = header.anno.value else {
+            panic!("header reference")
+        };
+        assert_eq!(
+            store
+                .it
+                .resolve(compiled.ir.decl_node(target).unwrap().name),
+            "base"
+        );
+        let n = compiled
+            .ir
+            .decls()
+            .find(|(_, node)| store.it.resolve(node.name) == "n")
+            .unwrap()
+            .1;
+        assert_eq!(n.anno.value, Some(hymeko::ir::ir::ValueR::Num(6.0)));
+    }
+
+    #[test]
     fn course_aliases_resolve_for_every_entry() {
         for entry in ["course.hymeko", "lecture.hymeko", "index.hymeko"] {
             let provider = MemProvider::default()
@@ -28,13 +78,31 @@ mod mod_test_module_store {
                 .with_file("lecture.hymeko", "lecture_description { @\"course.hymeko\"; } lecture {}")
                 .with_file("index.hymeko", "index_description { @\"concepts/production.hymeko\"; @\"course.hymeko\"; } index {}");
             let mut store = ModuleStore::new(provider, hymeko::util::real_parser::RealParser);
-            let compiled = store.compile(Path::new(entry)).unwrap_or_else(|e| panic!("{entry}: {e:?}"));
-            let arcs: Vec<_> = compiled.ir.arcs.iter().filter(|arc|
-                store.it.resolve(compiled.ir.decl_nodes[arc.in_edge.raw()].name) == "topic_production").collect();
-            assert_eq!(arcs.len(), 1, "{entry}: course must be lowered exactly once");
+            let compiled = store
+                .compile(Path::new(entry))
+                .unwrap_or_else(|e| panic!("{entry}: {e:?}"));
+            let arcs: Vec<_> = compiled
+                .ir
+                .arcs
+                .iter()
+                .filter(|arc| {
+                    store
+                        .it
+                        .resolve(compiled.ir.decl_nodes[arc.in_edge.raw()].name)
+                        == "topic_production"
+                })
+                .collect();
+            assert_eq!(
+                arcs.len(),
+                1,
+                "{entry}: course must be lowered exactly once"
+            );
             assert_eq!(arcs[0].refs.len(), 1);
             let target = arcs[0].refs[0].target();
-            assert_eq!(store.it.resolve(compiled.ir.decl_nodes[target.raw()].name), "production_concept");
+            assert_eq!(
+                store.it.resolve(compiled.ir.decl_nodes[target.raw()].name),
+                "production_concept"
+            );
         }
     }
 
@@ -45,10 +113,14 @@ mod mod_test_module_store {
                 .with_file("lectures/l01.hymeko", format!(
                     "lecture_description {{ @\"{import}\"; using metrics as met; }} lecture {{ @topic {{ (+ met.measure); }} }}"))
                 .with_file("concepts/metrics.hymeko", "metrics_description {} metrics { measure {} }");
-            let mut store = ModuleStore::new(provider.clone(), hymeko::util::real_parser::RealParser);
+            let mut store =
+                ModuleStore::new(provider.clone(), hymeko::util::real_parser::RealParser);
             let compiled = store.compile(Path::new("lectures/l01.hymeko")).unwrap();
             let target = compiled.ir.arcs[0].refs[0].target();
-            assert_eq!(store.it.resolve(compiled.ir.decl_nodes[target.raw()].name), "measure");
+            assert_eq!(
+                store.it.resolve(compiled.ir.decl_nodes[target.raw()].name),
+                "measure"
+            );
             assert_eq!(provider.read_count("concepts/metrics.hymeko"), 1);
         }
     }
@@ -58,51 +130,83 @@ mod mod_test_module_store {
         use hymeko::module_store::source_provider::SourceProvider;
         let provider = MemProvider::default();
         for path in ["../secret.hymeko", "lectures/../../secret.hymeko"] {
-            assert!(provider.canonicalize(Path::new(path)).is_err(), "accepted {path}");
+            assert!(
+                provider.canonicalize(Path::new(path)).is_err(),
+                "accepted {path}"
+            );
         }
     }
 
     #[test]
     fn course_provider_normalization_covers_reads_versions_and_filesystem_paths() {
         use hymeko::module_store::source_provider::{SourceProvider, StdFsProvider};
-        let mut memory = MemProvider::default().with_file("concepts/./subject.hymeko", "description{} subject{}");
+        let mut memory = MemProvider::default()
+            .with_file("concepts/./subject.hymeko", "description{} subject{}");
         let first = Path::new("concepts/subject.hymeko");
         let equivalent = Path::new("lectures/../concepts/subject.hymeko");
-        assert_eq!(memory.read(first).unwrap(), memory.read(equivalent).unwrap());
-        assert_eq!(memory.version(first).unwrap(), memory.version(equivalent).unwrap());
+        assert_eq!(
+            memory.read(first).unwrap(),
+            memory.read(equivalent).unwrap()
+        );
+        assert_eq!(
+            memory.version(first).unwrap(),
+            memory.version(equivalent).unwrap()
+        );
         assert_eq!(memory.read_count(equivalent), 2);
 
         let fs = StdFsProvider::new();
         let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../data/minimal_examples");
-        assert_eq!(fs.canonicalize(&base.join("minimal_example.hymeko")).unwrap(),
-            fs.canonicalize(&base.join("../minimal_examples/./minimal_example.hymeko")).unwrap());
+        assert_eq!(
+            fs.canonicalize(&base.join("minimal_example.hymeko"))
+                .unwrap(),
+            fs.canonicalize(&base.join("../minimal_examples/./minimal_example.hymeko"))
+                .unwrap()
+        );
         let absolute = std::env::current_dir().unwrap();
-        let root: std::path::PathBuf = absolute.components().take_while(|part|
-            !matches!(part, std::path::Component::Normal(_))).collect();
-        assert!(fs.canonicalize(&root.join("../not_read.hymeko")).unwrap_err().contains("escapes provider root"));
+        let root: std::path::PathBuf = absolute
+            .components()
+            .take_while(|part| !matches!(part, std::path::Component::Normal(_)))
+            .collect();
+        assert!(
+            fs.canonicalize(&root.join("../not_read.hymeko"))
+                .unwrap_err()
+                .contains("escapes provider root")
+        );
     }
 
     #[test]
     fn course_failed_load_can_be_retried_without_a_spurious_cycle() {
-        let provider = MemProvider::default().with_file("lecture.hymeko",
-            "lecture_description { @\"concepts.hymeko\"; } lecture {}");
+        let provider = MemProvider::default().with_file(
+            "lecture.hymeko",
+            "lecture_description { @\"concepts.hymeko\"; } lecture {}",
+        );
         let mut store = ModuleStore::new(provider, hymeko::util::real_parser::RealParser);
         let error = store.compile(Path::new("lecture.hymeko")).err().unwrap();
         assert!(format!("{error:?}").contains("IoDiag"));
-        store.provider_mut().insert_file("concepts.hymeko", "concepts_description{} concepts{}");
+        store
+            .provider_mut()
+            .insert_file("concepts.hymeko", "concepts_description{} concepts{}");
         assert!(store.compile(Path::new("lecture.hymeko")).is_ok());
     }
 
     #[test]
     fn course_source_metadata_rejects_corruption_and_marks_synthetic_declarations() {
         use hymeko::ir::coherence::{CoherenceLimits, Finding, validate_hierarchy_index_coherence};
-        let mut store = ModuleStore::new(MemProvider::default().with_file("a.hymeko", "description{} a{}"),
-            hymeko::util::real_parser::RealParser);
+        let mut store = ModuleStore::new(
+            MemProvider::default().with_file("a.hymeko", "description{} a{}"),
+            hymeko::util::real_parser::RealParser,
+        );
         let compiled = store.compile(Path::new("a.hymeko")).unwrap();
         let mut ir = compiled.ir.clone();
         ir.decl_file[0] = 99;
         assert!(serde_json::to_value(&ir).is_err());
-        let report = validate_hierarchy_index_coherence(&ir, &compiled.idx, &store.it, CoherenceLimits::default()).unwrap_err();
+        let report = validate_hierarchy_index_coherence(
+            &ir,
+            &compiled.idx,
+            &store.it,
+            CoherenceLimits::default(),
+        )
+        .unwrap_err();
         assert!(report.findings.contains(&Finding::InvalidSourceProvenance));
         let mut ir = compiled.ir.clone();
         let appended = ir.push_decl(ir.decl_nodes[0].clone());
@@ -120,14 +224,22 @@ mod mod_test_module_store {
         let mut store = ModuleStore::new(provider, hymeko::util::real_parser::RealParser);
         let compiled = store.compile(Path::new("lecture.hymeko")).unwrap();
         let wire = serde_json::to_value(&compiled.ir).unwrap();
-        let files = wire["files"].as_array().expect("IR must expose source files");
-        let decl_file = wire["decl_file"].as_array().expect("IR must expose declaration provenance");
+        let files = wire["files"]
+            .as_array()
+            .expect("IR must expose source files");
+        let decl_file = wire["decl_file"]
+            .as_array()
+            .expect("IR must expose declaration provenance");
         assert_eq!(files.len(), 2);
         assert_eq!(decl_file.len(), compiled.ir.decl_nodes.len());
         for (id, decl) in compiled.ir.decl_nodes.iter().enumerate() {
             let file = &files[decl_file[id].as_u64().unwrap() as usize];
             let name = store.it.resolve(decl.name);
-            let expected = if ["concepts", "subject"].contains(&name) { "concepts.hymeko" } else { "lecture.hymeko" };
+            let expected = if ["concepts", "subject"].contains(&name) {
+                "concepts.hymeko"
+            } else {
+                "lecture.hymeko"
+            };
             assert_eq!(file, expected, "declaration {id}: {name}");
         }
         let restored: hymeko::ir::ir::Ir = serde_json::from_value(wire.clone()).unwrap();
@@ -144,35 +256,36 @@ mod mod_test_module_store {
         let refs = &compiled.ir.arcs[0].refs;
         let subject = refs[0].target();
         let topic = refs[1].target();
-        assert_eq!(store.it.resolve(compiled.ir.decl_nodes[subject.raw()].name), "subject");
-        assert_eq!(store.it.resolve(compiled.ir.decl_nodes[topic.raw()].name), "topic");
+        assert_eq!(
+            store.it.resolve(compiled.ir.decl_nodes[subject.raw()].name),
+            "subject"
+        );
+        assert_eq!(
+            store.it.resolve(compiled.ir.decl_nodes[topic.raw()].name),
+            "topic"
+        );
         assert_ne!(compiled.ir.as_node(subject).unwrap().raw(), subject.raw());
         assert!(compiled.ir.as_edge(topic).is_some());
         assert!(compiled.ir.as_node(topic).is_none());
     }
 
     #[test]
-    fn compilation_preserves_normalized_ir_bytes() {
-        // Frozen on unmodified Core f305ade before removing the AST clone.
-        // The serialized IR includes declaration hashes and namespace metadata.
-        for (name, root, dep, expected) in [
+    fn compiled_ir_roundtrips_without_hash_caches() {
+        for (name, root, dep) in [
             (
                 "mixed_values",
                 "Description{} Example { node0{} @edge { (+node0 [node0, \"payload\", [node0, -0.0]], -node0 [], ~node0); } }",
                 MODULE_STORE_SIMPLE_DEP_SRC,
-                "363c33b5902fe43fe50262e7bb5fc3424eb047d5dad575c7644636e1c1953ffe",
             ),
             (
                 "imported",
                 MODULE_STORE_RESOLVE_ROOT_SRC,
                 MODULE_STORE_RESOLVE_DEP_SRC,
-                "9ba27ede1623362367c33939e1092af8fd380049ce9d1fdf41b09106fed76fd4",
             ),
             (
                 "empty_import",
                 MODULE_STORE_SIMPLE_ROOT_SRC,
                 MODULE_STORE_SIMPLE_DEP_SRC,
-                "81b7cb9a0de3c1dfe844115770e27856bfeb2ff938bb113cf396ba1bafff34e2",
             ),
         ] {
             let provider = MemProvider::default()
@@ -182,29 +295,32 @@ mod mod_test_module_store {
             let compiled = store.compile(Path::new(MODULE_STORE_ROOT_FILE)).unwrap();
             assert_eq!(
                 compiled.canon_hash,
-                canonical_program_hash(CanonHashCfg::default(), &compiled.ir, &store.it),
+                CanonicalPaths::new(&compiled.ir).hash(CanonHashCfg::default(), &store.it),
                 "shared and standalone canonical paths: {name}"
             );
             assert_eq!(
-                validate_namespace_roots(&compiled.ir, &compiled.idx),
+                NamespaceValidator::new(&CanonicalPaths::new(&compiled.ir)).validate(&compiled.idx),
                 Ok(())
             );
             let mut ir = compiled.ir.clone();
             ir.meta.as_mut().unwrap().created_at_unix_ns = 0;
-            // New optional source metadata has its own round-trip controls above.
-            // This pre-optimization KAT continues to freeze every legacy IR field.
-            ir.files.clear();
-            ir.decl_file.clear();
-            let digest = blake3::hash(&serde_json::to_vec(&ir).unwrap());
-            println!("NORMALIZED_IR {name} {digest}");
-            assert_eq!(digest.to_hex().as_str(), expected, "fixture {name}");
+            let encoded = serde_json::to_value(&ir).unwrap();
+            for removed in ["doc_hash", "decl_hash", "arc_hash"] {
+                assert!(encoded.get(removed).is_none(), "obsolete field: {removed}");
+            }
+            let decoded: hymeko::ir::ir::Ir = serde_json::from_value(encoded).unwrap();
+            assert_eq!(
+                hymeko::ir::semantic_digest::semantic_model_digest(&ir, &store.it),
+                hymeko::ir::semantic_digest::semantic_model_digest(&decoded, &store.it),
+                "fixture {name}"
+            );
 
             // Corrupt the first indexed declaration without changing its path length.
             // Validation must still report the same first mismatch by declaration ID.
             if let Some(&did) = compiled.idx.by_path.values().min_by_key(|did| did.raw()) {
                 ir.decl_nodes[did.raw()].name = store.it.intern("corrupted_name");
                 assert_eq!(
-                    validate_namespace_roots(&ir, &compiled.idx),
+                    NamespaceValidator::new(&CanonicalPaths::new(&ir)).validate(&compiled.idx),
                     Err(NamespaceError::PathMismatch { decl: did }),
                     "fixture {name}"
                 );
@@ -225,9 +341,20 @@ mod mod_test_module_store {
         let mut store = ModuleStore::new(provider, hymeko::util::real_parser::RealParser);
         let compiled = store.compile(Path::new("index.hymeko")).unwrap();
         for arc in &compiled.ir.arcs {
-            let edge = store.it.resolve(compiled.ir.decl_nodes[arc.in_edge.raw()].name);
-            let target = store.it.resolve(compiled.ir.decl_nodes[arc.refs[0].target().raw()].name);
-            assert_eq!(target, if edge == "topic_a" { "subject_a" } else { "subject_b" });
+            let edge = store
+                .it
+                .resolve(compiled.ir.decl_nodes[arc.in_edge.raw()].name);
+            let target = store
+                .it
+                .resolve(compiled.ir.decl_nodes[arc.refs[0].target().raw()].name);
+            assert_eq!(
+                target,
+                if edge == "topic_a" {
+                    "subject_a"
+                } else {
+                    "subject_b"
+                }
+            );
         }
         assert_eq!(compiled.ir.arcs.len(), 2);
         assert_eq!(compiled.ir.files.len(), 5);
@@ -242,7 +369,10 @@ mod mod_test_module_store {
             .with_file("concepts.hymeko", "concepts_description {} concepts { subject {} }");
         let mut store = ModuleStore::new(provider.clone(), hymeko::util::real_parser::RealParser);
         let compiled = store.compile(Path::new("index.hymeko")).unwrap();
-        assert_eq!(compiled.ir.arcs[0].refs[0].target(), compiled.ir.arcs[1].refs[0].target());
+        assert_eq!(
+            compiled.ir.arcs[0].refs[0].target(),
+            compiled.ir.arcs[1].refs[0].target()
+        );
         assert_eq!(compiled.ir.files.len(), 4);
         assert_eq!(provider.read_count("concepts.hymeko"), 1);
     }
@@ -250,10 +380,19 @@ mod mod_test_module_store {
     #[test]
     fn course_invalid_imported_using_is_not_silently_ignored() {
         let provider = MemProvider::default()
-            .with_file("index.hymeko", "index_description { @\"course.hymeko\"; } index {}")
-            .with_file("course.hymeko", "course_description { using missing as c; } course {}");
+            .with_file(
+                "index.hymeko",
+                "index_description { @\"course.hymeko\"; } index {}",
+            )
+            .with_file(
+                "course.hymeko",
+                "course_description { using missing as c; } course {}",
+            );
         let mut store = ModuleStore::new(provider, hymeko::util::real_parser::RealParser);
-        let error = store.compile(Path::new("index.hymeko")).err().expect("invalid using must fail");
+        let error = store
+            .compile(Path::new("index.hymeko"))
+            .err()
+            .expect("invalid using must fail");
         let diagnostic = format!("{error:?}");
         assert!(diagnostic.contains("UnresolvedRef"));
         assert!(diagnostic.contains("<using>"));
@@ -263,10 +402,19 @@ mod mod_test_module_store {
     #[test]
     fn course_root_aliases_do_not_leak_into_imports() {
         let provider = MemProvider::default()
-            .with_file("index.hymeko", "index_description { @\"course.hymeko\"; using index as c; } index { subject {} }")
-            .with_file("course.hymeko", "course_description {} course { @topic { (+ c.subject); } }");
+            .with_file(
+                "index.hymeko",
+                "index_description { @\"course.hymeko\"; using index as c; } index { subject {} }",
+            )
+            .with_file(
+                "course.hymeko",
+                "course_description {} course { @topic { (+ c.subject); } }",
+            );
         let mut store = ModuleStore::new(provider, hymeko::util::real_parser::RealParser);
-        let error = store.compile(Path::new("index.hymeko")).err().expect("entry alias leaked into dependency");
+        let error = store
+            .compile(Path::new("index.hymeko"))
+            .err()
+            .expect("entry alias leaked into dependency");
         let diagnostic = format!("{error:?}");
         assert!(diagnostic.contains("UnresolvedRef"));
         assert!(diagnostic.contains("course_description.course.topic"));
@@ -276,25 +424,40 @@ mod mod_test_module_store {
     #[test]
     fn course_source_metadata_is_optional_validated_and_hash_neutral() {
         use hymeko::ir::ir::Ir;
-        use hymeko::ir::semantic_digest::semantic_model_digest_v2;
+        use hymeko::ir::semantic_digest::semantic_model_digest;
         use hymeko::writers::cbor_writer;
-        let mut store = ModuleStore::new(MemProvider::default()
-            .with_file("plain.hymeko", "description{} model{a \"árvíztűrő 東京\";}"),
-            hymeko::util::real_parser::RealParser);
+        let mut store = ModuleStore::new(
+            MemProvider::default()
+                .with_file("plain.hymeko", "description{} model{a \"árvíztűrő 東京\";}"),
+            hymeko::util::real_parser::RealParser,
+        );
         let compiled = store.compile(Path::new("plain.hymeko")).unwrap();
-        assert_eq!(compiled.canon_hash.0.iter().map(|b| format!("{b:02x}")).collect::<String>(),
-            "f004527060201656811f52eeaa7cbb2562961db352143971fcebc5e646ecc7b8");
+        assert_eq!(
+            compiled
+                .canon_hash
+                .0
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>(),
+            "f004527060201656811f52eeaa7cbb2562961db352143971fcebc5e646ecc7b8"
+        );
         let structural = compiled.canon_hash;
-        let semantic = semantic_model_digest_v2(&compiled.ir, &store.it);
+        let semantic = semantic_model_digest(&compiled.ir, &store.it);
         let mut ir = compiled.ir.clone();
         ir.files[0] = "moved/lecture.hymeko".into();
-        assert_eq!(canonical_program_hash(CanonHashCfg::default(), &ir, &store.it), structural);
-        assert_eq!(semantic_model_digest_v2(&ir, &store.it), semantic);
+        assert_eq!(
+            CanonicalPaths::new(&ir).hash(CanonHashCfg::default(), &store.it),
+            structural
+        );
+        assert_eq!(semantic_model_digest(&ir, &store.it), semantic);
         let wire = serde_json::to_value(&ir).unwrap();
         for key in ["files", "decl_file"] {
             let mut invalid = wire.clone();
             invalid.as_object_mut().unwrap().remove(key);
-            assert!(serde_json::from_value::<Ir>(invalid).is_err(), "missing {key}");
+            assert!(
+                serde_json::from_value::<Ir>(invalid).is_err(),
+                "missing {key}"
+            );
         }
         for ids in [serde_json::json!([]), serde_json::json!([99, 0])] {
             let mut invalid = wire.clone();
@@ -421,7 +584,6 @@ mod mod_test_module_store {
         assert_eq!(format!("{:?}", ms.get(&dep_key).unwrap().ast), dep_before);
         drop(ms);
         assert_eq!(compiled.ir.arcs[0].refs[0].target(), idx.by_path[&foo_path]);
-        assert!(compiled.ir.decl_hash.iter().all(Option::is_some));
         log_test_footer(
             "module_store_allows_resolving_imported_refs",
             Some(start.elapsed()),

@@ -5,12 +5,12 @@
 //! Each case builds two IRs that mean the same thing and were built
 //! differently, proves the equivalence with the independent oracle
 //! (`super::oracle`, which never calls the hash), and only then compares
-//! `canonical_program_hash`.
+//! `CanonicalPaths::hash`.
 //!
 //! Run against the **unmodified** implementation. This phase does not fix
 //! canonical hashing.
 
-use hymeko::ir::canonical_hash::{CanonHashCfg, canonical_program_hash};
+use hymeko::ir::canonical_hash::{CanonHashCfg, CanonicalPaths};
 use hymeko::ir::hash::HashId;
 
 use crate::unified_ir::support::builder::{S, TestIr};
@@ -19,7 +19,7 @@ use crate::unified_ir::support::oracle::{
 };
 
 fn hash(t: &TestIr) -> HashId {
-    canonical_program_hash(CanonHashCfg::default(), &t.ir, &t.it)
+    CanonicalPaths::new(&t.ir).hash(CanonHashCfg::default(), &t.it)
 }
 
 /// One comparison, reported in full so a failure is diagnosable from the
@@ -73,7 +73,7 @@ fn assert_invariant(case: &'static str, a: &TestIr, b: &TestIr) {
     );
     assert!(
         v.hash_eq,
-        "{} — oracle says equivalent, canonical_program_hash disagrees. \
+        "{} — oracle says equivalent, CanonicalPaths::hash disagrees. \
          COUNTEREXAMPLE.\nA dense: {}\nB dense: {}",
         case,
         dense_id_form(a),

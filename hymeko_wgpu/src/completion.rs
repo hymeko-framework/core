@@ -92,7 +92,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use hymeko::tensor::compute::{BackendKind, ComputeError};
+use hymeko_tensor::compute::{BackendKind, ComputeError};
 
 /// A submission's position in the queue's completion order.
 ///

@@ -1,5 +1,5 @@
 # hymeko/core — standalone workspace: the HyMeKo semantic core.
-#   hymeko_core : IR, encoding (writers), tensor primitives
+#   hymeko_core : IR, encoding (writers), IR-to-tensor adapters
 #   hymeko_hnn  : RELOCATED 2026-08-31 to hymeko/nagare as hymeko_nagare::hnn
 # `parser` is an external repo (hymeko/parser), pulled as a git dependency.
 [workspace]
@@ -10,7 +10,8 @@ members = ["hymeko_core", "hymeko_wgpu"]
 serde = "1.0.228"
 blake3 = "1.8.3"
 rayon = "1.11.0"
-arrow = "58.0.0"
-iceoryx2 = "0.8.1"
 log = "0.4.22"
 parser = { git = "ssh://git@192.168.1.228:2222/hymeko/parser.git", rev = "f11628591a8183586492807ecdf43c64e6d31c5f" }
+# Tensor extraction provider, published on tensor feat/tensor-extraction; ledger in
+# docs/hymeko-kernel-ownership.md (tensor extraction, 2026-09-23).
+hymeko_tensor = { git = "ssh://git@192.168.1.228:2222/hymeko/tensor.git", rev = "98c08a4504a4f98acd2941e34c0f3f3baa6694de" }

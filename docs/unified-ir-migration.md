@@ -330,7 +330,7 @@ The +20…49 % M2a reported was a **redundant sentinel guard M2a itself introduc
 | `writers/ir_writer.rs` | 3 | 0 |
 | `hymeko_hnn/.../hypergraphview.rs` | 7 | 0 |
 
-**Unexplained remaining: 0.** Retained direct access, each with a category: `ir/ir.rs` (storage implementation), `ir/lower.rs` (construction), `ir/canonical_hash.rs` and `ir/hash_pass.rs` (representation-owner algorithms), `ir/coherence.rs` (must read raw storage to *detect* incoherence), serde derives, and malformed-state tests.
+**Unexplained remaining: 0.** Retained direct access, each with a category: `ir/ir.rs` (storage implementation), `ir/lower.rs` (construction), `ir/canonical_hash.rs` and `ir/semantic_digest.rs` (representation-owner algorithms), `ir/coherence.rs` (must read raw storage to *detect* incoherence), serde derives, and malformed-state tests.
 
 `generators.rs` appeared in the grep with 10 hits and is **not an IR consumer** — `self.edges` there is the generator's own `Vec<Vec<usize>>`. Counting it would have inflated the inventory.
 

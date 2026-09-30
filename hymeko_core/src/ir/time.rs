@@ -5,7 +5,7 @@
 // "unreachable" and breaks the demo's `parse_and_compile`. Gate the
 // real impl behind cfg(not(wasm32)) and return 0 on wasm so the build
 // stays portable. The Meta timestamp is informational only — canonical
-// hashing in `canonical_hash::canonical_program_hash` deliberately
+// hashing in `canonical_hash::CanonicalPaths::hash` deliberately
 // excludes Meta from the hash, so a 0 stamp on wasm doesn't change
 // hash compatibility with native builds.
 

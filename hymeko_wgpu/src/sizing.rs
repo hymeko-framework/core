@@ -25,7 +25,7 @@
 //! the two numbers in one struct is what stops a caller from padding a transfer
 //! and reading four bytes of nothing back into a zero-element tensor.
 
-use hymeko::tensor::compute::{ComputeError, TensorShape};
+use hymeko_tensor::compute::{ComputeError, TensorShape};
 
 /// Bytes per `f32`, named so the arithmetic below reads as intent.
 const F32_BYTES: usize = std::mem::size_of::<f32>();

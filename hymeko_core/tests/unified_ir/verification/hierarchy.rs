@@ -2,16 +2,10 @@
 //!
 //! APPROVED-CORE-EDIT: unified-ir-m0-5-tests-and-benchmarks (2026-08-28).
 //!
-//! Structure first, timing later. The question that matters for the Merkle-fold
-//! identity design (architecture §F.6) is *how deep real declaration trees get*,
-//! because the incremental update cost is O(changed × depth) and because
-//! `canonical_hash::compute_subtree_hashes_with_kinds` contains a genuinely
-//! **recursive** inner `fn rec(...)` that descends one stack frame per level.
-//!
-//! Depth here means **path depth**: the canonical hash builds its skeleton
-//! forest from `Index` path prefixes, not from `DeclNode.parent` (proven by
-//! `invariance::intrusive_parent_links_do_not_affect_the_canonical_hash`), so
-//! the recursion depth is the path-nesting depth.
+//! `SkeletonForest::subtree_hashes` folds declaration children iteratively.
+//! The forest comes from `DeclNode.parent`; the resolution `Index` is used
+//! here only to report fixture path depths. These ordinary correctness cases
+//! exercise chain, wide and high-cardinality input shapes.
 //!
 //! Dangerous depths are deliberately **not** exercised here — a stack overflow
 //! aborts the whole test process, taking 150+ unrelated tests with it. They run
@@ -22,7 +16,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use hymeko::common::ids::DeclId;
-use hymeko::ir::canonical_hash::{CanonHashCfg, canonical_program_hash};
+use hymeko::ir::canonical_hash::{CanonHashCfg, CanonicalPaths};
 use hymeko::ir::ir::DeclKind;
 
 use crate::unified_ir::support::builder::{S, TestIr};
@@ -115,8 +109,8 @@ fn synthetic_chain_depths_are_traversable_and_hashable() {
             );
         }
 
-        // Canonical hash: this is the recursive path.
-        let h = canonical_program_hash(CanonHashCfg::default(), &t.ir, &t.it);
+        // Canonical hash: iterative subtree fold and Pruefer traversal.
+        let h = CanonicalPaths::new(&t.ir).hash(CanonHashCfg::default(), &t.it);
 
         // Semantic oracle at the same depth.
         let form = crate::unified_ir::support::oracle::semantic_form(
@@ -151,7 +145,7 @@ fn synthetic_wide_hierarchy_is_traversable_and_hashable() {
     let refs: Vec<_> = kids.iter().take(64).map(|&d| (d, S::Plus)).collect();
     t.arc(e, &refs);
 
-    let h = canonical_program_hash(CanonHashCfg::default(), &t.ir, &t.it);
+    let h = CanonicalPaths::new(&t.ir).hash(CanonHashCfg::default(), &t.it);
     eprintln!(
         "[depth] wide hierarchy: decls={} depth=2 branching=2000 hash_prefix={:02x}{:02x}",
         t.ir.decl_nodes.len(),
@@ -173,7 +167,7 @@ fn synthetic_high_cardinality_edge_is_hashable() {
     let refs: Vec<_> = nodes.iter().map(|&d| (d, S::Plus)).collect();
     t.arc(e, &refs);
 
-    let h = canonical_program_hash(CanonHashCfg::default(), &t.ir, &t.it);
+    let h = CanonicalPaths::new(&t.ir).hash(CanonHashCfg::default(), &t.it);
     eprintln!(
         "[depth] high-cardinality edge: arity=1000 hash_prefix={:02x}{:02x}",
         h.0[0], h.0[1]

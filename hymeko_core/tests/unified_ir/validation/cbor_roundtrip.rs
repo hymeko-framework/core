@@ -124,7 +124,10 @@ fn every_lowerable_corpus_program_round_trips_through_the_public_facade() {
             lowered += 1;
         }
     }
-    assert_eq!(lowered, 103, "the codec gate must include the newly lowerable transitive-import scenario");
+    assert_eq!(
+        lowered, 103,
+        "the codec gate must include the newly lowerable transitive-import scenario"
+    );
 }
 
 #[test]
@@ -215,7 +218,6 @@ fn push_child(ir: &mut Ir, parent: DeclId, kind: DeclKind, name: SymId) -> DeclI
         next_sibling: DeclId::NONE,
         anno: AnnoR::default(),
     });
-    ir.decl_hash.push(None);
     let previous = ir.decl_nodes[parent.raw()].last_child;
     if previous.is_none() {
         ir.decl_nodes[parent.raw()].first_child = id;
@@ -244,7 +246,6 @@ fn incidence_heavy_memory_fixture() -> (Ir, Index, Interner) {
         next_sibling: DeclId::NONE,
         anno: AnnoR::default(),
     });
-    ir.decl_hash.push(None);
     ir.nodes.push(NodeRec::new(root, Vec::new()));
     ir.bind_node_decl(root, NodeId::new(0)).unwrap();
     index.by_path.insert(PathKey(vec![root_name]), root);
@@ -285,7 +286,6 @@ fn incidence_heavy_memory_fixture() -> (Ir, Index, Interner) {
             in_edge: edge_decl,
             refs,
         });
-        ir.arc_hash.push(None);
         ir.edges[edge_id.raw()].arcs.push(arc_id);
         let arc_decl = push_child(&mut ir, edge_decl, DeclKind::HyperArc, arc_name);
         ir.bind_arc_decl(arc_decl, arc_id).unwrap();
@@ -295,8 +295,6 @@ fn incidence_heavy_memory_fixture() -> (Ir, Index, Interner) {
 
 fn conservative_public_ir_heap_bytes(ir: &Ir) -> usize {
     size_of::<Ir>()
-        + ir.decl_hash.capacity() * size_of::<Option<hymeko::ir::hash::HashId>>()
-        + ir.arc_hash.capacity() * size_of::<Option<hymeko::ir::hash::HashId>>()
         + ir.decl_nodes.capacity() * size_of::<DeclNode>()
         + ir.nodes.capacity() * size_of::<NodeRec>()
         + ir.edges.capacity() * size_of::<EdgeRec>()

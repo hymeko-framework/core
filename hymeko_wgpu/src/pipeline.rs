@@ -35,7 +35,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use hymeko::tensor::compute::{BackendKind, ComputeError};
+use hymeko_tensor::compute::{BackendKind, ComputeError};
 
 /// Which activation formula a kernel compiles.
 ///

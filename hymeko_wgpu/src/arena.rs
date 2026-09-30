@@ -78,7 +78,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use hymeko::tensor::compute::{BackendKind, ComputeError, TensorShape};
+use hymeko_tensor::compute::{BackendKind, ComputeError, TensorShape};
 
 use crate::backend::WgpuBackend;
 use crate::completion::{CompletionTracker, SubmissionEpoch};

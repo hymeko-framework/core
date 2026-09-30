@@ -12,8 +12,8 @@
 
 #![allow(dead_code)]
 
-use hymeko::tensor::representations::sparse::SparseTensorContract;
-use hymeko::tensor::representations::tensor_csr::TensorCsr;
+use hymeko_tensor::representations::sparse::SparseTensorContract;
+use hymeko_tensor::representations::tensor_csr::TensorCsr;
 use hymeko_wgpu::{ComputeError, GpuCsrMatrix, ResourceFactory, WgpuBackend};
 
 /// The CPU/WGPU parity bound, **declared before any number was measured** and never relaxed.

@@ -2,7 +2,7 @@
 //!
 //! APPROVED-CORE-EDIT: unified-ir-m0-5-tests-and-benchmarks (2026-08-28).
 //!
-//! If equivalence were defined by `canonical_program_hash`, then "equivalent
+//! If equivalence were defined by `CanonicalPaths::hash`, then "equivalent
 //! histories hash identically" would be a tautology and the M0.5 test would
 //! prove nothing. So this module derives meaning independently, by walking the
 //! `Ir` and the `Index` directly, and emits a normalised textual form. Two IRs
@@ -17,7 +17,7 @@
 //! | Ordering | Status | Evidence |
 //! |---|---|---|
 //! | Dense `DeclId`/`NodeId`/`EdgeId` assignment | **representational** | `canonical_hash` keys everything on `PathKey`; `verts`/`children`/`roots` are sorted before use |
-//! | Sibling order among declarations | **representational** | `compute_subtree_hashes_with_kinds` sorts child hashes (`ch.sort()`) before folding |
+//! | Sibling order among declarations | **representational** | `SkeletonForest::subtree_hashes` sorts child hashes (`ch.sort()`) before folding |
 //! | `Vec` insertion order of `Ir.nodes` / `Ir.edges` | **representational** | never read positionally by the hash; only `.decl` is followed |
 //! | **Arc order within an edge** (`EdgeRec.arcs` position) | **SEMANTIC — by the hash** | `canonical_incidence_bytes` writes `ai as u16` and sorts on it |
 //! | **Reference slot within an arc** (`ArcRec.refs` position) | **SEMANTIC — by the hash** | same function writes `slot as u16` and sorts on it |

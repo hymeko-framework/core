@@ -25,6 +25,8 @@
 //! to the transaction layer, which Phase 10A does not implement; this type only
 //! provides the comparison it will need.
 
+use super::reader::{LittleEndianReader, LittleEndianValue};
+
 /// Bytes this occupies on the wire: four little-endian `u64`.
 pub const VERSION_WIRE_BYTES: usize = 32;
 
@@ -99,17 +101,21 @@ impl SnapshotVersion {
     /// be out of range.
     #[must_use]
     pub fn from_le_bytes(bytes: &[u8; VERSION_WIRE_BYTES]) -> Self {
-        let rd = |o: usize| -> u64 {
-            let mut b = [0u8; 8];
-            b.copy_from_slice(&bytes[o..o + 8]);
-            u64::from_le_bytes(b)
-        };
+        let reader = LittleEndianReader::new(bytes);
         Self {
-            topology: rd(0),
-            weights: rd(8),
-            features: rd(16),
-            params: rd(24),
+            topology: reader.read(0),
+            weights: reader.read(8),
+            features: reader.read(16),
+            params: reader.read(24),
         }
+    }
+}
+
+impl LittleEndianValue for SnapshotVersion {
+    type Bytes = [u8; VERSION_WIRE_BYTES];
+
+    fn from_le_bytes(bytes: Self::Bytes) -> Self {
+        Self::from_le_bytes(&bytes)
     }
 }
 

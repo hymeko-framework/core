@@ -5,19 +5,8 @@
 
 //! Hierarchy / `Index` coherence validation.
 //!
-//! `Ir` carries the same hierarchy twice and keeps neither in step with the
-//! other. The intrusive links (`DeclNode.parent`, `first_child`, `last_child`,
-//! `next_sibling`) describe one tree; the `Index` path keys describe another.
-//! Nothing enforces that they agree, and the two current hash systems disagree
-//! about which one is authoritative: `canonical_program_hash` reads *only* the
-//! `Index` path prefixes, while `hash_pass::compute_merkle_hashes` walks *only*
-//! the intrusive child lists.
-//!
-//! User decision **U2** makes `parent`/`children` canonical and demotes the
-//! path `Index` to a derived view. This validator exists to make that migration
-//! safe: while both structures are populated independently it proves they agree,
-//! and once the index is derived *from* the hierarchy incoherence becomes
-//! unrepresentable and this module should be deleted rather than kept.
+//! The IR hierarchy is canonical. This validator proves that a derived resolution
+//! `Index` describes the same declarations before the compiler discards that index.
 //!
 //! # Preconditions
 //!
@@ -160,17 +149,12 @@ pub fn validate_hierarchy_index_coherence(
     }
 
     // --- parallel array lengths -------------------------------------------
-    for (name, len) in [
-        ("decl_hash", ir.decl_hash.len()),
-        ("decl_to_record", ir.decl_to_record.len()),
-    ] {
-        if len != n {
-            c.push(Finding::ParallelArrayLengthMismatch {
-                array: name,
-                len,
-                expected: n,
-            });
-        }
+    if ir.decl_to_record.len() != n {
+        c.push(Finding::ParallelArrayLengthMismatch {
+            array: "decl_to_record",
+            len: ir.decl_to_record.len(),
+            expected: n,
+        });
     }
 
     // --- index -> declaration ---------------------------------------------
@@ -200,7 +184,7 @@ pub fn validate_hierarchy_index_coherence(
     }
 
     // Path-prefix parent: the nearest strictly-shorter prefix that is itself
-    // indexed. Mirrors what `canonical_hash::build_skeleton_forest` computes.
+    // indexed. Mirrors what `canonical_hash::SkeletonForest::new` computes.
     let by_path_lookup: std::collections::HashMap<&[u32], DeclId> =
         indexed.iter().map(|(d, p)| (p.as_slice(), *d)).collect();
 

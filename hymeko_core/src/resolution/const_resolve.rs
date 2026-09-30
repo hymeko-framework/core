@@ -17,11 +17,12 @@
 //!
 //! evaluates fine. Cycles are detected and reported.
 
+use crate::sym_ast::DeclarationFields;
 use std::collections::HashMap;
 
 use parser::ast::{
-    Anno, ArcInner, BinOp, ConstDecl, ConstExpr, Description, EdgeDecl, EdgeInner, HyperItem,
-    NodeDecl, NodeInner, Ref, RefAtom, SignedRef, Value,
+    Anno, BinOp, ConstDecl, ConstExpr, Description, HyperAnnotatedElement, HyperItem, SignedRef,
+    Value,
 };
 
 use crate::common::ids::SymId;
@@ -63,87 +64,95 @@ pub fn evaluate_consts(
     decls: &[ConstDecl<SymId>],
     it: &Interner,
 ) -> Result<HashMap<SymId, f64>, ConstResolveError> {
-    // Build name → expr lookup. Last decl wins on shadowing (matches
-    // the surface ordering — declared later overrides declared earlier).
-    let mut by_name: HashMap<SymId, &ConstExpr<SymId>> = HashMap::with_capacity(decls.len());
-    for d in decls {
-        by_name.insert(d.name, &d.value);
+    let mut definitions = ConstDefinitions {
+        by_name: decls.iter().map(|d| (d.name, &d.value)).collect(),
+        resolved: HashMap::with_capacity(decls.len()),
+        in_progress: Vec::new(),
+        it,
+    };
+    // Source order determines the first diagnostic, even for unused constants.
+    for decl in decls {
+        definitions.resolve(decl.name)?;
     }
+    Ok(definitions.resolved)
+}
 
-    let mut resolved: HashMap<SymId, f64> = HashMap::with_capacity(decls.len());
-    let mut in_progress: Vec<SymId> = Vec::new(); // for cycle detection
+/// One arithmetic traversal; strategies own dependency evaluation or table lookup.
+trait ConstReferences {
+    fn resolve(&mut self, name: SymId) -> Result<f64, ConstResolveError>;
 
-    fn eval(
-        sym: SymId,
-        by_name: &HashMap<SymId, &ConstExpr<SymId>>,
-        resolved: &mut HashMap<SymId, f64>,
-        in_progress: &mut Vec<SymId>,
-        it: &Interner,
-    ) -> Result<f64, ConstResolveError> {
-        if let Some(&v) = resolved.get(&sym) {
-            return Ok(v);
-        }
-        if in_progress.contains(&sym) {
-            // Build cycle path starting from `sym`'s first appearance.
-            let start = in_progress.iter().position(|&s| s == sym).unwrap();
-            let mut cycle: Vec<String> = in_progress[start..]
-                .iter()
-                .map(|s| it.resolve(*s).to_string())
-                .collect();
-            cycle.push(it.resolve(sym).to_string());
-            return Err(ConstResolveError::Cycle { names: cycle });
-        }
-        let expr = by_name
-            .get(&sym)
-            .ok_or_else(|| ConstResolveError::UndefinedRef {
-                name: it.resolve(sym).to_string(),
-            })?;
-        in_progress.push(sym);
-        let v = eval_expr(expr, by_name, resolved, in_progress, it)?;
-        in_progress.pop();
-        resolved.insert(sym, v);
-        Ok(v)
-    }
-
-    fn eval_expr(
-        e: &ConstExpr<SymId>,
-        by_name: &HashMap<SymId, &ConstExpr<SymId>>,
-        resolved: &mut HashMap<SymId, f64>,
-        in_progress: &mut Vec<SymId>,
-        it: &Interner,
-    ) -> Result<f64, ConstResolveError> {
-        Ok(match e {
+    fn evaluate(&mut self, expr: &ConstExpr<SymId>) -> Result<f64, ConstResolveError> {
+        Ok(match expr {
             ConstExpr::Lit(n) => *n,
             ConstExpr::Pi => std::f64::consts::PI,
-            ConstExpr::Exp(arg) => eval_expr(arg, by_name, resolved, in_progress, it)?.exp(),
-            ConstExpr::Neg(arg) => -eval_expr(arg, by_name, resolved, in_progress, it)?,
-            ConstExpr::Bin(op, l, r) => {
-                let lv = eval_expr(l, by_name, resolved, in_progress, it)?;
-                let rv = eval_expr(r, by_name, resolved, in_progress, it)?;
+            ConstExpr::Exp(arg) => self.evaluate(arg)?.exp(),
+            ConstExpr::Neg(arg) => -self.evaluate(arg)?,
+            ConstExpr::Ref(name) => self.resolve(*name)?,
+            ConstExpr::Bin(op, left, right) => {
+                let left = self.evaluate(left)?;
+                let right = self.evaluate(right)?;
                 match op {
-                    BinOp::Add => lv + rv,
-                    BinOp::Sub => lv - rv,
-                    BinOp::Mul => lv * rv,
-                    BinOp::Div => {
-                        if rv == 0.0 {
-                            return Err(ConstResolveError::DivisionByZero);
-                        }
-                        lv / rv
-                    }
+                    BinOp::Add => left + right,
+                    BinOp::Sub => left - right,
+                    BinOp::Mul => left * right,
+                    BinOp::Div if right == 0.0 => return Err(ConstResolveError::DivisionByZero),
+                    BinOp::Div => left / right,
                 }
             }
-            ConstExpr::Ref(name) => eval(*name, by_name, resolved, in_progress, it)?,
         })
     }
+}
 
-    // Drive evaluation for each declared const so that even consts
-    // unreferenced in any value position are validated for cyclicity
-    // and well-formedness.
-    for d in decls {
-        eval(d.name, &by_name, &mut resolved, &mut in_progress, it)?;
+struct ConstDefinitions<'a> {
+    by_name: HashMap<SymId, &'a ConstExpr<SymId>>,
+    resolved: HashMap<SymId, f64>,
+    in_progress: Vec<SymId>,
+    it: &'a Interner,
+}
+
+impl ConstReferences for ConstDefinitions<'_> {
+    fn resolve(&mut self, sym: SymId) -> Result<f64, ConstResolveError> {
+        if let Some(&value) = self.resolved.get(&sym) {
+            return Ok(value);
+        }
+        if let Some(start) = self.in_progress.iter().position(|&s| s == sym) {
+            let names = self.in_progress[start..]
+                .iter()
+                .copied()
+                .chain([sym])
+                .map(|s| self.it.resolve(s).to_owned())
+                .collect();
+            return Err(ConstResolveError::Cycle { names });
+        }
+        let expr = *self
+            .by_name
+            .get(&sym)
+            .ok_or_else(|| ConstResolveError::UndefinedRef {
+                name: self.it.resolve(sym).to_owned(),
+            })?;
+        self.in_progress.push(sym);
+        let result = self.evaluate(expr);
+        self.in_progress.pop();
+        let value = result?;
+        self.resolved.insert(sym, value);
+        Ok(value)
     }
+}
 
-    Ok(resolved)
+struct ConstValues<'a> {
+    table: &'a HashMap<SymId, f64>,
+    it: &'a Interner,
+}
+
+impl ConstReferences for ConstValues<'_> {
+    fn resolve(&mut self, sym: SymId) -> Result<f64, ConstResolveError> {
+        self.table
+            .get(&sym)
+            .copied()
+            .ok_or_else(|| ConstResolveError::UndefinedRef {
+                name: self.it.resolve(sym).to_owned(),
+            })
+    }
 }
 
 /// Walk the description tree, substituting every `Value::Expr` with its
@@ -156,200 +165,85 @@ pub fn resolve_consts<'a>(
     it: &Interner,
 ) -> Result<(), ConstResolveError> {
     let table = evaluate_consts(&desc.consts, it)?;
-
-    for n in desc.header.iter_mut() {
-        substitute_in_node(n, &table, it)?;
+    let mut values = ConstValues { table: &table, it };
+    for node in &mut desc.header {
+        values.declaration(node)?;
     }
-    for item in desc.items.iter_mut() {
-        substitute_in_item(item, &table, it)?;
-    }
-    Ok(())
-}
-
-fn substitute_in_item(
-    item: &mut HyperItem<'_, SymId>,
-    table: &HashMap<SymId, f64>,
-    it: &Interner,
-) -> Result<(), ConstResolveError> {
-    match item {
-        HyperItem::Node(n) => substitute_in_node(n, table, it),
-        HyperItem::Edge(e) => substitute_in_edge(e, table, it),
-        HyperItem::Arc(a) => {
-            substitute_in_arc(&mut a.inner, table, it)?;
-            substitute_in_anno(&mut a.anno, table, it)
-        }
-    }
-}
-
-fn substitute_in_node(
-    n: &mut NodeDecl<'_, SymId>,
-    table: &HashMap<SymId, f64>,
-    it: &Interner,
-) -> Result<(), ConstResolveError> {
-    substitute_in_anno(&mut n.anno, table, it)?;
-    substitute_in_node_inner(&mut n.inner, table, it)
-}
-
-fn substitute_in_node_inner(
-    inner: &mut NodeInner<'_, SymId>,
-    table: &HashMap<SymId, f64>,
-    it: &Interner,
-) -> Result<(), ConstResolveError> {
-    for sr in inner.bases.iter_mut() {
-        substitute_in_signed_ref(sr, table, it)?;
-    }
-    if let Some(body) = inner.body.as_mut() {
-        for c in body.iter_mut() {
-            substitute_in_item(c, table, it)?;
-        }
+    for item in &mut desc.items {
+        values.item(item)?;
     }
     Ok(())
 }
 
-fn substitute_in_edge(
-    e: &mut EdgeDecl<'_, SymId>,
-    table: &HashMap<SymId, f64>,
-    it: &Interner,
-) -> Result<(), ConstResolveError> {
-    substitute_in_anno(&mut e.anno, table, it)?;
-    substitute_in_edge_inner(&mut e.inner, table, it)
-}
-
-fn substitute_in_edge_inner(
-    inner: &mut EdgeInner<'_, SymId>,
-    table: &HashMap<SymId, f64>,
-    it: &Interner,
-) -> Result<(), ConstResolveError> {
-    for sr in inner.bases.iter_mut() {
-        substitute_in_signed_ref(sr, table, it)?;
-    }
-    for c in inner.body.iter_mut() {
-        substitute_in_item(c, table, it)?;
-    }
-    Ok(())
-}
-
-fn substitute_in_arc(
-    inner: &mut ArcInner<'_, SymId>,
-    table: &HashMap<SymId, f64>,
-    it: &Interner,
-) -> Result<(), ConstResolveError> {
-    for sr in inner.refs.iter_mut() {
-        substitute_in_signed_ref(sr, table, it)?;
-    }
-    Ok(())
-}
-
-fn substitute_in_signed_ref(
-    sr: &mut SignedRef<'_, SymId>,
-    table: &HashMap<SymId, f64>,
-    it: &Interner,
-) -> Result<(), ConstResolveError> {
-    let atom: &mut RefAtom<'_, SymId> = match sr {
-        SignedRef::Plus(a) | SignedRef::Minus(a) | SignedRef::Neutral(a) => a,
-    };
-    substitute_in_anno(&mut atom.anno, table, it)
-}
-
-fn substitute_in_anno(
-    a: &mut Anno<'_, SymId>,
-    table: &HashMap<SymId, f64>,
-    it: &Interner,
-) -> Result<(), ConstResolveError> {
-    if let Some(v) = a.value.as_mut() {
-        substitute_in_value(v, table, it)?;
-    }
-    Ok(())
-}
-
-fn substitute_in_value(
-    v: &mut Value<'_, SymId>,
-    table: &HashMap<SymId, f64>,
-    it: &Interner,
-) -> Result<(), ConstResolveError> {
-    match v {
-        Value::Str(_) | Value::Num(_) => Ok(()),
-        Value::List(xs) => {
-            for x in xs.iter_mut() {
-                substitute_in_value(x, table, it)?;
+impl ConstValues<'_> {
+    fn item(&mut self, item: &mut HyperItem<'_, SymId>) -> Result<(), ConstResolveError> {
+        match item {
+            HyperItem::Node(n) => self.declaration(n),
+            HyperItem::Edge(e) => self.declaration(e),
+            HyperItem::Arc(a) => {
+                // Arc references precede the arc annotation in diagnostic order.
+                for reference in &mut a.inner.refs {
+                    self.signed_ref(reference)?;
+                }
+                self.anno(&mut a.anno)
             }
-            Ok(())
         }
-        Value::Ref(r) => {
-            // Single-segment refs whose ident matches a const become
-            // numeric literals; multi-segment refs are real cross-decl
-            // references and the standard resolver handles them.
-            if r.path.len() == 1 {
-                let sym = r.path[0];
-                if let Some(&f) = table.get(&sym) {
-                    *v = Value::Num(f);
+    }
+
+    fn declaration<'a, T: DeclarationFields<'a, SymId>>(
+        &mut self,
+        declaration: &mut HyperAnnotatedElement<'a, T, SymId>,
+    ) -> Result<(), ConstResolveError> {
+        self.anno(&mut declaration.anno)?;
+        let (bases, body) = declaration.inner.fields_mut();
+        for reference in bases {
+            self.signed_ref(reference)?;
+        }
+        for item in body {
+            self.item(item)?;
+        }
+        Ok(())
+    }
+
+    fn signed_ref(
+        &mut self,
+        reference: &mut SignedRef<'_, SymId>,
+    ) -> Result<(), ConstResolveError> {
+        let atom = match reference {
+            SignedRef::Plus(a) | SignedRef::Minus(a) | SignedRef::Neutral(a) => a,
+        };
+        self.anno(&mut atom.anno)
+    }
+
+    fn anno(&mut self, anno: &mut Anno<'_, SymId>) -> Result<(), ConstResolveError> {
+        if let Some(value) = &mut anno.value {
+            self.value(value)?;
+        }
+        Ok(())
+    }
+
+    fn value(&mut self, value: &mut Value<'_, SymId>) -> Result<(), ConstResolveError> {
+        match value {
+            Value::Str(_) | Value::Num(_) => {}
+            Value::List(items) => {
+                for item in items {
+                    self.value(item)?;
                 }
             }
-            Ok(())
-        }
-        Value::Expr(_) => {
-            // Move out via mem::take so we can transform.
-            let owned = std::mem::replace(
-                v,
-                Value::Expr(ConstExpr::Lit(0.0)), // placeholder, immediately overwritten
-            );
-            let expr = match owned {
-                Value::Expr(e) => e,
-                _ => unreachable!(),
-            };
-            // Re-use evaluate_consts machinery via a lightweight wrap:
-            // expression doesn't reference anything outside the table,
-            // so an empty by_name is fine.
-            let by_name: HashMap<SymId, &ConstExpr<SymId>> = HashMap::new();
-            let mut resolved_local: HashMap<SymId, f64> = table.clone();
-            let mut in_progress: Vec<SymId> = Vec::new();
-            let value =
-                eval_in_context(&expr, &by_name, &mut resolved_local, &mut in_progress, it)?;
-            *v = Value::Num(value);
-            Ok(())
-        }
-    }
-}
-
-/// Stand-alone expression evaluator for use after the const table is
-/// fully built — `resolved` already contains all const values, so we
-/// only need to walk through `Lit`/`Bin`/`Neg`/`Pi`/`Exp` and look up
-/// `Ref`s in the resolved table.
-fn eval_in_context(
-    e: &ConstExpr<SymId>,
-    _by_name: &HashMap<SymId, &ConstExpr<SymId>>,
-    resolved: &mut HashMap<SymId, f64>,
-    _in_progress: &mut Vec<SymId>,
-    it: &Interner,
-) -> Result<f64, ConstResolveError> {
-    Ok(match e {
-        ConstExpr::Lit(n) => *n,
-        ConstExpr::Pi => std::f64::consts::PI,
-        ConstExpr::Exp(arg) => eval_in_context(arg, _by_name, resolved, _in_progress, it)?.exp(),
-        ConstExpr::Neg(arg) => -eval_in_context(arg, _by_name, resolved, _in_progress, it)?,
-        ConstExpr::Bin(op, l, r) => {
-            let lv = eval_in_context(l, _by_name, resolved, _in_progress, it)?;
-            let rv = eval_in_context(r, _by_name, resolved, _in_progress, it)?;
-            match op {
-                BinOp::Add => lv + rv,
-                BinOp::Sub => lv - rv,
-                BinOp::Mul => lv * rv,
-                BinOp::Div => {
-                    if rv == 0.0 {
-                        return Err(ConstResolveError::DivisionByZero);
+            Value::Ref(reference) => {
+                // Multi-segment paths remain references for the name resolver.
+                if reference.path.len() == 1 {
+                    if let Some(&number) = self.table.get(&reference.path[0]) {
+                        *value = Value::Num(number);
                     }
-                    lv / rv
                 }
             }
+            Value::Expr(expr) => {
+                *value = Value::Num(self.evaluate(expr)?);
+            }
         }
-        ConstExpr::Ref(name) => {
-            *resolved
-                .get(name)
-                .ok_or_else(|| ConstResolveError::UndefinedRef {
-                    name: it.resolve(*name).to_string(),
-                })?
-        }
-    })
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -362,6 +256,97 @@ mod tests {
     }
     fn mk_bin(op: BinOp, l: ConstExpr<SymId>, r: ConstExpr<SymId>) -> ConstExpr<SymId> {
         ConstExpr::Bin(op, Box::new(l), Box::new(r))
+    }
+
+    struct SubstitutionCase {
+        item: HyperItem<'static, SymId>,
+        expected: &'static str,
+    }
+
+    impl SubstitutionCase {
+        fn check(mut self, values: &mut ConstValues<'_>) {
+            assert_eq!(
+                values.item(&mut self.item),
+                Err(ConstResolveError::UndefinedRef {
+                    name: self.expected.into(),
+                })
+            );
+        }
+    }
+
+    #[test]
+    fn declaration_and_arc_diagnostics_keep_traversal_order() {
+        use parser::ast::{ArcInner, EdgeInner, NodeInner, Ref, RefAtom};
+        let mut it = Interner::new();
+        let name = it.intern("name");
+        let annotation = it.intern("annotation");
+        let base = it.intern("base");
+        let child = it.intern("child");
+        let anno = |sym| Anno {
+            tags: vec![],
+            value: Some(Value::Expr(ConstExpr::Ref(sym))),
+        };
+        let reference = SignedRef::Minus(RefAtom {
+            target: Ref { path: vec![name] },
+            anno: anno(base),
+        });
+        let body = vec![HyperItem::Node(HyperAnnotatedElement {
+            anno: anno(child),
+            inner: NodeInner {
+                name,
+                bases: vec![],
+                body: None,
+            },
+        })];
+        let table = HashMap::new();
+        let mut values = ConstValues {
+            table: &table,
+            it: &it,
+        };
+        for (annotation_value, bases, expected) in [
+            (
+                Some(Value::Expr(ConstExpr::Ref(annotation))),
+                vec![reference.clone()],
+                "annotation",
+            ),
+            (None, vec![reference.clone()], "base"),
+            (None, vec![], "child"),
+        ] {
+            let annotation = Anno {
+                tags: vec![],
+                value: annotation_value,
+            };
+            for item in [
+                HyperItem::Node(HyperAnnotatedElement {
+                    anno: annotation.clone(),
+                    inner: NodeInner {
+                        name,
+                        bases: bases.clone(),
+                        body: Some(body.clone()),
+                    },
+                }),
+                HyperItem::Edge(HyperAnnotatedElement {
+                    anno: annotation,
+                    inner: EdgeInner {
+                        name,
+                        bases: bases.clone(),
+                        body: body.clone(),
+                    },
+                }),
+            ] {
+                SubstitutionCase { item, expected }.check(&mut values);
+            }
+        }
+        SubstitutionCase {
+            item: HyperItem::Arc(HyperAnnotatedElement {
+                anno: anno(annotation),
+                inner: ArcInner {
+                    refs: vec![reference],
+                },
+            }),
+            expected: "base",
+        }
+        .check(&mut values);
     }
 
     #[test]
@@ -489,5 +474,126 @@ mod tests {
         }];
         let table = evaluate_consts(&decls, &it).unwrap();
         assert!((table[&b] - std::f64::consts::PI).abs() < 1e-12);
+    }
+
+    #[test]
+    fn table_and_dependency_strategies_preserve_bits_and_first_error() {
+        let mut it = Interner::new();
+        let input = it.intern("input");
+        let result = it.intern("result");
+        let missing = it.intern("missing");
+        let table = HashMap::from([(input, -0.0)]);
+        let expressions = [
+            ConstExpr::Ref(input),
+            ConstExpr::Neg(Box::new(ConstExpr::Ref(input))),
+            mk_bin(
+                BinOp::Sub,
+                ConstExpr::Pi,
+                ConstExpr::Exp(Box::new(mk_lit(1.0))),
+            ),
+            mk_bin(BinOp::Div, mk_lit(-5.0), mk_lit(2.0)),
+            mk_bin(
+                BinOp::Add,
+                mk_bin(BinOp::Add, mk_lit(1e16), mk_lit(-1e16)),
+                mk_lit(1.0),
+            ),
+        ];
+        for expr in expressions {
+            let declarations = [
+                ConstDecl {
+                    name: result,
+                    value: expr.clone(),
+                },
+                ConstDecl {
+                    name: input,
+                    value: mk_lit(-0.0),
+                },
+            ];
+            let expected = evaluate_consts(&declarations, &it).unwrap()[&result];
+            let mut value = Value::Expr(expr);
+            ConstValues {
+                table: &table,
+                it: &it,
+            }
+            .value(&mut value)
+            .unwrap();
+            let Value::Num(actual) = value else {
+                panic!("numeric substitution required")
+            };
+            assert_eq!(actual.to_bits(), expected.to_bits());
+        }
+        for (expr, expected) in [
+            (
+                mk_bin(BinOp::Div, ConstExpr::Ref(missing), mk_lit(0.0)),
+                ConstResolveError::UndefinedRef {
+                    name: "missing".into(),
+                },
+            ),
+            (
+                mk_bin(
+                    BinOp::Add,
+                    mk_bin(BinOp::Div, mk_lit(1.0), mk_lit(-0.0)),
+                    ConstExpr::Ref(missing),
+                ),
+                ConstResolveError::DivisionByZero,
+            ),
+        ] {
+            let declarations = [ConstDecl {
+                name: result,
+                value: expr.clone(),
+            }];
+            assert_eq!(evaluate_consts(&declarations, &it).unwrap_err(), expected);
+            let mut value = Value::Expr(expr);
+            let before = format!("{value:?}");
+            assert_eq!(
+                ConstValues {
+                    table: &table,
+                    it: &it
+                }
+                .value(&mut value),
+                Err(expected)
+            );
+            assert_eq!(
+                format!("{value:?}"),
+                before,
+                "failure must not replace the expression"
+            );
+        }
+        assert_eq!(table.len(), 1);
+        assert_eq!(table[&input].to_bits(), (-0.0f64).to_bits());
+    }
+
+    #[test]
+    fn shadowing_and_cycle_diagnostics_keep_source_order() {
+        let mut it = Interner::new();
+        let a = it.intern("a");
+        let b = it.intern("b");
+        let declarations = [
+            ConstDecl {
+                name: a,
+                value: ConstExpr::Ref(b),
+            },
+            ConstDecl {
+                name: a,
+                value: mk_lit(7.0),
+            },
+        ];
+        assert_eq!(evaluate_consts(&declarations, &it).unwrap()[&a], 7.0);
+        let declarations = [
+            ConstDecl {
+                name: b,
+                value: ConstExpr::Ref(a),
+            },
+            ConstDecl {
+                name: a,
+                value: ConstExpr::Ref(b),
+            },
+        ];
+        assert_eq!(
+            evaluate_consts(&declarations, &it).unwrap_err(),
+            ConstResolveError::Cycle {
+                names: vec!["b".into(), "a".into(), "b".into()]
+            }
+        );
     }
 }

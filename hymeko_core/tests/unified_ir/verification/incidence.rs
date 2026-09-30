@@ -240,13 +240,11 @@ fn build_synth_ir(n_nodes: usize, n_arcs: usize, arity: usize, seed: u64) -> Ir 
     };
     for i in 0..n_nodes {
         ir.push_decl(dn(DeclKind::Node));
-        ir.decl_hash.push(None);
         ir.nodes.push(NodeRec::new(DeclId::new(i), Vec::new()));
         ir.bind_node_decl(DeclId::new(i), hymeko::common::ids::NodeId::new(i))
             .unwrap();
     }
     let edge_decl = ir.push_decl(dn(DeclKind::Edge));
-    ir.decl_hash.push(None);
     ir.edges.push(EdgeRec::new(edge_decl, Vec::new()));
     ir.bind_edge_decl(edge_decl, hymeko::common::ids::EdgeId::new(0))
         .unwrap();

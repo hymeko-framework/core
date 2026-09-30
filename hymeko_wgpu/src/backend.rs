@@ -15,7 +15,7 @@
 //!
 //! There is deliberately **no** automatic readback and **no** submit-per-call.
 
-use hymeko::tensor::compute::{BackendKind, ComputeError};
+use hymeko_tensor::compute::{BackendKind, ComputeError};
 
 use crate::block_on::block_on;
 use crate::pipeline::PipelineCache;

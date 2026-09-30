@@ -18,10 +18,11 @@ pub use value_updates::{ValueUpdate, ValueUpdateError};
 
 use super::module_store::{CompiledProgram, HymekoParser, ModuleLoadError, ModuleStore};
 use super::source_provider::SourceProvider;
+use crate::ir::semantic_digest::{SemanticDigestState, SemanticModelDigest};
 use crate::resolution::interner::Interner;
 use std::fmt;
 use std::path::Path;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, OnceLock, RwLock};
 
 /// An inseparable, read-only compiled program and symbol table.
 ///
@@ -31,6 +32,7 @@ use std::sync::{Arc, RwLock};
 pub struct CompiledModel {
     program: Arc<CompiledProgram>,
     interner: Interner,
+    semantic: OnceLock<SemanticDigestState>,
 }
 
 impl CompiledModel {
@@ -52,6 +54,7 @@ impl CompiledModel {
         Ok(Self {
             program,
             interner: store.it,
+            semantic: OnceLock::new(),
         })
     }
 
@@ -72,6 +75,7 @@ impl CompiledModel {
                 canon_hash: payload.canon_hash,
             }),
             interner,
+            semantic: OnceLock::new(),
         }
     }
 
@@ -85,6 +89,19 @@ impl CompiledModel {
     #[must_use]
     pub fn interner(&self) -> &Interner {
         &self.interner
+    }
+
+    /// Value-sensitive identity of this immutable snapshot. The first call builds
+    /// derived contributions; repeated calls reuse them. Checked value updates
+    /// rehash only edited declarations with the same encoder as the full digest.
+    #[must_use]
+    pub fn semantic_digest(&self) -> SemanticModelDigest {
+        self.semantic_state().digest()
+    }
+
+    fn semantic_state(&self) -> &SemanticDigestState {
+        self.semantic
+            .get_or_init(|| SemanticDigestState::new(&self.program.ir, &self.interner))
     }
 }
 
@@ -253,7 +270,7 @@ mod tests;
 mod snapshot_tests {
     use super::*;
     use crate::{
-        ir::ir::ValueR, ir::semantic_digest::semantic_model_digest_v2, ir_stream::DecodeLimits,
+        ir::ir::ValueR, ir::semantic_digest::semantic_model_digest, ir_stream::DecodeLimits,
         module_store::source_provider::MemProvider, writers::cbor_writer,
     };
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -273,7 +290,7 @@ mod snapshot_tests {
         let nodes = decoded.ir().decl_nodes.as_ptr();
         let imported = decoded.payload().imports.clone();
         assert!(!imported.is_empty());
-        let digest = semantic_model_digest_v2(decoded.ir(), decoded.interner());
+        let digest = semantic_model_digest(decoded.ir(), decoded.interner());
         let installed = CompiledModel::from_decoded_cbor(decoded);
         assert_eq!(installed.program().ir.decl_nodes.as_ptr(), nodes);
         assert_eq!(installed.program().root.0, Path::new("scene.hymeko"));
@@ -283,7 +300,7 @@ mod snapshot_tests {
             original.program().canon_hash
         );
         assert_eq!(
-            semantic_model_digest_v2(&installed.program().ir, installed.interner()),
+            semantic_model_digest(&installed.program().ir, installed.interner()),
             digest
         );
         assert_eq!(

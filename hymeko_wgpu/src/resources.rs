@@ -11,17 +11,17 @@
 //!
 //! `TensorCsr` stores indices as `usize`; WGSL has no 64-bit integer indexing,
 //! so every index narrows to `u32` through
-//! [`hymeko::tensor::compute::try_u32`] — a **checked** conversion that reports
+//! [`hymeko_tensor::compute::try_u32`] — a **checked** conversion that reports
 //! [`ComputeError::IndexOverflow`] instead of silently wrapping into a kernel
 //! that reads the wrong memory.
 
 use std::marker::PhantomData;
 
-use hymeko::tensor::compute::{ComputeError, SparseCsrShape, TensorShape, try_u32};
-use hymeko::tensor::representations::sparse::{
+use hymeko_tensor::compute::{ComputeError, SparseCsrShape, TensorShape, try_u32};
+use hymeko_tensor::representations::sparse::{
     SparseLayout, SparseViolation, ValidatedSparse, validate_csr_parts,
 };
-use hymeko::tensor::representations::tensor_csr::TensorCsr;
+use hymeko_tensor::representations::tensor_csr::TensorCsr;
 use wgpu::util::DeviceExt;
 
 /// A dense, row-major GPU tensor.
@@ -36,6 +36,13 @@ pub struct GpuTensor<T> {
 }
 
 impl<T> GpuTensor<T> {
+    pub(crate) fn binding(&self, binding: u32) -> wgpu::BindGroupEntry<'_> {
+        wgpu::BindGroupEntry {
+            binding,
+            resource: self.buffer.as_entire_binding(),
+        }
+    }
+
     /// Build a tensor from a buffer the caller already owns.
     ///
     /// Exists for [`crate::TensorArena`], which hands out recycled buffers and
@@ -136,7 +143,7 @@ pub struct ResourceFactory<'a> {
 /// Translate core's typed structural verdict into this backend's error type.
 ///
 /// A **translation**, not a check. The rules live in
-/// [`hymeko::tensor::representations::sparse::validate_csr_parts`]; this only carries the verdict
+/// [`hymeko_tensor::representations::sparse::validate_csr_parts`]; this only carries the verdict
 /// across an API boundary, preserving the operand wording the existing consumers already assert on
 /// (`tests/skeleton.rs`) so the migration to the core owner changes no caller's contract.
 fn structural(violation: SparseViolation) -> ComputeError {
@@ -430,7 +437,7 @@ impl<'a> ResourceFactory<'a> {
     pub fn upload_csr_from(
         &self,
         label: &str,
-        csr: &hymeko::tensor::representations::tensor_csr::TensorCsr<f32>,
+        csr: &hymeko_tensor::representations::tensor_csr::TensorCsr<f32>,
     ) -> Result<GpuCsrMatrix<f32>, ComputeError> {
         let shape = SparseCsrShape::new(csr.num_rows, csr.num_cols, csr.nnz());
         self.upload_csr(label, shape, &csr.row_ptr, &csr.col_ind, &csr.val)

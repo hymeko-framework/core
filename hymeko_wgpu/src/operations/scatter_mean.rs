@@ -37,10 +37,12 @@
 
 use std::sync::Arc;
 
-use hymeko::tensor::compute::{BackendKind, ComputeError, TensorShape, try_u32};
+use hymeko_tensor::compute::{BackendKind, ComputeError, TensorShape, try_u32};
 
+use super::OperandCheck;
+use super::OperationFactory;
 use crate::operations::dispatch::PreparedDispatch;
-use crate::pipeline::{KernelId, PipelineCache};
+use crate::pipeline::KernelId;
 use crate::{GpuCsrMatrix, GpuTensor};
 
 /// WGSL source owned by [`KernelId::ScatterMeanCsr`].
@@ -62,19 +64,9 @@ struct ScatterMeanParams {
 
 const _: () = assert!(std::mem::size_of::<ScatterMeanParams>() == 24);
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct ScatterMeanLimits {
-    pub max_workgroups_per_dimension: u32,
-    pub max_invocations_per_workgroup: u32,
-    pub max_storage_buffers_per_stage: u32,
-}
-
 /// Builds one validated edge-to-node mean scatter dispatch.
 pub struct ScatterMeanBuilder<'a> {
-    device: &'a wgpu::Device,
-    queue: &'a wgpu::Queue,
-    cache: &'a PipelineCache,
-    limits: ScatterMeanLimits,
+    factory: OperationFactory<'a>,
     incidence: Option<&'a GpuCsrMatrix<f32>>,
     counts: Option<&'a GpuTensor<f32>>,
     edge_state: Option<&'a GpuTensor<f32>>,
@@ -84,17 +76,9 @@ pub struct ScatterMeanBuilder<'a> {
 }
 
 impl<'a> ScatterMeanBuilder<'a> {
-    pub(crate) fn new(
-        device: &'a wgpu::Device,
-        queue: &'a wgpu::Queue,
-        cache: &'a PipelineCache,
-        limits: ScatterMeanLimits,
-    ) -> Self {
+    pub(crate) fn new(factory: OperationFactory<'a>) -> Self {
         Self {
-            device,
-            queue,
-            cache,
-            limits,
+            factory,
             incidence: None,
             counts: None,
             edge_state: None,
@@ -152,20 +136,19 @@ impl<'a> ScatterMeanBuilder<'a> {
     /// others describe; [`ComputeError::IndexOverflow`] for a count that does not fit `u32`;
     /// [`ComputeError::Backend`] for a device that cannot satisfy the layout or workgroup.
     pub fn prepare(self) -> Result<PreparedScatterMean<'a>, ComputeError> {
-        let incidence = supplied(self.incidence, "scatter_mean incidence")?;
-        let counts = supplied(self.counts, "scatter_mean counts")?;
-        let edge_state = supplied(self.edge_state, "scatter_mean edge state")?;
-        let node_state = supplied(self.node_state, "scatter_mean node state")?;
+        let incidence = OperandCheck("scatter_mean incidence").supplied(self.incidence)?;
+        let counts = OperandCheck("scatter_mean counts").supplied(self.counts)?;
+        let edge_state = OperandCheck("scatter_mean edge state").supplied(self.edge_state)?;
+        let node_state = OperandCheck("scatter_mean node state").supplied(self.node_state)?;
 
         let n_nodes = node_state.shape().rows;
         let hidden = node_state.shape().cols;
         let n_edges = edge_state.shape().rows;
         if n_nodes == 0 || hidden == 0 {
-            return shape_error("scatter_mean node state must be non-empty", 1, 0);
+            return OperandCheck("scatter_mean node state must be non-empty").mismatch(1, 0);
         }
         if edge_state.shape() != TensorShape::new(n_edges, hidden) {
-            return shape_error(
-                "scatter_mean edge state shape",
+            return OperandCheck("scatter_mean edge state shape").mismatch(
                 n_edges.saturating_mul(hidden),
                 edge_state.shape().checked_elements().unwrap_or(usize::MAX),
             );
@@ -175,10 +158,10 @@ impl<'a> ScatterMeanBuilder<'a> {
         // edges being read.
         let csr = incidence.shape();
         if csr.rows != n_nodes {
-            return shape_error("scatter_mean incidence rows", n_nodes, csr.rows);
+            return OperandCheck("scatter_mean incidence rows").mismatch(n_nodes, csr.rows);
         }
         if csr.cols != n_edges {
-            return shape_error("scatter_mean incidence columns", n_edges, csr.cols);
+            return OperandCheck("scatter_mean incidence columns").mismatch(n_edges, csr.cols);
         }
         let counts_len = counts
             .shape()
@@ -188,23 +171,24 @@ impl<'a> ScatterMeanBuilder<'a> {
                 value: usize::MAX,
             })?;
         if counts_len != n_nodes {
-            return shape_error("scatter_mean counts length", n_nodes, counts_len);
+            return OperandCheck("scatter_mean counts length").mismatch(n_nodes, counts_len);
         }
-        if self.limits.max_storage_buffers_per_stage < 5 {
+        if self.factory.limits.max_storage_buffers_per_stage < 5 {
             return Err(ComputeError::Backend {
                 backend: BackendKind::Wgpu,
                 message: format!(
                     "scatter_mean requires 5 storage buffers, device exposes {}",
-                    self.limits.max_storage_buffers_per_stage
+                    self.factory.limits.max_storage_buffers_per_stage
                 ),
             });
         }
-        if self.workgroup == 0 || self.workgroup > self.limits.max_invocations_per_workgroup {
+        if self.workgroup == 0 || self.workgroup > self.factory.limits.max_invocations_per_workgroup
+        {
             return Err(ComputeError::Backend {
                 backend: BackendKind::Wgpu,
                 message: format!(
                     "scatter_mean workgroup {} outside 1..={}",
-                    self.workgroup, self.limits.max_invocations_per_workgroup
+                    self.workgroup, self.factory.limits.max_invocations_per_workgroup
                 ),
             });
         }
@@ -219,7 +203,7 @@ impl<'a> ScatterMeanBuilder<'a> {
                 })?;
         let count = try_u32("scatter_mean output element count", elements)?;
         let ideal_groups = count.div_ceil(self.workgroup);
-        let groups = ideal_groups.min(self.limits.max_workgroups_per_dimension);
+        let groups = ideal_groups.min(self.factory.limits.max_workgroups_per_dimension);
         let stride = groups
             .checked_mul(self.workgroup)
             .ok_or(ComputeError::IndexOverflow {
@@ -236,36 +220,35 @@ impl<'a> ScatterMeanBuilder<'a> {
         };
 
         let kernel = KernelId::ScatterMeanCsr;
-        let bundle = self.cache.bundle(self.device, kernel, self.workgroup, 1)?;
-        let params_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("scatter_mean_csr.params"),
-            size: std::mem::size_of::<ScatterMeanParams>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        self.queue
-            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
-        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("scatter_mean_csr.bind_group"),
-            layout: bundle.bind_group_layout(),
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: incidence.row_ptr().as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: incidence.col_ind().as_entire_binding(),
-                },
-                entry(2, counts),
-                entry(3, edge_state),
-                entry(4, node_state),
-                wgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: params_buffer.as_entire_binding(),
-                },
-            ],
-        });
+        let bundle = self
+            .factory
+            .cache
+            .bundle(self.factory.device, kernel, self.workgroup, 1)?;
+        let params_buffer = self.factory.uniform("scatter_mean_csr.params", &params);
+        let bind_group = self
+            .factory
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("scatter_mean_csr.bind_group"),
+                layout: bundle.bind_group_layout(),
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: incidence.row_ptr().as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: incidence.col_ind().as_entire_binding(),
+                    },
+                    counts.binding(2),
+                    edge_state.binding(3),
+                    node_state.binding(4),
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: params_buffer.as_entire_binding(),
+                    },
+                ],
+            });
         Ok(PreparedScatterMean {
             _operands: core::marker::PhantomData,
             dispatch: PreparedDispatch::new(
@@ -279,33 +262,6 @@ impl<'a> ScatterMeanBuilder<'a> {
             kernel,
             elements,
         })
-    }
-}
-
-fn supplied<'a, T>(value: Option<&'a T>, operand: &'static str) -> Result<&'a T, ComputeError> {
-    value.ok_or(ComputeError::ShapeMismatch {
-        operand,
-        expected: 1,
-        actual: 0,
-    })
-}
-
-fn shape_error<T>(
-    operand: &'static str,
-    expected: usize,
-    actual: usize,
-) -> Result<T, ComputeError> {
-    Err(ComputeError::ShapeMismatch {
-        operand,
-        expected,
-        actual,
-    })
-}
-
-fn entry<T>(binding: u32, tensor: &GpuTensor<T>) -> wgpu::BindGroupEntry<'_> {
-    wgpu::BindGroupEntry {
-        binding,
-        resource: tensor.buffer().as_entire_binding(),
     }
 }
 

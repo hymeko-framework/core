@@ -1,5 +1,4 @@
 use crate::common::ids::{DeclId, EdgeId, HyperArcId, NodeId, SymId};
-use crate::ir::hash::HashId;
 use crate::ir::meta::Meta;
 use serde::{Deserialize, Serialize};
 
@@ -24,9 +23,6 @@ pub struct DeclNode {
 #[derive(Debug, Default, Clone)]
 pub struct Ir {
     pub meta: Option<Meta>,
-    pub doc_hash: Option<HashId>,
-    pub decl_hash: Vec<Option<HashId>>,
-    pub arc_hash: Vec<Option<HashId>>,
     // Unified Arena
     pub decl_nodes: Vec<DeclNode>,
 
@@ -45,7 +41,7 @@ pub struct Ir {
     // decl replaces the former three `Vec<Option<Id>>` maps (48 B/decl -> 8 B/decl).
     // Storage is PRIVATE; the public read contract is the accessor API
     // (`as_node`/`as_edge`/`as_arc`, `node_for_decl`/..., `contains_*`); writes go
-    // through the crate-private typed mutators `bind_{node,edge,arc}_decl`. See the
+    // through the checked typed mutators `bind_{node,edge,arc}_decl`. See the
     // `dispatch` module for the checked encoding. The legacy three-map serde wire is
     // preserved byte-for-byte by the manual `Serialize`/`Deserialize` impls below.
     pub(crate) decl_to_record: Vec<u64>,
@@ -63,8 +59,8 @@ pub struct Ir {
 
     // APPROVED-CORE-EDIT: executable-model-contract (2026-09-06).
     //
-    // The OPTIONAL executable-model facet, one slot per declaration, keyed by `DeclId` exactly as
-    // `decl_hash` and `arc_hash` are. It is a side table rather than a `DeclNode` field for two
+    // The OPTIONAL executable-model facet has one slot per declaration keyed by `DeclId`.
+    // It is a side table rather than a `DeclNode` field for two
     // reasons: `DeclNode` has 17 literal construction sites across core and its consumers, and the
     // struct-of-arrays layout is what the surrounding code already uses for per-declaration data.
     //
@@ -160,7 +156,7 @@ pub enum ModelFacet {
 /// reserved tag, or a `u64`->`usize` overflow is a typed [`DispatchError`] — never a
 /// silent truncation, and never `unsafe`.
 pub mod dispatch {
-    use super::DeclKind;
+    use super::{DeclId, DeclKind};
 
     pub(crate) const NONE: u64 = 0;
     const TAG_SHIFT: u32 = 62;
@@ -174,19 +170,55 @@ pub mod dispatch {
     /// bounded numeric metadata; deterministic.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum DispatchError {
+        InvalidDeclaration {
+            decl: DeclId,
+        },
+        KindMismatch {
+            decl: DeclId,
+            expected: DeclKind,
+        },
+        RecordOutOfRange {
+            kind: DeclKind,
+            index: usize,
+        },
+        WrongBacklink {
+            decl: DeclId,
+        },
+        ConflictingBinding {
+            decl: DeclId,
+        },
+        InvalidHierarchy {
+            decl: DeclId,
+        },
         /// A record index does not fit the 62-bit dispatch index domain.
-        IndexOverflow { index: usize },
+        IndexOverflow {
+            index: usize,
+        },
         /// A slot carries the reserved (invalid) tag `3`.
-        ReservedTag { slot: u64 },
+        ReservedTag {
+            slot: u64,
+        },
         /// A non-NONE slot whose index field is `0` (i.e. `raw+1 == 0`): malformed.
-        MalformedZeroIndex { slot: u64 },
+        MalformedZeroIndex {
+            slot: u64,
+        },
         /// A slot's decoded `u64` index did not fit `usize` on this target.
-        UsizeOverflow { value: u64 },
+        UsizeOverflow {
+            value: u64,
+        },
     }
 
     impl core::fmt::Display for DispatchError {
         fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
             match self {
+                Self::InvalidDeclaration { decl } => write!(f, "invalid declaration {decl:?}"),
+                Self::KindMismatch { decl, expected } => write!(f, "{decl:?} is not {expected:?}"),
+                Self::RecordOutOfRange { kind, index } => {
+                    write!(f, "{kind:?} record {index} out of range")
+                }
+                Self::WrongBacklink { decl } => write!(f, "record does not belong to {decl:?}"),
+                Self::ConflictingBinding { decl } => write!(f, "conflicting binding for {decl:?}"),
+                Self::InvalidHierarchy { decl } => write!(f, "invalid hierarchy at {decl:?}"),
                 Self::IndexOverflow { index } => {
                     write!(f, "record index {index} exceeds the 62-bit dispatch domain")
                 }
@@ -373,7 +405,11 @@ impl Ir {
             return Ok(());
         }
         if self.decl_file.len() != self.decl_nodes.len()
-            || self.decl_file.iter().any(|&id| id != u32::MAX && id as usize >= self.files.len()) {
+            || self
+                .decl_file
+                .iter()
+                .any(|&id| id != u32::MAX && id as usize >= self.files.len())
+        {
             return Err(IrDecodeError::InvalidSourceProvenance);
         }
         Ok(())
@@ -445,12 +481,7 @@ impl Ir {
     }
 
     pub fn decl_children(&self, parent: DeclId) -> DeclChildren<'_> {
-        let next = if parent.is_none() {
-            DeclId::NONE
-        } else {
-            self.decl_nodes[parent.0].first_child
-        };
-        DeclChildren { ir: self, next }
+        self.child_decls(parent)
     }
 
     pub fn decl_kind(&self, did: DeclId) -> DeclKind {
@@ -572,8 +603,8 @@ impl Ir {
         self.decl_model.iter().any(Option::is_some)
     }
 
-    /// Crate-private typed binding: `decl (kind Node) -> node record`. Checks the
-    /// declaration kind, checks the index is representable (checked encode), and
+    /// Checked typed binding: `decl (kind Node) -> node record`. Checks the
+    /// declaration kind, record range/backlink and index representability, and
     /// refuses a second, *different* binding. On any error the slot is left exactly
     /// as it was (no half-written state).
     #[inline]
@@ -609,14 +640,56 @@ impl Ir {
         kind: DeclKind,
         index: usize,
     ) -> Result<(), dispatch::DispatchError> {
-        let slot = dispatch::encode(kind, index)?; // checked; no partial state on Err
-        let cur = self.decl_to_record[d.raw()];
-        debug_assert!(
-            cur == dispatch::NONE || cur == slot,
-            "conflicting re-binding of decl {} : {cur:#x} -> {slot:#x}",
-            d.raw()
-        );
-        self.decl_to_record[d.raw()] = slot;
+        let slot = dispatch::encode(kind, index)?;
+        let node = self
+            .decl_node(d)
+            .ok_or(dispatch::DispatchError::InvalidDeclaration { decl: d })?;
+        if node.kind != kind {
+            return Err(dispatch::DispatchError::KindMismatch {
+                decl: d,
+                expected: kind,
+            });
+        }
+        let backlink = match kind {
+            DeclKind::Node => self.nodes.get(index).map(|r| r.decl == d),
+            DeclKind::Edge => self.edges.get(index).map(|r| r.decl == d),
+            DeclKind::HyperArc => self.arcs.get(index).map(|_| true),
+        }
+        .ok_or(dispatch::DispatchError::RecordOutOfRange { kind, index })?;
+        if !backlink {
+            return Err(dispatch::DispatchError::WrongBacklink { decl: d });
+        }
+        let current = *self
+            .decl_to_record
+            .get(d.raw())
+            .ok_or(dispatch::DispatchError::InvalidDeclaration { decl: d })?;
+        if current != dispatch::NONE && current != slot {
+            return Err(dispatch::DispatchError::ConflictingBinding { decl: d });
+        }
+        if current != slot {
+            self.decl_to_record[d.raw()] = slot;
+        }
+        Ok(())
+    }
+
+    /// Checked batch commit: the hierarchy and bindings stay unchanged and no
+    /// edit occurs unless every target is a bound leaf node. Value-domain checks
+    /// (including symbol ownership) belong to the compiled model's interner.
+    pub(crate) fn set_leaf_values(
+        &mut self,
+        values: Vec<(DeclId, Option<ValueR>)>,
+    ) -> Result<(), dispatch::DispatchError> {
+        for (id, _) in &values {
+            let node = self
+                .decl_node(*id)
+                .ok_or(dispatch::DispatchError::InvalidDeclaration { decl: *id })?;
+            if self.node_for_decl(*id).is_none() || node.first_child.is_some() {
+                return Err(dispatch::DispatchError::InvalidHierarchy { decl: *id });
+            }
+        }
+        for (id, value) in values {
+            self.decl_nodes[id.raw()].anno.value = value;
+        }
         Ok(())
     }
 
@@ -637,7 +710,6 @@ impl Ir {
         self.decl_nodes.resize(total_named_decls, default_node);
         self.decl_to_record
             .resize(total_named_decls, dispatch::NONE);
-        self.decl_hash.resize(total_named_decls, None);
         if !self.decl_model.is_empty() {
             self.decl_model.resize(total_named_decls, None);
         }
@@ -658,7 +730,6 @@ impl Ir {
             anno: AnnoR::default(),
         });
         self.decl_to_record.push(dispatch::NONE);
-        self.decl_hash.push(None);
         if !self.decl_model.is_empty() {
             self.decl_model.push(None);
         }
@@ -666,23 +737,148 @@ impl Ir {
     }
 }
 
-pub struct DeclChildren<'a> {
-    ir: &'a Ir,
-    next: DeclId,
+/// Exclusive construction capability. No raw mutable arena escapes this type.
+/// Each operation checks everything that can fail before committing its links,
+/// record and dispatch slot.
+pub(crate) struct IrConstruction<'a> {
+    ir: &'a mut Ir,
 }
 
-impl<'a> Iterator for DeclChildren<'a> {
-    type Item = DeclId;
+impl<'a> IrConstruction<'a> {
+    pub(crate) fn new(ir: &'a mut Ir) -> Self {
+        Self { ir }
+    }
 
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.next.is_none() {
-            return None;
+    fn check_parent(&self, child: DeclId, parent: DeclId) -> Result<(), dispatch::DispatchError> {
+        if parent.is_none() {
+            return Ok(());
         }
-        let cur = self.next;
-        self.next = self.ir.next_sibling(cur);
-        Some(cur)
+        let invalid = dispatch::DispatchError::InvalidHierarchy { decl: parent };
+        let node = self.ir.decl_node(parent).ok_or(invalid)?;
+        if parent == child
+            || (self.ir.as_node(parent).is_none() && self.ir.as_edge(parent).is_none())
+        {
+            return Err(invalid);
+        }
+        match (node.first_child.is_none(), node.last_child.is_none()) {
+            (true, true) => Ok(()),
+            (false, false) => {
+                let last = self.ir.decl_node(node.last_child).ok_or(invalid)?;
+                if last.parent != parent || last.next_sibling.is_some() {
+                    return Err(invalid);
+                }
+                Ok(())
+            }
+            _ => Err(invalid),
+        }
+    }
+
+    fn link_child(&mut self, parent: DeclId, child: DeclId) {
+        if parent.is_none() {
+            return;
+        }
+        let last = self.ir.decl_nodes[parent.raw()].last_child;
+        if last.is_none() {
+            self.ir.decl_nodes[parent.raw()].first_child = child;
+        } else {
+            self.ir.decl_nodes[last.raw()].next_sibling = child;
+        }
+        self.ir.decl_nodes[parent.raw()].last_child = child;
+    }
+
+    pub(crate) fn named(
+        &mut self,
+        id: DeclId,
+        node: DeclNode,
+        bases: Vec<SignedRefR>,
+        namespace: &[SymId],
+    ) -> Result<(), dispatch::DispatchError> {
+        let current = self
+            .ir
+            .decl_node(id)
+            .ok_or(dispatch::DispatchError::InvalidDeclaration { decl: id })?;
+        if self.ir.decl_to_record.get(id.raw()) != Some(&dispatch::NONE) {
+            return Err(dispatch::DispatchError::ConflictingBinding { decl: id });
+        }
+        if current.parent.is_some()
+            || current.first_child.is_some()
+            || current.last_child.is_some()
+            || current.next_sibling.is_some()
+            || node.first_child.is_some()
+            || node.last_child.is_some()
+            || node.next_sibling.is_some()
+        {
+            return Err(dispatch::DispatchError::InvalidHierarchy { decl: id });
+        }
+        self.check_parent(id, node.parent)?;
+        if !namespace.is_empty()
+            && (node.parent.is_some()
+                || self
+                    .ir
+                    .namespace_roots
+                    .last()
+                    .is_some_and(|(d, _)| d.raw() >= id.raw()))
+        {
+            return Err(dispatch::DispatchError::InvalidHierarchy { decl: id });
+        }
+        let index = match node.kind {
+            DeclKind::Node => self.ir.nodes.len(),
+            DeclKind::Edge => self.ir.edges.len(),
+            DeclKind::HyperArc => {
+                return Err(dispatch::DispatchError::KindMismatch {
+                    decl: id,
+                    expected: DeclKind::Node,
+                });
+            }
+        };
+        let slot = dispatch::encode(node.kind, index)?;
+        match node.kind {
+            DeclKind::Node => self.ir.nodes.push(NodeRec::new(id, bases)),
+            DeclKind::Edge => self.ir.edges.push(EdgeRec::new(id, bases)),
+            DeclKind::HyperArc => unreachable!("kind checked before commit"),
+        }
+        self.link_child(node.parent, id);
+        self.ir.decl_nodes[id.raw()] = node;
+        self.ir.decl_to_record[id.raw()] = slot;
+        self.ir.record_namespace_root(id, namespace);
+        Ok(())
+    }
+
+    pub(crate) fn arc(
+        &mut self,
+        parent: DeclId,
+        anno: AnnoR,
+        refs: Vec<SignedRefR>,
+    ) -> Result<(), dispatch::DispatchError> {
+        let (edge, _) =
+            self.ir
+                .edge_for_decl(parent)
+                .ok_or(dispatch::DispatchError::KindMismatch {
+                    decl: parent,
+                    expected: DeclKind::Edge,
+                })?;
+        let id = DeclId::new(self.ir.decl_count());
+        self.check_parent(id, parent)?;
+        let aid = HyperArcId::new(self.ir.arcs.len());
+        let slot = dispatch::encode(DeclKind::HyperArc, aid.raw())?;
+        let id = self.ir.push_anonymous_arc();
+        self.ir.decl_nodes[id.raw()].parent = parent;
+        self.ir.decl_nodes[id.raw()].anno = anno.clone();
+        self.ir.arcs.push(ArcRec {
+            anno,
+            in_edge: parent,
+            refs,
+        });
+        self.ir.decl_to_record[id.raw()] = slot;
+        self.ir.edges[edge.raw()].arcs.push(aid);
+        self.link_child(parent, id);
+        Ok(())
     }
 }
+
+/// Compatibility name used by Nagare's `DeclTreeView` associated iterator.
+/// All child traversal is implemented by `access::ChildDecls`.
+pub type DeclChildren<'a> = crate::ir::access::ChildDecls<'a>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeRec {
@@ -879,7 +1075,9 @@ pub enum IrDecodeError {
 impl core::fmt::Display for IrDecodeError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::InvalidSourceProvenance => write!(f, "invalid declaration source-file provenance"),
+            Self::InvalidSourceProvenance => {
+                write!(f, "invalid declaration source-file provenance")
+            }
             Self::InvalidMapLength {
                 decl_nodes,
                 node,
@@ -946,7 +1144,8 @@ struct NamespaceWireRef<'a> {
 
 impl Serialize for Ir {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        self.validate_source_provenance().map_err(serde::ser::Error::custom)?;
+        self.validate_source_provenance()
+            .map_err(serde::ser::Error::custom)?;
         // Reconstruct the three legacy maps for the wire -- the ONLY compat allocation.
         let n = self.decl_to_record.len();
         let mut d2n: Vec<Option<NodeId>> = vec![None; n];
@@ -964,21 +1163,14 @@ impl Serialize for Ir {
                 }
             }
         }
-        // Field order/names identical to the former derived form. With no namespace
-        // metadata (single-module) the wire keeps exactly the legacy 11 fields ->
-        // byte-identical to the pre-U2.1 form (and the frozen serde KAT).
+        // Encode the current IR fields; derived digest caches are not model state.
         let has_ns = !self.namespace_roots.is_empty();
-        // APPROVED-CORE-EDIT: executable-model-contract. Additive and CONDITIONAL, following the
-        // `namespace_roots` precedent: a document with no facet emits the legacy field set, so its
-        // bytes -- and the frozen serde KAT -- are unchanged.
         let has_model = self.decl_model.iter().any(Option::is_some);
         let has_sources = !self.files.is_empty() || !self.decl_file.is_empty();
-        let fields = 11 + usize::from(has_ns) + usize::from(has_model) + 2 * usize::from(has_sources);
+        let fields =
+            8 + usize::from(has_ns) + usize::from(has_model) + 2 * usize::from(has_sources);
         let mut st = s.serialize_struct("Ir", fields)?;
         st.serialize_field("meta", &self.meta)?;
-        st.serialize_field("doc_hash", &self.doc_hash)?;
-        st.serialize_field("decl_hash", &self.decl_hash)?;
-        st.serialize_field("arc_hash", &self.arc_hash)?;
         st.serialize_field("decl_nodes", &self.decl_nodes)?;
         st.serialize_field("nodes", &self.nodes)?;
         st.serialize_field("edges", &self.edges)?;
@@ -1021,9 +1213,6 @@ struct IrWire {
     #[serde(default)]
     decl_file: Option<Vec<u32>>,
     meta: Option<Meta>,
-    doc_hash: Option<HashId>,
-    decl_hash: Vec<Option<HashId>>,
-    arc_hash: Vec<Option<HashId>>,
     decl_nodes: Vec<DeclNode>,
     nodes: Vec<NodeRec>,
     edges: Vec<EdgeRec>,
@@ -1045,8 +1234,14 @@ impl Ir {
         let n = w.decl_nodes.len();
         let (files, decl_file) = match (w.files, w.decl_file) {
             (None, None) => (Vec::new(), Vec::new()),
-            (Some(files), Some(ids)) if ids.len() == n
-                && ids.iter().all(|&id| id == u32::MAX || (id as usize) < files.len()) => (files, ids),
+            (Some(files), Some(ids))
+                if ids.len() == n
+                    && ids
+                        .iter()
+                        .all(|&id| id == u32::MAX || (id as usize) < files.len()) =>
+            {
+                (files, ids)
+            }
             _ => return Err(IrDecodeError::InvalidSourceProvenance),
         };
         if w.decl_to_node.len() != n || w.decl_to_edge.len() != n || w.decl_to_arc.len() != n {
@@ -1135,9 +1330,6 @@ impl Ir {
             files,
             decl_file,
             meta: w.meta,
-            doc_hash: w.doc_hash,
-            decl_hash: w.decl_hash,
-            arc_hash: w.arc_hash,
             decl_nodes: w.decl_nodes,
             nodes: w.nodes,
             edges: w.edges,
@@ -1186,10 +1378,106 @@ mod compaction_coverage {
             next_sibling: DeclId::NONE,
             anno: AnnoR::default(),
         });
-        ir.decl_hash.push(None);
         ir.nodes.push(NodeRec::new(d, Vec::new()));
         ir.bind_node_decl(d, NodeId::new(0)).unwrap();
         ir
+    }
+
+    #[test]
+    fn checked_binding_rejects_faults_without_changing_state() {
+        let mut ir = one_node_ir();
+        let d = DeclId::new(0);
+        ir.nodes.push(NodeRec::new(d, vec![]));
+        let before = serde_json::to_vec(&ir).unwrap();
+        for error in [
+            ir.bind_node_decl(DeclId::NONE, NodeId::new(0)),
+            ir.bind_edge_decl(d, EdgeId::new(0)),
+            ir.bind_node_decl(d, NodeId::new(2)),
+            ir.bind_node_decl(d, NodeId::new(1)),
+        ] {
+            assert!(error.is_err());
+        }
+        ir.bind_node_decl(d, NodeId::new(0)).unwrap(); // idempotence retains caches
+        assert_eq!(serde_json::to_vec(&ir).unwrap(), before);
+        ir.nodes[1].decl = DeclId::new(99);
+        assert_eq!(
+            ir.bind_node_decl(d, NodeId::new(1)),
+            Err(dispatch::DispatchError::WrongBacklink { decl: d })
+        );
+    }
+
+    #[test]
+    fn construction_commits_links_records_namespaces_and_invalidates_caches() {
+        let mut ir = Ir::default();
+        ir.preallocate_from_index(2);
+        let root = DeclId::new(0);
+        let edge = DeclId::new(1);
+        let mut node = ir.decl_nodes[0].clone();
+        node.name = SymId::new(1);
+        let mut construction = IrConstruction::new(&mut ir);
+        construction
+            .named(root, node.clone(), vec![], &[SymId::new(0)])
+            .unwrap();
+        node.parent = root;
+        node.kind = DeclKind::Edge;
+        node.name = SymId::new(2);
+        construction.named(edge, node, vec![], &[]).unwrap();
+        let anno = AnnoR {
+            tags: vec![],
+            value: Some(ValueR::Num(4.0)),
+        };
+        construction
+            .arc(
+                edge,
+                anno.clone(),
+                vec![SignedRefR::Plus(RefAtomR::plain(root))],
+            )
+            .unwrap();
+        assert_eq!(ir.child_decls(root).collect::<Vec<_>>(), vec![edge]);
+        let arc = ir.child_decls(edge).next().unwrap();
+        let (aid, record) = ir.arc_for_decl(arc).unwrap();
+        assert_eq!(record.in_edge, edge);
+        assert_eq!(ir.edges[0].arcs, vec![aid]);
+        assert_eq!(record.anno, ir.decl_node(arc).unwrap().anno);
+        assert_eq!(ir.namespace_prefix(root), Some([SymId::new(0)].as_slice()));
+    }
+
+    #[test]
+    fn rejected_construction_and_leaf_updates_do_not_damage_existing_ir() {
+        let mut ir = one_node_ir();
+        ir.preallocate_from_index(2);
+        let mut node = ir.decl_nodes[1].clone();
+        node.parent = DeclId::new(99);
+        let before = serde_json::to_vec(&ir).unwrap();
+        let mut construction = IrConstruction::new(&mut ir);
+        assert!(
+            construction
+                .named(DeclId::new(1), node.clone(), vec![], &[])
+                .is_err()
+        );
+        node.parent = DeclId::NONE;
+        assert!(
+            construction
+                .named(DeclId::new(0), node, vec![], &[])
+                .is_err()
+        );
+        assert!(
+            construction
+                .arc(DeclId::new(0), AnnoR::default(), vec![])
+                .is_err()
+        );
+        assert_eq!(serde_json::to_vec(&ir).unwrap(), before);
+        assert!(
+            ir.set_leaf_values(vec![
+                (DeclId::new(0), Some(ValueR::Num(2.0))),
+                (DeclId::new(1), None)
+            ])
+            .is_err()
+        );
+        assert_eq!(serde_json::to_vec(&ir).unwrap(), before);
+        ir.set_leaf_values(vec![(DeclId::new(0), Some(ValueR::Num(2.0)))])
+            .unwrap();
+        assert_eq!(ir.decl_nodes[0].anno.value, Some(ValueR::Num(2.0)));
     }
 
     #[test]

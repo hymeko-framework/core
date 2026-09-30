@@ -2,11 +2,61 @@
 \node (s) {Source (generation excluded)};
 \node (p) [below=of s] {Parse and intern; resolve constants};
 \node (c) [below=of p] {Borrow cached root AST and dependencies};
-\node (i) [below=of c] {Index, aliases; resolve values once, retain both IR fields};
-\node (h) [below=of i] {Legacy hash; shared canonical paths; compact Pruefer state};
-\node (r) [below=of h] {Cached compiled program; prepared execution};
+\node (i) [below=of c] {CanonicalPaths and CanonHashCfg own shared preparation};
+\node (h) [below=of i] {CanonicalIncidence / CanonicalPrufer; bottom-up fold};
+\node (t) [below=of h] {PruferTraversal: Iterator over leaf elimination};
+\node (o) [right=of h,text width=32mm] {Output trait: bytes / buffered BLAKE3};
+\node (v) [right=of i,text width=32mm] {NamespaceValidator borrows canonical paths};
+\node (r) [below=of t] {Cached compiled program; prepared execution};
 \draw[->] (s)--(p); \draw[->] (p)--(c); \draw[->] (c)--(i);
-\draw[->] (i)--(h); \draw[->] (h)--(r);
+\draw[->] (i)--(h); \draw[->] (h)--(t); \draw[->] (t)--(r);
+\draw[->] (h)--(o);
+\draw[->] (i)--(v);
+\end{tikzpicture}
+
+\begin{tikzpicture}[node distance=5mm, every node/.style={draw,rounded corners,font=\small},>=Stealth]
+\node (refs) {SignedRefR::target/sign own reference access};
+\node (limits) [below=of refs] {Seven staging-limit guards};
+\node (error) [below=of limits] {Assembler apply owns resync cleanup};
+\node (keep) [below=of error] {Committed version and replay position preserved};
+\draw[->] (limits)--(error); \draw[->] (error)--(keep);
+\end{tikzpicture}
+
+\begin{tikzpicture}[node distance=5mm, every node/.style={draw,rounded corners,font=\small},>=Stealth]
+\node (clients) {Envelope, section and snapshot decoding};
+\node (reader) [below=of clients] {LittleEndianReader::read<T>};
+\node (value) [below=of reader] {LittleEndianValue: fixed byte array and static conversion};
+\draw[->] (clients)--(reader); \draw[->] (reader)--(value);
 \end{tikzpicture}
 
 % PERF-1 2026-09-09T18:54:44+02:00: released course control -> measured optimization integration -> native/WASM parity -> GitHub/LAN publication.
+
+\begin{tikzpicture}[node distance=5mm, every node/.style={draw,rounded corners,font=\small},>=Stealth]
+\node (api) {Owned and borrowed incidence API: one declaration template};
+\node (data) [below=of api] {IncidenceIndexData: one numerical owner};
+\node (access) [below=of data] {Four typed access families: shared declarations};
+\node (apply) [below=of access] {Assembler apply: one resync cleanup boundary};
+\draw[->] (api)--(data);
+\end{tikzpicture}
+
+\begin{tikzpicture}[node distance=5mm, every node/.style={draw,rounded corners,font=\small},>=Stealth]
+\node (tests) {Assembler cases, taxonomy and model tests};
+\node (runner) [below=of tests] {AssemblerRunner: Producer and TransactionAssembler};
+\node (wire) [below=of runner] {Real wire admission and common invariant checks};
+\draw[->] (tests)--(runner); \draw[->] (runner)--(wire);
+\end{tikzpicture}
+
+\begin{tikzpicture}[node distance=5mm, every node/.style={draw,rounded corners,font=\small},>=Stealth]
+\node (gpu) {Eight builders share OperationFactory context and limits};
+\node (upload) [below=of gpu] {Uniform upload, tensor binding and operand diagnostics};
+\node (ast) [below=of upload] {DeclarationFields: node/edge field contract};
+\node (passes) [below=of ast] {AstInterner mapping / ConstValues substitution};
+\draw[->] (gpu)--(upload); \draw[->] (ast)--(passes);
+\end{tikzpicture}
+
+\begin{tikzpicture}[node distance=5mm, every node/.style={draw,rounded corners,font=\small},>=Stealth]
+\node (coeff) {IncidenceCoefficients: live references / retained coefficients};
+\node (row) [below=of coeff] {IncidenceIndexData: one ordered transpose-row fold};
+\node (apply) [below=of row] {Shared serial traversal / disjoint Rayon outputs};
+\draw[->] (coeff)--(row); \draw[->] (row)--(apply);
+\end{tikzpicture}

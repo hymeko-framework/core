@@ -1,4 +1,4 @@
-use hymeko::tensor::compute::{SparseCsrShape, TensorShape};
+use hymeko_tensor::compute::{SparseCsrShape, TensorShape};
 use hymeko_wgpu::KernelId;
 use hymeko_wgpu::testing::shared_backend;
 

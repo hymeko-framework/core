@@ -9,12 +9,12 @@
 //! boundary between the two must be explicit.
 
 use hymeko::common::ids::DeclId;
-use hymeko::ir::canonical_hash::{CanonHashCfg, canonical_program_hash};
+use hymeko::ir::canonical_hash::{CanonHashCfg, CanonicalPaths};
 use hymeko::ir::coherence::{ModelFinding, validate_model_contract};
 use hymeko::ir::ir::{
     DType, DeclKind, Extent, ModelFacet, OperatorContract, TensorContract, TensorRole,
 };
-use hymeko::ir::semantic_digest::semantic_model_digest_v2;
+use hymeko::ir::semantic_digest::semantic_model_digest;
 
 use crate::unified_ir::support::builder::{S, TestIr};
 
@@ -73,12 +73,14 @@ fn model() -> (TestIr, [DeclId; 4]) {
     (t, [x, w, y, e])
 }
 
-fn v2(t: &TestIr) -> [u8; 32] {
-    semantic_model_digest_v2(&t.ir, &t.it).0.0
+fn digest(t: &TestIr) -> [u8; 32] {
+    semantic_model_digest(&t.ir, &t.it).0.0
 }
 
 fn v1(t: &TestIr) -> [u8; 32] {
-    canonical_program_hash(CanonHashCfg::default(), &t.ir, &t.it).0
+    CanonicalPaths::new(&t.ir)
+        .hash(CanonHashCfg::default(), &t.it)
+        .0
 }
 
 fn roundtrip(t: &TestIr) -> hymeko::ir::ir::Ir {
@@ -123,7 +125,7 @@ fn a_pre_facet_payload_decodes_as_no_model() {
     json.as_object_mut().expect("object").remove("decl_model");
     let back: hymeko::ir::ir::Ir = serde_json::from_value(json).expect("legacy payload decodes");
     assert!(!back.declares_executable_model());
-    assert_eq!(v2(&t), semantic_model_digest_v2(&back, &t.it).0.0);
+    assert_eq!(digest(&t), semantic_model_digest(&back, &t.it).0.0);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -171,8 +173,8 @@ fn the_round_trip_preserves_the_typed_contract_and_the_digest() {
     assert_eq!(back.model_facet(x), t.ir.model_facet(x));
     assert_eq!(back.model_facet(e), t.ir.model_facet(e));
     assert_eq!(
-        semantic_model_digest_v2(&back, &t.it).0.0,
-        v2(&t),
+        semantic_model_digest(&back, &t.it).0.0,
+        digest(&t),
         "the digest must survive the wire"
     );
     assert_eq!(validate_model_contract(&back, &t.it), Ok(()));
@@ -189,7 +191,7 @@ fn declaring_a_model_moves_the_digest() {
     let (model_ir, _) = model();
     assert!(!plain_ir.ir.declares_executable_model());
     assert!(model_ir.ir.declares_executable_model());
-    assert_ne!(v2(&plain_ir), v2(&model_ir));
+    assert_ne!(digest(&plain_ir), digest(&model_ir));
 }
 
 #[test]
@@ -205,7 +207,7 @@ fn a_role_change_moves_the_digest() {
         right.ir.model_facet(x),
         "observation floor"
     );
-    assert_ne!(v2(&left), v2(&right));
+    assert_ne!(digest(&left), digest(&right));
 }
 
 #[test]
@@ -216,7 +218,7 @@ fn a_shape_change_moves_the_digest() {
         .ir
         .set_model_facet(x, Some(tensor(TensorRole::Input, &[1, 5], DType::F32)));
     assert_ne!(left.ir.model_facet(x), right.ir.model_facet(x));
-    assert_ne!(v2(&left), v2(&right));
+    assert_ne!(digest(&left), digest(&right));
 }
 
 #[test]
@@ -227,7 +229,7 @@ fn a_rank_change_moves_the_digest() {
         .ir
         .set_model_facet(x, Some(tensor(TensorRole::Input, &[1, 4, 1], DType::F32)));
     assert_ne!(left.ir.model_facet(x), right.ir.model_facet(x));
-    assert_ne!(v2(&left), v2(&right));
+    assert_ne!(digest(&left), digest(&right));
 }
 
 #[test]
@@ -238,7 +240,7 @@ fn a_dtype_change_moves_the_digest() {
         .ir
         .set_model_facet(x, Some(tensor(TensorRole::Input, &[1, 4], DType::F64)));
     assert_ne!(left.ir.model_facet(x), right.ir.model_facet(x));
-    assert_ne!(v2(&left), v2(&right));
+    assert_ne!(digest(&left), digest(&right));
 }
 
 #[test]
@@ -251,7 +253,7 @@ fn an_operator_identity_change_moves_the_digest() {
         Some(ModelFacet::Operator(OperatorContract { identity: id })),
     );
     assert_ne!(left.ir.model_facet(e), right.ir.model_facet(e));
-    assert_ne!(v2(&left), v2(&right));
+    assert_ne!(digest(&left), digest(&right));
 }
 
 /// A symbolic extent is hashed by its resolved TEXT, so interner order cannot move the digest.
@@ -273,7 +275,7 @@ fn a_symbolic_extent_is_interner_order_independent() {
         );
         t
     };
-    assert_eq!(v2(&build(false)), v2(&build(true)));
+    assert_eq!(digest(&build(false)), digest(&build(true)));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -384,7 +386,7 @@ fn an_empty_operator_identity_is_rejected() {
 fn v1_is_blind_to_the_model_facet() {
     let (plain_ir, _) = plain();
     let (model_ir, _) = model();
-    assert_ne!(v2(&plain_ir), v2(&model_ir), "V2 does see it");
+    assert_ne!(digest(&plain_ir), digest(&model_ir), "V2 does see it");
     assert_eq!(
         v1(&plain_ir),
         v1(&model_ir),
@@ -464,7 +466,7 @@ fn direction_moves_the_digest_at_a_fixed_sign() {
             && matches!(right.ir.arcs[0].refs[1], SignedRefR::Minus(_)),
         "the sign is held fixed"
     );
-    assert_ne!(v2(&left), v2(&right));
+    assert_ne!(digest(&left), digest(&right));
 }
 
 /// **The other half of orthogonality.** Same direction, changed sign: a separate mutation, and it
@@ -484,7 +486,7 @@ fn sign_moves_the_digest_at_a_fixed_direction() {
             && matches!(right.ir.arcs[0].refs[1], SignedRefR::Plus(_)),
         "observation floor: the sign really changed"
     );
-    assert_ne!(v2(&left), v2(&right));
+    assert_ne!(digest(&left), digest(&right));
 }
 
 /// The two axes are independent: four (sign, direction) combinations, four distinct digests.
@@ -498,7 +500,7 @@ fn the_four_sign_direction_combinations_are_all_distinct() {
             if sign_flipped {
                 flip_sign(&mut t, 1);
             }
-            seen.push(v2(&t));
+            seen.push(digest(&t));
         }
     }
     seen.sort_unstable();
@@ -580,7 +582,7 @@ fn the_round_trip_preserves_both_axes() {
             "sign at slot {slot}"
         );
     }
-    assert_eq!(semantic_model_digest_v2(&back, &t.it).0.0, v2(&t));
+    assert_eq!(semantic_model_digest(&back, &t.it).0.0, digest(&t));
 }
 
 /// A pre-direction payload decodes to `Unspecified` and is not judged against the port rules.

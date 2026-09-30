@@ -1,4 +1,4 @@
-use hymeko::tensor::aggregation::{AggCfg, SignAgg, WeightAgg};
+use hymeko_tensor::aggregation::{AggCfg, SignAgg, WeightAgg};
 
 pub const BERGE_SRC: &str = r#"
         berge_demo {}

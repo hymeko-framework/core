@@ -80,6 +80,27 @@ fn assert_view_matches_index(ir: Ir) {
     let view: IncidenceView<'_, '_> = prepared.incidences();
     view.validate().expect("view is a bijection");
 
+    let (data, arcs, slots, incidences, plan) = {
+        let short_lived = prepared.incidences();
+        (
+            short_lived.data(),
+            short_lived.incident_arcs(DeclId::new(0)),
+            short_lived.incident_slots(DeclId::new(0)),
+            short_lived.incidences(DeclId::new(0)),
+            short_lived
+                .prepare_operator()
+                .expect("short-lived view plan"),
+        )
+    };
+    assert!(std::ptr::eq(data, prepared.index()));
+    assert_eq!(arcs, index.incident_arcs(DeclId::new(0)));
+    assert_eq!(slots, index.incident_slots(DeclId::new(0)));
+    assert_eq!(incidences.count(), index.degree(DeclId::new(0)));
+    assert_eq!(
+        plan.retained_bytes(),
+        index.prepare_operator().unwrap().retained_bytes()
+    );
+
     // structural / accounting invariants
     assert_eq!(view.incidence_count(), index.incidence_count());
     assert_eq!(view.retained_bytes(), index.retained_bytes());

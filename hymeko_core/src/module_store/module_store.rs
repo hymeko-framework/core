@@ -1,12 +1,10 @@
 use crate::common::ids::SymId;
 use crate::ir::hash::HashId;
-#[allow(deprecated)]
-use crate::ir::hash_pass::compute_merkle_hashes;
 use crate::ir::ir::Ir;
 use crate::ir::lower::lower_program_to_ir;
 use crate::module_store::source_provider::SourceProvider;
 use crate::resolution::const_resolve::resolve_consts;
-use crate::resolution::intern_pass::intern_ast_into_owned;
+use crate::resolution::intern_pass::intern_ast_into;
 use crate::resolution::interner::Interner;
 use crate::resolution::resolve::{Index, build_index_sym_with_prefix, module_aliases};
 use parser::ast::AstStr;
@@ -33,7 +31,7 @@ pub struct CompiledProgram {
     pub root: ModuleKey,
     /// The resolution `Index`. **Non-authoritative after U2.2**: the canonical
     /// hash and all post-lowering path consumers read the `Ir`
-    /// (`canonical_program_hash(cfg, ir, it)`, `canonical_hash::build_path_index`).
+    /// (`CanonicalPaths::hash(cfg, ir, it)`, `canonical_hash::DerivedPathIndex::new`).
     /// This is a resolution-time artifact retained for external/test consumers;
     /// its removal is planned for a breaking release once they migrate to the
     /// derived path index. It is NOT re-validated against the `Ir` after the
@@ -66,20 +64,12 @@ pub trait HymekoParser {
     fn parse<'a>(&self, src: &'a str) -> Result<AstStr<'a>, String>;
 }
 
-pub struct CompiledProgramCache {
-    // később ide jöhet fingerprint/hash
-    pub idx: Index,
-    pub ir: Ir,
-    pub imports: Vec<(SymId, ModuleKey)>,
-}
-
 pub struct ModuleStore<P: SourceProvider, R: HymekoParser> {
     pub it: Interner,
     fs: P,
     parser: R,
     entries: HashMap<ModuleKey, ModuleEntry>,
     in_progress: Vec<ModuleKey>,
-    program_cache: HashMap<ModuleKey, CompiledProgramCache>,
     last_compiled: Option<Arc<CompiledProgram>>,
 }
 
@@ -91,7 +81,6 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
             parser,
             entries: HashMap::new(),
             in_progress: Vec::new(),
-            program_cache: HashMap::new(),
             last_compiled: None,
         }
     }
@@ -151,7 +140,7 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
             .parse(src.as_ref())
             .map_err(ModuleLoadError::Parse)?;
         // 3) intern (közös internerbe!)
-        let mut ast_sym: AstSym<'static> = intern_ast_into_owned(&ast_str, &mut self.it);
+        let mut ast_sym: AstSym<'static> = intern_ast_into(&ast_str, &mut self.it);
         // 3b) Tier B: resolve top-level `const` decls into numeric
         // literals before downstream passes (resolve / lower) see the
         // AST. Any `Value::Expr` or `Value::Ref(<single-segment-const>)`
@@ -244,27 +233,40 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
         // Each source owns its import bindings and using statements. Keep environments
         // on named declaration ranges; lowering anonymous arcs resolves in their owner edge.
         let modules: Vec<_> = std::iter::once((&root, Vec::new()))
-            .chain(imports_map.iter().map(|(ns, key)| (key, vec![*ns]))).collect();
+            .chain(imports_map.iter().map(|(ns, key)| (key, vec![*ns])))
+            .collect();
         let linked_names: HashMap<_, _> = imports_map.iter().map(|(ns, key)| (key, *ns)).collect();
         for ((key, prefix), range) in modules.iter().zip(&ranges) {
             let entry = &self.entries[*key];
-            let bindings: Vec<_> = entry.ast.imports.iter().zip(&entry.deps).map(|(imp, dep)| {
-                let local = imp.alias.unwrap_or(self.entries[dep].ast.name);
-                let linked = linked_names[dep];
-                (local, linked)
-            }).collect();
+            let bindings: Vec<_> = entry
+                .ast
+                .imports
+                .iter()
+                .zip(&entry.deps)
+                .map(|(imp, dep)| {
+                    let local = imp.alias.unwrap_or(self.entries[dep].ast.name);
+                    let linked = linked_names[dep];
+                    (local, linked)
+                })
+                .collect();
             let aliases = module_aliases(&idx, &entry.ast.usings, prefix, &bindings, &self.it)
                 .map_err(|e| ModuleLoadError::Parse(format!("using alias failed: {e:?}")))?;
             idx.module_aliases.push((range.clone(), aliases));
         }
-        idx.aliases = root_ast.usings.iter().map(|u|
-            (u.alias, idx.module_aliases[0].1[&u.alias].clone())).collect();
+        idx.aliases = root_ast
+            .usings
+            .iter()
+            .map(|u| (u.alias, idx.module_aliases[0].1[&u.alias].clone()))
+            .collect();
 
-        // 7) lower program IR (2A) + merkle
+        // 7) Lower the canonical program IR.
         let mut ir = lower_program_to_ir(root_ast, &imported, &idx, &mut self.it)
             .map_err(|e| ModuleLoadError::Parse(format!("lower failed: {e:?}")))?;
 
-        ir.files = modules.iter().map(|(key, _)| key.0.to_string_lossy().replace('\\', "/")).collect();
+        ir.files = modules
+            .iter()
+            .map(|(key, _)| key.0.to_string_lossy().replace('\\', "/"))
+            .collect();
         ir.decl_file = vec![u32::MAX; ir.decl_nodes.len()];
         for (file, range) in ranges.iter().enumerate() {
             ir.decl_file[range.clone()].fill(file as u32);
@@ -275,16 +277,6 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
             let parent = ir.decl_nodes[id].parent;
             ir.decl_file[id] = ir.decl_file[parent.raw()];
         }
-
-        // AMBIGUOUS CONSUMER, DELIBERATELY NOT MIGRATED (semantic-model-digest-v2, 2026-09-05).
-        // `Ir::decl_hash` is a serialized field: `Ir`'s serde impl writes it and both
-        // `ir::coherence` and the CBOR validator check its LENGTH. Nothing checks its values, and
-        // no consumer has been shown to use them as an identity. Changing what this call stores is
-        // therefore a wire-content change with no established consumer contract, so it is left
-        // exactly as it was and classified `ambiguous -> blocked`. The sound identity is
-        // `ir::semantic_digest::semantic_model_digest_v2`, which is pure and writes nothing.
-        #[allow(deprecated)]
-        compute_merkle_hashes(&mut ir, &self.it);
 
         let cfg = crate::ir::canonical_hash::CanonHashCfg {
             schema_version: 1,
@@ -297,9 +289,11 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
         // canonical hash reads no Index.
         let canon_hash = {
             let paths = crate::ir::canonical_hash::CanonicalPaths::new(&ir);
-            paths.validate(&idx).map_err(|e| {
-                ModuleLoadError::Parse(format!("namespace boundary validation failed: {e}"))
-            })?;
+            crate::ir::canonical_hash::NamespaceValidator::new(&paths)
+                .validate(&idx)
+                .map_err(|e| {
+                    ModuleLoadError::Parse(format!("namespace boundary validation failed: {e}"))
+                })?;
             paths.hash(cfg, &self.it)
         };
 
@@ -335,7 +329,9 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
                     let mut suffix = linked.len();
                     loop {
                         ns = self.it.intern(&format!("__hymeko_module_{suffix}"));
-                        if namespaces.insert(ns) { break; }
+                        if namespaces.insert(ns) {
+                            break;
+                        }
                         suffix += 1;
                     }
                 }
@@ -371,8 +367,10 @@ fn resolve_import_path(base_dir: &Path, import_path: &str) -> Result<PathBuf, St
     } else {
         // Validate before PathBuf::join: Windows verbatim paths can collapse parent
         // components during joining, hiding an attempt to move above the root.
-        crate::module_store::source_provider::normalize_components(base_dir.components().chain(p.components()))
-            .map_err(|e| format!("{e}: {import_path}"))?;
+        crate::module_store::source_provider::normalize_components(
+            base_dir.components().chain(p.components()),
+        )
+        .map_err(|e| format!("{e}: {import_path}"))?;
         Ok(base_dir.join(p))
     }
 }
@@ -384,20 +382,4 @@ fn io_diag(op: &'static str, path: &Path, e: String) -> ModuleLoadError {
         cwd: std::env::current_dir().ok(),
         err: std::io::Error::new(std::io::ErrorKind::Other, e),
     })
-}
-
-fn make_build_id(created_at_unix_ns: i128) -> [u8; 16] {
-    let mut h = blake3::Hasher::new();
-    h.update(b"HYMEKO_BUILD_ID");
-    h.update(&created_at_unix_ns.to_le_bytes());
-
-    // kis entropy: address (nem kriptó, de session ID-nek oké)
-    let addr = (&h as *const _ as usize).to_le_bytes();
-    h.update(&addr);
-
-    let out = h.finalize();
-    let b = out.as_bytes();
-    let mut id = [0u8; 16];
-    id.copy_from_slice(&b[..16]);
-    id
 }

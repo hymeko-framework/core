@@ -1,13 +1,14 @@
 use super::{CBOR_SCHEMA_VERSION, CborError, CborPayload, DecodedCborPayload};
-use crate::common::ids::{DeclId, SymId};
+use crate::common::ids::DeclId;
 use crate::ir::canonical_hash::{
-    CanonHashCfg, build_path_index, canonical_program_hash, validate_namespace_roots,
+    CanonHashCfg, CanonicalPaths, DerivedPathIndex, NamespaceValidator,
 };
 use crate::ir::coherence::{CoherenceLimits, validate_hierarchy_index_coherence};
 use crate::ir::ir::{AnnoR, SignedRefR, ValueR};
 use crate::ir_stream::DecodeLimits;
 use crate::resolution::interner::Interner;
 use crate::resolution::resolve::Index;
+use crate::resolution::symbols::SymbolCompaction;
 use std::path::{Component, Path, PathBuf};
 
 pub(super) fn payload(
@@ -32,9 +33,30 @@ pub(super) fn payload(
             return Err(CborError::DuplicateInternedString { index });
         }
     }
-    validate_symbols_and_ids(&payload, payload.interned_strings.len())?;
+    // Module-local parser environments were never serialized. The shared
+    // typed symbol visitor validates every live symbol before dense rewriting.
+    payload.index.module_aliases.clear();
+    let compacted = SymbolCompaction::apply(
+        &mut payload.ir,
+        &mut payload.index,
+        &mut payload.imports,
+        &interner,
+    )
+    .map_err(|error| CborError::SymbolOutOfRange {
+        field: error.field,
+        symbol: error.symbol,
+    })?;
+    payload.interned_strings = compacted
+        .interner
+        .iter()
+        .map(|(_, text)| text.to_owned())
+        .collect();
+    let interner = compacted.interner;
+    validate_declaration_ids(&payload)?;
 
-    validate_namespace_roots(&payload.ir, &payload.index)
+    let paths = CanonicalPaths::new(&payload.ir);
+    NamespaceValidator::new(&paths)
+        .validate(&payload.index)
         .map_err(|_| CborError::NamespaceMismatch)?;
     let max_walk = payload.ir.decl_nodes.len().saturating_add(1);
     validate_hierarchy_index_coherence(
@@ -50,7 +72,7 @@ pub(super) fn payload(
         findings: report.total,
     })?;
 
-    let derived = build_path_index(&payload.ir).map_err(|_| CborError::IndexMismatch)?;
+    let derived = DerivedPathIndex::new(&payload.ir).map_err(|_| CborError::IndexMismatch)?;
     let mut rebuilt = Index::new();
     for (path, decl) in derived.iter() {
         rebuilt.by_path.insert(path.clone(), decl);
@@ -67,7 +89,7 @@ pub(super) fn payload(
     payload.index = rebuilt;
 
     if verify_hash {
-        let expected = canonical_program_hash(CanonHashCfg::default(), &payload.ir, &interner);
+        let expected = paths.hash(CanonHashCfg::default(), &interner);
         if expected != payload.canon_hash {
             return Err(CborError::CanonicalHashMismatch {
                 expected,
@@ -86,8 +108,6 @@ pub(super) fn limits(payload: &CborPayload, limits: &DecodeLimits) -> Result<(),
         ("nodes", payload.ir.nodes.len()),
         ("edges", payload.ir.edges.len()),
         ("arcs", payload.ir.arcs.len()),
-        ("declaration hashes", payload.ir.decl_hash.len()),
-        ("arc hashes", payload.ir.arc_hash.len()),
         ("path-index entries", payload.index.by_path.len()),
         ("aliases", payload.index.aliases.len()),
         ("interned strings", payload.interned_strings.len()),
@@ -179,31 +199,27 @@ pub(super) fn normalize_portable_path(
     Ok(normalized)
 }
 
-fn validate_symbols_and_ids(payload: &CborPayload, symbol_count: usize) -> Result<(), CborError> {
+fn validate_declaration_ids(payload: &CborPayload) -> Result<(), CborError> {
     let ir = &payload.ir;
     let decl_count = ir.decl_nodes.len();
 
     for decl in &ir.decl_nodes {
-        symbol(decl.name, symbol_count, "declaration name")?;
         optional_decl(decl.parent, decl_count, "declaration parent")?;
         optional_decl(decl.first_child, decl_count, "declaration first_child")?;
         optional_decl(decl.last_child, decl_count, "declaration last_child")?;
         optional_decl(decl.next_sibling, decl_count, "declaration next_sibling")?;
-        anno(&decl.anno, symbol_count, decl_count)?;
+        anno(&decl.anno, decl_count)?;
     }
-    for (root, prefix) in &ir.namespace_roots {
+    for (root, _) in &ir.namespace_roots {
         required_decl(*root, decl_count, "namespace root")?;
-        for part in prefix {
-            symbol(*part, symbol_count, "namespace prefix symbol")?;
-        }
     }
     for node in &ir.nodes {
         required_decl(node.decl, decl_count, "node declaration")?;
-        refs(&node.bases, symbol_count, decl_count)?;
+        refs(&node.bases, decl_count)?;
     }
     for edge in &ir.edges {
         required_decl(edge.decl, decl_count, "edge declaration")?;
-        refs(&edge.bases, symbol_count, decl_count)?;
+        refs(&edge.bases, decl_count)?;
         for arc in &edge.arcs {
             if arc.is_none() || arc.raw() >= ir.arcs.len() {
                 return Err(CborError::IdOutOfRange {
@@ -215,70 +231,44 @@ fn validate_symbols_and_ids(payload: &CborPayload, symbol_count: usize) -> Resul
     }
     for arc in &ir.arcs {
         required_decl(arc.in_edge, decl_count, "arc owner")?;
-        anno(&arc.anno, symbol_count, decl_count)?;
-        refs(&arc.refs, symbol_count, decl_count)?;
+        anno(&arc.anno, decl_count)?;
+        refs(&arc.refs, decl_count)?;
     }
-    for (path, decl) in &payload.index.by_path {
+    for decl in payload.index.by_path.values() {
         required_decl(*decl, decl_count, "path-index declaration")?;
-        for part in &path.0 {
-            symbol(*part, symbol_count, "path-index symbol")?;
-        }
-    }
-    for (alias, path) in &payload.index.aliases {
-        symbol(*alias, symbol_count, "alias")?;
-        for part in path {
-            symbol(*part, symbol_count, "alias path symbol")?;
-        }
-    }
-    for (namespace, _) in &payload.imports {
-        symbol(*namespace, symbol_count, "import namespace")?;
     }
     Ok(())
 }
 
-fn refs(refs: &[SignedRefR], symbol_count: usize, decl_count: usize) -> Result<(), CborError> {
+fn refs(refs: &[SignedRefR], decl_count: usize) -> Result<(), CborError> {
     for reference in refs {
         let atom = reference.atom();
         required_decl(atom.target, decl_count, "reference target")?;
-        anno(&atom.anno, symbol_count, decl_count)?;
+        anno(&atom.anno, decl_count)?;
         if let Some(weights) = &atom.weights {
             for weight in weights {
-                value(weight, symbol_count, decl_count)?;
+                value(weight, decl_count)?;
             }
         }
     }
     Ok(())
 }
 
-fn anno(anno: &AnnoR, symbol_count: usize, decl_count: usize) -> Result<(), CborError> {
-    for tag in &anno.tags {
-        symbol(*tag, symbol_count, "annotation tag")?;
-    }
+fn anno(anno: &AnnoR, decl_count: usize) -> Result<(), CborError> {
     if let Some(value_ref) = &anno.value {
-        value(value_ref, symbol_count, decl_count)?;
+        value(value_ref, decl_count)?;
     }
     Ok(())
 }
 
-fn value(root: &ValueR, symbol_count: usize, decl_count: usize) -> Result<(), CborError> {
+fn value(root: &ValueR, decl_count: usize) -> Result<(), CborError> {
     let mut pending = vec![root];
     while let Some(value_ref) = pending.pop() {
         match value_ref {
-            ValueR::Str(symbol_id) => symbol(*symbol_id, symbol_count, "string value")?,
             ValueR::Ref(decl) => required_decl(*decl, decl_count, "value reference")?,
             ValueR::List(values) => pending.extend(values),
-            ValueR::Num(_) => {}
+            ValueR::Num(_) | ValueR::Str(_) => {}
         }
-    }
-    Ok(())
-}
-
-fn symbol(id: SymId, count: usize, field: &'static str) -> Result<(), CborError> {
-    if id.is_none() || id.raw() >= count {
-        return Err(CborError::SymbolOutOfRange {
-            field,
-            symbol: id.raw(),
-        });
     }
     Ok(())
 }
