@@ -4,7 +4,7 @@
 use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_main};
 use hymeko::{
     ir::{
-        canonical_hash::{CanonHashCfg, CanonicalPaths, NamespaceValidator},
+        canonical_hash::{Canon, CanonHashCfg, CanonicalIdentity, validate_namespace_roots},
         lower::lower_to_ir,
     },
     module_store::{module_store::ModuleStore, source_provider::MemProvider},
@@ -126,12 +126,12 @@ fn bench_compiler_phases(c: &mut Criterion) {
         expected.ir.edges.len(),
         expected.ir.arcs.len(),
         expected.ir.decl_nodes.len(),
-        expected.canon_hash,
+        expected.canon.structure().0,
     );
     assert_eq!(expected.ir.decl_nodes.len(), ir.decl_nodes.len());
     assert_eq!(
-        expected.canon_hash,
-        CanonicalPaths::new(&ir).hash(CanonHashCfg::default(), &it)
+        expected.canon,
+        CanonicalIdentity::of(&Canon::new(&ir, &it), CanonHashCfg::default())
     );
     let scale = if nodes % 1000 == 0 {
         format!("{}k", nodes / 1000)
@@ -184,14 +184,14 @@ fn bench_compiler_phases(c: &mut Criterion) {
         )
     });
     group.bench_function("namespace_validation", |b| {
-        b.iter(|| {
-            NamespaceValidator::new(&CanonicalPaths::new(black_box(&ir)))
-                .validate(&idx)
-                .unwrap()
-        })
+        b.iter(|| validate_namespace_roots(black_box(&ir), &idx).unwrap())
     });
     group.bench_function("canonical_hash", |b| {
-        b.iter(|| CanonicalPaths::new(black_box(&ir)).hash(CanonHashCfg::default(), &it))
+        b.iter(|| {
+            Canon::new(black_box(&ir), &it)
+                .structure(CanonHashCfg::default())
+                .0
+        })
     });
     group.bench_function("compile_cold", |b| {
         b.iter_batched(
@@ -220,7 +220,6 @@ fn bench_compiler_phases(c: &mut Criterion) {
 fn bench_semantic_digest(c: &mut Criterion) {
     use hymeko::common::ids::DeclId;
     use hymeko::ir::ir::ValueR;
-    use hymeko::ir::semantic_digest::semantic_model_digest;
     use hymeko::module_store::execution::{CompiledModel, ValueUpdate};
 
     let input: Arc<str> = generate_large_hypergraph(1_000, "[0.5]")
@@ -253,13 +252,13 @@ fn bench_semantic_digest(c: &mut Criterion) {
     let before = model.semantic_digest();
     assert_eq!(
         before,
-        semantic_model_digest(&model.program().ir, model.interner())
+        Canon::new(&model.program().ir, model.interner()).hash()
     );
     let changed = model.with_value_updates(&updates).unwrap();
     assert_ne!(before, changed.semantic_digest());
     assert_eq!(
         changed.semantic_digest(),
-        semantic_model_digest(&changed.program().ir, changed.interner())
+        Canon::new(&changed.program().ir, changed.interner()).hash()
     );
     eprintln!(
         "DIGEST_FIXTURE nodes=1000 bytes={} blake3={} decls={}",
@@ -275,7 +274,7 @@ fn bench_semantic_digest(c: &mut Criterion) {
         .measurement_time(Duration::from_secs(3));
     group.bench_function("full", |b| {
         b.iter(|| {
-            semantic_model_digest(black_box(&model.program().ir), black_box(model.interner()))
+            Canon::new(black_box(&model.program().ir), black_box(model.interner())).hash()
         })
     });
     group.bench_function("cached", |b| b.iter(|| black_box(&model).semantic_digest()));

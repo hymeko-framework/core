@@ -255,6 +255,160 @@ crates:
           - the reassembled length is checked against DecodeLimits before the single reassembly allocation
           - no installation into ExecutionState or CompiledModel, and no commit or push under this approval
 
+      # APPROVED-CORE-EDIT: generic-arena-contract (2026-09-27, user chat)
+      - slug: generic-arena-contract
+        date: 2026-09-27
+        scope: >
+          Planned in nagare docs/plans/2026-09-27-p42-one-arena-contract-over-backends/.
+          New module hymeko_core/src/tensor/compute/arena/: mod.rs holds the
+          ArenaBackend and ArenaEpoch traits, ArenaConfig, ReusePolicy (plus
+          BestFit), ArenaStats and AllocationKey<C>; pool.rs the generic
+          reuse-policy core Pool<B> (free list, pending, retired, budgets,
+          deterministic eviction, statistics) extracted from hymeko_wgpu's
+          PoolInner with its semantics unchanged; host.rs the host deployment
+          HostArena<R> / HostLease<R> / HostResource. compute/mod.rs
+          declares the module and its header records the amendment. Tests in
+          hymeko_core/tests/compute_arena.rs, wired through tests/mod.rs.
+        constraints:
+          - no dependency and no manifest change; std only
+          - no wgpu type, device handle, or backend implementation other than the std host one
+          - generics only, no dynamic dispatch
+          - no CUDA code; the trait admits a CUDA backend without naming one
+          - "both consumers exist when this lands: hymeko_wgpu::TensorArena (Pool<WgpuBackend>) and Nagare HSiKAN (HostArena)"
+          - no commit or push beyond the feature branch the user merges
+
+      # APPROVED-CORE-EDIT: canonical-identity (2026-09-29, user chat)
+      - slug: canonical-identity
+        date: 2026-09-29
+        scope: >
+          Planned in docs/plans/2026-09-29-canonical-identity/. The canonical
+          identity of an Ir becomes one object. hymeko_core/src/ir/canonical_hash.rs:
+          the crate-private CanonicalPaths becomes the public Canon<'ir> (the Ir, its
+          interner and its canonical paths, derived once) with structure(cfg),
+          declaration_hashes(), path_of() and the crate-private validate(idx);
+          CanonicalIdentity is the value a compile keeps (hash(), structure()).
+          hymeko_core/src/ir/semantic_digest.rs implements Canon::hash() (the
+          semantic V2 digest) and Canon::declaration_hashes() over the Canon's paths.
+          They replace canonical_program_hash, program_structure_hash_v1,
+          semantic_model_digest_v2 and semantic_declaration_hashes.
+          module_store.rs computes CanonicalIdentity once per compile and
+          CompiledProgram::canon replaces canon_hash. Call sites migrate in
+          writers/cbor_writer.rs and cbor_writer/validate.rs, util/pretty_print.rs,
+          module_store/execution_tests.rs and the tests, benches and example;
+          ir/hash_pass.rs, ir/coherence.rs and ir/time.rs change documentation only, the
+          links that named the replaced functions. build_path_index shares Canon's sorted
+          path order (sorted_paths) and no longer clones a path to sort it.
+        constraints:
+          - no hash byte changes; V1 and V2 known-answer and relative suites pass unchanged in meaning
+          - the CBOR wire field canon_hash and its bytes are unchanged
+          - the deprecated Merkle pass is untouched
+          - no dependency and no manifest change
+          - no commit or push beyond the feature branch the user merges
+
+      # APPROVED-CORE-EDIT: semantic-digest-path-cache (2026-09-29, user chat)
+      - slug: semantic-digest-path-cache
+        date: 2026-09-29
+        scope: >
+          A byte-identical speed-up of the semantic digest, hymeko_core/src/ir/semantic_digest.rs
+          only. Proposed as a per-declaration path cache; the profile then showed that blake3's
+          per-update bookkeeping, not path resolution, was the cost (5.2M updates for one
+          Bitcoin-OTC graph, 940M of write_target's 1079M instructions), so it is built as
+          DigestWriter: the digest's small writes go through a 256-byte stack buffer into one
+          blake3 update, with no per-declaration memory. Unit test
+          a_buffered_digest_is_the_stream_it_feeds.
+        constraints:
+          - every digest byte unchanged (blake3 streaming; 105 corpus files compared against 83ef0c1)
+          - no algorithm or schema version change, no wire change
+          - no dependency and no manifest change
+          - no commit or push beyond the feature branch the user merges
+
+      # APPROVED-CORE-EDIT: module-store-borrowed-asts (2026-09-29, user chat: "of course borrow
+      # them. Don't violate the zero copy rule. Also be gentle on memory")
+      - slug: module-store-borrowed-asts
+        date: 2026-09-29
+        scope: >
+          ModuleStore::compile reads every dependency module's AST in place instead of cloning
+          it: the entries and the interner are disjoint fields, so the borrow needs no copy.
+          lower_program_to_ir(_with_meta) takes the imports as (SymId, &AstSym); ModuleStore::compile
+          is its only caller in the ecosystem. Measured (massif, CogInfoCom Alpha): the clone was
+          364 MiB of the compile's heap peak.
+        constraints:
+          - zero copy: no module AST is cloned by a compile
+          - the lowered Ir and every identity byte unchanged
+          - no dependency and no manifest change
+          - no commit or push beyond the feature branch the user merges
+
+      # APPROVED-CORE-EDIT: ir-shrink-after-lowering (2026-09-29, user chat)
+      - slug: ir-shrink-after-lowering
+        date: 2026-09-29
+        scope: >
+          hymeko_core/src/ir/ir.rs gains Ir::shrink_to_fit over the one table list
+          ir_tables! (every Vec table, crate-private ones included) and its unit test;
+          hymeko_core/src/ir/lower.rs calls it once at the end of lower_program_to_ir, so a
+          lowered IR carries no growth slack (declaration tables sized for the named
+          declarations then grown by the anonymous arcs; record tables grown as filled).
+          Compile-level test in test_module_store.rs.
+        constraints:
+          - no element and no identity byte changes
+          - the allocator shrinks in place; nothing is copied to compact the IR
+          - no dependency and no manifest change
+          - no commit or push beyond the feature branch the user merges
+
+      # APPROVED-CORE-EDIT: mycielskian-generator (2026-09-29, user chat)
+      - slug: mycielskian-generator
+        date: 2026-09-29
+        scope: >
+          Planned in nagare docs/plans/2026-09-29-p52-combinatorial-hypergraph-language-models/
+          (phase L0). hymeko_core/src/generators.rs gains one free function,
+          mycielskian(&HypergraphDesign) -> HypergraphDesign (Mycielski's construction on
+          graphs, one shadowed copy per member on hypergraphs, plus the apex edges), its
+          module-doc line, and its unit tests in the module's tests.
+        constraints:
+          - additive only: no existing signature, enum or variant changes, so no downstream match is affected
+          - infallible: the base design's own invariant is its precondition, and no GeneratorError variant is added
+          - HypergraphGenerator is not extended
+          - no dependency and no manifest change; std only
+          - no commit or push beyond the feature branch the user merges
+
+      # APPROVED-CORE-EDIT: merkle-hash-removal (2026-09-30, user chat)
+      - slug: merkle-hash-removal
+        date: 2026-09-30
+        scope: >
+          User, 2026-09-30, deciding the merge of main into feat/tensor-extraction:
+          "minden frissítsünk ne legyen v2". Remove the obsolete Merkle hash caches,
+          ir/hash_pass.rs (compute_merkle_hashes) and the Ir fields doc_hash, decl_hash
+          and arc_hash, including their serde/CBOR representation, without a CBOR
+          schema version bump, and update every reader. This authorizes the removal the
+          tensor-extraction work made on 2026-09-23 under the unrecorded slug
+          core-pipeline-encapsulation-cleanup. For these three fields it supersedes the
+          `ambiguous -> blocked` classification under semantic-model-digest-v2 and the
+          "cached IR hashes / CBOR wire unchanged" constraints of
+          semantic-digest-canonical-coverage and canonical-identity.
+        constraints:
+          - CBOR_SCHEMA_VERSION stays 1; payloads written before the change still decode (serde ignores the removed fields)
+          - "readers older than this change reject new payloads (IrWire requires decl_hash/arc_hash there): core_cpp, nagare, network, transformation-formula and the HIVE deployments update in the same wave"
+          - V1 structural and V2 semantic digest bytes unchanged; the frozen known-answer vectors pass
+
+      # 2026-09-30: main merged into feat/tensor-extraction (user chat: "WIP beolvasztása main-be").
+      - slug: canonical-identity-tensor-extraction-merge
+        date: 2026-09-30
+        scope: >
+          canonical-identity's public API is kept: Canon, CanonicalIdentity,
+          validate_namespace_roots, build_path_index and the V1/V2 type names. The
+          tensor-extraction work's internals stay behind it: the crate-private
+          CanonicalPaths, NamespaceValidator, SkeletonForest and incremental
+          SemanticDigestState, and the public CanonicalPrufer/CanonicalIncidence
+          canonical forms. Its public free functions (program_structure_hash,
+          semantic_model_digest, semantic_declaration_hashes) and
+          DerivedPathIndex::new are not kept. A checked value update keeps
+          CanonicalIdentity from its incremental digest and the unchanged structural
+          hash (CanonicalIdentity::from_parts). generic-arena-contract's module
+          moved with the tensor extraction to hymeko_tensor::compute::arena (tensor
+          091f4f1); Core no longer carries tensor/compute.
+        constraints:
+          - digest bytes and CBOR admission are unchanged; the CBOR round-trip test compares paths as text, because SymIds are snapshot-local after symbol compaction
+          - no commit or push beyond the feature branch the user merges
+
   # `hymeko_hnn` was RELOCATED 2026-08-31 to hymeko/nagare (hymeko_nagare::hnn) and no longer
   # exists in this workspace (Cargo.toml members = [hymeko_core, hymeko_wgpu]; the directory is
   # gone). Its stale crate declaration was removed here on 2026-09-01 under

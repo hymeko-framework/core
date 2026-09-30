@@ -7,6 +7,7 @@ use super::{
 use crate::{
     common::ids::DeclId,
     ir::{
+        canonical_hash::CanonicalIdentity,
         coherence::{CoherenceLimits, validate_hierarchy_index_coherence, validate_model_contract},
         ir::{DeclKind, ValueR},
     },
@@ -140,13 +141,17 @@ impl CompiledModel {
         let semantic =
             self.semantic_state()
                 .with_values(&ir, &interner, &changed, compacted.renumbered);
+        // The kept identity is the updated IR's: its incremental semantic digest and the
+        // unchanged structural hash.
+        let canon =
+            CanonicalIdentity::from_parts(semantic.digest(), self.program.canon.structure());
         Ok(Self {
             program: Arc::new(CompiledProgram {
                 root: self.program.root.clone(),
                 idx: index,
                 ir,
                 imports,
-                canon_hash: self.program.canon_hash,
+                canon,
             }),
             interner,
             semantic: std::sync::OnceLock::from(semantic),
@@ -215,7 +220,7 @@ mod tests {
     use super::*;
     use crate::{
         common::ids::SymId,
-        ir::semantic_digest::semantic_model_digest,
+        ir::canonical_hash::Canon,
         module_store::{module_store::HymekoParser, source_provider::MemProvider},
         util::real_parser::RealParser,
     };
@@ -277,7 +282,7 @@ mod tests {
             assert_eq!(current.interner().resolve(*symbol), text);
             assert_eq!(
                 current.semantic_digest(),
-                semantic_model_digest(&current.program().ir, current.interner())
+                Canon::new(&current.program().ir, current.interner()).hash()
             );
         }
         let Some(ValueR::Str(old)) = value(&original, "label") else {
@@ -322,7 +327,7 @@ mod tests {
         );
         assert_eq!(
             cleared.semantic_digest(),
-            semantic_model_digest(&cleared.program().ir, cleared.interner())
+            Canon::new(&cleared.program().ir, cleared.interner()).hash()
         );
     }
 
@@ -332,7 +337,7 @@ mod tests {
         let state = id(&original, "state");
         let label = id(&original, "label");
         let position = id(&original, "position");
-        let digest = semantic_model_digest(&original.program().ir, original.interner());
+        let digest = Canon::new(&original.program().ir, original.interner()).hash();
         let updated = original
             .with_value_updates(&[
                 ValueUpdate::Set {
@@ -364,13 +369,13 @@ mod tests {
             original.program().ir.node_count(),
             updated.program().ir.node_count()
         );
-        assert_ne!(
-            digest,
-            semantic_model_digest(&updated.program().ir, updated.interner())
-        );
+        let recomputed = Canon::new(&updated.program().ir, updated.interner()).hash();
+        assert_ne!(digest, recomputed);
+        // The kept identity is the updated IR's, not the original's.
+        assert_eq!(updated.program().canon.hash(), recomputed);
         assert_eq!(
             digest,
-            semantic_model_digest(&original.program().ir, original.interner())
+            Canon::new(&original.program().ir, original.interner()).hash()
         );
         let cleared = updated
             .with_value_updates(&[ValueUpdate::Clear {
@@ -441,12 +446,13 @@ mod tests {
             assert_eq!(take_hash_work(), [0; 4]);
             assert_eq!(
                 digest,
-                semantic_model_digest(&next.program.ir, next.interner())
+                Canon::new(&next.program.ir, next.interner()).hash()
             );
             assert_eq!(
-                next.program.canon_hash,
-                CanonicalPaths::new(&next.program.ir)
-                    .hash(CanonHashCfg::default(), next.interner())
+                next.program.canon.structure().0,
+                Canon::new(&next.program.ir, next.interner())
+                    .structure(CanonHashCfg::default())
+                    .0
             );
             assert_eq!(base.semantic_digest(), baseline);
             take_hash_work();
@@ -462,7 +468,7 @@ mod tests {
         assert_ne!(branch.semantic_digest(), baseline);
         assert_eq!(
             branch.semantic_digest(),
-            semantic_model_digest(&branch.program.ir, branch.interner())
+            Canon::new(&branch.program.ir, branch.interner()).hash()
         );
         take_hash_work();
         let unchanged = branch

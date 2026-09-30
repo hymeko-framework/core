@@ -53,3 +53,5 @@ mod prepared_ir_backbone;
 // Part-2 §4 Bx profile (temporary; autotests=false).
 #[path = "bx_profile.rs"]
 mod bx_profile;
+
+// The generic arena (Pool<B>, HostArena) moved to hymeko_tensor with its tests.

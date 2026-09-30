@@ -5,6 +5,7 @@ use crate::common::ids::DeclId;
 use crate::common::pathkey::PathKey;
 use crate::ir::hash::HashId;
 use crate::ir::ir::{DeclKind, DeclNode, EdgeRec, Ir, SignedRefR};
+use crate::ir::semantic_digest::{ProgramStructureHashV1, SemanticModelDigestV2};
 use crate::resolution::interner::Interner;
 use crate::resolution::resolve::Index;
 
@@ -46,9 +47,128 @@ impl CanonHashCfg {
     }
 }
 
+/// The canonical view of one [`Ir`]: the IR, its interner, and every named declaration's canonical
+/// path, derived once. Every identity of the IR is a method of this view --
+/// [`Self::structure`] (V1), `Self::hash` (the semantic V2 digest, in `ir::semantic_digest`) and
+/// `Self::declaration_hashes` -- so the paths are derived once however many are asked for.
+///
+/// Borrowing the IR prevents changes that would invalidate the derived paths.
+///
+/// # Invariants
+/// The path table has one entry per declaration of the borrowed IR, `None` for an anonymous arc.
+pub struct Canon<'ir> {
+    paths: CanonicalPaths<'ir>,
+    it: &'ir Interner,
+    /// The first two declarations that share a path, in path order; `None` when every path is
+    /// unique, which is what the semantic digest's canonical scheme requires.
+    duplicate: Option<PathIndexError>,
+}
+
+impl<'ir> Canon<'ir> {
+    /// The canonical view of `ir`, whose symbols resolve through `it`.
+    ///
+    /// # Preconditions
+    /// None: total over any `Ir`. A malformed hierarchy (cycle, dangling parent) terminates
+    /// deterministically (bounded walks), and a duplicate path is recorded, not refused.
+    #[must_use]
+    pub fn new(ir: &'ir Ir, it: &'ir Interner) -> Self {
+        let paths = CanonicalPaths::new(ir);
+        let duplicate = sorted_paths(&paths.did_to_path).err();
+        Self { paths, it, duplicate }
+    }
+
+    /// The IR this view reads.
+    #[must_use]
+    pub fn ir(&self) -> &'ir Ir {
+        self.paths.ir
+    }
+
+    /// The interner its symbols resolve through.
+    #[must_use]
+    pub fn interner(&self) -> &'ir Interner {
+        self.it
+    }
+
+    /// The canonical path of a declaration, or `None` for an anonymous arc or an out-of-range id.
+    #[must_use]
+    pub fn path_of(&self, d: DeclId) -> Option<&PathKey> {
+        self.paths.did_to_path.get(d.raw())?.as_ref()
+    }
+
+    /// Whether every named declaration has its own path.
+    ///
+    /// # Errors
+    /// [`PathIndexError::DuplicatePath`] naming the first two declarations, in path order, that
+    /// share one.
+    pub fn unique_paths(&self) -> Result<(), PathIndexError> {
+        self.duplicate.map_or(Ok(()), Err)
+    }
+
+    /// Canonical program hash V1: `H( header || H(skeleton_prufer) || H(incidence_bytes) )`.
+    /// Structural only: annotation values and incidence weights are not covered; `Self::hash` is
+    /// the identity that covers them. See [`CanonicalPaths::hash`] for its preconditions.
+    ///
+    /// # Postconditions
+    /// Deterministic; independent of dense `DeclId` assignment (name/path-based).
+    #[must_use]
+    pub fn structure(&self, cfg: CanonHashCfg) -> ProgramStructureHashV1 {
+        ProgramStructureHashV1(self.paths.hash(cfg, self.it))
+    }
+
+    /// The lowering-boundary check: the IR's links reproduce the resolution `Index` hierarchy.
+    pub(crate) fn validate(&self, idx: &Index) -> Result<(), NamespaceError> {
+        NamespaceValidator::new(&self.paths).validate(idx)
+    }
+
+    /// The per-declaration path table, for the semantic digest's layout.
+    pub(crate) fn paths(&self) -> &[Option<PathKey>] {
+        &self.paths.did_to_path
+    }
+}
+
+/// The identity a compile keeps of the program it compiled: its semantic digest and its structural
+/// hash, computed once, through one [`Canon`], where the IR is built.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct CanonicalIdentity {
+    hash: SemanticModelDigestV2,
+    structure: ProgramStructureHashV1,
+}
+
+impl CanonicalIdentity {
+    /// Both identities of `canon`'s IR, the structural one under `cfg`.
+    #[must_use]
+    pub fn of(canon: &Canon<'_>, cfg: CanonHashCfg) -> Self {
+        Self {
+            hash: canon.hash(),
+            structure: canon.structure(cfg),
+        }
+    }
+
+    /// An identity whose parts were computed elsewhere: a checked value update keeps the
+    /// structural hash (values are not structure) and supplies its incremental semantic digest.
+    pub(crate) const fn from_parts(
+        hash: SemanticModelDigestV2,
+        structure: ProgramStructureHashV1,
+    ) -> Self {
+        Self { hash, structure }
+    }
+
+    /// The semantic identity: every declaration, annotation value, record and arc.
+    #[must_use]
+    pub const fn hash(&self) -> SemanticModelDigestV2 {
+        self.hash
+    }
+
+    /// The structural identity, blind to annotation values and incidence weights.
+    #[must_use]
+    pub const fn structure(&self) -> ProgramStructureHashV1 {
+        self.structure
+    }
+}
+
 /// Transient canonical paths shared by lowering-boundary validation and hashing.
 /// Borrowing the IR prevents changes that would invalidate these derived paths.
-pub struct CanonicalPaths<'ir> {
+pub(crate) struct CanonicalPaths<'ir> {
     ir: &'ir Ir,
     did_to_path: Vec<Option<PathKey>>,
 }
@@ -57,7 +177,7 @@ impl<'ir> CanonicalPaths<'ir> {
     /// Derive named declaration paths from IR links and namespace metadata.
     /// Parent walks are bounded even for malformed cycles; arcs have no path.
     #[must_use]
-    pub fn new(ir: &'ir Ir) -> Self {
+    pub(crate) fn new(ir: &'ir Ir) -> Self {
         let n = ir.decl_nodes.len();
         let mut v: Vec<Option<PathKey>> = vec![None; n];
         let mut buf: Vec<crate::common::ids::SymId> = Vec::new();
@@ -104,14 +224,14 @@ impl<'ir> CanonicalPaths<'ir> {
     /// # Preconditions
     /// Named declarations form an acyclic hierarchy, and referenced declaration,
     /// arc and symbol indices are valid. Path reconstruction bounds parent walks;
-    /// structural coherence is a separate diagnostic (`coherence`, [`NamespaceValidator::validate`]).
+    /// structural coherence is a separate diagnostic (`coherence`, [`validate_namespace_roots`]).
     ///
     /// # Postconditions
     /// Deterministic; independent of dense `DeclId` assignment (name/path-based).
     /// # Panics
     /// Invalid indices or a cyclic skeleton may panic; this is not an IR validator.
     #[must_use]
-    pub fn hash(&self, cfg: CanonHashCfg, it: &Interner) -> HashId {
+    pub(crate) fn hash(&self, cfg: CanonHashCfg, it: &Interner) -> HashId {
         let sk = CanonicalPrufer::from_paths(cfg, self, it).hash();
         let inc = CanonicalIncidence::from_paths(cfg, self, it).hash();
         let mut h = cfg.hasher(*b"PROGRAM\0");
@@ -671,14 +791,14 @@ impl CanonicalSink for CanonicalHasher {
 /// Checks the lowering boundary against the canonical paths of one borrowed IR.
 /// Path preparation is shared with hashing; validation neither rebuilds paths
 /// nor mutates the IR or the resolution index.
-pub struct NamespaceValidator<'paths, 'ir> {
+pub(crate) struct NamespaceValidator<'paths, 'ir> {
     paths: &'paths CanonicalPaths<'ir>,
 }
 
 impl<'paths, 'ir> NamespaceValidator<'paths, 'ir> {
     /// Borrow an existing path view for namespace diagnostics.
     #[must_use]
-    pub fn new(paths: &'paths CanonicalPaths<'ir>) -> Self {
+    pub(crate) fn new(paths: &'paths CanonicalPaths<'ir>) -> Self {
         Self { paths }
     }
 
@@ -692,7 +812,7 @@ impl<'paths, 'ir> NamespaceValidator<'paths, 'ir> {
     /// [`NamespaceError::MissingNamespaceMetadata`] when an imported root lacks its
     /// prefix (an incomplete `Ir`); [`NamespaceError::PathMismatch`] on any other
     /// disagreement (corrupt metadata, malformed links).
-    pub fn validate(&self, idx: &Index) -> Result<(), NamespaceError> {
+    pub(crate) fn validate(&self, idx: &Index) -> Result<(), NamespaceError> {
         let ir = self.paths.ir;
         let n = ir.decl_nodes.len();
         let idx_paths = self.resolution_paths(idx);
@@ -758,6 +878,17 @@ impl core::fmt::Display for NamespaceError {
 }
 impl std::error::Error for NamespaceError {}
 
+/// Lowering-boundary check (U2.1, Part C) over a fresh canonical path view of `ir`; see
+/// [`Canon`] for a view that is also hashed.
+///
+/// # Errors
+/// [`NamespaceError::MissingNamespaceMetadata`] when an imported root lacks its
+/// prefix (an incomplete `Ir`); [`NamespaceError::PathMismatch`] on any other
+/// disagreement (corrupt metadata, malformed links).
+pub fn validate_namespace_roots(ir: &Ir, idx: &Index) -> Result<(), NamespaceError> {
+    NamespaceValidator::new(&CanonicalPaths::new(ir)).validate(idx)
+}
+
 // -----------------------------
 //  U2.2 derived path index (Ir -> path view)
 // -----------------------------
@@ -795,34 +926,6 @@ impl core::fmt::Display for PathIndexError {
 impl std::error::Error for PathIndexError {}
 
 impl DerivedPathIndex {
-    /// Build a [`DerivedPathIndex`] from the `Ir` — the U2.2 replacement for reading
-    /// paths off the (now non-authoritative) resolution `Index`.
-    ///
-    /// # Errors
-    /// [`PathIndexError::DuplicatePath`] if two declarations resolve to the same
-    /// canonical path (a malformed hierarchy).
-    pub fn new(ir: &Ir) -> Result<Self, PathIndexError> {
-        let did_to_path = CanonicalPaths::new(ir).did_to_path;
-        let mut by_path: Vec<(PathKey, DeclId)> = did_to_path
-            .iter()
-            .enumerate()
-            .filter_map(|(i, p)| p.as_ref().map(|pk| (pk.clone(), DeclId::new(i))))
-            .collect();
-        by_path.sort_by(|a, b| a.0.0.cmp(&b.0.0).then_with(|| a.1.raw().cmp(&b.1.raw())));
-        for w in by_path.windows(2) {
-            if w[0].0.0 == w[1].0.0 {
-                return Err(PathIndexError::DuplicatePath {
-                    first: w[0].1,
-                    second: w[1].1,
-                });
-            }
-        }
-        Ok(Self {
-            by_path,
-            did_to_path,
-        })
-    }
-
     /// Number of named (Node/Edge) declarations with a path.
     #[must_use]
     pub fn len(&self) -> usize {
@@ -854,5 +957,47 @@ impl DerivedPathIndex {
     #[must_use]
     pub fn did_to_path(&self) -> &[Option<PathKey>] {
         &self.did_to_path
+    }
+}
+
+/// Build a [`DerivedPathIndex`] from the `Ir` — the U2.2 replacement for reading
+/// paths off the (now non-authoritative) resolution `Index`.
+///
+/// # Errors
+/// [`PathIndexError::DuplicatePath`] if two declarations resolve to the same
+/// canonical path (a malformed hierarchy).
+pub fn build_path_index(ir: &Ir) -> Result<DerivedPathIndex, PathIndexError> {
+    let did_to_path = CanonicalPaths::new(ir).did_to_path;
+    let by_path = sorted_paths(&did_to_path)?
+        .into_iter()
+        .map(|(path, d)| (path.clone(), d))
+        .collect();
+    Ok(DerivedPathIndex {
+        by_path,
+        did_to_path,
+    })
+}
+
+/// The named declarations with their paths, sorted by path, then by id: the one order
+/// [`build_path_index`] keeps and [`Canon`] checks.
+///
+/// # Errors
+/// [`PathIndexError::DuplicatePath`] for the first two adjacent declarations, in that order, that
+/// share a path.
+fn sorted_paths(
+    did_to_path: &[Option<PathKey>],
+) -> Result<Vec<(&PathKey, DeclId)>, PathIndexError> {
+    let mut named: Vec<(&PathKey, DeclId)> = did_to_path
+        .iter()
+        .enumerate()
+        .filter_map(|(i, p)| p.as_ref().map(|path| (path, DeclId::new(i))))
+        .collect();
+    named.sort_by(|a, b| a.0.0.cmp(&b.0.0).then_with(|| a.1.raw().cmp(&b.1.raw())));
+    match named.windows(2).find(|w| w[0].0.0 == w[1].0.0) {
+        Some(w) => Err(PathIndexError::DuplicatePath {
+            first: w[0].1,
+            second: w[1].1,
+        }),
+        None => Ok(named),
     }
 }

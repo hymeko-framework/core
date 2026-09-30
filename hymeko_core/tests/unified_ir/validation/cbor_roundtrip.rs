@@ -32,6 +32,39 @@ fn interned_strings(interner: &Interner) -> Vec<String> {
     interner.iter().map(|(_, value)| value.to_owned()).collect()
 }
 
+/// A symbol list as text, through the interner that numbers it.
+fn texts(symbols: &[SymId], interner: &Interner) -> Vec<String> {
+    symbols.iter().map(|&symbol| interner.resolve(symbol).to_owned()).collect()
+}
+
+/// A path index as text: SymIds are snapshot-local (the CBOR boundary compacts unreachable
+/// symbols), so two snapshots agree on paths, not on symbol numbers.
+fn path_texts(index: &Index, interner: &Interner) -> Vec<(Vec<String>, DeclId)> {
+    let mut paths: Vec<_> = index
+        .by_path
+        .iter()
+        .map(|(path, &decl)| (texts(&path.0, interner), decl))
+        .collect();
+    paths.sort();
+    paths
+}
+
+fn alias_texts(index: &Index, interner: &Interner) -> Vec<(String, Vec<String>)> {
+    let mut aliases: Vec<_> = index
+        .aliases
+        .iter()
+        .map(|(&alias, target)| (interner.resolve(alias).to_owned(), texts(target, interner)))
+        .collect();
+    aliases.sort();
+    aliases
+}
+
+/// Whether `part` is `whole` with some entries left out, in the same order.
+fn is_subsequence(part: &[String], whole: &[String]) -> bool {
+    let mut rest = whole.iter();
+    part.iter().all(|entry| rest.any(|candidate| candidate == entry))
+}
+
 fn rendered(ir: &hymeko::ir::ir::Ir, interner: &Interner) -> Vec<u8> {
     let mut output = Vec::new();
     IrWriter::new(ir, interner)
@@ -42,8 +75,9 @@ fn rendered(ir: &hymeko::ir::ir::Ir, interner: &Interner) -> Vec<u8> {
 
 fn expected_imports(
     root: &Path,
-    imports: &[(hymeko::common::ids::SymId, ModuleKey)],
-) -> Vec<(hymeko::common::ids::SymId, ModuleKey)> {
+    imports: &[(SymId, ModuleKey)],
+    interner: &Interner,
+) -> Vec<(String, ModuleKey)> {
     let canonical_root = root.canonicalize().expect("corpus root canonicalizes");
     imports
         .iter()
@@ -52,7 +86,7 @@ fn expected_imports(
                 .0
                 .strip_prefix(&canonical_root)
                 .expect("corpus import must stay under the corpus root");
-            (*namespace, ModuleKey(portable(relative)))
+            (interner.resolve(*namespace).to_owned(), ModuleKey(portable(relative)))
         })
         .collect()
 }
@@ -77,31 +111,43 @@ fn assert_round_trip(path: &Path) -> usize {
     );
     assert_eq!(
         decoded.canonical_hash(),
-        compiled.canon_hash,
+        compiled.canon.structure().0,
         "canonical hash on {}",
         path.display()
     );
+    // The CBOR boundary compacts symbols (plan 2026-09-25-symbol-lifetime): symbols nothing in the
+    // snapshot reaches are dropped and the rest are renumbered densely in their original order. So
+    // the snapshot and the compile agree on paths, aliases and imports as text, and the snapshot's
+    // strings are the compile's with the unreachable ones left out.
     assert_eq!(
-        decoded.index().by_path,
-        compiled.idx.by_path,
+        path_texts(decoded.index(), decoded.interner()),
+        path_texts(&compiled.idx, &store.it),
         "path index on {}",
         path.display()
     );
     assert_eq!(
-        decoded.index().aliases,
-        compiled.idx.aliases,
+        alias_texts(decoded.index(), decoded.interner()),
+        alias_texts(&compiled.idx, &store.it),
         "aliases on {}",
         path.display()
     );
-    assert_eq!(
-        decoded.payload().interned_strings,
-        interned_strings(&store.it),
-        "interner on {}",
+    assert!(
+        is_subsequence(
+            &decoded.payload().interned_strings,
+            &interned_strings(&store.it)
+        ),
+        "interner on {}: the snapshot's strings must be the compile's, in order",
         path.display()
     );
+    let decoded_imports: Vec<_> = decoded
+        .payload()
+        .imports
+        .iter()
+        .map(|(namespace, module)| (decoded.interner().resolve(*namespace).to_owned(), module.clone()))
+        .collect();
     assert_eq!(
-        decoded.payload().imports,
-        expected_imports(&root, &compiled.imports),
+        decoded_imports,
+        expected_imports(&root, &compiled.imports, &store.it),
         "imports on {}",
         path.display()
     );

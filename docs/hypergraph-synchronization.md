@@ -711,7 +711,7 @@ phase. Each is stated with the test that would refute it.
 
 | # | Claim | Test that would falsify it |
 |---|---|---|
-| C1 | Valid ordered replay is state-idempotent, with typed conflict/unknown-identity outcomes | Inject duplication/conflicts/reconnects and compare full semantic state; admission proof covers repeated individual transactions only |
+| C1 | Valid ordered replay is state-idempotent, with typed conflict/unknown-identity outcomes | Inject duplication/conflicts/reconnects and compare full semantic state; admission proof includes an installed transaction replayed after any finite suffix; full semantic-state installation remains separate |
 | C2 | Superseded or equal-established targets never replace state; incomparable targets never regress an axis | Test old/equal/incomparable targets, including resume at ZERO, with exact recovery outcomes |
 | C3 | Full-snapshot resync and delta-replay converge to identical semantic state | Fork at version V; compare complete state through both routes; structural v1 hash equality is insufficient |
 | C4 | No sequence gap is ever applied | Inject dropped/reordered messages; assert `Nack{SequenceGap}` and unchanged state |

@@ -4,7 +4,7 @@ mod ir_blake3_hash_tests {
     use hymeko::common::pathkey::PathKey;
     use hymeko::ir::hash::HashId;
     use hymeko::ir::lower::lower_to_ir;
-    use hymeko::ir::semantic_digest::{semantic_declaration_hashes, semantic_model_digest};
+    use hymeko::ir::canonical_hash::Canon;
     use hymeko::resolution::intern_pass::Interned;
     use hymeko::resolution::intern_pass::intern_ast;
     use hymeko::resolution::resolve::build_index_sym;
@@ -54,7 +54,7 @@ mod ir_blake3_hash_tests {
         let idx = build_index_sym(&ast, &interner).expect("index build failed");
         let ir = lower_to_ir(&ast, &idx, &mut interner).expect("lower_to_ir failed");
 
-        semantic_model_digest(&ir, &interner).0
+        Canon::new(&ir, &interner).hash().0
     }
 
     #[test]
@@ -94,7 +94,7 @@ mod ir_blake3_hash_tests {
         let idx = build_index_sym(&ast, &interner).expect("index build failed");
         let ir = lower_to_ir(&ast, &idx, &mut interner).expect("lower_to_ir failed");
 
-        let hashes = semantic_declaration_hashes(&ir, &interner);
+        let hashes = Canon::new(&ir, &interner).declaration_hashes();
 
         let mut out = HashMap::new();
         for spec in specs {

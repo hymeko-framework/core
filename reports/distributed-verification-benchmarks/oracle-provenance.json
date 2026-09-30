@@ -1,0 +1,13 @@
+{
+  "lean_source_sha256": "0c1d4c97faef9f38cadbe1a4e24354b8861c710320bcb39b06e4def93b58f4f7",
+  "vectors_sha256": "fcf9c82375b98d84f0fc4e5a88e0a62ec712e2b6403e3bc68a04713b4ea413e3",
+  "rows": 26406,
+  "byte_count": 434681,
+  "verdicts": {
+    "U": 214,
+    "I": 17592,
+    "C": 2525,
+    "S": 4860,
+    "B": 1215
+  }
+}

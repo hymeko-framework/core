@@ -10,3 +10,17 @@ flowchart TD
     CAND --> PUB[Serialized base check and Arc publication]
     PUB --> SNAP[Immutable IR plus matching interner]
     SNAP --> READ[Concurrent readers retain their snapshot]
+
+%% Continuation (2026-09-06): cross-platform admission verification
+flowchart TD
+  A[Core main 92383b38: existing checkout] --> B[New distributed verification branch]
+  B --> C[Extend Lean replay safety and bounded reference cases]
+  C --> D[Real Rust wire and assembler conformance]
+  D --> E[Criterion outcome preflight]
+  E --> W[Windows native]
+  E --> L[Amaterasu native Linux]
+  E --> Q[Amaterasu Docker and explicit QEMU ARM64]
+  W --> R[Raw samples, identity and resource evidence]
+  L --> R
+  Q --> R
+  R --> S[Scoped conclusions and feature-branch report]

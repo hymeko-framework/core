@@ -21,7 +21,7 @@ pub use stream::{
 };
 
 use crate::common::ids::SymId;
-use crate::ir::canonical_hash::{CanonHashCfg, CanonicalPaths};
+use crate::ir::canonical_hash::{Canon, CanonHashCfg};
 use crate::ir::hash::HashId;
 use crate::ir::ir::Ir;
 use crate::ir_stream::DecodeLimits;
@@ -244,8 +244,9 @@ pub fn encode(
     };
     let validated = validate::payload(payload, false)?;
     let (mut payload, reconstructed_interner) = validated.into_parts();
-    payload.canon_hash =
-        CanonicalPaths::new(&payload.ir).hash(CanonHashCfg::default(), &reconstructed_interner);
+    payload.canon_hash = Canon::new(&payload.ir, &reconstructed_interner)
+        .structure(CanonHashCfg::default())
+        .0;
 
     let mut bytes = Vec::new();
     ciborium::ser::into_writer(&payload, &mut bytes)

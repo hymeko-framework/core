@@ -2,10 +2,9 @@
 //! The independent test oracle checks the same single-field mutations.
 
 use hymeko::common::ids::DeclId;
-use hymeko::ir::canonical_hash::{CanonHashCfg, CanonicalPaths};
+use hymeko::ir::canonical_hash::{Canon, CanonHashCfg};
 use hymeko::ir::hash::HashId;
 use hymeko::ir::ir::{AnnoR, SignedRefR, ValueR};
-use hymeko::ir::semantic_digest::semantic_model_digest;
 
 use crate::unified_ir::support::builder::{S, TestIr};
 use crate::unified_ir::support::oracle::{Ordering, semantic_form};
@@ -19,8 +18,10 @@ pub struct Probe {
 
 pub fn probe(t: &TestIr) -> Probe {
     Probe {
-        v1: CanonicalPaths::new(&t.ir).hash(CanonHashCfg::default(), &t.it),
-        semantic: semantic_model_digest(&t.ir, &t.it).0.0,
+        v1: Canon::new(&t.ir, &t.it)
+            .structure(CanonHashCfg::default())
+            .0,
+        semantic: Canon::new(&t.ir, &t.it).hash().0.0,
         oracle: semantic_form(t, Ordering::Ordered),
     }
 }

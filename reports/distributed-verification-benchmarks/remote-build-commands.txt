@@ -1,0 +1,20 @@
+set -eu
+cd /home/kyberszittya/hymeko-core-amaterasu-20260905/clean/core
+test -z "$(git status --porcelain)"
+git fetch ../../distributed-transfer.bundle feat/core-distributed-verification-benchmarks
+git switch --detach FETCH_HEAD
+docker inspect hymeko-core-distributed-build-20260906 --format '{{json .State}}'
+docker rm hymeko-core-distributed-build-20260906
+docker run --name hymeko-core-distributed-build-20260906 --network=none --memory=16g --memory-swap=16g --cpus=4 -e CARGO_HOME=/cache -e CARGO_TARGET_DIR=/target -v hymeko-consumer-cargo-20260905:/cache -v hymeko-core-parser-target-20260905:/target -v "$PWD":/workspace/core --entrypoint sh hymeko-core-cross:1.97.1 -ec '
+ sh tools/ci/core.sh distributed-build
+ CARGO_BUILD_TARGET=aarch64-unknown-linux-gnu sh tools/ci/core.sh distributed-build
+'
+mkdir -p target/distributed-bench
+docker cp hymeko-core-distributed-build-20260906:/target/release/deps/mod-f87f1ab25fa3d2aa target/distributed-bench/native-tests
+docker cp hymeko-core-distributed-build-20260906:/target/release/deps/ir_stream_bench-51640f759496f8d3 target/distributed-bench/native-bench
+docker cp hymeko-core-distributed-build-20260906:/target/aarch64-unknown-linux-gnu/release/deps/mod-95fe1a7204e20ae8 target/distributed-bench/arm64-tests
+docker cp hymeko-core-distributed-build-20260906:/target/aarch64-unknown-linux-gnu/release/deps/ir_stream_bench-4b9bd4b176ad49a6 target/distributed-bench/arm64-bench
+docker cp hymeko-core-distributed-build-20260906:/usr/bin/qemu-aarch64-static target/distributed-bench/qemu-aarch64-static
+file target/distributed-bench/*
+sha256sum target/distributed-bench/*
+docker inspect hymeko-core-distributed-build-20260906 --format '{{json .State}}'

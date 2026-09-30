@@ -7,7 +7,7 @@
 //! corrupted results with no error — the worst failure mode available.
 //!
 //! Phase 3's backend could answer only the blocking form of that question:
-//! [`WgpuBackend::wait`] blocks until a given [`wgpu::SubmissionIndex`]
+//! [`crate::WgpuBackend::wait`] blocks until a given [`wgpu::SubmissionIndex`]
 //! completes. Calling that on every lease release would serialise the host
 //! against the GPU and throw away the asynchrony the resident chain exists to
 //! exploit — explicitly forbidden by the Phase 4 brief.
@@ -115,6 +115,15 @@ impl SubmissionEpoch {
     #[must_use]
     pub const fn is_complete_at(self, watermark: Self) -> bool {
         self.0 <= watermark.0
+    }
+}
+
+/// The arena dates a release with the submission that may still read it.
+impl hymeko_tensor::compute::arena::ArenaEpoch for SubmissionEpoch {
+    const NEVER: Self = Self::NEVER;
+
+    fn is_complete_at(self, watermark: Self) -> bool {
+        Self::is_complete_at(self, watermark)
     }
 }
 

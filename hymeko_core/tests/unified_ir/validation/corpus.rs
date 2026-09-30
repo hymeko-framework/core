@@ -20,7 +20,7 @@ use crate::unified_ir::verification::coherence::label;
 use crate::unified_ir::verification::hierarchy::{DepthStats, depth_stats};
 
 use hymeko::common::ids::{DeclId, EdgeId, HyperArcId, NodeId};
-use hymeko::ir::canonical_hash::{CanonHashCfg, CanonicalPaths, NamespaceValidator};
+use hymeko::ir::canonical_hash::{Canon, CanonHashCfg, build_path_index, validate_namespace_roots};
 use hymeko::ir::coherence::{CoherenceLimits, Finding, validate_hierarchy_index_coherence};
 
 use crate::unified_ir::support::corpus::require_fixtures;
@@ -158,7 +158,7 @@ fn corpus_digest(include_course_regressions: bool) -> (usize, String) {
             continue;
         }
         if let Ok((store, compiled)) = crate::test_helpers::load_and_lower(f) {
-            let d = CanonicalPaths::new(&compiled.ir).hash(CanonHashCfg::default(), &store.it);
+            let d = Canon::new(&compiled.ir, &store.it).structure(CanonHashCfg::default()).0;
             // Include the file name so a reordering or omission is detected.
             h.update(
                 f.file_name()
@@ -189,16 +189,8 @@ fn print_corpus_digest_for_capture() {
             .strip_prefix(PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap())
             .unwrap();
         match crate::test_helpers::load_and_lower(&file) {
-            Ok((_, program)) => eprintln!(
-                "COURSE_CORPUS {} {}",
-                relative.display(),
-                program
-                    .canon_hash
-                    .0
-                    .iter()
-                    .map(|b| format!("{b:02x}"))
-                    .collect::<String>()
-            ),
+            Ok((_, program)) => eprintln!("COURSE_CORPUS {} {}", relative.display(),
+                program.canon.structure().0.0.iter().map(|b| format!("{b:02x}")).collect::<String>()),
             Err(error) => eprintln!("COURSE_CORPUS_ERROR {} {error:?}", relative.display()),
         }
     }
@@ -323,12 +315,10 @@ fn link_derived_hash_equals_index_hash_on_the_whole_corpus() {
             continue;
         };
         // (namespace prefix + links) reproduces the Index hierarchy exactly
-        NamespaceValidator::new(&CanonicalPaths::new(&compiled.ir))
-            .validate(&compiled.idx)
+        validate_namespace_roots(&compiled.ir, &compiled.idx)
             .unwrap_or_else(|e| panic!("namespace validation failed on {}: {e}", f.display()));
-        let vi = CanonicalPaths::new(&compiled.ir).hash(CanonHashCfg::default(), &store.it);
-        let vl = hymeko::ir::canonical_hash::CanonicalPaths::new(&compiled.ir)
-            .hash(CanonHashCfg::default(), &store.it);
+        let vi = Canon::new(&compiled.ir, &store.it).structure(CanonHashCfg::default()).0;
+        let vl = Canon::new(&compiled.ir, &store.it).structure(CanonHashCfg::default()).0;
         assert_eq!(
             vl.0,
             vi.0,
@@ -452,7 +442,7 @@ fn derived_path_index_round_trips_on_the_corpus() {
         let Ok((_s, c)) = crate::test_helpers::load_and_lower(f) else {
             continue;
         };
-        let pi = hymeko::ir::canonical_hash::DerivedPathIndex::new(&c.ir)
+        let pi = build_path_index(&c.ir)
             .unwrap_or_else(|e| panic!("DerivedPathIndex::new failed on {}: {e}", f.display()));
         assert_eq!(
             pi.len(),

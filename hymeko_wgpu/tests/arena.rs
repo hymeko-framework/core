@@ -17,7 +17,7 @@
 use hymeko_tensor::compute::{ComputeError, TensorShape};
 use hymeko_tensor::representations::tensor_csr::TensorCsr;
 use hymeko_wgpu::testing::SparseSpec;
-use hymeko_wgpu::testing::backend_or_skip;
+use hymeko_wgpu::testing::fresh_gpu;
 use hymeko_wgpu::{ActivationKind, ReusePolicy, SubmissionEpoch, TensorArenaConfig};
 
 /// A value the computation cannot produce, so its appearance proves a leak.
@@ -35,7 +35,7 @@ fn small_csr() -> TensorCsr<f32> {
 /// allocation rather than a new one.
 #[test]
 fn test_same_shape_and_usage_is_reused() {
-    let Some(backend) = backend_or_skip("reuse") else {
+    let Some(backend) = fresh_gpu("reuse") else {
         return;
     };
     let arena = backend.tensor_arena(TensorArenaConfig::default());
@@ -80,7 +80,7 @@ fn test_same_shape_and_usage_is_reused() {
 /// pool most obviously breaks.
 #[test]
 fn test_two_live_leases_never_alias() {
-    let Some(backend) = backend_or_skip("alias") else {
+    let Some(backend) = fresh_gpu("alias") else {
         return;
     };
     let arena = backend.tensor_arena(TensorArenaConfig::default());
@@ -111,7 +111,7 @@ fn test_two_live_leases_never_alias() {
 /// Different byte sizes are different resources and must not be confused.
 #[test]
 fn test_different_sizes_do_not_share_allocations() {
-    let Some(backend) = backend_or_skip("sizes") else {
+    let Some(backend) = fresh_gpu("sizes") else {
         return;
     };
     let arena = backend.tensor_arena(TensorArenaConfig::default());
@@ -134,7 +134,7 @@ fn test_different_sizes_do_not_share_allocations() {
 /// allocation — the buffer is untyped bytes, and the shape lives on the tensor.
 #[test]
 fn test_same_bytes_different_shape_is_reused() {
-    let Some(backend) = backend_or_skip("shape") else {
+    let Some(backend) = fresh_gpu("shape") else {
         return;
     };
     let arena = backend.tensor_arena(TensorArenaConfig::default());
@@ -158,7 +158,7 @@ fn test_same_bytes_different_shape_is_reused() {
 /// Usage flags are fixed at buffer creation, so they partition the pool.
 #[test]
 fn test_different_usage_is_not_reused() {
-    let Some(backend) = backend_or_skip("usage") else {
+    let Some(backend) = fresh_gpu("usage") else {
         return;
     };
     let arena = backend.tensor_arena(TensorArenaConfig::default());
@@ -181,7 +181,7 @@ fn test_different_usage_is_not_reused() {
 /// the arena pads, and the kernels bound themselves by their params block.
 #[test]
 fn test_zero_sized_tensor_is_valid() {
-    let Some(backend) = backend_or_skip("zero") else {
+    let Some(backend) = fresh_gpu("zero") else {
         return;
     };
     let arena = backend.tensor_arena(TensorArenaConfig::default());
@@ -201,7 +201,7 @@ fn test_zero_sized_tensor_is_valid() {
 /// `SizeClass` trades internal fragmentation for hit rate; it must actually hit.
 #[test]
 fn test_size_class_policy_reuses_a_larger_slab() {
-    let Some(backend) = backend_or_skip("sizeclass") else {
+    let Some(backend) = fresh_gpu("sizeclass") else {
         return;
     };
     let arena = backend.tensor_arena(TensorArenaConfig {
@@ -229,7 +229,7 @@ fn test_size_class_policy_reuses_a_larger_slab() {
 /// again before completion.
 #[test]
 fn test_in_flight_buffer_is_not_recycled_early() {
-    let Some(backend) = backend_or_skip("inflight") else {
+    let Some(backend) = fresh_gpu("inflight") else {
         return;
     };
     let arena = backend.tensor_arena(TensorArenaConfig::default());
@@ -291,7 +291,7 @@ fn test_in_flight_buffer_is_not_recycled_early() {
 /// commands referencing it are submitted.
 #[test]
 fn test_release_before_submit_is_not_recycled_early() {
-    let Some(backend) = backend_or_skip("early_release") else {
+    let Some(backend) = fresh_gpu("early_release") else {
         return;
     };
     let arena = backend.tensor_arena(TensorArenaConfig::default());
@@ -347,7 +347,7 @@ fn test_release_before_submit_is_not_recycled_early() {
 /// Several submits in sequence, with the watermark advancing across them.
 #[test]
 fn test_multiple_sequential_submits_advance_the_watermark() {
-    let Some(backend) = backend_or_skip("submits") else {
+    let Some(backend) = fresh_gpu("submits") else {
         return;
     };
     let arena = backend.tensor_arena(TensorArenaConfig::default());
@@ -389,7 +389,7 @@ fn test_multiple_sequential_submits_advance_the_watermark() {
 /// A byte budget must bound the free list, and must evict only free buffers.
 #[test]
 fn test_byte_budget_evicts_and_never_touches_live_leases() {
-    let Some(backend) = backend_or_skip("budget") else {
+    let Some(backend) = fresh_gpu("budget") else {
         return;
     };
     let shape = TensorShape::new(1024, 1); // 4096 B each
@@ -437,7 +437,7 @@ fn test_byte_budget_evicts_and_never_touches_live_leases() {
 /// The buffer-count ceiling is enforced independently of the byte ceiling.
 #[test]
 fn test_max_cached_buffers_is_enforced() {
-    let Some(backend) = backend_or_skip("count") else {
+    let Some(backend) = fresh_gpu("count") else {
         return;
     };
     let arena = backend.tensor_arena(TensorArenaConfig {
@@ -469,7 +469,7 @@ fn test_max_cached_buffers_is_enforced() {
 /// `trim` releases cached memory without disturbing live leases.
 #[test]
 fn test_trim_clears_cache_only() {
-    let Some(backend) = backend_or_skip("trim") else {
+    let Some(backend) = fresh_gpu("trim") else {
         return;
     };
     let arena = backend.tensor_arena(TensorArenaConfig::default());
@@ -496,10 +496,10 @@ fn test_trim_clears_cache_only() {
 /// distinct devices, and the arena must say so.
 #[test]
 fn test_arena_is_bound_to_one_backend() {
-    let Some(first) = backend_or_skip("device_a") else {
+    let Some(first) = fresh_gpu("device_a") else {
         return;
     };
-    let Some(second) = backend_or_skip("device_b") else {
+    let Some(second) = first.sibling("device_b") else {
         return;
     };
     let arena = first.tensor_arena(TensorArenaConfig::default());
@@ -521,7 +521,7 @@ fn test_arena_is_bound_to_one_backend() {
 /// allocated buffers, bit for bit.
 #[test]
 fn test_spmm_activation_chain_matches_non_arena_path() {
-    let Some(backend) = backend_or_skip("chain_equiv") else {
+    let Some(backend) = fresh_gpu("chain_equiv") else {
         return;
     };
     let spec = SparseSpec::small();
@@ -607,7 +607,7 @@ fn test_spmm_activation_chain_matches_non_arena_path() {
 /// buffers.
 #[test]
 fn test_eight_layer_chain_matches_and_reuses() {
-    let Some(backend) = backend_or_skip("eight_layer") else {
+    let Some(backend) = fresh_gpu("eight_layer") else {
         return;
     };
     const LAYERS: usize = 8;
@@ -746,7 +746,7 @@ fn test_eight_layer_chain_matches_and_reuses() {
 /// producing the same answer.
 #[test]
 fn test_repeated_chains_on_one_arena_reuse_and_stay_correct() {
-    let Some(backend) = backend_or_skip("repeat") else {
+    let Some(backend) = fresh_gpu("repeat") else {
         return;
     };
     let spec = SparseSpec::small();
@@ -801,7 +801,7 @@ fn test_repeated_chains_on_one_arena_reuse_and_stay_correct() {
 /// buffers, not contents, and the arena must not have cached a stale result.
 #[test]
 fn test_input_rewrite_is_observed_through_the_arena() {
-    let Some(backend) = backend_or_skip("rewrite") else {
+    let Some(backend) = fresh_gpu("rewrite") else {
         return;
     };
     let spec = SparseSpec::small();
@@ -852,7 +852,7 @@ fn test_input_rewrite_is_observed_through_the_arena() {
 /// buffers are not part of the pipeline key.
 #[test]
 fn test_pipeline_cache_behaviour_is_unchanged_by_the_arena() {
-    let Some(backend) = backend_or_skip("pipeline") else {
+    let Some(backend) = fresh_gpu("pipeline") else {
         return;
     };
     let spec = SparseSpec::small();
@@ -903,7 +903,7 @@ fn test_pipeline_cache_behaviour_is_unchanged_by_the_arena() {
 /// Phase 4 report, so they get asserted rather than trusted.
 #[test]
 fn test_stats_accounting_is_consistent() {
-    let Some(backend) = backend_or_skip("stats") else {
+    let Some(backend) = fresh_gpu("stats") else {
         return;
     };
     let arena = backend.tensor_arena(TensorArenaConfig::default());

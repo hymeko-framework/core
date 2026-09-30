@@ -1,0 +1,11 @@
+\begin{center}
+\begin{tikzpicture}[node distance=7mm,every node/.style={draw,rounded corners,align=center,font=\small},>={Stealth}]
+\node (src) {HyMeKo source};
+\node (store) [below=of src] {\texttt{ModuleStore::compile}\\parse, resolve, lower};
+\node (canon) [below=of store] {\texttt{Canon<'ir>}: IR, interner, path index derived once\\\texttt{hash()} \quad \texttt{structure(cfg)} \quad \texttt{declaration\_hashes()} \quad \texttt{paths()} \quad \texttt{validate(idx)}};
+\node (id) [below left=8mm and -18mm of canon] {\texttt{CompiledProgram::canon}\\\texttt{CanonicalIdentity}: \texttt{hash()}, \texttt{structure()}};
+\node (wire) [below right=8mm and -18mm of canon] {CBOR payload \texttt{canon\_hash}\\(wire field, unchanged)};
+\node (nagare) [below=of id] {Nagare: source identity \texttt{program.canon}\\model digest \texttt{Canon::new(ir, it).hash()}};
+\draw[->] (src)--(store); \draw[->] (store)--(canon); \draw[->] (canon)--(id); \draw[->] (canon)--(wire); \draw[->] (id)--(nagare);
+\end{tikzpicture}
+\end{center}

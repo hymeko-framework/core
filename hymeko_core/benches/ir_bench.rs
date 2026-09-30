@@ -32,7 +32,7 @@ use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_m
 
 use hymeko::common::ids::{DeclId, EdgeId, HyperArcId, NodeId, SymId};
 use hymeko::common::pathkey::PathKey;
-use hymeko::ir::canonical_hash::{CanonHashCfg, CanonicalPaths};
+use hymeko::ir::canonical_hash::{Canon, CanonHashCfg};
 use hymeko::ir::ir::{
     AnnoR, ArcRec, DeclKind, DeclNode, EdgeRec, Ir, NodeRec, RefAtomR, SignedRefR,
 };
@@ -433,7 +433,7 @@ fn bench_ir_clone(c: &mut Criterion) {
 /// The real canonical hash, not a flat BLAKE3 sweep.
 ///
 /// The Phase 0 appendix measured a flat sweep and said so explicitly: it was a
-/// lower bound. This measures `CanonicalPaths::hash` itself - path map,
+/// lower bound. This measures `Canon::structure` itself - path map,
 /// skeleton forest, subtree fold, Prufer encoding and incidence bytes - which
 /// is the figure the 10 ms commit budget must actually be compared against.
 fn bench_ir_canonical_hash(c: &mut Criterion) {
@@ -458,8 +458,9 @@ fn bench_ir_canonical_hash(c: &mut Criterion) {
             |b| {
                 b.iter(|| {
                     black_box(
-                        CanonicalPaths::new(black_box(&ir))
-                            .hash(CanonHashCfg::default(), black_box(&it)),
+                        Canon::new(black_box(&ir), black_box(&it))
+                            .structure(CanonHashCfg::default())
+                            .0,
                     )
                 });
             },

@@ -173,13 +173,21 @@ impl WgpuBackendBuilder {
     /// Acquire instance, adapter and device.
     ///
     /// Blocking: wgpu's init futures resolve without an event loop on native
-    /// backends (see [`crate::block_on`]).
+    /// backends (see `crate::block_on`).
     ///
     /// # Errors
     /// [`ComputeError::BackendUnavailable`] when no adapter matches, or the
     /// device request is refused. That variant is distinct from
     /// [`ComputeError::Backend`] on purpose: *no adapter* is an environment
     /// fact a test may skip on, whereas a later failure is a defect.
+    ///
+    /// # Concurrency
+    /// Build one backend per process and share it (it is `Send + Sync`). On Linux with several
+    /// Vulkan drivers installed, creating or destroying a backend while another thread uses Vulkan
+    /// can crash inside the loader: measured on 2026-09-27 as a segfault in 13 of 20 runs of a
+    /// suite that built a backend per test, and in none with a single driver (`gfx-rs/wgpu#5930`
+    /// records the same class). Nothing here serialises it; test suites follow
+    /// [`crate::testing::GpuDiscipline`].
     pub fn build(self) -> Result<WgpuBackend, ComputeError> {
         // `InstanceDescriptor` has no `Default` in wgpu 30 (the `display` field
         // is a boxed trait object), so it is built from the documented

@@ -208,7 +208,7 @@ mod test_import_graphs {
             referenced,
             "expected at least one arc ref to target basic_library.elements.operand"
         );
-        let hashes = hymeko::ir::semantic_digest::semantic_declaration_hashes(&compiled.ir, &ms.it);
+        let hashes = hymeko::ir::canonical_hash::Canon::new(&compiled.ir, &ms.it).declaration_hashes();
         assert_eq!(hashes.len(), compiled.ir.decl_nodes.len());
         info!(
             "Import compilation pulled {} namespaces and produced {} decls",

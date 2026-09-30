@@ -6,7 +6,7 @@
 //! freshly-serialized valid imported Ir, so the baseline is restored per test.
 
 use hymeko::common::ids::DeclId;
-use hymeko::ir::canonical_hash::{CanonicalPaths, NamespaceError, NamespaceValidator};
+use hymeko::ir::canonical_hash::{NamespaceError, validate_namespace_roots};
 use hymeko::ir::ir::Ir;
 use hymeko::resolution::resolve::Index;
 use serde_json::{Value, json};
@@ -86,7 +86,7 @@ fn missing_namespace_metadata_is_detected() {
     let mut v = wire(&json);
     v.as_object_mut().unwrap().remove("namespace_roots");
     let stripped: Ir = serde_json::from_str(&serde_json::to_string(&v).unwrap()).unwrap();
-    match NamespaceValidator::new(&CanonicalPaths::new(&stripped)).validate(&idx) {
+    match validate_namespace_roots(&stripped, &idx) {
         Err(NamespaceError::MissingNamespaceMetadata { root }) => {
             assert_eq!(root, DeclId::new(16));
         }
@@ -100,7 +100,7 @@ fn wrong_prefix_symbol_is_a_path_mismatch() {
     let mut v = wire(&json);
     v["namespace_roots"]["roots"] = json!([[16, [1]]]); // wrong prefix symbol
     let corrupt: Ir = serde_json::from_str(&serde_json::to_string(&v).unwrap()).unwrap();
-    match NamespaceValidator::new(&CanonicalPaths::new(&corrupt)).validate(&idx) {
+    match validate_namespace_roots(&corrupt, &idx) {
         Err(NamespaceError::PathMismatch { decl }) => assert_eq!(decl, DeclId::new(16)),
         other => panic!("expected PathMismatch, got {other:?}"),
     }
@@ -110,8 +110,7 @@ fn wrong_prefix_symbol_is_a_path_mismatch() {
 fn a_correct_imported_ir_validates_clean() {
     let (idx, ir, _json) = imported();
     assert!(
-        NamespaceValidator::new(&CanonicalPaths::new(&ir))
-            .validate(&idx)
+        validate_namespace_roots(&ir, &idx)
             .is_ok()
     );
 }

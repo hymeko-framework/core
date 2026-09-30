@@ -13,7 +13,7 @@ Extracted by grammar -- tree-sitter for Rust and C++, `ast` for Python -- so tha
 `pub(crate)`, a `pub fn` inside a private `mod`, and a `def` written inside a
 docstring are all excluded for a stated reason rather than by luck.
 
-**3 package(s), 643 public symbol(s).**
+**3 package(s), 652 public symbol(s).**
 
 ## docs (rust)
 
@@ -40,9 +40,10 @@ _No public symbols._
 - `AnnoR` — `hymeko_core/src/ir/ir.rs`
 - `ArcRec` — `hymeko_core/src/ir/ir.rs`
 - `AssemblerLimits` — `hymeko_core/src/ir_stream/assembler.rs`
+- `Canon` — `hymeko_core/src/ir/canonical_hash.rs`
 - `CanonHashCfg` — `hymeko_core/src/ir/canonical_hash.rs`
+- `CanonicalIdentity` — `hymeko_core/src/ir/canonical_hash.rs`
 - `CanonicalIncidence` — `hymeko_core/src/ir/canonical_hash.rs`
-- `CanonicalPaths` — `hymeko_core/src/ir/canonical_hash.rs`
 - `CanonicalPrufer` — `hymeko_core/src/ir/canonical_hash.rs`
 - `CborPayload` — `hymeko_core/src/writers/cbor_writer.rs`
 - `ChildDecls` — `hymeko_core/src/ir/access.rs`
@@ -82,19 +83,18 @@ _No public symbols._
 - `ModuleEntry` — `hymeko_core/src/module_store/module_store.rs`
 - `ModuleKey` — `hymeko_core/src/module_store/module_store.rs`
 - `ModuleStore` — `hymeko_core/src/module_store/module_store.rs`
-- `NamespaceValidator` — `hymeko_core/src/ir/canonical_hash.rs`
 - `NodeRec` — `hymeko_core/src/ir/ir.rs`
 - `NodeTag` — `hymeko_core/src/common/ids.rs`
 - `OperatorContract` — `hymeko_core/src/ir/ir.rs`
 - `PathKey` — `hymeko_core/src/common/pathkey.rs`
 - `PreparedCompilation` — `hymeko_core/src/module_store/execution.rs`
 - `PreparedIr` — `hymeko_core/src/ir/incidence.rs`
-- `ProgramStructureHash` — `hymeko_core/src/ir/semantic_digest.rs`
+- `ProgramStructureHashV1` — `hymeko_core/src/ir/semantic_digest.rs`
 - `RealParser` — `hymeko_core/src/util/real_parser.rs`
 - `RefAtomR` — `hymeko_core/src/ir/ir.rs`
 - `ScalarWeightExtractor` — `hymeko_core/src/tensor/tensor_val.rs`
 - `SectionEntry` — `hymeko_core/src/ir_stream/section.rs`
-- `SemanticModelDigest` — `hymeko_core/src/ir/semantic_digest.rs`
+- `SemanticModelDigestV2` — `hymeko_core/src/ir/semantic_digest.rs`
 - `SnapshotMessageDraft` — `hymeko_core/src/writers/cbor_writer/stream.rs`
 - `SnapshotVersion` — `hymeko_core/src/ir_stream/version.rs`
 - `StagedSection` — `hymeko_core/src/ir_stream/assembler.rs`
@@ -171,6 +171,7 @@ _No public symbols._
 - `build_incidence_index` — `hymeko_core/src/ir/incidence.rs`
 - `build_index_sym` — `hymeko_core/src/resolution/resolve.rs`
 - `build_index_sym_with_prefix` — `hymeko_core/src/resolution/resolve.rs`
+- `build_path_index` — `hymeko_core/src/ir/canonical_hash.rs`
 - `bytes` — `hymeko_core/src/ir/canonical_hash.rs`
 - `bytes` — `hymeko_core/src/ir_stream/assembler.rs`
 - `bytes` — `hymeko_core/src/ir_stream/section.rs`
@@ -194,6 +195,7 @@ _No public symbols._
 - `decl_node` — `hymeko_core/src/ir/ir.rs`
 - `decl_node_unchecked` — `hymeko_core/src/ir/ir.rs`
 - `decl_of` — `hymeko_core/src/ir/canonical_hash.rs`
+- `declaration_hashes` — `hymeko_core/src/ir/semantic_digest.rs`
 - `declares_executable_model` — `hymeko_core/src/ir/ir.rs`
 - `decode` — `hymeko_core/src/ir_stream/envelope.rs`
 - `decode` — `hymeko_core/src/writers/cbor_writer.rs`
@@ -231,6 +233,7 @@ _No public symbols._
 - `get_id` — `hymeko_core/src/resolution/interner.rs`
 - `has_open_transaction` — `hymeko_core/src/ir_stream/assembler.rs`
 - `hash` — `hymeko_core/src/ir/canonical_hash.rs`
+- `hash` — `hymeko_core/src/ir/semantic_digest.rs`
 - `header_bytes` — `hymeko_core/src/ir_stream/envelope.rs`
 - `incidence_count` — `hymeko_core/src/ir/incidence.rs`
 - `incidences` — `hymeko_core/src/ir/incidence.rs`
@@ -242,10 +245,12 @@ _No public symbols._
 - `intern` — `hymeko_core/src/resolution/interner.rs`
 - `intern_ast` — `hymeko_core/src/resolution/intern_pass.rs`
 - `intern_ast_into` — `hymeko_core/src/resolution/intern_pass.rs`
+- `interner` — `hymeko_core/src/ir/canonical_hash.rs`
 - `interner` — `hymeko_core/src/module_store/execution.rs`
 - `interner` — `hymeko_core/src/writers/cbor_writer.rs`
 - `into_ir` — `hymeko_core/src/ir/incidence.rs`
 - `into_parts` — `hymeko_core/src/writers/cbor_writer.rs`
+- `ir` — `hymeko_core/src/ir/canonical_hash.rs`
 - `ir` — `hymeko_core/src/ir/incidence.rs`
 - `ir` — `hymeko_core/src/writers/cbor_writer.rs`
 - `is_comparable_to` — `hymeko_core/src/ir_stream/version.rs`
@@ -277,6 +282,7 @@ _No public symbols._
 - `model_facet` — `hymeko_core/src/ir/ir.rs`
 - `model_facet_table_len` — `hymeko_core/src/ir/ir.rs`
 - `msg_type` — `hymeko_core/src/ir_stream/envelope.rs`
+- `mycielskian` — `hymeko_core/src/generators.rs`
 - `n_edges` — `hymeko_core/src/generators.rs`
 - `namespace_prefix` — `hymeko_core/src/ir/ir.rs`
 - `new` — `hymeko_core/src/common/ids.rs`
@@ -302,6 +308,7 @@ _No public symbols._
 - `now_ms` — `hymeko_core/src/ir/time.rs`
 - `now_ns` — `hymeko_core/src/ir/time.rs`
 - `now_ns_u128` — `hymeko_core/src/ir/time.rs`
+- `of` — `hymeko_core/src/ir/canonical_hash.rs`
 - `of` — `hymeko_core/src/ir_stream/assembler.rs`
 - `par_arc_to_node` — `hymeko_core/src/ir/incidence.rs`
 - `parent` — `hymeko_core/src/ir/ir.rs`
@@ -318,7 +325,6 @@ _No public symbols._
 - `prepare_model_at` — `hymeko_core/src/module_store/execution/value_updates.rs`
 - `pretty_print_compiled` — `hymeko_core/src/util/pretty_print.rs`
 - `program` — `hymeko_core/src/module_store/execution.rs`
-- `program_structure_hash` — `hymeko_core/src/ir/semantic_digest.rs`
 - `provider_mut` — `hymeko_core/src/module_store/module_store.rs`
 - `push_anonymous_arc` — `hymeko_core/src/ir/ir.rs`
 - `push_decl` — `hymeko_core/src/ir/ir.rs`
@@ -343,12 +349,11 @@ _No public symbols._
 - `section` — `hymeko_core/src/ir_stream/codec.rs`
 - `sections` — `hymeko_core/src/ir_stream/assembler.rs`
 - `sections` — `hymeko_core/src/ir_stream/codec.rs`
-- `semantic_declaration_hashes` — `hymeko_core/src/ir/semantic_digest.rs`
 - `semantic_digest` — `hymeko_core/src/module_store/execution.rs`
-- `semantic_model_digest` — `hymeko_core/src/ir/semantic_digest.rs`
 - `seq` — `hymeko_core/src/ir_stream/assembler.rs`
 - `seq` — `hymeko_core/src/ir_stream/envelope.rs`
 - `set_model_facet` — `hymeko_core/src/ir/ir.rs`
+- `shrink_to_fit` — `hymeko_core/src/ir/ir.rs`
 - `sign` — `hymeko_core/src/ir/ir.rs`
 - `size` — `hymeko_core/src/ir_stream/section.rs`
 - `size_usize` — `hymeko_core/src/ir_stream/section.rs`
@@ -363,6 +368,7 @@ _No public symbols._
 - `stream_id` — `hymeko_core/src/ir_stream/envelope.rs`
 - `strict` — `hymeko_core/src/ir_stream/assembler.rs`
 - `strict` — `hymeko_core/src/ir_stream/limits.rs`
+- `structure` — `hymeko_core/src/ir/canonical_hash.rs`
 - `sunflower_design` — `hymeko_core/src/generators.rs`
 - `take_last_ir` — `hymeko_core/src/module_store/module_store.rs`
 - `target` — `hymeko_core/src/ir/ir.rs`
@@ -380,13 +386,14 @@ _No public symbols._
 - `try_from_wire` — `hymeko_core/src/ir_stream/section.rs`
 - `txn_id` — `hymeko_core/src/ir_stream/assembler.rs`
 - `txn_id` — `hymeko_core/src/ir_stream/envelope.rs`
-- `validate` — `hymeko_core/src/ir/canonical_hash.rs`
+- `unique_paths` — `hymeko_core/src/ir/canonical_hash.rs`
 - `validate` — `hymeko_core/src/ir/incidence.rs`
 - `validate_all_refs_sym` — `hymeko_core/src/resolution/resolve.rs`
 - `validate_all_refs_sym_with_prefix` — `hymeko_core/src/resolution/resolve.rs`
 - `validate_hierarchy_index_coherence` — `hymeko_core/src/ir/coherence.rs`
 - `validate_message` — `hymeko_core/src/ir_stream/codec.rs`
 - `validate_model_contract` — `hymeko_core/src/ir/coherence.rs`
+- `validate_namespace_roots` — `hymeko_core/src/ir/canonical_hash.rs`
 - `view` — `hymeko_core/src/ir/incidence.rs`
 - `with_file` — `hymeko_core/src/module_store/source_provider.rs`
 - `with_value_updates` — `hymeko_core/src/module_store/execution/value_updates.rs`
@@ -407,16 +414,16 @@ _No public symbols._
 ### structs
 
 - `ActivationBuilder` — `hymeko_wgpu/src/operations/activation.rs`
-- `AllocationKey` — `hymeko_wgpu/src/arena.rs`
-- `ArenaStats` — `hymeko_wgpu/src/arena.rs`
 - `ArenaTensor` — `hymeko_wgpu/src/arena.rs`
 - `BackendCell` — `hymeko_wgpu/src/testing.rs`
 - `CompletionTracker` — `hymeko_wgpu/src/completion.rs`
 - `DeviceCapabilities` — `hymeko_wgpu/src/backend.rs`
 - `ElapsedTicks` — `hymeko_wgpu/src/profiling.rs`
 - `Fixture` — `hymeko_wgpu/src/testing.rs`
+- `FreshGpu` — `hymeko_wgpu/src/testing.rs`
 - `GlobalEntropyPoolBuilder` — `hymeko_wgpu/src/operations/global_entropy_pool.rs`
 - `GpuCsrMatrix` — `hymeko_wgpu/src/resources.rs`
+- `GpuDiscipline` — `hymeko_wgpu/src/testing.rs`
 - `GpuTensor` — `hymeko_wgpu/src/resources.rs`
 - `GpuTimer` — `hymeko_wgpu/src/profiling.rs`
 - `HighwayIdentityBuilder` — `hymeko_wgpu/src/operations/highway.rs`
@@ -444,12 +451,13 @@ _No public symbols._
 - `RotorAttentionBuilder` — `hymeko_wgpu/src/operations/rotor_attention.rs`
 - `ScatterMeanBuilder` — `hymeko_wgpu/src/operations/scatter_mean.rs`
 - `SessionSubmittedOnce` — `hymeko_wgpu/src/scope.rs`
+- `SharedGpu` — `hymeko_wgpu/src/testing.rs`
+- `SiblingGpu` — `hymeko_wgpu/src/testing.rs`
 - `SpmmBuilder` — `hymeko_wgpu/src/operations/spmm.rs`
 - `StagingStorage` — `hymeko_wgpu/src/readback.rs`
 - `StarRotorSpikeBuilder` — `hymeko_wgpu/src/operations/star_rotor_spike.rs`
 - `SubmissionEpoch` — `hymeko_wgpu/src/completion.rs`
 - `TensorArena` — `hymeko_wgpu/src/arena.rs`
-- `TensorArenaConfig` — `hymeko_wgpu/src/arena.rs`
 - `TensorOperandIsSealed` — `hymeko_wgpu/src/scope.rs`
 - `Tracked` — `hymeko_wgpu/src/scope.rs`
 - `TrackedSession` — `hymeko_wgpu/src/arena.rs`
@@ -464,7 +472,6 @@ _No public symbols._
 - `ActivationKind` — `hymeko_wgpu/src/operations/activation.rs`
 - `KernelId` — `hymeko_wgpu/src/pipeline.rs`
 - `LayoutId` — `hymeko_wgpu/src/pipeline.rs`
-- `ReusePolicy` — `hymeko_wgpu/src/arena.rs`
 - `TimestampSupport` — `hymeko_wgpu/src/profiling.rs`
 
 ### functions
@@ -478,7 +485,6 @@ _No public symbols._
 - `allocations` — `hymeko_wgpu/src/readback.rs`
 - `alpha` — `hymeko_wgpu/src/operations/activation.rs`
 - `as_str` — `hymeko_wgpu/src/operations/activation.rs`
-- `backend_or_skip` — `hymeko_wgpu/src/testing.rs`
 - `backends` — `hymeko_wgpu/src/backend.rs`
 - `bind_group_layout` — `hymeko_wgpu/src/pipeline.rs`
 - `block_on` — `hymeko_wgpu/src/block_on.rs`
@@ -488,7 +494,6 @@ _No public symbols._
 - `builder` — `hymeko_wgpu/src/backend.rs`
 - `builds` — `hymeko_wgpu/src/testing.rs`
 - `bundle` — `hymeko_wgpu/src/pipeline.rs`
-- `bytes` — `hymeko_wgpu/src/arena.rs`
 - `capabilities` — `hymeko_wgpu/src/backend.rs`
 - `capacity` — `hymeko_wgpu/src/profiling.rs`
 - `capacity` — `hymeko_wgpu/src/readback.rs`
@@ -502,7 +507,6 @@ _No public symbols._
 - `create_readback_workspace` — `hymeko_wgpu/src/backend.rs`
 - `destination_capacity` — `hymeko_wgpu/src/readback.rs`
 - `device` — `hymeko_wgpu/src/backend.rs`
-- `device_bytes` — `hymeko_wgpu/src/arena.rs`
 - `dispatch_groups` — `hymeko_wgpu/src/operations/activation.rs`
 - `dispatch_groups` — `hymeko_wgpu/src/operations/highway.rs`
 - `dispatch_groups` — `hymeko_wgpu/src/operations/hsikan.rs`
@@ -537,6 +541,8 @@ _No public symbols._
 - `features` — `hymeko_wgpu/src/backend.rs`
 - `features` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `features` — `hymeko_wgpu/src/operations/star_rotor_spike.rs`
+- `fresh` — `hymeko_wgpu/src/testing.rs`
+- `fresh_gpu` — `hymeko_wgpu/src/testing.rs`
 - `from_features` — `hymeko_wgpu/src/profiling.rs`
 - `from_parts` — `hymeko_wgpu/src/resources.rs`
 - `fused_activation` — `hymeko_wgpu/src/operations/spmm.rs`
@@ -547,7 +553,6 @@ _No public symbols._
 - `get_or_init` — `hymeko_wgpu/src/testing.rs`
 - `global_entropy_pool` — `hymeko_wgpu/src/operations/mod.rs`
 - `highway_identity` — `hymeko_wgpu/src/operations/mod.rs`
-- `hit_rate` — `hymeko_wgpu/src/arena.rs`
 - `hsikan` — `hymeko_wgpu/src/operations/mod.rs`
 - `in_place` — `hymeko_wgpu/src/operations/activation.rs`
 - `incidence` — `hymeko_wgpu/src/operations/scatter_mean.rs`
@@ -650,7 +655,11 @@ _No public symbols._
 - `shader_name` — `hymeko_wgpu/src/pipeline.rs`
 - `shape` — `hymeko_wgpu/src/arena.rs`
 - `shape` — `hymeko_wgpu/src/resources.rs`
+- `shared` — `hymeko_wgpu/src/testing.rs`
 - `shared_backend` — `hymeko_wgpu/src/testing.rs`
+- `shared_gpu` — `hymeko_wgpu/src/testing.rs`
+- `shared_unguarded` — `hymeko_wgpu/src/testing.rs`
+- `sibling` — `hymeko_wgpu/src/testing.rs`
 - `signs` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `size_bytes` — `hymeko_wgpu/src/resources.rs`
 - `source` — `hymeko_wgpu/src/pipeline.rs`

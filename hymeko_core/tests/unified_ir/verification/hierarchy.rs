@@ -16,7 +16,8 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use hymeko::common::ids::DeclId;
-use hymeko::ir::canonical_hash::{CanonHashCfg, CanonicalPaths};
+use hymeko::ir::canonical_hash::{Canon, CanonHashCfg};
+use hymeko::ir::hash::HashId;
 use hymeko::ir::ir::DeclKind;
 
 use crate::unified_ir::support::builder::{S, TestIr};
@@ -70,6 +71,13 @@ pub fn depth_stats(
 
 /// Build a single chain of `depth` nested declarations, plus one edge whose arc
 /// references the deepest node. Returns the constructed IR.
+/// `t`'s structural (V1) canonical hash under the default configuration.
+fn structure_hash(t: &TestIr) -> HashId {
+    Canon::new(&t.ir, &t.it)
+        .structure(CanonHashCfg::default())
+        .0
+}
+
 fn chain(depth: usize) -> TestIr {
     let mut t = TestIr::new();
     let mut segs: Vec<String> = Vec::new();
@@ -109,8 +117,8 @@ fn synthetic_chain_depths_are_traversable_and_hashable() {
             );
         }
 
-        // Canonical hash: iterative subtree fold and Pruefer traversal.
-        let h = CanonicalPaths::new(&t.ir).hash(CanonHashCfg::default(), &t.it);
+        // Canonical hash: this is the recursive path.
+        let h = structure_hash(&t);
 
         // Semantic oracle at the same depth.
         let form = crate::unified_ir::support::oracle::semantic_form(
@@ -145,7 +153,7 @@ fn synthetic_wide_hierarchy_is_traversable_and_hashable() {
     let refs: Vec<_> = kids.iter().take(64).map(|&d| (d, S::Plus)).collect();
     t.arc(e, &refs);
 
-    let h = CanonicalPaths::new(&t.ir).hash(CanonHashCfg::default(), &t.it);
+    let h = structure_hash(&t);
     eprintln!(
         "[depth] wide hierarchy: decls={} depth=2 branching=2000 hash_prefix={:02x}{:02x}",
         t.ir.decl_nodes.len(),
@@ -167,7 +175,7 @@ fn synthetic_high_cardinality_edge_is_hashable() {
     let refs: Vec<_> = nodes.iter().map(|&d| (d, S::Plus)).collect();
     t.arc(e, &refs);
 
-    let h = CanonicalPaths::new(&t.ir).hash(CanonHashCfg::default(), &t.it);
+    let h = structure_hash(&t);
     eprintln!(
         "[depth] high-cardinality edge: arity=1000 hash_prefix={:02x}{:02x}",
         h.0[0], h.0[1]

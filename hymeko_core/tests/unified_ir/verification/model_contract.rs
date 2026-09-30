@@ -9,12 +9,11 @@
 //! boundary between the two must be explicit.
 
 use hymeko::common::ids::DeclId;
-use hymeko::ir::canonical_hash::{CanonHashCfg, CanonicalPaths};
+use hymeko::ir::canonical_hash::{Canon, CanonHashCfg};
 use hymeko::ir::coherence::{ModelFinding, validate_model_contract};
 use hymeko::ir::ir::{
     DType, DeclKind, Extent, ModelFacet, OperatorContract, TensorContract, TensorRole,
 };
-use hymeko::ir::semantic_digest::semantic_model_digest;
 
 use crate::unified_ir::support::builder::{S, TestIr};
 
@@ -74,12 +73,13 @@ fn model() -> (TestIr, [DeclId; 4]) {
 }
 
 fn digest(t: &TestIr) -> [u8; 32] {
-    semantic_model_digest(&t.ir, &t.it).0.0
+    Canon::new(&t.ir, &t.it).hash().0.0
 }
 
 fn v1(t: &TestIr) -> [u8; 32] {
-    CanonicalPaths::new(&t.ir)
-        .hash(CanonHashCfg::default(), &t.it)
+    Canon::new(&t.ir, &t.it)
+        .structure(CanonHashCfg::default())
+        .0
         .0
 }
 
@@ -125,7 +125,7 @@ fn a_pre_facet_payload_decodes_as_no_model() {
     json.as_object_mut().expect("object").remove("decl_model");
     let back: hymeko::ir::ir::Ir = serde_json::from_value(json).expect("legacy payload decodes");
     assert!(!back.declares_executable_model());
-    assert_eq!(digest(&t), semantic_model_digest(&back, &t.it).0.0);
+    assert_eq!(digest(&t), Canon::new(&back, &t.it).hash().0.0);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -173,7 +173,7 @@ fn the_round_trip_preserves_the_typed_contract_and_the_digest() {
     assert_eq!(back.model_facet(x), t.ir.model_facet(x));
     assert_eq!(back.model_facet(e), t.ir.model_facet(e));
     assert_eq!(
-        semantic_model_digest(&back, &t.it).0.0,
+        Canon::new(&back, &t.it).hash().0.0,
         digest(&t),
         "the digest must survive the wire"
     );
@@ -582,7 +582,7 @@ fn the_round_trip_preserves_both_axes() {
             "sign at slot {slot}"
         );
     }
-    assert_eq!(semantic_model_digest(&back, &t.it).0.0, digest(&t));
+    assert_eq!(Canon::new(&back, &t.it).hash().0.0, digest(&t));
 }
 
 /// A pre-direction payload decodes to `Unspecified` and is not judged against the port rules.

@@ -20,7 +20,7 @@
 use hymeko_tensor::compute::{ComputeError, SparseCsrShape, TensorShape};
 use hymeko_tensor::representations::tensor_csr::TensorCsr;
 use hymeko_wgpu::testing::{DegreeShape, SparseSpec};
-use hymeko_wgpu::testing::{backend_or_skip, shared_backend};
+use hymeko_wgpu::testing::{fresh_gpu, shared_gpu};
 use hymeko_wgpu::{GpuCsrMatrix, GpuTensor, PreparedSpmm, WgpuBackend, WorkgroupShape};
 
 const POISON: f32 = -12345.5;
@@ -158,7 +158,7 @@ fn handmade() -> TensorCsr<f32> {
 
 #[test]
 fn reusable_readback_waits_for_changing_resident_compute() {
-    let Some(backend) = shared_backend("spmm_single_wait") else {
+    let Some(backend) = shared_gpu("spmm_single_wait") else {
         return;
     };
     let csr = handmade();
@@ -172,7 +172,13 @@ fn reusable_readback_waits_for_changing_resident_compute() {
         .resources()
         .zeroed_tensor("y", matrix.shape().output_shape(fd))
         .unwrap();
-    let op = prepare_spmm(backend, &matrix, &input, &output, WorkgroupShape::default());
+    let op = prepare_spmm(
+        &backend,
+        &matrix,
+        &input,
+        &output,
+        WorkgroupShape::default(),
+    );
     let mut workspace = backend.create_readback_workspace();
     for round in 0..8 {
         let x: Vec<_> = (0..csr.num_cols * fd)
@@ -191,14 +197,14 @@ fn reusable_readback_waits_for_changing_resident_compute() {
 
 #[test]
 fn nonfinite_inputs_preserve_cpu_classification() {
-    let Some(backend) = shared_backend("spmm_nonfinite") else {
+    let Some(backend) = shared_gpu("spmm_nonfinite") else {
         return;
     };
     let csr = handmade();
     for special in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
         let mut x = vec![1.0; csr.num_cols];
         x[0] = special;
-        let got = run_gpu(backend, &csr, &x, 1, WorkgroupShape::default());
+        let got = run_gpu(&backend, &csr, &x, 1, WorkgroupShape::default());
         assert_close(&got, &cpu_reference(&csr, &x, 1), "nonfinite input");
     }
 }
@@ -207,7 +213,7 @@ fn nonfinite_inputs_preserve_cpu_classification() {
 fn test_handmade_matrix_matches_cpu_across_feature_dims() {
     // Covers: empty CSR row (3), duplicate column index (5), negative values
     // (6), and feature_dim 1/8/32/128 (8).
-    let Some(backend) = shared_backend("handmade") else {
+    let Some(backend) = shared_gpu("handmade") else {
         return;
     };
     let csr = handmade();
@@ -217,7 +223,7 @@ fn test_handmade_matrix_matches_cpu_across_feature_dims() {
             .map(|t| 0.5 + (t % 13) as f32 * 0.125)
             .collect();
         let cpu = cpu_reference(&csr, &x, fd);
-        let gpu = run_gpu(backend, &csr, &x, fd, WorkgroupShape::default());
+        let gpu = run_gpu(&backend, &csr, &x, fd, WorkgroupShape::default());
         assert_close(&gpu, &cpu, &format!("handmade fd={fd}"));
 
         // Row 2 is structurally empty -> must be exactly zero, not poison.
@@ -230,7 +236,7 @@ fn test_handmade_matrix_matches_cpu_across_feature_dims() {
 #[test]
 fn test_empty_matrix_and_output() {
     // Covers: empty matrix/output (1) and the zero-extent dispatch rule.
-    let Some(backend) = shared_backend("empty") else {
+    let Some(backend) = shared_gpu("empty") else {
         return;
     };
     let res = backend.resources();
@@ -272,7 +278,7 @@ fn test_empty_matrix_and_output() {
 
 #[test]
 fn test_zero_feature_dim_is_a_valid_noop() {
-    let Some(backend) = shared_backend("fd0") else {
+    let Some(backend) = shared_gpu("fd0") else {
         return;
     };
     let res = backend.resources();
@@ -303,7 +309,7 @@ fn test_zero_feature_dim_is_a_valid_noop() {
 
 #[test]
 fn test_singleton() {
-    let Some(backend) = shared_backend("singleton") else {
+    let Some(backend) = shared_gpu("singleton") else {
         return;
     };
     let csr = TensorCsr {
@@ -315,7 +321,7 @@ fn test_singleton() {
     };
     let x = vec![4.0f32];
     let cpu = cpu_reference(&csr, &x, 1);
-    let gpu = run_gpu(backend, &csr, &x, 1, WorkgroupShape::default());
+    let gpu = run_gpu(&backend, &csr, &x, 1, WorkgroupShape::default());
     assert_close(&gpu, &cpu, "singleton");
     assert_eq!(gpu[0], 10.0);
 }
@@ -328,7 +334,7 @@ fn test_signed_zero_is_preserved_structurally() {
     // +0.0 there too. The GPU does the same. What is asserted is that both
     // agree, and that a genuinely negative result stays negative -- not that a
     // -0.0 input survives as -0.0, which the algorithm does not promise.
-    let Some(backend) = shared_backend("signed_zero") else {
+    let Some(backend) = shared_gpu("signed_zero") else {
         return;
     };
     // X is [2 x 2] row-major: x[0,:] = [0.0, -0.0], x[1,:] = [5.0, -5.0].
@@ -345,7 +351,7 @@ fn test_signed_zero_is_preserved_structurally() {
     let x = vec![0.0f32, -0.0, 5.0, -5.0];
     let fd = 2;
     let cpu = cpu_reference(&csr, &x, fd);
-    let gpu = run_gpu(backend, &csr, &x, fd, WorkgroupShape::default());
+    let gpu = run_gpu(&backend, &csr, &x, fd, WorkgroupShape::default());
 
     assert_close(&gpu, &cpu, "signed zero");
     for i in 0..cpu.len() {
@@ -365,7 +371,7 @@ fn test_signed_zero_is_preserved_structurally() {
 fn test_irregular_degree_and_non_multiple_shapes() {
     // Covers: irregular row degree (4) and shapes not divisible by the
     // workgroup extent (9). 1000 rows and fd=33 are coprime with 8/16.
-    let Some(backend) = shared_backend("irregular") else {
+    let Some(backend) = shared_gpu("irregular") else {
         return;
     };
     let spec = SparseSpec {
@@ -383,7 +389,7 @@ fn test_irregular_degree_and_non_multiple_shapes() {
             .collect();
         let cpu = cpu_reference(&csr, &x, fd);
         for wg in WorkgroupShape::sweep() {
-            let gpu = run_gpu(backend, &csr, &x, fd, wg);
+            let gpu = run_gpu(&backend, &csr, &x, fd, wg);
             assert_close(&gpu, &cpu, &format!("irregular fd={fd} wg={wg}"));
         }
     }
@@ -392,7 +398,7 @@ fn test_irregular_degree_and_non_multiple_shapes() {
 #[test]
 fn test_deterministic_medium_and_large_workloads() {
     // Covers: deterministic medium and large workloads (18).
-    let Some(backend) = shared_backend("scaled") else {
+    let Some(backend) = shared_gpu("scaled") else {
         return;
     };
 
@@ -403,7 +409,7 @@ fn test_deterministic_medium_and_large_workloads() {
         let csr = spec.build();
         let x = spec.dense_block(fd);
         let cpu = cpu_reference(&csr, &x, fd);
-        let gpu = run_gpu(backend, &csr, &x, fd, WorkgroupShape::default());
+        let gpu = run_gpu(&backend, &csr, &x, fd, WorkgroupShape::default());
         assert_close(&gpu, &cpu, &format!("{label} fd={fd}"));
         eprintln!(
             "[{label}] rows={} nnz={} fd={fd} -> {} elements agreed",
@@ -422,7 +428,7 @@ fn test_deterministic_medium_and_large_workloads() {
 fn test_shape_and_metadata_validation_at_prepare_time() {
     // Covers: input shape mismatch (10), output shape mismatch (11), bad CSR
     // metadata (12). All must be caught in `prepare`, never at dispatch.
-    let Some(backend) = shared_backend("validation") else {
+    let Some(backend) = shared_gpu("validation") else {
         return;
     };
     let res = backend.resources();
@@ -574,7 +580,7 @@ fn test_shape_and_metadata_validation_at_prepare_time() {
 
 #[test]
 fn test_oversized_workgroup_is_rejected() {
-    let Some(backend) = shared_backend("workgroup_limit") else {
+    let Some(backend) = shared_gpu("workgroup_limit") else {
         return;
     };
     let res = backend.resources();
@@ -611,7 +617,7 @@ fn test_oversized_workgroup_is_rejected() {
 fn test_repeated_dispatch_and_input_rewrite() {
     // Covers: multiple dispatch with one PreparedSpmm (13), input rewrite then
     // new dispatch (14), poisoned output overwrite (17).
-    let Some(backend) = shared_backend("reuse") else {
+    let Some(backend) = shared_gpu("reuse") else {
         return;
     };
     let res = backend.resources();
@@ -668,7 +674,7 @@ fn test_repeated_dispatch_and_input_rewrite() {
 #[test]
 fn test_two_operations_one_encoder_one_submit() {
     // Covers: two separate SpMM in one encoder and one submit (15).
-    let Some(backend) = shared_backend("batched") else {
+    let Some(backend) = shared_gpu("batched") else {
         return;
     };
     let res = backend.resources();
@@ -737,7 +743,7 @@ fn test_pipeline_is_cached_across_prepares() {
     // Covers: pipeline-cache reuse (16).
     // FRESH device: this test asserts an EMPTY pipeline cache, which a shared
     // backend would not have. Sharing here would make it pass for the wrong reason.
-    let Some(backend) = backend_or_skip("cache") else {
+    let Some(backend) = fresh_gpu("cache") else {
         return;
     };
     let res = backend.resources();
@@ -798,7 +804,7 @@ fn test_pipeline_is_cached_across_prepares() {
 fn test_all_workgroup_variants_agree_with_cpu() {
     // The sweep configurations must be numerically interchangeable; only their
     // speed may differ.
-    let Some(backend) = shared_backend("workgroup_sweep") else {
+    let Some(backend) = shared_gpu("workgroup_sweep") else {
         return;
     };
     let spec = SparseSpec::small();
@@ -808,7 +814,7 @@ fn test_all_workgroup_variants_agree_with_cpu() {
     let cpu = cpu_reference(&csr, &x, fd);
 
     for wg in WorkgroupShape::sweep() {
-        let gpu = run_gpu(backend, &csr, &x, fd, wg);
+        let gpu = run_gpu(&backend, &csr, &x, fd, wg);
         assert_close(&gpu, &cpu, &format!("workgroup {wg}"));
     }
 }

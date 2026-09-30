@@ -20,7 +20,7 @@
 
 use hymeko::common::ids::DeclId;
 use hymeko::ir::canonical_hash::{
-    CanonHashCfg, CanonicalIncidence, CanonicalPaths, CanonicalPrufer, NamespaceValidator,
+    Canon, CanonHashCfg, CanonicalIncidence, CanonicalPrufer, validate_namespace_roots,
 };
 
 use crate::unified_ir::support::builder::{S, TestIr};
@@ -30,7 +30,9 @@ fn hex(h: &hymeko::ir::hash::HashId) -> String {
 }
 
 fn v1(t: &TestIr) -> String {
-    hex(&CanonicalPaths::new(&t.ir).hash(CanonHashCfg::default(), &t.it))
+    hex(&Canon::new(&t.ir, &t.it)
+        .structure(CanonHashCfg::default())
+        .0)
 }
 
 // --- the five vectors -------------------------------------------------------
@@ -140,12 +142,9 @@ fn v1_known_answer_vectors_are_unchanged() {
         ("dense_permuted", vec_dense_permuted(), KAT_DENSE_PERMUTED),
     ];
     for (name, t, expected) in cases {
-        let paths = CanonicalPaths::new(&t.ir);
-        NamespaceValidator::new(&paths)
-            .validate(&t.idx)
-            .expect("fixture paths agree");
+        validate_namespace_roots(&t.ir, &t.idx).expect("fixture paths agree");
         assert_eq!(
-            hex(&paths.hash(CanonHashCfg::default(), &t.it)),
+            hex(&Canon::new(&t.ir, &t.it).structure(CanonHashCfg::default()).0),
             expected,
             "FROZEN v1 VECTOR CHANGED for `{name}`. This is a change to \
              CanonHashCfg algo_version=1 output, which M0.6 forbids. Either the \
@@ -195,7 +194,7 @@ fn v1_known_answer_vectors_are_unchanged() {
                     flags: 13,
                 },
             ] {
-                aggregate.update(&CanonicalPaths::new(&t.ir).hash(cfg, &t.it).0);
+                aggregate.update(&Canon::new(&t.ir, &t.it).structure(cfg).0.0);
                 assert_prufer_outputs(&t, cfg);
             }
         }
@@ -246,8 +245,9 @@ fn dense_permutation_does_not_change_v1() {
 // genuine DeclId permutation in the authority tests.
 
 fn v1_ir(t: &TestIr) -> String {
-    hex(&hymeko::ir::canonical_hash::CanonicalPaths::new(&t.ir)
-        .hash(CanonHashCfg::default(), &t.it))
+    hex(&Canon::new(&t.ir, &t.it)
+        .structure(CanonHashCfg::default())
+        .0)
 }
 
 #[test]

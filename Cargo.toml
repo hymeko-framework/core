@@ -14,4 +14,4 @@ log = "0.4.22"
 parser = { git = "ssh://git@192.168.1.228:2222/hymeko/parser.git", rev = "f11628591a8183586492807ecdf43c64e6d31c5f" }
 # Tensor extraction provider, published on tensor feat/tensor-extraction; ledger in
 # docs/hymeko-kernel-ownership.md (tensor extraction, 2026-09-23).
-hymeko_tensor = { git = "ssh://git@192.168.1.228:2222/hymeko/tensor.git", rev = "98c08a4504a4f98acd2941e34c0f3f3baa6694de" }
+hymeko_tensor = { git = "ssh://git@192.168.1.228:2222/hymeko/tensor.git", rev = "091f4f139e4759fc0c800fe98a5d15a8d5fd6e32" }

@@ -2,12 +2,11 @@
 //! Every mutation control first proves that its intended IR field changed.
 
 use hymeko::common::ids::DeclId;
-use hymeko::ir::canonical_hash::CanonHashCfg;
+use hymeko::ir::canonical_hash::{Canon, CanonHashCfg};
 use hymeko::ir::ir::{AnnoR, Ir, RefAtomR, SignedRefR, ValueR};
 use hymeko::ir::semantic_digest::{
-    ProgramStructureHash, SEMANTIC_DIGEST_ALGO_VERSION, SEMANTIC_DIGEST_SCHEMA_VERSION,
-    SemanticModelDigest, program_structure_hash, semantic_declaration_hashes,
-    semantic_model_digest,
+    ProgramStructureHashV1, SEMANTIC_DIGEST_ALGO_VERSION, SEMANTIC_DIGEST_SCHEMA_VERSION,
+    SemanticModelDigestV2,
 };
 
 use crate::unified_ir::support::builder::{S, TestIr};
@@ -127,12 +126,16 @@ const A: DeclId = DeclId::new(1);
 const B: DeclId = DeclId::new(2);
 const R: DeclId = DeclId::new(3);
 
-fn digest(t: &TestIr) -> SemanticModelDigest {
-    semantic_model_digest(&t.ir, &t.it)
+fn digest(t: &TestIr) -> SemanticModelDigestV2 {
+    Canon::new(&t.ir, &t.it).hash()
 }
 
-fn v1(t: &TestIr) -> ProgramStructureHash {
-    program_structure_hash(CanonHashCfg::default(), &t.ir, &t.it)
+fn v2(t: &TestIr) -> SemanticModelDigestV2 {
+    Canon::new(&t.ir, &t.it).hash()
+}
+
+fn v1(t: &TestIr) -> ProgramStructureHashV1 {
+    Canon::new(&t.ir, &t.it).structure(CanonHashCfg::default())
 }
 
 fn assert_distinct_models(left: &TestIr, right: &TestIr, changed: &str, message: &str) {
@@ -321,9 +324,10 @@ fn semantic_is_invariant_under_a_semantically_irrelevant_construction_order() {
 #[test]
 fn program_structure_hash_is_the_unchanged_v1_value() {
     let t = program(Some(ValueR::Ref(A)));
-    let direct =
-        hymeko::ir::canonical_hash::CanonicalPaths::new(&t.ir).hash(CanonHashCfg::default(), &t.it);
-    let wrapped: ProgramStructureHash = v1(&t);
+    let direct = Canon::new(&t.ir, &t.it)
+        .structure(CanonHashCfg::default())
+        .0;
+    let wrapped: ProgramStructureHashV1 = v1(&t);
     assert_eq!(
         wrapped.0, direct,
         "the wrapper renames, it does not recompute"
@@ -336,7 +340,7 @@ fn program_structure_hash_is_the_unchanged_v1_value() {
 fn structure_and_semantic_hashes_are_domain_and_version_separated() {
     let t = program(Some(ValueR::Ref(A)));
     let v1 = v1(&t);
-    let semantic = semantic_model_digest(&t.ir, &t.it);
+    let semantic = Canon::new(&t.ir, &t.it).hash();
     assert_ne!(
         v1.0.0, semantic.0.0,
         "a shared value would mean a shared domain header"
@@ -374,7 +378,7 @@ fn only_semantic_identity_covers_annotations() {
 #[test]
 fn semantic_declaration_hashes_covers_every_declaration() {
     let t = program(Some(ValueR::Ref(A)));
-    let table = semantic_declaration_hashes(&t.ir, &t.it);
+    let table = Canon::new(&t.ir, &t.it).declaration_hashes();
     assert_eq!(table.len(), t.ir.decl_nodes.len());
     let mut sorted: Vec<_> = table.iter().map(|h| h.0).collect();
     sorted.sort_unstable();

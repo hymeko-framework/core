@@ -204,9 +204,8 @@ mod tests {
     use super::*;
     use crate::{
         ir::{
-            canonical_hash::{CanonHashCfg, CanonicalPaths, DerivedPathIndex},
+            canonical_hash::{Canon, CanonHashCfg, build_path_index},
             ir::{DType, OperatorContract, PortDirection, RefAtomR, TensorContract, TensorRole},
-            semantic_digest::semantic_model_digest,
         },
         ir_stream::DecodeLimits,
         module_store::{execution::CompiledModel, source_provider::MemProvider},
@@ -317,7 +316,7 @@ mod tests {
             );
             crate::ir::coherence::validate_model_contract(&ir, &strings).unwrap();
             let mut index = Index::new();
-            index.by_path = DerivedPathIndex::new(&ir)
+            index.by_path = build_path_index(&ir)
                 .unwrap()
                 .iter()
                 .map(|(p, d)| (p.clone(), d))
@@ -339,8 +338,8 @@ mod tests {
     #[test]
     fn symbol_lifetime_covers_all_typed_symbol_positions_and_is_idempotent() {
         let mut f = Fixture::new();
-        let semantic = semantic_model_digest(&f.ir, &f.strings);
-        let structural = CanonicalPaths::new(&f.ir).hash(CanonHashCfg::default(), &f.strings);
+        let semantic = Canon::new(&f.ir, &f.strings).hash();
+        let structural = Canon::new(&f.ir, &f.strings).structure(CanonHashCfg::default()).0;
         let declaration_names =
             f.ir.decl_nodes
                 .iter()
@@ -355,9 +354,9 @@ mod tests {
                 .iter()
                 .all(|(_, s)| !s.starts_with("unused-before-"))
         );
-        assert_eq!(semantic_model_digest(&f.ir, &compact.interner), semantic);
+        assert_eq!(Canon::new(&f.ir, &compact.interner).hash(), semantic);
         assert_eq!(
-            CanonicalPaths::new(&f.ir).hash(CanonHashCfg::default(), &compact.interner),
+            Canon::new(&f.ir, &compact.interner).structure(CanonHashCfg::default()).0,
             structural
         );
         assert_eq!(
@@ -391,7 +390,7 @@ mod tests {
                 .unwrap();
         let decoded = cbor_writer::decode(&bytes, &DecodeLimits::strict()).unwrap();
         assert_eq!(
-            semantic_model_digest(decoded.ir(), decoded.interner()),
+            Canon::new(decoded.ir(), decoded.interner()).hash(),
             semantic
         );
         assert_eq!(decoded.canonical_hash(), structural);
@@ -412,7 +411,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             next.semantic_digest(),
-            semantic_model_digest(&next.program().ir, next.interner()),
+            Canon::new(&next.program().ir, next.interner()).hash(),
             "record hashes remain valid while cached symbolic paths are remapped"
         );
         assert_eq!(base.semantic_digest(), semantic);

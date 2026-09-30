@@ -1,8 +1,6 @@
 use super::{CBOR_SCHEMA_VERSION, CborError, CborPayload, DecodedCborPayload};
 use crate::common::ids::DeclId;
-use crate::ir::canonical_hash::{
-    CanonHashCfg, CanonicalPaths, DerivedPathIndex, NamespaceValidator,
-};
+use crate::ir::canonical_hash::{Canon, CanonHashCfg, build_path_index};
 use crate::ir::coherence::{CoherenceLimits, validate_hierarchy_index_coherence};
 use crate::ir::ir::{AnnoR, SignedRefR, ValueR};
 use crate::ir_stream::DecodeLimits;
@@ -54,8 +52,9 @@ pub(super) fn payload(
     let interner = compacted.interner;
     validate_declaration_ids(&payload)?;
 
-    let paths = CanonicalPaths::new(&payload.ir);
-    NamespaceValidator::new(&paths)
+    // One canonical view serves the namespace check and the hash check.
+    let canon = Canon::new(&payload.ir, &interner);
+    canon
         .validate(&payload.index)
         .map_err(|_| CborError::NamespaceMismatch)?;
     let max_walk = payload.ir.decl_nodes.len().saturating_add(1);
@@ -72,7 +71,7 @@ pub(super) fn payload(
         findings: report.total,
     })?;
 
-    let derived = DerivedPathIndex::new(&payload.ir).map_err(|_| CborError::IndexMismatch)?;
+    let derived = build_path_index(&payload.ir).map_err(|_| CborError::IndexMismatch)?;
     let mut rebuilt = Index::new();
     for (path, decl) in derived.iter() {
         rebuilt.by_path.insert(path.clone(), decl);
@@ -89,7 +88,7 @@ pub(super) fn payload(
     payload.index = rebuilt;
 
     if verify_hash {
-        let expected = paths.hash(CanonHashCfg::default(), &interner);
+        let expected = canon.structure(CanonHashCfg::default()).0;
         if expected != payload.canon_hash {
             return Err(CborError::CanonicalHashMismatch {
                 expected,

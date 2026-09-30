@@ -402,7 +402,7 @@ pub struct ReadbackPlan<'a> {
 ///
 /// # Relationship to the production engine
 ///
-/// This does **not** call [`crate::readback::readback_into`], and that is
+/// This does **not** call `crate::readback::readback_into`, and that is
 /// deliberate rather than an oversight. The engine treats encode-submit-wait as
 /// one step; this function's entire purpose is to time the boundaries *between*
 /// the steps, and with a timer it must additionally write GPU timestamps
@@ -411,8 +411,8 @@ pub struct ReadbackPlan<'a> {
 ///
 /// What it does share is every individual step: staging growth through
 /// [`crate::readback::StagingStorage`], mapping through
-/// [`crate::readback::map_blocking`], and mapped-range validation, the byte
-/// copy and unmap through [`crate::readback::drain_mapped_into`]. There is no
+/// `crate::readback::map_blocking`, and mapped-range validation, the byte
+/// copy and unmap through `crate::readback::drain_mapped_into`. There is no
 /// second copy loop, no second map implementation and no second unmap rule.
 ///
 /// Returns the data as a `Vec`, except when [`ReadbackPlan::dest`] is set, in

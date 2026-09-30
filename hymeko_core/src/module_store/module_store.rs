@@ -1,5 +1,5 @@
 use crate::common::ids::SymId;
-use crate::ir::hash::HashId;
+use crate::ir::canonical_hash::{Canon, CanonicalIdentity};
 use crate::ir::ir::Ir;
 use crate::ir::lower::lower_program_to_ir;
 use crate::module_store::source_provider::SourceProvider;
@@ -30,8 +30,8 @@ pub struct ModuleEntry {
 pub struct CompiledProgram {
     pub root: ModuleKey,
     /// The resolution `Index`. **Non-authoritative after U2.2**: the canonical
-    /// hash and all post-lowering path consumers read the `Ir`
-    /// (`CanonicalPaths::hash(cfg, ir, it)`, `canonical_hash::DerivedPathIndex::new`).
+    /// identity and all post-lowering path consumers read the `Ir`
+    /// (`canonical_hash::Canon`, `canonical_hash::build_path_index`).
     /// This is a resolution-time artifact retained for external/test consumers;
     /// its removal is planned for a breaking release once they migrate to the
     /// derived path index. It is NOT re-validated against the `Ir` after the
@@ -40,7 +40,9 @@ pub struct CompiledProgram {
     pub ir: Ir,
     // extra debug/teszt kényelmesség:
     pub imports: Vec<(SymId, ModuleKey)>, // (namespace, module key)
-    pub canon_hash: HashId,
+    /// The program's canonical identity, computed once here: `canon.hash()` is its semantic
+    /// digest, `canon.structure()` its structural hash.
+    pub canon: CanonicalIdentity,
 }
 
 #[derive(Debug)]
@@ -191,8 +193,10 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
 
         let imports_map = self.linked_imports(&root);
 
-        // Borrow cached syntax independently of the mutable interner. Compilation
-        // reads ASTs; cloning the root and dependency list adds no semantics.
+        // Borrow cached syntax independently of the mutable interner: the entries and the
+        // interner are disjoint fields, so every module's AST is read in place. Compilation
+        // only reads them, and a dependency is not copied (a 424k-hyperedge graph module's
+        // AST was 364 MiB of the compile's peak; module-store-borrowed-asts, 2026-09-29).
         let root_entry = self
             .entries
             .get(&root)
@@ -200,15 +204,15 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
         let root_ast = &root_entry.ast;
 
         // 4) imported list (alias opcionális: ns = alias || dep_ast.name)
-        let mut imported: Vec<(SymId, AstSym<'static>)> = Vec::new();
+        let mut imported: Vec<(SymId, &AstSym<'static>)> = Vec::with_capacity(imports_map.len());
         for &(ns, ref dep_key) in &imports_map {
-            let dep_ast = self
+            let dep_ast = &self
+                .entries
                 .get(dep_key)
                 .ok_or_else(|| {
                     ModuleLoadError::Parse(format!("dep missing: {}", dep_key.0.display()))
                 })?
-                .ast
-                .clone();
+                .ast;
 
             imported.push((ns, dep_ast));
         }
@@ -286,15 +290,14 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
         // U2.2 lowering boundary: prove the Ir (namespace_roots + intrusive links)
         // reproduces the resolution Index hierarchy, ONCE, before the Index is
         // discarded. After this the Ir is the sole post-lowering authority and the
-        // canonical hash reads no Index.
-        let canon_hash = {
-            let paths = crate::ir::canonical_hash::CanonicalPaths::new(&ir);
-            crate::ir::canonical_hash::NamespaceValidator::new(&paths)
-                .validate(&idx)
-                .map_err(|e| {
-                    ModuleLoadError::Parse(format!("namespace boundary validation failed: {e}"))
-                })?;
-            paths.hash(cfg, &self.it)
+        // canonical identity reads no Index. One canonical view serves the check and both
+        // identities, so the paths are derived once.
+        let canon = {
+            let canon = Canon::new(&ir, &self.it);
+            canon.validate(&idx).map_err(|e| {
+                ModuleLoadError::Parse(format!("namespace boundary validation failed: {e}"))
+            })?;
+            CanonicalIdentity::of(&canon, cfg)
         };
 
         // 9) bundle + cache
@@ -303,7 +306,7 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
             idx,
             ir,
             imports: imports_map,
-            canon_hash,
+            canon,
         });
 
         self.last_compiled = Some(compiled.clone());

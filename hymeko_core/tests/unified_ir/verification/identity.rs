@@ -10,7 +10,7 @@
 //! Run against the **unmodified** implementation. This phase does not fix
 //! canonical hashing.
 
-use hymeko::ir::canonical_hash::{CanonHashCfg, CanonicalPaths};
+use hymeko::ir::canonical_hash::{Canon, CanonHashCfg};
 use hymeko::ir::hash::HashId;
 
 use crate::unified_ir::support::builder::{S, TestIr};
@@ -19,7 +19,9 @@ use crate::unified_ir::support::oracle::{
 };
 
 fn hash(t: &TestIr) -> HashId {
-    CanonicalPaths::new(&t.ir).hash(CanonHashCfg::default(), &t.it)
+    Canon::new(&t.ir, &t.it)
+        .structure(CanonHashCfg::default())
+        .0
 }
 
 /// One comparison, reported in full so a failure is diagnosable from the

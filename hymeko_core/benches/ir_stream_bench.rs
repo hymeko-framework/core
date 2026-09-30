@@ -10,8 +10,8 @@
 //! those two terms so a future change that quietly adds a copy is visible as a
 //! departure from the digest rate rather than as an unexplained slowdown.
 //!
-//! Deliberately not measured here: transport, transaction application,
-//! materialisation. None of them exist yet.
+//! Additional groups measure transaction admission and content-aware replay.
+//! Transport and semantic IR installation/materialisation are outside this target.
 //!
 //! Throughput is declared in payload bytes, so the large cases are directly
 //! comparable against BLAKE3's own rate.
@@ -19,12 +19,12 @@
 use std::hint::black_box;
 use std::time::Duration;
 
-use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
+use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
 use hymeko::ir_stream::section::{ENTRY_BYTES, TABLE_PREFIX_BYTES};
 use hymeko::ir_stream::{
     ApplyOutcome, AssemblerLimits, DecodeLimits, ElementKind, EnvelopeDraft, MessageType,
-    SectionEntry, SectionKind, SnapshotVersion, TransactionAssembler, encode_message,
+    ResyncReason, SectionEntry, SectionKind, SnapshotVersion, TransactionAssembler, encode_message,
     validate_message,
 };
 
@@ -369,6 +369,10 @@ fn bench_replay_paths(c: &mut Criterion) {
     {
         let (mut a, msgs) = warm(1024);
         let target = msgs[32].clone();
+        assert_eq!(
+            a.apply(&validate_message(&target, &limits).expect("valid")),
+            ApplyOutcome::ExactDuplicate
+        );
         group.bench_function("exact_duplicate", |b| {
             b.iter(|| {
                 let v = validate_message(black_box(&target), &limits).expect("valid");
@@ -381,6 +385,10 @@ fn bench_replay_paths(c: &mut Criterion) {
     {
         let (mut a, _msgs) = warm(1024);
         let conflicting = mk(32, MessageType::Abort, 0xDEAD, &[]);
+        assert!(matches!(
+            a.apply(&validate_message(&conflicting, &limits).expect("valid")),
+            ApplyOutcome::ConflictingReplay { .. }
+        ));
         group.bench_function("conflicting_duplicate", |b| {
             b.iter(|| {
                 let v = validate_message(black_box(&conflicting), &limits).expect("valid");
@@ -396,6 +404,10 @@ fn bench_replay_paths(c: &mut Criterion) {
     {
         let (mut a, msgs) = warm(8);
         let old = msgs[0].clone();
+        assert!(matches!(
+            a.apply(&validate_message(&old, &limits).expect("valid")),
+            ApplyOutcome::ReplayOutsideWindow { .. }
+        ));
         group.bench_function("replay_window_miss", |b| {
             b.iter(|| {
                 let v = validate_message(black_box(&old), &limits).expect("valid");
@@ -506,11 +518,127 @@ fn bench_replay_capacity_scaling(c: &mut Criterion) {
             msgs.push(m);
         }
         let target = msgs[4].clone();
+        assert_eq!(
+            a.apply(&validate_message(&target, &limits).expect("valid")),
+            ApplyOutcome::ExactDuplicate
+        );
         group.bench_with_input(BenchmarkId::from_parameter(cap), &target, |b, t| {
             b.iter(|| {
                 let v = validate_message(black_box(t), &limits).expect("valid");
                 black_box(matches!(a.apply(&v), ApplyOutcome::ExactDuplicate))
             });
+        });
+    }
+    group.finish();
+}
+
+/// Codec plus admission for the distributed resume/monotonicity contract.
+/// Empty section tables are framing, not complete semantic snapshots. Each
+/// iteration gets a fresh assembler outside the timed closure; its staged
+/// allocation/commit work is included, construction is measured in its own group.
+fn bench_distributed_admission(c: &mut Criterion) {
+    let mut group = c.benchmark_group("ir_stream_admission");
+    group
+        .sample_size(50)
+        .measurement_time(Duration::from_secs(3));
+    let zero = SnapshotVersion::ZERO;
+    let current = SnapshotVersion::new(2, 2, 2, 0);
+    let next = SnapshotVersion::new(3, 3, 3, 0);
+    let incomparable = SnapshotVersion::new(1, 3, 3, 0);
+    let snapshot = MessageType::SnapshotBegin;
+    for (name, resumed, base, target, begin, expected) in [
+        ("fresh_zero", None, zero, zero, snapshot, 'C'),
+        ("resumed_zero", Some(zero), zero, zero, snapshot, 'U'),
+        ("resumed_equal", Some(current), zero, current, snapshot, 'U'),
+        (
+            "dominating_snapshot",
+            Some(current),
+            zero,
+            next,
+            snapshot,
+            'C',
+        ),
+        (
+            "incomparable_snapshot",
+            Some(current),
+            zero,
+            incomparable,
+            snapshot,
+            'I',
+        ),
+        (
+            "stale_delta",
+            Some(current),
+            zero,
+            next,
+            MessageType::DeltaBegin,
+            'B',
+        ),
+    ] {
+        let frames: Vec<_> = [begin, MessageType::Commit]
+            .into_iter()
+            .enumerate()
+            .map(|(i, kind)| {
+                let draft = EnvelopeDraft {
+                    stream_id: 17,
+                    seq: i as u64 + 1,
+                    txn_id: 23,
+                    base_version: base,
+                    target_version: target,
+                    ..EnvelopeDraft::new(kind)
+                };
+                encode_message(
+                    &draft,
+                    if kind.carries_sections() {
+                        &[0; 8]
+                    } else {
+                        &[]
+                    },
+                )
+            })
+            .collect();
+        let make = || {
+            resumed.map_or_else(
+                || TransactionAssembler::new(AssemblerLimits::strict()),
+                |v| TransactionAssembler::resuming_at(v, AssemblerLimits::strict()),
+            )
+        };
+        let apply = |assembler: &mut TransactionAssembler| {
+            let mut outcome = ApplyOutcome::Accepted;
+            for frame in &frames {
+                let message = validate_message(black_box(frame), &DecodeLimits::DEFAULT)
+                    .expect("valid frame");
+                outcome = assembler.apply(&message);
+                if !matches!(outcome, ApplyOutcome::Accepted) {
+                    break;
+                }
+            }
+            outcome
+        };
+        let mut probe = make();
+        let verdict = match apply(&mut probe) {
+            ApplyOutcome::Committed(_) => 'C',
+            ApplyOutcome::ReplayOutsideWindow { .. } => 'U',
+            ApplyOutcome::ResyncRequired(ResyncReason::IncoherentVersionBump { .. }) => 'I',
+            ApplyOutcome::ResyncRequired(ResyncReason::StaleBase { .. }) => 'B',
+            other => panic!("{name}: unexpected preflight {other:?}"),
+        };
+        assert_eq!(verdict, expected, "{name}");
+        assert_eq!(
+            probe.current_version(),
+            if expected == 'C' {
+                target
+            } else {
+                resumed.unwrap_or(zero)
+            }
+        );
+        assert_eq!(probe.current_commit_digest().is_some(), expected == 'C');
+        group.bench_function(name, |b| {
+            b.iter_batched(
+                make,
+                |mut assembler| black_box(apply(&mut assembler)),
+                BatchSize::SmallInput,
+            );
         });
     }
     group.finish();
@@ -525,6 +653,7 @@ criterion_group!(
     bench_assembler_rejection,
     bench_replay_paths,
     bench_replay_capacity_scaling,
-    bench_assembler_construction
+    bench_assembler_construction,
+    bench_distributed_admission
 );
 criterion_main!(benches);

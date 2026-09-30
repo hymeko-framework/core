@@ -31,23 +31,33 @@
 //!   are pinned to each other by `test_in_place_and_out_of_place_agree` and
 //!   `test_fused_matches_unfused_chain`, so drift fails a test.
 
+use std::cell::Cell;
+use std::marker::PhantomData;
+use std::ops::Deref;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{OnceLock, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
+
 use hymeko_tensor::compute::{ComputeError, TensorShape};
 use hymeko_tensor::representations::tensor_csr::TensorCsr;
 
 use crate::{ActivationKind, ArenaTensor, GpuCsrMatrix, GpuTensor, TrackedSession, WgpuBackend};
 
-/// Build a backend, or return `None` when the host has no usable adapter.
+/// The default test backend's builder: every suite device that asks for no special feature.
+fn default_backend() -> Result<WgpuBackend, ComputeError> {
+    WgpuBackend::builder().label("hymeko-test").build()
+}
+
+/// A built backend, or `None` when the host has no usable adapter.
 ///
 /// # Why availability is not a failure
 ///
-/// A machine without a GPU should **skip** these tests, not fail them —
-/// otherwise CI on a headless runner reports red for a condition the code
-/// cannot control. But every *other* initialisation error is a real defect and
-/// panics, so a broken backend cannot masquerade as an absent one.
-#[must_use]
-pub fn backend_or_skip(context: &str) -> Option<WgpuBackend> {
-    match WgpuBackend::builder().label("hymeko-test").build() {
-        Ok(b) => Some(b),
+/// A machine without a GPU should **skip** these tests, not fail them — otherwise CI on a headless
+/// runner reports red for a condition the code cannot control. But every *other* initialisation
+/// error is a real defect and panics, so a broken backend cannot masquerade as an absent one. This is
+/// the one place that decides it, for [`BackendCell`] and [`GpuDiscipline`] alike.
+fn classify(context: &str, built: Result<WgpuBackend, ComputeError>) -> Option<WgpuBackend> {
+    match built {
+        Ok(backend) => Some(backend),
         Err(ComputeError::BackendUnavailable { reason, .. }) => {
             eprintln!("[{context}] SKIPPED - no GPU adapter: {reason}");
             None
@@ -60,10 +70,10 @@ pub fn backend_or_skip(context: &str) -> Option<WgpuBackend> {
 ///
 /// # Why a cell and not another function
 ///
-/// `backend_or_skip` builds a device per call. A suite whose tests each call it constructs several
-/// `WgpuBackend`s in rapid succession, and this repository already records what that costs on Linux:
-/// "concurrent `WgpuBackend` construction deadlocks in the Vulkan loader". Measured on 2026-09-08 it
-/// is worse than a deadlock — a segmentation fault under the resulting device create/drop churn.
+/// A suite whose tests each build a device constructs several `WgpuBackend`s in rapid succession,
+/// and this repository already records what that costs on Linux: "concurrent `WgpuBackend`
+/// construction deadlocks in the Vulkan loader". Measured on 2026-09-08 it is worse than a deadlock —
+/// a segmentation fault under the resulting device create/drop churn.
 ///
 /// A `BackendCell` removes the churn instead of documenting a run-mode workaround: the `OnceLock`
 /// guarantees one construction per process, and the value is shared read-only afterwards.
@@ -78,8 +88,8 @@ pub fn backend_or_skip(context: &str) -> Option<WgpuBackend> {
 /// `WgpuBackend` is `Send + Sync`, so sharing one is sound. Nothing here locks or otherwise changes
 /// production `WgpuBackend::build()`.
 pub struct BackendCell {
-    cell: std::sync::OnceLock<Option<WgpuBackend>>,
-    builds: std::sync::atomic::AtomicUsize,
+    cell: OnceLock<Option<WgpuBackend>>,
+    builds: AtomicUsize,
 }
 
 impl Default for BackendCell {
@@ -92,19 +102,16 @@ impl BackendCell {
     #[must_use]
     pub const fn new() -> Self {
         Self {
-            cell: std::sync::OnceLock::new(),
-            builds: std::sync::atomic::AtomicUsize::new(0),
+            cell: OnceLock::new(),
+            builds: AtomicUsize::new(0),
         }
     }
 
     /// The suite's backend, building it on first use with `build`.
     ///
-    /// The classification is central and identical for every suite: a missing adapter is a
-    /// **skip** (`None`), and any other initialisation error is a **failure** (panic), so a broken
-    /// backend cannot masquerade as an absent one.
-    ///
     /// # Returns
-    /// `None` when the machine has no adapter — decided once, not per test.
+    /// `None` when the machine has no adapter — decided once, not per test. Any other
+    /// initialisation error panics.
     pub fn get_or_init(
         &'static self,
         context: &str,
@@ -112,18 +119,8 @@ impl BackendCell {
     ) -> Option<&'static WgpuBackend> {
         self.cell
             .get_or_init(|| {
-                self.builds
-                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                match build() {
-                    Ok(b) => Some(b),
-                    Err(ComputeError::BackendUnavailable { reason, .. }) => {
-                        eprintln!("[{context}] SKIPPED - no GPU adapter: {reason}");
-                        None
-                    }
-                    Err(other) => {
-                        panic!("[{context}] backend init failed (not availability): {other}")
-                    }
-                }
+                self.builds.fetch_add(1, Ordering::SeqCst);
+                classify(context, build())
             })
             .as_ref()
     }
@@ -134,21 +131,234 @@ impl BackendCell {
     /// tests have run is measuring the construction count, not asserting it in prose.
     #[must_use]
     pub fn builds(&self) -> usize {
-        self.builds.load(std::sync::atomic::Ordering::SeqCst)
+        self.builds.load(Ordering::SeqCst)
     }
 }
 
-/// The default shared backend for a test binary — one device, whatever the test count.
+/// How a test process uses the GPU: no Vulkan instance is created or destroyed while any other
+/// Vulkan work runs in the process.
+///
+/// # Why
+///
+/// On Linux with several Vulkan drivers installed, creating or destroying an instance on one thread
+/// while another thread uses the loader crashes inside `libvulkan.so`. Measured on 2026-09-27
+/// (Nagare P43, loader 1.4.341, RADV + NVIDIA + lavapipe ICDs):
+///
+/// * `hymeko_wgpu --test arena`, which built a device per test, segfaulted in 13 of 20
+///   default-threaded runs, and in 0 of 20 with the RADV driver alone;
+/// * the faults were a null jump inside `vkCreateInstance` and a garbage load in a device call,
+///   each while another test thread was constructing its backend;
+/// * upstream records the same class: `gfx-rs/wgpu#5930`.
+///
+/// # What it guarantees
+///
+/// One `RwLock` per process, `LOADER`, models the process-global loader. Every discipline uses it,
+/// however many exist, because the loader is one per process:
+///
+/// * [`Self::fresh`] builds, uses and drops a test's own device under the **write** guard, so
+///   nothing else in the process touches Vulkan meanwhile;
+/// * [`Self::shared`] uses the one shared device under a **read** guard, so shared tests run in
+///   parallel with each other and never beside a fresh device's lifecycle;
+/// * [`Self::shared_unguarded`] is the `'static` form for binaries that use nothing else. Mixing it
+///   with fresh devices in one process would bring the race back, so the second of the two to be
+///   used panics, in either order;
+/// * a second guard asked for on a thread that already holds one panics instead of deadlocking
+///   (the lock is not re-entrant). Two devices in one test are [`FreshGpu::sibling`].
+pub struct GpuDiscipline {
+    shared: BackendCell,
+    unguarded_shared: AtomicBool,
+    fresh_built: AtomicBool,
+}
+
+/// The process's Vulkan loader, as a lock: written while an instance is created or destroyed,
+/// read while a shared device is used. See [`GpuDiscipline`].
+static LOADER: RwLock<()> = RwLock::new(());
+
+thread_local! {
+    /// Whether this thread holds a guard of some `GpuDiscipline`; see [`GpuDiscipline`].
+    static HOLDS_GPU_GUARD: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Marks the current thread as holding a discipline guard for as long as it lives.
+struct ThreadHold;
+
+impl ThreadHold {
+    fn take(context: &str) -> Self {
+        HOLDS_GPU_GUARD.with(|held| {
+            assert!(
+                !held.replace(true),
+                "[{context}] this thread already holds a GPU guard; the lock is not re-entrant and a \
+                 second guard would deadlock. Take one per test; a second device is FreshGpu::sibling"
+            );
+        });
+        Self
+    }
+}
+
+impl Drop for ThreadHold {
+    fn drop(&mut self) {
+        HOLDS_GPU_GUARD.with(|held| held.set(false));
+    }
+}
+
+impl Default for GpuDiscipline {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl GpuDiscipline {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            shared: BackendCell::new(),
+            unguarded_shared: AtomicBool::new(false),
+            fresh_built: AtomicBool::new(false),
+        }
+    }
+
+    /// A device of this test's own, built, used and dropped while nothing else in the process
+    /// touches Vulkan. For a test that measures per-device state, such as an empty pipeline cache.
+    ///
+    /// # Panics
+    /// When this process has used [`Self::shared_unguarded`], when this thread already holds a
+    /// guard, or when initialisation fails for a reason other than a missing adapter.
+    pub fn fresh(&'static self, context: &str) -> Option<FreshGpu> {
+        let hold = ThreadHold::take(context);
+        let guard = LOADER.write().unwrap_or_else(PoisonError::into_inner);
+        assert!(
+            !self.unguarded_shared.load(Ordering::SeqCst),
+            "[{context}] this test process already uses shared_backend(), whose device is used \
+             without a guard; a fresh device beside it would race the Vulkan loader. Use \
+             shared_gpu() for the shared tests of a binary that also needs fresh_gpu()"
+        );
+        self.fresh_built.store(true, Ordering::SeqCst);
+        let backend = classify(context, default_backend())?;
+        Some(FreshGpu {
+            backend,
+            _guard: guard,
+            _hold: hold,
+        })
+    }
+
+    /// The process's shared device, for a test that does not care which device it runs on. Shared
+    /// tests run in parallel with each other, never beside a fresh device's lifecycle.
+    ///
+    /// # Panics
+    /// When this thread already holds a guard, or when initialisation fails for a reason other than
+    /// a missing adapter.
+    pub fn shared(&'static self, context: &str) -> Option<SharedGpu> {
+        let hold = ThreadHold::take(context);
+        let guard = LOADER.read().unwrap_or_else(PoisonError::into_inner);
+        let backend = self.shared.get_or_init(context, default_backend)?;
+        Some(SharedGpu {
+            backend,
+            _guard: guard,
+            _hold: hold,
+        })
+    }
+
+    /// The shared device as a plain `'static` reference, for a binary whose tests use nothing else.
+    ///
+    /// # Panics
+    /// When this process has built a fresh device, or when initialisation fails for a reason other
+    /// than a missing adapter.
+    pub fn shared_unguarded(&'static self, context: &str) -> Option<&'static WgpuBackend> {
+        let _construction = LOADER.read().unwrap_or_else(PoisonError::into_inner);
+        assert!(
+            !self.fresh_built.load(Ordering::SeqCst),
+            "[{context}] this test process builds fresh devices; the unguarded shared device would \
+             be used beside their lifecycle and race the Vulkan loader. Use shared_gpu()"
+        );
+        self.unguarded_shared.store(true, Ordering::SeqCst);
+        self.shared.get_or_init(context, default_backend)
+    }
+}
+
+/// A test's own device, alone in the process for its lifetime. Dereferences to the backend.
+///
+/// Fields drop in declaration order: the backend is destroyed while the write guard still holds.
+pub struct FreshGpu {
+    backend: WgpuBackend,
+    _guard: RwLockWriteGuard<'static, ()>,
+    _hold: ThreadHold,
+}
+
+impl FreshGpu {
+    /// A second, distinct device under the same guard, for a test that needs two. It borrows this
+    /// one, so it is dropped first, while the guard still holds.
+    ///
+    /// # Panics
+    /// When initialisation fails for a reason other than a missing adapter.
+    #[must_use]
+    pub fn sibling(&self, context: &str) -> Option<SiblingGpu<'_>> {
+        let backend = classify(context, default_backend())?;
+        Some(SiblingGpu {
+            backend,
+            _within: PhantomData,
+        })
+    }
+}
+
+/// A second device built under a [`FreshGpu`]'s guard. Dereferences to the backend.
+pub struct SiblingGpu<'g> {
+    backend: WgpuBackend,
+    _within: PhantomData<&'g FreshGpu>,
+}
+
+/// The process's shared device, held under a read guard. Dereferences to the backend.
+pub struct SharedGpu {
+    backend: &'static WgpuBackend,
+    _guard: RwLockReadGuard<'static, ()>,
+    _hold: ThreadHold,
+}
+
+impl Deref for FreshGpu {
+    type Target = WgpuBackend;
+    fn deref(&self) -> &WgpuBackend {
+        &self.backend
+    }
+}
+
+impl Deref for SiblingGpu<'_> {
+    type Target = WgpuBackend;
+    fn deref(&self) -> &WgpuBackend {
+        &self.backend
+    }
+}
+
+impl Deref for SharedGpu {
+    type Target = WgpuBackend;
+    fn deref(&self) -> &WgpuBackend {
+        self.backend
+    }
+}
+
+/// The test process's discipline. One per process, because the Vulkan loader it models is one per
+/// process.
+static PROCESS_GPU: GpuDiscipline = GpuDiscipline::new();
+
+/// A fresh device for this test, alone in the process; see [`GpuDiscipline::fresh`].
+#[must_use]
+pub fn fresh_gpu(context: &str) -> Option<FreshGpu> {
+    PROCESS_GPU.fresh(context)
+}
+
+/// The shared device under a read guard; see [`GpuDiscipline::shared`].
+#[must_use]
+pub fn shared_gpu(context: &str) -> Option<SharedGpu> {
+    PROCESS_GPU.shared(context)
+}
+
+/// The default shared backend for a test binary — one device, whatever the test count — as a
+/// `'static` reference, for a binary whose tests use nothing else; see
+/// [`GpuDiscipline::shared_unguarded`].
 ///
 /// # Returns
-/// `None` when the machine has no adapter, with the same skip contract as [`backend_or_skip`].
-/// Any other initialisation error still panics.
+/// `None` when the machine has no adapter. Any other initialisation error still panics.
 #[must_use]
 pub fn shared_backend(context: &str) -> Option<&'static WgpuBackend> {
-    static SHARED: BackendCell = BackendCell::new();
-    SHARED.get_or_init(context, || {
-        WgpuBackend::builder().label("hymeko-test").build()
-    })
+    PROCESS_GPU.shared_unguarded(context)
 }
 
 /// A CSR matrix and dense input uploaded to the device, plus the shapes derived
@@ -303,6 +513,7 @@ pub use hymeko_tensor::sparse_workload::{DegreeShape, Lcg, SparseSpec};
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::TryLockError;
 
     /// The parity rule, checked against the layer indices it describes.
     #[test]
@@ -316,5 +527,142 @@ mod tests {
         assert_eq!(*chain_output(&a, &b, 8), b);
         // 9 layers: layer 8 is even, writes a.
         assert_eq!(*chain_output(&a, &b, 9), a);
+    }
+
+    /// Whether another thread could take `(the write guard, a read guard)` right now. A poisoned
+    /// lock counts as free: the discipline recovers it.
+    fn free_now() -> (bool, bool) {
+        fn took<G>(attempt: std::sync::TryLockResult<G>) -> bool {
+            !matches!(attempt, Err(TryLockError::WouldBlock))
+        }
+        std::thread::scope(|scope| {
+            scope
+                .spawn(|| (took(LOADER.try_write()), took(LOADER.try_read())))
+                .join()
+                .expect("the probe does not panic")
+        })
+    }
+
+    /// Whether another thread obtains the write guard within a bound. Other tests in this binary
+    /// share the lock and may hold it briefly, so "released" is checked by waiting, not by trying.
+    fn released() -> bool {
+        let (sent, received) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _write = LOADER.write().unwrap_or_else(PoisonError::into_inner);
+            let _ = sent.send(());
+        });
+        received
+            .recv_timeout(std::time::Duration::from_secs(60))
+            .is_ok()
+    }
+
+    // Each test below owns a local `GpuDiscipline`, so its mixing flags are its own; the lock is the
+    // process's, as it must be.
+
+    #[test]
+    fn a_fresh_device_excludes_every_other_guard_until_it_is_dropped() {
+        static GPU: GpuDiscipline = GpuDiscipline::new();
+        let Some(fresh) = GPU.fresh("exclusive") else {
+            return;
+        };
+        assert_eq!(free_now(), (false, false));
+        assert!(HOLDS_GPU_GUARD.with(Cell::get));
+        drop(fresh);
+        assert!(!HOLDS_GPU_GUARD.with(Cell::get));
+        assert!(released());
+    }
+
+    /// The lock is the process's, not a discipline's: a fresh device of one discipline holds off
+    /// every guard of another. With a lock per discipline (the first version of this module), the
+    /// second discipline proceeded at once, and the lib test binary segfaulted in 5 of 5 runs.
+    #[test]
+    fn two_disciplines_share_the_one_loader_lock() {
+        static FIRST: GpuDiscipline = GpuDiscipline::new();
+        static SECOND: GpuDiscipline = GpuDiscipline::new();
+        let Some(fresh) = FIRST.fresh("first") else {
+            return;
+        };
+        let (sent, received) = std::sync::mpsc::channel();
+        let waiter = std::thread::spawn(move || {
+            let shared = SECOND.shared("second");
+            let _ = sent.send(());
+            drop(shared);
+        });
+        let blocked = received.recv_timeout(std::time::Duration::from_millis(300));
+        assert!(
+            blocked.is_err(),
+            "the second discipline ran beside a fresh device"
+        );
+        drop(fresh);
+        assert!(
+            received
+                .recv_timeout(std::time::Duration::from_secs(60))
+                .is_ok()
+        );
+        waiter.join().expect("the waiter does not panic");
+    }
+
+    #[test]
+    fn a_shared_device_excludes_a_fresh_devices_lifecycle() {
+        static GPU: GpuDiscipline = GpuDiscipline::new();
+        let Some(shared) = GPU.shared("parallel") else {
+            return;
+        };
+        assert!(!free_now().0);
+        drop(shared);
+        assert!(released());
+    }
+
+    #[test]
+    fn a_sibling_is_built_and_dropped_under_its_fresh_devices_guard() {
+        static GPU: GpuDiscipline = GpuDiscipline::new();
+        let Some(fresh) = GPU.fresh("pair") else {
+            return;
+        };
+        let sibling = fresh
+            .sibling("pair")
+            .expect("the adapter that built one builds two");
+        let arena = fresh.tensor_arena(crate::TensorArenaConfig::default());
+        assert!(arena.owns_device(&fresh) && !arena.owns_device(&sibling));
+        drop((arena, sibling));
+        assert!(!free_now().0, "still under the fresh device's guard");
+    }
+
+    #[test]
+    #[should_panic(expected = "already uses shared_backend()")]
+    fn a_fresh_device_after_the_unguarded_shared_one_is_refused() {
+        static GPU: GpuDiscipline = GpuDiscipline::new();
+        let _shared = GPU.shared_unguarded("unguarded");
+        let _fresh = GPU.fresh("fresh");
+    }
+
+    #[test]
+    #[should_panic(expected = "builds fresh devices")]
+    fn the_unguarded_shared_device_after_a_fresh_one_is_refused() {
+        static GPU: GpuDiscipline = GpuDiscipline::new();
+        drop(GPU.fresh("fresh"));
+        let _shared = GPU.shared_unguarded("unguarded");
+    }
+
+    #[test]
+    #[should_panic(expected = "already holds a GPU guard")]
+    fn a_second_guard_on_one_thread_panics_instead_of_deadlocking() {
+        let _first = ThreadHold::take("first");
+        let _second = ThreadHold::take("second");
+    }
+
+    #[test]
+    fn a_test_that_panics_under_the_write_guard_does_not_wedge_the_next() {
+        static GPU: GpuDiscipline = GpuDiscipline::new();
+        let failed = std::thread::spawn(|| {
+            let _fresh = GPU.fresh("panicking");
+            panic!("a failing test");
+        })
+        .join();
+        assert!(failed.is_err());
+        // With an adapter the panic poisoned the lock under the write guard. The next test must
+        // neither panic on the poison nor wait forever.
+        drop(GPU.fresh("after"));
+        assert!(released());
     }
 }

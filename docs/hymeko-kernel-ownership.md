@@ -94,6 +94,15 @@ Publish the reviewed Tensor change first, replace the Core Git pin with that
 available commit, regenerate its lockfile without patches, and pin downstream
 consumers. No commit, push or release was performed in this task.
 
+Publication, 2026-09-30 (user direction to commit and to merge main):
+
+- Tensor `feat/tensor-extraction` 98c08a4 carries the moved numeric code. 091f4f1 adds main's
+  generic arena (`compute::arena`, approved 2026-09-27), which moves with the rest of compute.
+- Core `feat/tensor-extraction` pins Tensor 091f4f1, and its lockfile resolves without patches.
+  Core main is merged in; see CORE.YAML `canonical-identity-tensor-extraction-merge` and
+  `merkle-hash-removal`.
+- The local patch below is no longer required for a Core build.
+
 From the Core checkout, the local integration check is reproducible with:
 
 ```powershell
