@@ -137,7 +137,7 @@ fn foreign_candidate_is_rejected_even_at_the_same_revision() {
     assert_eq!(first.snapshot().unwrap().revision(), 0);
 }
 
-struct CallbackParser<F>(F);
+pub(super) struct CallbackParser<F>(pub(super) F);
 
 impl<F: Fn()> HymekoParser for CallbackParser<F> {
     fn parse<'a>(&self, source: &'a str) -> Result<parser::ast::AstStr<'a>, String> {
