@@ -52,7 +52,7 @@
 //! two threads reading concurrently hold two workspaces, and the borrow checker
 //! enforces that rather than a runtime lock.
 
-use hymeko::tensor::compute::{BackendKind, ComputeError, TensorShape};
+use hymeko_tensor::compute::{BackendKind, ComputeError, TensorShape};
 
 use crate::WgpuBackend;
 
@@ -354,7 +354,7 @@ pub(crate) fn readback_into(
 ///
 /// ```compile_fail
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// use hymeko::tensor::compute::TensorShape;
+/// use hymeko_tensor::compute::TensorShape;
 /// use hymeko_wgpu::WgpuBackend;
 /// let backend = WgpuBackend::new()?;
 /// let res = backend.resources();
@@ -374,7 +374,7 @@ pub(crate) fn readback_into(
 ///
 /// ```no_run
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// use hymeko::tensor::compute::TensorShape;
+/// use hymeko_tensor::compute::TensorShape;
 /// use hymeko_wgpu::WgpuBackend;
 /// let backend = WgpuBackend::new()?;
 /// let res = backend.resources();

@@ -53,6 +53,8 @@ pub struct CborPayload {
 }
 
 /// A payload that has passed every core-owned CBOR boundary check.
+/// Its table contains only referenced symbols. Dense symbol IDs may differ from
+/// the wire input; declaration IDs and canonical model meaning are preserved.
 pub struct DecodedCborPayload {
     payload: CborPayload,
     interner: Interner,

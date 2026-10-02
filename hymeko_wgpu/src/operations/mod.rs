@@ -46,14 +46,6 @@ pub use star_rotor_spike::{
 };
 
 use crate::pipeline::PipelineCache;
-use activation::ActivationLimits;
-use global_entropy_pool::GlobalEntropyPoolLimits;
-use highway::HighwayLimits;
-use hsikan::HsikanLimits;
-use rotor_attention::RotorAttentionLimits;
-use scatter_mean::ScatterMeanLimits;
-use spmm::SpmmLimits;
-use star_rotor_spike::StarRotorSpikeLimits;
 
 /// Creates prepared operations bound to one device.
 #[derive(Clone, Copy)]
@@ -61,14 +53,7 @@ pub struct OperationFactory<'a> {
     device: &'a wgpu::Device,
     queue: &'a wgpu::Queue,
     cache: &'a PipelineCache,
-    limits: SpmmLimits,
-    activation_limits: ActivationLimits,
-    global_entropy_pool_limits: GlobalEntropyPoolLimits,
-    hsikan_limits: HsikanLimits,
-    scatter_mean_limits: ScatterMeanLimits,
-    highway_limits: HighwayLimits,
-    rotor_attention_limits: RotorAttentionLimits,
-    star_rotor_spike_limits: StarRotorSpikeLimits,
+    limits: OperationLimits,
 }
 
 impl<'a> OperationFactory<'a> {
@@ -84,40 +69,7 @@ impl<'a> OperationFactory<'a> {
             device,
             queue,
             cache,
-            limits: SpmmLimits {
-                max_workgroups_per_dimension,
-                max_invocations_per_workgroup,
-                max_storage_buffers_per_stage,
-            },
-            activation_limits: ActivationLimits {
-                max_workgroups_per_dimension,
-                max_invocations_per_workgroup,
-            },
-            global_entropy_pool_limits: GlobalEntropyPoolLimits {
-                max_workgroups_per_dimension,
-                max_invocations_per_workgroup,
-            },
-            hsikan_limits: HsikanLimits {
-                max_workgroups_per_dimension,
-                max_invocations_per_workgroup,
-                max_storage_buffers_per_stage,
-            },
-            scatter_mean_limits: ScatterMeanLimits {
-                max_workgroups_per_dimension,
-                max_invocations_per_workgroup,
-                max_storage_buffers_per_stage,
-            },
-            highway_limits: HighwayLimits {
-                max_workgroups_per_dimension,
-                max_invocations_per_workgroup,
-                max_storage_buffers_per_stage,
-            },
-            rotor_attention_limits: RotorAttentionLimits {
-                max_workgroups_per_dimension,
-                max_invocations_per_workgroup,
-                max_storage_buffers_per_stage,
-            },
-            star_rotor_spike_limits: StarRotorSpikeLimits {
+            limits: OperationLimits {
                 max_workgroups_per_dimension,
                 max_invocations_per_workgroup,
                 max_storage_buffers_per_stage,
@@ -128,30 +80,25 @@ impl<'a> OperationFactory<'a> {
     /// Begin building a CSR × dense SpMM.
     #[must_use]
     pub fn spmm(&self) -> SpmmBuilder<'a> {
-        SpmmBuilder::new(self.device, self.queue, self.cache, self.limits)
+        SpmmBuilder::new(*self)
     }
 
     /// Begin building an elementwise activation.
     #[must_use]
     pub fn activation(&self) -> ActivationBuilder<'a> {
-        ActivationBuilder::new(self.device, self.queue, self.cache, self.activation_limits)
+        ActivationBuilder::new(*self)
     }
 
     /// Begin building spatial global-entropy pooling over `(K,H,W)` responses.
     #[must_use]
     pub fn global_entropy_pool(&self) -> GlobalEntropyPoolBuilder<'a> {
-        GlobalEntropyPoolBuilder::new(
-            self.device,
-            self.queue,
-            self.cache,
-            self.global_entropy_pool_limits,
-        )
+        GlobalEntropyPoolBuilder::new(*self)
     }
 
     /// Begin building a fused signed HSiKAN inference dispatch.
     #[must_use]
     pub fn hsikan(&self) -> HsikanBuilder<'a> {
-        HsikanBuilder::new(self.device, self.queue, self.cache, self.hsikan_limits)
+        HsikanBuilder::new(*self)
     }
 
     /// Begin building an edge-to-node mean scatter.
@@ -160,39 +107,71 @@ impl<'a> OperationFactory<'a> {
     /// currently only — physical lowering is the node-indexed CSR gather.
     #[must_use]
     pub fn scatter_mean(&self) -> ScatterMeanBuilder<'a> {
-        ScatterMeanBuilder::new(
-            self.device,
-            self.queue,
-            self.cache,
-            self.scatter_mean_limits,
-        )
+        ScatterMeanBuilder::new(*self)
     }
 
     /// Begin building an identity-transport highway transition.
     #[must_use]
     pub fn highway_identity(&self) -> HighwayIdentityBuilder<'a> {
-        HighwayIdentityBuilder::new(self.device, self.queue, self.cache, self.highway_limits)
+        HighwayIdentityBuilder::new(*self)
     }
 
     /// Begin building sparse single-head quaternion rotor attention.
     #[must_use]
     pub fn rotor_attention(&self) -> RotorAttentionBuilder<'a> {
-        RotorAttentionBuilder::new(
-            self.device,
-            self.queue,
-            self.cache,
-            self.rotor_attention_limits,
-        )
+        RotorAttentionBuilder::new(*self)
     }
 
     /// Begin building a star rotor-spike orientation-code dispatch.
     #[must_use]
     pub fn star_rotor_spike(&self) -> StarRotorSpikeBuilder<'a> {
-        StarRotorSpikeBuilder::new(
-            self.device,
-            self.queue,
-            self.cache,
-            self.star_rotor_spike_limits,
-        )
+        StarRotorSpikeBuilder::new(*self)
+    }
+}
+
+/// Device capabilities shared by every operation builder.
+#[derive(Clone, Copy, Debug)]
+struct OperationLimits {
+    max_workgroups_per_dimension: u32,
+    max_invocations_per_workgroup: u32,
+    max_storage_buffers_per_stage: u32,
+}
+
+/// Keeps operand diagnostics attached to the operand being validated.
+struct OperandCheck(&'static str);
+
+impl OperandCheck {
+    fn supplied<T>(self, value: Option<T>) -> Result<T, hymeko_tensor::compute::ComputeError> {
+        value.ok_or(hymeko_tensor::compute::ComputeError::ShapeMismatch {
+            operand: self.0,
+            expected: 1,
+            actual: 0,
+        })
+    }
+
+    fn mismatch<T>(
+        self,
+        expected: usize,
+        actual: usize,
+    ) -> Result<T, hymeko_tensor::compute::ComputeError> {
+        Err(hymeko_tensor::compute::ComputeError::ShapeMismatch {
+            operand: self.0,
+            expected,
+            actual,
+        })
+    }
+}
+
+impl OperationFactory<'_> {
+    fn uniform<T: bytemuck::Pod>(&self, label: &str, value: &T) -> wgpu::Buffer {
+        let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(label),
+            size: std::mem::size_of::<T>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        self.queue
+            .write_buffer(&buffer, 0, bytemuck::bytes_of(value));
+        buffer
     }
 }

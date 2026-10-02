@@ -7,11 +7,11 @@ use super::{
 use crate::{
     common::ids::DeclId,
     ir::{
-        canonical_hash::{Canon, CanonHashCfg, CanonicalIdentity},
+        canonical_hash::CanonicalIdentity,
         coherence::{CoherenceLimits, validate_hierarchy_index_coherence, validate_model_contract},
         ir::{DeclKind, ValueR},
     },
-    resolution::interner::Interner,
+    resolution::{interner::Interner, symbols::SymbolCompaction},
 };
 use std::{collections::HashSet, fmt, sync::Arc};
 
@@ -56,19 +56,21 @@ impl CompiledModel {
     /// Prepare a new immutable model by changing existing leaf values.
     ///
     /// The source model is never mutated, including on failure. Declaration IDs,
-    /// hierarchy, imports, bindings, facets and resolution index remain unchanged.
-    /// Existing symbol IDs are preserved; new text belongs to the new interner.
+    /// hierarchy, import meanings, bindings and facets remain unchanged.
+    /// Symbol IDs belong to one snapshot and may be renumbered when unreachable
+    /// text is removed; the new model's index and interner are updated together.
     /// IDs supplied in values belong to this base model; foreign-model IDs cannot
     /// be distinguished by their numeric representation. Derived expression values
     /// are not re-evaluated: this edits the already lowered value, not authored AST.
-    /// Legacy optional Merkle caches are invalidated, never copied as current.
-    /// V1 structure hashing stays unchanged; use semantic_model_digest_v2 for
-    /// value-sensitive identity.
+    /// Structural identity is unchanged. The retained semantic digest rehashes
+    /// only edited declarations; topology and concrete-record contributions are
+    /// shared with the base. Its final sorted-hash fold remains linear to preserve
+    /// the canonical digest bytes. No derived cache enters the serialized IR.
     ///
     /// Limits: 4096 edits, 65536 aggregate value nodes, depth 32, 1 MiB new text.
-    /// This copies the model and symbol table. Repeated text edits based on each
-    /// successor retain old symbols; a complete-measurement producer can instead
-    /// prepare from its retained authored template to bound symbol growth.
+    /// This copies the candidate and retains only symbols it actually references.
+    /// Repeated updates do not implicitly retain historical text values. Explicit
+    /// old snapshot readers retain their independent, unchanged symbol tables.
     pub fn with_value_updates(
         &self,
         updates: &[ValueUpdate<'_>],
@@ -112,37 +114,47 @@ impl CompiledModel {
             debug_assert_eq!(id, copied);
         }
         let mut ir = self.program.ir.clone();
-        for update in updates {
-            let value = match update {
-                ValueUpdate::Set { value, .. } => Some(value.clone()),
-                ValueUpdate::Text { value, .. } => Some(ValueR::Str(interner.intern(value))),
-                ValueUpdate::Clear { .. } => None,
-            };
-            ir.decl_nodes[update.declaration().raw()].anno.value = value;
-        }
-        if !updates.is_empty() {
-            ir.doc_hash = None;
-            ir.decl_hash.fill(None);
-            ir.arc_hash.fill(None);
-        }
-        validate_hierarchy_index_coherence(
-            &ir,
-            &self.program.idx,
-            &interner,
-            CoherenceLimits::default(),
-        )
-        .map_err(|_| ValueUpdateError::InvalidModel)?;
+        let values = updates
+            .iter()
+            .map(|update| {
+                let value = match update {
+                    ValueUpdate::Set { value, .. } => Some(value.clone()),
+                    ValueUpdate::Text { value, .. } => Some(ValueR::Str(interner.intern(value))),
+                    ValueUpdate::Clear { .. } => None,
+                };
+                (update.declaration(), value)
+            })
+            .collect();
+        ir.set_leaf_values(values)
+            .map_err(|_| ValueUpdateError::InvalidModel)?;
+        let mut index = self.program.idx.clone();
+        let mut imports = self.program.imports.clone();
+        let compacted = SymbolCompaction::apply(&mut ir, &mut index, &mut imports, &interner)
+            .map_err(|_| ValueUpdateError::InvalidModel)?;
+        interner = compacted.interner;
+        validate_hierarchy_index_coherence(&ir, &index, &interner, CoherenceLimits::default())
+            .map_err(|_| ValueUpdateError::InvalidModel)?;
         validate_model_contract(&ir, &interner).map_err(|_| ValueUpdateError::InvalidModel)?;
-        let canon = CanonicalIdentity::of(&Canon::new(&ir, &interner), CanonHashCfg::default());
+        // Values do not participate in the structural hash. No hierarchy, facet,
+        // binding or concrete record changes, so their digest contributions remain valid.
+        let changed: Vec<_> = updates.iter().map(ValueUpdate::declaration).collect();
+        let semantic =
+            self.semantic_state()
+                .with_values(&ir, &interner, &changed, compacted.renumbered);
+        // The kept identity is the updated IR's: its incremental semantic digest and the
+        // unchanged structural hash.
+        let canon =
+            CanonicalIdentity::from_parts(semantic.digest(), self.program.canon.structure());
         Ok(Self {
             program: Arc::new(CompiledProgram {
                 root: self.program.root.clone(),
-                idx: self.program.idx.clone(),
+                idx: index,
                 ir,
-                imports: self.program.imports.clone(),
+                imports,
                 canon,
             }),
             interner,
+            semantic: std::sync::OnceLock::from(semantic),
         })
     }
 
@@ -208,6 +220,7 @@ mod tests {
     use super::*;
     use crate::{
         common::ids::SymId,
+        ir::canonical_hash::Canon,
         module_store::{module_store::HymekoParser, source_provider::MemProvider},
         util::real_parser::RealParser,
     };
@@ -243,6 +256,79 @@ mod tests {
             .anno
             .value
             .as_ref()
+    }
+
+    #[test]
+    fn symbol_lifetime_successive_text_updates_keep_only_current_values() {
+        let original = model();
+        let target = id(&original, "label");
+        let initial_count = original.interner().iter().count();
+        let mut current = original.with_value_updates(&[]).unwrap();
+        for step in 0..1000 {
+            let text = format!("timestamp-{step:019}");
+            current = current
+                .with_value_updates(&[ValueUpdate::Text {
+                    declaration: target,
+                    value: &text,
+                }])
+                .unwrap();
+            assert!(
+                current.interner().iter().count() <= initial_count + 1,
+                "unreachable old values must not accumulate"
+            );
+            let Some(ValueR::Str(symbol)) = value(&current, "label") else {
+                panic!("label");
+            };
+            assert_eq!(current.interner().resolve(*symbol), text);
+            assert_eq!(
+                current.semantic_digest(),
+                Canon::new(&current.program().ir, current.interner()).hash()
+            );
+        }
+        let Some(ValueR::Str(old)) = value(&original, "label") else {
+            panic!("old label");
+        };
+        assert_eq!(
+            original.interner().resolve(*old),
+            "initial",
+            "explicit old snapshot stays valid"
+        );
+    }
+
+    #[test]
+    fn symbol_lifetime_nested_base_symbols_survive_until_last_reference_is_cleared() {
+        let base = model();
+        let label = id(&base, "label");
+        let state = id(&base, "state");
+        let initial = base.interner().get_id("initial").unwrap();
+        let next = base
+            .with_value_updates(&[
+                ValueUpdate::Text {
+                    declaration: label,
+                    value: "replacement",
+                },
+                ValueUpdate::Set {
+                    declaration: state,
+                    value: ValueR::List(vec![
+                        ValueR::List(vec![ValueR::Str(initial)]),
+                        ValueR::Ref(label),
+                    ]),
+                },
+            ])
+            .unwrap();
+        assert!(next.interner().get_id("initial").is_some());
+        let cleared = next
+            .with_value_updates(&[ValueUpdate::Clear { declaration: state }])
+            .unwrap();
+        assert!(cleared.interner().get_id("initial").is_none());
+        assert!(
+            next.interner().get_id("initial").is_some(),
+            "retained previous graph stays valid"
+        );
+        assert_eq!(
+            cleared.semantic_digest(),
+            Canon::new(&cleared.program().ir, cleared.interner()).hash()
+        );
     }
 
     #[test]
@@ -291,8 +377,6 @@ mod tests {
             digest,
             Canon::new(&original.program().ir, original.interner()).hash()
         );
-        assert!(updated.program().ir.decl_hash.iter().all(Option::is_none));
-        assert!(updated.program().ir.doc_hash.is_none());
         let cleared = updated
             .with_value_updates(&[ValueUpdate::Clear {
                 declaration: position,
@@ -300,6 +384,101 @@ mod tests {
             .unwrap();
         assert!(value(&cleared, "position").is_none());
         assert!(value(&updated, "position").is_some());
+    }
+
+    #[test]
+    fn incremental_digest_rehashes_only_edits_and_matches_full_recomputation() {
+        use crate::ir::{
+            canonical_hash::{CanonHashCfg, CanonicalPaths},
+            semantic_digest::take_hash_work,
+        };
+        let base = model();
+        let target = id(&base, "state");
+        let label = id(&base, "label");
+        let reference = id(&base, "position");
+        take_hash_work();
+        let baseline = base.semantic_digest();
+        assert_eq!(
+            take_hash_work(),
+            [
+                base.program.ir.decl_count(),
+                base.program.ir.node_count(),
+                base.program.ir.edge_count(),
+                base.program.ir.arc_count()
+            ]
+        );
+        assert_eq!(base.semantic_digest(), baseline);
+        assert_eq!(take_hash_work(), [0; 4]);
+        let mut current = base.with_value_updates(&[]).unwrap();
+        assert_eq!(current.semantic_digest(), baseline);
+        assert_eq!(take_hash_work(), [0; 4]);
+        // Include signed zero, reference identity, nested lists, strings, clearing,
+        // repeated identical edits and branching from an unchanged old reader.
+        for step in 0..32 {
+            let numeric = match step % 4 {
+                0 => ValueR::Num(-0.0),
+                1 => ValueR::Ref(reference),
+                2 => ValueR::List(vec![
+                    ValueR::Num(step as f64),
+                    ValueR::List(vec![ValueR::Ref(label)]),
+                ]),
+                _ => ValueR::Num(0.0),
+            };
+            let text = format!("observation-{step}");
+            let updates = [
+                ValueUpdate::Set {
+                    declaration: target,
+                    value: numeric,
+                },
+                if step % 3 == 0 {
+                    ValueUpdate::Clear { declaration: label }
+                } else {
+                    ValueUpdate::Text {
+                        declaration: label,
+                        value: &text,
+                    }
+                },
+            ];
+            let next = current.with_value_updates(&updates).unwrap();
+            assert_eq!(take_hash_work(), [2, 0, 0, 0]);
+            let digest = next.semantic_digest();
+            assert_eq!(next.semantic_digest(), digest);
+            assert_eq!(take_hash_work(), [0; 4]);
+            assert_eq!(
+                digest,
+                Canon::new(&next.program.ir, next.interner()).hash()
+            );
+            assert_eq!(
+                next.program.canon.structure().0,
+                Canon::new(&next.program.ir, next.interner())
+                    .structure(CanonHashCfg::default())
+                    .0
+            );
+            assert_eq!(base.semantic_digest(), baseline);
+            take_hash_work();
+            current = next;
+        }
+        let branch = base
+            .with_value_updates(&[ValueUpdate::Set {
+                declaration: target,
+                value: ValueR::Num(-0.0),
+            }])
+            .unwrap();
+        assert_eq!(take_hash_work(), [1, 0, 0, 0]);
+        assert_ne!(branch.semantic_digest(), baseline);
+        assert_eq!(
+            branch.semantic_digest(),
+            Canon::new(&branch.program.ir, branch.interner()).hash()
+        );
+        take_hash_work();
+        let unchanged = branch
+            .with_value_updates(&[ValueUpdate::Set {
+                declaration: target,
+                value: ValueR::Num(-0.0),
+            }])
+            .unwrap();
+        assert_eq!(take_hash_work(), [1, 0, 0, 0]);
+        assert_eq!(unchanged.semantic_digest(), branch.semantic_digest());
     }
 
     #[test]
@@ -406,7 +585,12 @@ mod tests {
         )
         .unwrap();
         assert_eq!(calls.load(Ordering::SeqCst), 1);
-        let symbols = template.interner().iter().count();
+        let symbols = template
+            .with_value_updates(&[])
+            .unwrap()
+            .interner()
+            .iter()
+            .count();
         for n in 0..16 {
             let next = template
                 .with_value_updates(&[ValueUpdate::Text {
@@ -414,7 +598,8 @@ mod tests {
                     value: &format!("measurement-{n}"),
                 }])
                 .unwrap();
-            assert_eq!(next.interner().iter().count(), symbols + 1);
+            assert_eq!(next.interner().iter().count(), symbols);
+            assert!(next.interner().get_id("initial").is_none());
             assert_eq!(id(&next, "state"), id(&template, "state"));
         }
         assert_eq!(calls.load(Ordering::SeqCst), 1);

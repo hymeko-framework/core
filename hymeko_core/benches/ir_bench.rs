@@ -17,7 +17,6 @@
 //!    state is cheap, versioning is easy; if it is not, the design must commit
 //!    to incremental identity.
 //! 3. **What do the duplicated mappings cost in memory?** `Ir` stores
-//!    `decl_to_node`, `decl_to_edge`, `decl_to_arc`, `decl_hash` and `arc_hash`
 //!    as dense parallel arrays beside the records that already carry the
 //!    reverse edge. That redundancy is what a mutable IR would have to keep
 //!    consistent, so its size is part of the decision.
@@ -43,7 +42,6 @@ use hymeko::resolution::resolve::Index;
 /// Append one declaration, keeping every parallel array in lockstep.
 ///
 /// That this is the caller's duty, in five places, is itself an audit finding:
-/// nothing in the type system couples `decl_nodes` to `decl_hash`,
 /// `decl_to_node`, `decl_to_edge` and `decl_to_arc`, so a mutable IR would have
 /// five independent chances to desynchronise on every insertion.
 fn push_decl(ir: &mut Ir, root: DeclId, kind: DeclKind, name: usize) -> DeclId {
@@ -56,7 +54,6 @@ fn push_decl(ir: &mut Ir, root: DeclId, kind: DeclKind, name: usize) -> DeclId {
         next_sibling: DeclId::NONE,
         anno: AnnoR::default(),
     });
-    ir.decl_hash.push(None);
 
     // Maintain the intrusive sibling list.
     let prev = ir.decl_nodes[root.raw()].last_child;
@@ -88,7 +85,6 @@ fn build_ir(nodes: usize, edges: usize, arity: usize) -> Ir {
         next_sibling: DeclId::NONE,
         anno: AnnoR::default(),
     });
-    ir.decl_hash.push(None);
     let root = DeclId::new(0);
 
     let node_decls: Vec<DeclId> = (0..nodes)
@@ -126,7 +122,6 @@ fn build_ir(nodes: usize, edges: usize, arity: usize) -> Ir {
             in_edge: ed,
             refs,
         });
-        ir.arc_hash.push(None);
         ir.bind_arc_decl(ad, aid)
             .expect("bench: arc index representable");
         ir.edges[eid.raw()].arcs.push(aid);
@@ -335,7 +330,6 @@ fn build_indexed(nodes: usize, edges: usize, arity: usize) -> (Ir, Index, Intern
             next_sibling: DeclId::NONE,
             anno: AnnoR::default(),
         });
-        ir.decl_hash.push(None);
         idx.by_path.insert(PathKey(vec![root, leaf]), id);
         id
     }
@@ -377,7 +371,6 @@ fn build_indexed(nodes: usize, edges: usize, arity: usize) -> (Ir, Index, Intern
             in_edge: ed,
             refs,
         });
-        ir.arc_hash.push(None);
         ir.edges[eid.raw()].arcs.push(aid);
     }
 
@@ -440,7 +433,7 @@ fn bench_ir_clone(c: &mut Criterion) {
 /// The real canonical hash, not a flat BLAKE3 sweep.
 ///
 /// The Phase 0 appendix measured a flat sweep and said so explicitly: it was a
-/// lower bound. This measures `canonical_program_hash` itself - path map,
+/// lower bound. This measures `Canon::structure` itself - path map,
 /// skeleton forest, subtree fold, Prufer encoding and incidence bytes - which
 /// is the figure the 10 ms commit budget must actually be compared against.
 fn bench_ir_canonical_hash(c: &mut Criterion) {

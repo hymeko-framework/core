@@ -92,7 +92,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use hymeko::tensor::compute::{BackendKind, ComputeError};
+use hymeko_tensor::compute::{BackendKind, ComputeError};
 
 /// A submission's position in the queue's completion order.
 ///
@@ -119,7 +119,7 @@ impl SubmissionEpoch {
 }
 
 /// The arena dates a release with the submission that may still read it.
-impl hymeko::tensor::compute::arena::ArenaEpoch for SubmissionEpoch {
+impl hymeko_tensor::compute::arena::ArenaEpoch for SubmissionEpoch {
     const NEVER: Self = Self::NEVER;
 
     fn is_complete_at(self, watermark: Self) -> bool {

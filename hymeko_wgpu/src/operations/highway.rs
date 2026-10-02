@@ -9,11 +9,13 @@
 
 use std::sync::Arc;
 
-use hymeko::tensor::compute::{BackendKind, ComputeError, TensorShape, try_u32};
+use hymeko_tensor::compute::{BackendKind, ComputeError, TensorShape, try_u32};
 
+use super::OperandCheck;
+use super::OperationFactory;
 use crate::GpuTensor;
 use crate::operations::dispatch::PreparedDispatch;
-use crate::pipeline::{KernelId, PipelineCache};
+use crate::pipeline::KernelId;
 
 /// WGSL source owned by [`KernelId::HighwayIdentity`].
 ///
@@ -38,19 +40,9 @@ struct HighwayParams {
 
 const _: () = assert!(std::mem::size_of::<HighwayParams>() == 16);
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct HighwayLimits {
-    pub max_workgroups_per_dimension: u32,
-    pub max_invocations_per_workgroup: u32,
-    pub max_storage_buffers_per_stage: u32,
-}
-
 /// Builds one validated identity-highway transition dispatch.
 pub struct HighwayIdentityBuilder<'a> {
-    device: &'a wgpu::Device,
-    queue: &'a wgpu::Queue,
-    cache: &'a PipelineCache,
-    limits: HighwayLimits,
+    factory: OperationFactory<'a>,
     step: Option<&'a GpuTensor<f32>>,
     carry: Option<&'a GpuTensor<f32>>,
     gate: Option<&'a GpuTensor<f32>>,
@@ -60,17 +52,9 @@ pub struct HighwayIdentityBuilder<'a> {
 }
 
 impl<'a> HighwayIdentityBuilder<'a> {
-    pub(crate) fn new(
-        device: &'a wgpu::Device,
-        queue: &'a wgpu::Queue,
-        cache: &'a PipelineCache,
-        limits: HighwayLimits,
-    ) -> Self {
+    pub(crate) fn new(factory: OperationFactory<'a>) -> Self {
         Self {
-            device,
-            queue,
-            cache,
-            limits,
+            factory,
             step: None,
             carry: None,
             gate: None,
@@ -126,20 +110,19 @@ impl<'a> HighwayIdentityBuilder<'a> {
     /// `hidden` long; [`ComputeError::IndexOverflow`] for a count that does not fit `u32`;
     /// [`ComputeError::Backend`] for a device that cannot satisfy the layout or workgroup.
     pub fn prepare(self) -> Result<PreparedHighwayIdentity<'a>, ComputeError> {
-        let step = supplied(self.step, "highway step")?;
-        let carry = supplied(self.carry, "highway carry")?;
-        let gate = supplied(self.gate, "highway gate")?;
-        let next = supplied(self.next, "highway next")?;
+        let step = OperandCheck("highway step").supplied(self.step)?;
+        let carry = OperandCheck("highway carry").supplied(self.carry)?;
+        let gate = OperandCheck("highway gate").supplied(self.gate)?;
+        let next = OperandCheck("highway next").supplied(self.next)?;
 
         let n_nodes = next.shape().rows;
         let hidden = next.shape().cols;
         if n_nodes == 0 || hidden == 0 {
-            return shape_error("highway next must be non-empty", 1, 0);
+            return OperandCheck("highway next must be non-empty").mismatch(1, 0);
         }
         for (operand, tensor) in [("highway step shape", step), ("highway carry shape", carry)] {
             if tensor.shape() != TensorShape::new(n_nodes, hidden) {
-                return shape_error(
-                    operand,
+                return OperandCheck(operand).mismatch(
                     n_nodes.saturating_mul(hidden),
                     tensor.shape().checked_elements().unwrap_or(usize::MAX),
                 );
@@ -153,24 +136,25 @@ impl<'a> HighwayIdentityBuilder<'a> {
                 value: usize::MAX,
             })?;
         if gate_len != hidden {
-            return shape_error("highway gate length", hidden, gate_len);
+            return OperandCheck("highway gate length").mismatch(hidden, gate_len);
         }
 
-        if self.limits.max_storage_buffers_per_stage < 4 {
+        if self.factory.limits.max_storage_buffers_per_stage < 4 {
             return Err(ComputeError::Backend {
                 backend: BackendKind::Wgpu,
                 message: format!(
                     "highway requires 4 storage buffers, device exposes {}",
-                    self.limits.max_storage_buffers_per_stage
+                    self.factory.limits.max_storage_buffers_per_stage
                 ),
             });
         }
-        if self.workgroup == 0 || self.workgroup > self.limits.max_invocations_per_workgroup {
+        if self.workgroup == 0 || self.workgroup > self.factory.limits.max_invocations_per_workgroup
+        {
             return Err(ComputeError::Backend {
                 backend: BackendKind::Wgpu,
                 message: format!(
                     "highway workgroup {} outside 1..={}",
-                    self.workgroup, self.limits.max_invocations_per_workgroup
+                    self.workgroup, self.factory.limits.max_invocations_per_workgroup
                 ),
             });
         }
@@ -184,7 +168,7 @@ impl<'a> HighwayIdentityBuilder<'a> {
             })?;
         let count = try_u32("highway output element count", elements)?;
         let ideal_groups = count.div_ceil(self.workgroup);
-        let groups = ideal_groups.min(self.limits.max_workgroups_per_dimension);
+        let groups = ideal_groups.min(self.factory.limits.max_workgroups_per_dimension);
         let stride = groups
             .checked_mul(self.workgroup)
             .ok_or(ComputeError::IndexOverflow {
@@ -199,29 +183,28 @@ impl<'a> HighwayIdentityBuilder<'a> {
         };
 
         let kernel = KernelId::HighwayIdentity;
-        let bundle = self.cache.bundle(self.device, kernel, self.workgroup, 1)?;
-        let params_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("highway_identity.params"),
-            size: std::mem::size_of::<HighwayParams>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        self.queue
-            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
-        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("highway_identity.bind_group"),
-            layout: bundle.bind_group_layout(),
-            entries: &[
-                entry(0, step),
-                entry(1, carry),
-                entry(2, gate),
-                entry(3, next),
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: params_buffer.as_entire_binding(),
-                },
-            ],
-        });
+        let bundle = self
+            .factory
+            .cache
+            .bundle(self.factory.device, kernel, self.workgroup, 1)?;
+        let params_buffer = self.factory.uniform("highway_identity.params", &params);
+        let bind_group = self
+            .factory
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("highway_identity.bind_group"),
+                layout: bundle.bind_group_layout(),
+                entries: &[
+                    step.binding(0),
+                    carry.binding(1),
+                    gate.binding(2),
+                    next.binding(3),
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: params_buffer.as_entire_binding(),
+                    },
+                ],
+            });
         Ok(PreparedHighwayIdentity {
             _operands: core::marker::PhantomData,
             dispatch: PreparedDispatch::new(
@@ -235,33 +218,6 @@ impl<'a> HighwayIdentityBuilder<'a> {
             kernel,
             elements,
         })
-    }
-}
-
-fn supplied<'a, T>(value: Option<&'a T>, operand: &'static str) -> Result<&'a T, ComputeError> {
-    value.ok_or(ComputeError::ShapeMismatch {
-        operand,
-        expected: 1,
-        actual: 0,
-    })
-}
-
-fn shape_error<T>(
-    operand: &'static str,
-    expected: usize,
-    actual: usize,
-) -> Result<T, ComputeError> {
-    Err(ComputeError::ShapeMismatch {
-        operand,
-        expected,
-        actual,
-    })
-}
-
-fn entry<T>(binding: u32, tensor: &GpuTensor<T>) -> wgpu::BindGroupEntry<'_> {
-    wgpu::BindGroupEntry {
-        binding,
-        resource: tensor.buffer().as_entire_binding(),
     }
 }
 

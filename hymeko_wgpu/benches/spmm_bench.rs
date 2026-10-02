@@ -30,7 +30,7 @@ use std::time::Duration;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
-use hymeko::tensor::representations::tensor_csr::TensorCsr;
+use hymeko_tensor::representations::tensor_csr::TensorCsr;
 use hymeko_wgpu::testing::SparseSpec;
 use hymeko_wgpu::{ComputeError, KernelId, PipelineCache, WgpuBackend, WorkgroupShape};
 

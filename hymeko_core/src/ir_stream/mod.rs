@@ -57,13 +57,6 @@
 //!   [`ValidatedEnvelope`], [`ValidatedMessage`] and [`ValidatedSection`] have
 //!   private fields and no public constructor; producers use [`EnvelopeDraft`].
 //!
-//! # Relationship to `tensor::shared_state`
-//!
-//! That module is the quarantined predecessor. It is deprecated, its arithmetic
-//! has been made checked, and it is documented as **not a wire protocol**. It is
-//! retained only so that a downstream caller outside this repository does not
-//! break on an import; nothing here is derived from it.
-//!
 //! # Invariant: "validated" types cannot be forged
 //!
 //! A downstream crate cannot construct a [`ValidatedEnvelope`] without going
@@ -125,6 +118,7 @@ pub mod codec;
 pub mod envelope;
 pub mod error;
 pub mod limits;
+mod reader;
 pub mod section;
 pub mod version;
 

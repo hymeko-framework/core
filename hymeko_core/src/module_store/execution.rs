@@ -18,11 +18,12 @@ pub use value_updates::{ValueUpdate, ValueUpdateError};
 
 use super::module_store::{CompiledProgram, HymekoParser, ModuleLoadError, ModuleStore};
 use super::source_provider::SourceProvider;
+use crate::ir::semantic_digest::{SemanticDigestState, SemanticModelDigestV2};
 use crate::ir::canonical_hash::{Canon, CanonHashCfg, CanonicalIdentity};
 use crate::resolution::interner::Interner;
 use std::fmt;
 use std::path::Path;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, OnceLock, RwLock};
 
 /// An inseparable, read-only compiled program and symbol table.
 ///
@@ -32,6 +33,7 @@ use std::sync::{Arc, RwLock};
 pub struct CompiledModel {
     program: Arc<CompiledProgram>,
     interner: Interner,
+    semantic: OnceLock<SemanticDigestState>,
 }
 
 impl CompiledModel {
@@ -53,6 +55,7 @@ impl CompiledModel {
         Ok(Self {
             program,
             interner: store.it,
+            semantic: OnceLock::new(),
         })
     }
 
@@ -78,6 +81,7 @@ impl CompiledModel {
                 canon,
             }),
             interner,
+            semantic: OnceLock::new(),
         }
     }
 
@@ -91,6 +95,19 @@ impl CompiledModel {
     #[must_use]
     pub fn interner(&self) -> &Interner {
         &self.interner
+    }
+
+    /// Value-sensitive identity of this immutable snapshot. The first call builds
+    /// derived contributions; repeated calls reuse them. Checked value updates
+    /// rehash only edited declarations with the same encoder as the full digest.
+    #[must_use]
+    pub fn semantic_digest(&self) -> SemanticModelDigestV2 {
+        self.semantic_state().digest()
+    }
+
+    fn semantic_state(&self) -> &SemanticDigestState {
+        self.semantic
+            .get_or_init(|| SemanticDigestState::new(&self.program.ir, &self.interner))
     }
 }
 

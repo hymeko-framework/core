@@ -5,7 +5,7 @@
 //! Each case builds two IRs that mean the same thing and were built
 //! differently, proves the equivalence with the independent oracle
 //! (`super::oracle`, which never calls the hash), and only then compares
-//! `canonical_program_hash`.
+//! `CanonicalPaths::hash`.
 //!
 //! Run against the **unmodified** implementation. This phase does not fix
 //! canonical hashing.
@@ -75,7 +75,7 @@ fn assert_invariant(case: &'static str, a: &TestIr, b: &TestIr) {
     );
     assert!(
         v.hash_eq,
-        "{} — oracle says equivalent, canonical_program_hash disagrees. \
+        "{} — oracle says equivalent, CanonicalPaths::hash disagrees. \
          COUNTEREXAMPLE.\nA dense: {}\nB dense: {}",
         case,
         dense_id_form(a),

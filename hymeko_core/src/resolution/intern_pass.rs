@@ -1,6 +1,6 @@
 use crate::common::ids::SymId;
 use crate::resolution::interner::Interner;
-use crate::sym_ast::AstSym;
+use crate::sym_ast::{AstSym, DeclarationFields};
 use parser::ast::{
     Anno, ArcInner, AstStr, ConstDecl, ConstExpr, Description, EdgeDecl, EdgeInner,
     HyperAnnotatedElement, HyperArc, HyperItem, ImportStmt, NodeDecl, NodeInner, Ref, RefAtom,
@@ -15,320 +15,207 @@ pub struct Interned<'a> {
 
 pub fn intern_ast<'a>(src: &AstStr<'a>) -> Interned<'a> {
     let mut it = Interner::new();
-    let ast = lower_desc(src, &mut it);
+    let ast = intern_ast_into(src, &mut it);
     Interned { ast, interner: it }
 }
 
-fn sid(it: &mut Interner, s: &str) -> SymId {
-    it.intern(s)
+pub fn intern_ast_into<'a>(src: &AstStr<'a>, it: &mut Interner) -> AstSym<'static> {
+    AstInterner { it }.desc(src)
 }
 
-fn lower_desc<'a>(src: &Description<'a, &'a str>, it: &mut Interner) -> Description<'a, SymId> {
-    Description {
-        name: sid(it, src.name),
-        header: src.header.iter().map(|n| lower_node(n, it)).collect(),
-        imports: src
-            .imports
-            .iter()
-            .map(|imp| lower_import(imp, it))
-            .collect(),
-        usings: src.usings.iter().map(|u| lower_using(u, it)).collect(),
-        consts: src.consts.iter().map(|c| lower_const_decl(c, it)).collect(),
-        items: src.items.iter().map(|x| lower_item(x, it)).collect(),
+/// Owns symbol allocation order across the complete AST traversal.
+struct AstInterner<'i> {
+    it: &'i mut Interner,
+}
+
+impl AstInterner<'_> {
+    fn desc<'a>(&mut self, src: &Description<'a, &'a str>) -> Description<'static, SymId> {
+        Description {
+            name: self.it.intern(src.name),
+            header: src.header.iter().map(|n| self.node(n)).collect(),
+            imports: src.imports.iter().map(|imp| self.import(imp)).collect(),
+            usings: src.usings.iter().map(|u| self.using(u)).collect(),
+            consts: src.consts.iter().map(|c| self.const_decl(c)).collect(),
+            items: src.items.iter().map(|x| self.item(x)).collect(),
+        }
+    }
+
+    fn const_decl(&mut self, src: &ConstDecl<&str>) -> ConstDecl<SymId> {
+        ConstDecl {
+            name: self.it.intern(src.name),
+            value: self.const_expr(&src.value),
+        }
+    }
+
+    fn const_expr(&mut self, src: &ConstExpr<&str>) -> ConstExpr<SymId> {
+        match src {
+            ConstExpr::Lit(n) => ConstExpr::Lit(*n),
+            ConstExpr::Ref(name) => ConstExpr::Ref(self.it.intern(name)),
+            ConstExpr::Neg(e) => ConstExpr::Neg(Box::new(self.const_expr(e))),
+            ConstExpr::Bin(op, l, r) => ConstExpr::Bin(
+                *op,
+                Box::new(self.const_expr(l)),
+                Box::new(self.const_expr(r)),
+            ),
+            ConstExpr::Pi => ConstExpr::Pi,
+            ConstExpr::Exp(e) => ConstExpr::Exp(Box::new(self.const_expr(e))),
+        }
+    }
+
+    fn using(&mut self, src: &UsingStmt<&str>) -> UsingStmt<SymId> {
+        UsingStmt {
+            path: Ref {
+                path: src.path.path.iter().map(|&p| self.it.intern(p)).collect(),
+            },
+            alias: self.it.intern(src.alias),
+        }
+    }
+
+    fn item<'a>(&mut self, src: &HyperItem<'a, &'a str>) -> HyperItem<'static, SymId> {
+        match src {
+            HyperItem::Node(n) => HyperItem::Node(self.node(n)),
+            HyperItem::Edge(e) => HyperItem::Edge(self.edge(e)),
+            HyperItem::Arc(a) => HyperItem::Arc(self.arc(a)),
+        }
+    }
+
+    fn anno<'a>(&mut self, src: &Anno<'a, &'a str>) -> Anno<'static, SymId> {
+        Anno {
+            tags: src.tags.iter().map(|&t| self.it.intern(t)).collect(),
+            value: src.value.as_ref().map(|v| self.value(v)),
+        }
+    }
+
+    fn arc<'a>(&mut self, src: &HyperArc<'a, &'a str>) -> HyperArc<'static, SymId> {
+        HyperAnnotatedElement {
+            anno: self.anno(&src.anno),
+            inner: ArcInner {
+                refs: src.inner.refs.iter().map(|r| self.signed_ref(r)).collect(),
+            },
+        }
+    }
+
+    fn signed_ref<'a>(&mut self, src: &SignedRef<'a, &'a str>) -> SignedRef<'static, SymId> {
+        match src {
+            SignedRef::Plus(a) => SignedRef::Plus(self.ref_atom(a)),
+            SignedRef::Minus(a) => SignedRef::Minus(self.ref_atom(a)),
+            SignedRef::Neutral(a) => SignedRef::Neutral(self.ref_atom(a)),
+        }
+    }
+
+    fn ref_atom<'a>(&mut self, src: &RefAtom<'a, &'a str>) -> RefAtom<'static, SymId> {
+        RefAtom {
+            target: Ref {
+                path: src.target.path.iter().map(|&p| self.it.intern(p)).collect(),
+            },
+            anno: self.anno(&src.anno),
+        }
+    }
+
+    fn import<'a>(&mut self, src: &ImportStmt<'a, &'a str>) -> ImportStmt<'static, SymId> {
+        ImportStmt {
+            path: Cow::Owned(src.path.as_ref().to_string()),
+            alias: src.alias.map(|n| self.it.intern(n)),
+        }
+    }
+
+    fn value<'a>(&mut self, src: &Value<'a, &'a str>) -> Value<'static, SymId> {
+        match src {
+            Value::Str(s) => Value::Str(Cow::Owned(s.as_ref().to_string())),
+            Value::Num(n) => Value::Num(*n),
+            Value::List(xs) => Value::List(xs.iter().map(|v| self.value(v)).collect()),
+            Value::Ref(r) => Value::Ref(Ref {
+                path: r.path.iter().map(|&seg| self.it.intern(seg)).collect(),
+            }),
+            Value::Expr(e) => Value::Expr(self.const_expr(e)),
+        }
+    }
+    fn declaration<'a, T: DeclarationFields<'a, &'a str>, U>(
+        &mut self,
+        src: &HyperAnnotatedElement<'a, T, &'a str>,
+        build: impl FnOnce(
+            SymId,
+            Vec<SignedRef<'static, SymId>>,
+            Option<Vec<HyperItem<'static, SymId>>>,
+        ) -> U,
+    ) -> HyperAnnotatedElement<'static, U, SymId> {
+        let anno = self.anno(&src.anno);
+        let (name, bases, body) = src.inner.fields();
+        let name = self.it.intern(name);
+        let bases = bases.iter().map(|r| self.signed_ref(r)).collect();
+        let body = body.map(|xs| xs.iter().map(|x| self.item(x)).collect());
+        HyperAnnotatedElement {
+            anno,
+            inner: build(name, bases, body),
+        }
+    }
+
+    fn node<'a>(&mut self, src: &NodeDecl<'a, &'a str>) -> NodeDecl<'static, SymId> {
+        self.declaration(src, |name, bases, body| NodeInner { name, bases, body })
+    }
+
+    fn edge<'a>(&mut self, src: &EdgeDecl<'a, &'a str>) -> EdgeDecl<'static, SymId> {
+        self.declaration(src, |name, bases, body| EdgeInner {
+            name,
+            bases,
+            body: body.unwrap_or_default(),
+        })
     }
 }
 
-fn lower_const_decl(src: &ConstDecl<&str>, it: &mut Interner) -> ConstDecl<SymId> {
-    ConstDecl {
-        name: sid(it, src.name),
-        value: lower_const_expr(&src.value, it),
-    }
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-fn lower_const_expr(src: &ConstExpr<&str>, it: &mut Interner) -> ConstExpr<SymId> {
-    match src {
-        ConstExpr::Lit(n) => ConstExpr::Lit(*n),
-        ConstExpr::Ref(name) => ConstExpr::Ref(sid(it, name)),
-        ConstExpr::Neg(e) => ConstExpr::Neg(Box::new(lower_const_expr(e, it))),
-        ConstExpr::Bin(op, l, r) => ConstExpr::Bin(
-            *op,
-            Box::new(lower_const_expr(l, it)),
-            Box::new(lower_const_expr(r, it)),
-        ),
-        ConstExpr::Pi => ConstExpr::Pi,
-        ConstExpr::Exp(e) => ConstExpr::Exp(Box::new(lower_const_expr(e, it))),
-    }
-}
+    #[test]
+    fn entry_points_share_symbol_order_and_own_text_after_source_is_dropped() {
+        let source = String::from(
+            r#"description {
+            @"vocabulary.hymeko" -> vocabulary;
+            using vocabulary.base as kind;
+            const B = 2.0;
+            const A = -B + exp(0.0) * pi;
+            header <tag> "header text";
+        }
+        root: kind { value ["text", (A / B), root]; @edge: kind { (+root [1.0], -value, ~header); } }
+        "#,
+        );
+        let ast = parser::parse_description(&source).unwrap();
+        let first = intern_ast(&ast);
+        let mut owned_it = Interner::new();
+        let owned = intern_ast_into(&ast, &mut owned_it);
+        let expected = format!("{:?}", first.ast);
+        let symbols: Vec<_> = first.interner.iter().collect();
+        assert_eq!(symbols, owned_it.iter().collect::<Vec<_>>());
+        assert_eq!(
+            symbols.iter().map(|(_, text)| *text).collect::<Vec<_>>(),
+            [
+                "description",
+                "tag",
+                "header",
+                "vocabulary",
+                "base",
+                "kind",
+                "B",
+                "A",
+                "root",
+                "value",
+                "edge"
+            ]
+        );
+        assert!(owned.header[0].inner.body.is_none());
+        let HyperItem::Node(root) = &owned.items[0] else {
+            panic!("root node required")
+        };
+        assert!(root.inner.body.is_some());
 
-fn lower_using(src: &UsingStmt<&str>, it: &mut Interner) -> UsingStmt<SymId> {
-    UsingStmt {
-        path: Ref {
-            path: src.path.path.iter().map(|&p| sid(it, p)).collect(),
-        },
-        alias: sid(it, src.alias),
-    }
-}
-
-fn lower_item<'a>(src: &HyperItem<'a, &'a str>, it: &mut Interner) -> HyperItem<'a, SymId> {
-    match src {
-        HyperItem::Node(n) => HyperItem::Node(lower_node(n, it)),
-        HyperItem::Edge(e) => HyperItem::Edge(lower_edge(e, it)),
-        HyperItem::Arc(a) => HyperItem::Arc(lower_arc(a, it)),
-    }
-}
-
-fn lower_anno<'a>(src: &Anno<'a, &'a str>, it: &mut Interner) -> Anno<'a, SymId> {
-    Anno {
-        tags: src.tags.iter().map(|&t| sid(it, t)).collect(),
-        value: src.value.as_ref().map(|v| lower_value(v, it)),
-    }
-}
-
-fn lower_node<'a>(src: &NodeDecl<'a, &'a str>, it: &mut Interner) -> NodeDecl<'a, SymId> {
-    HyperAnnotatedElement {
-        anno: lower_anno(&src.anno, it),
-        inner: NodeInner {
-            name: sid(it, src.inner.name),
-            bases: src
-                .inner
-                .bases
-                .iter()
-                .map(|r| lower_signed_ref(r, it))
-                .collect(),
-            body: src
-                .inner
-                .body
-                .as_ref()
-                .map(|xs| xs.iter().map(|x| lower_item(x, it)).collect()),
-        },
-    }
-}
-
-fn lower_edge<'a>(src: &EdgeDecl<'a, &'a str>, it: &mut Interner) -> EdgeDecl<'a, SymId> {
-    HyperAnnotatedElement {
-        anno: lower_anno(&src.anno, it),
-        inner: EdgeInner {
-            name: sid(it, src.inner.name),
-            bases: src
-                .inner
-                .bases
-                .iter()
-                .map(|r| lower_signed_ref(r, it))
-                .collect(),
-            body: src.inner.body.iter().map(|x| lower_item(x, it)).collect(),
-        },
-    }
-}
-
-fn lower_arc<'a>(src: &HyperArc<'a, &'a str>, it: &mut Interner) -> HyperArc<'a, SymId> {
-    HyperAnnotatedElement {
-        anno: lower_anno(&src.anno, it),
-        inner: ArcInner {
-            refs: src
-                .inner
-                .refs
-                .iter()
-                .map(|r| lower_signed_ref(r, it))
-                .collect(),
-        },
-    }
-}
-
-fn lower_signed_ref<'a>(src: &SignedRef<'a, &'a str>, it: &mut Interner) -> SignedRef<'a, SymId> {
-    match src {
-        SignedRef::Plus(a) => SignedRef::Plus(lower_ref_atom(a, it)),
-        SignedRef::Minus(a) => SignedRef::Minus(lower_ref_atom(a, it)),
-        SignedRef::Neutral(a) => SignedRef::Neutral(lower_ref_atom(a, it)),
-    }
-}
-
-fn lower_ref_atom<'a>(src: &RefAtom<'a, &'a str>, it: &mut Interner) -> RefAtom<'a, SymId> {
-    RefAtom {
-        target: Ref {
-            path: src.target.path.iter().map(|&p| sid(it, p)).collect(),
-        },
-        anno: lower_anno(&src.anno, it),
-    }
-}
-
-fn lower_import<'a>(src: &ImportStmt<'a, &'a str>, it: &mut Interner) -> ImportStmt<'a, SymId> {
-    ImportStmt {
-        path: Cow::Owned(src.path.as_ref().to_string()),
-        alias: src.alias.map(|n| sid(it, n)),
-    }
-}
-
-fn lower_value<'a>(src: &Value<'a, &'a str>, it: &mut Interner) -> Value<'a, SymId> {
-    match src {
-        Value::Str(s) => Value::Str(Cow::Owned(s.as_ref().to_string())),
-        Value::Num(n) => Value::Num(*n),
-        Value::List(xs) => Value::List(xs.iter().map(|v| lower_value(v, it)).collect()),
-        Value::Ref(r) => Value::Ref(Ref {
-            path: r.path.iter().map(|&seg| sid(it, seg)).collect(),
-        }),
-        Value::Expr(e) => Value::Expr(lower_const_expr(e, it)),
-    }
-}
-
-pub fn intern_ast_into<'a>(src: &AstStr<'a>, it: &mut Interner) -> AstSym<'a> {
-    lower_desc(src, it)
-}
-
-pub fn intern_ast_into_owned<'a>(src: &AstStr<'a>, it: &mut Interner) -> AstSym<'static> {
-    lower_desc_owned(src, it)
-}
-
-fn lower_desc_owned<'a>(
-    src: &Description<'a, &'a str>,
-    it: &mut Interner,
-) -> Description<'static, SymId> {
-    Description {
-        name: sid(it, src.name),
-        header: src.header.iter().map(|n| lower_node_owned(n, it)).collect(),
-        imports: src
-            .imports
-            .iter()
-            .map(|imp| lower_import_owned(imp, it))
-            .collect(),
-        usings: src
-            .usings
-            .iter()
-            .map(|u| lower_using_owned(u, it))
-            .collect(),
-        consts: src.consts.iter().map(|c| lower_const_decl(c, it)).collect(),
-        items: src.items.iter().map(|x| lower_item_owned(x, it)).collect(),
-    }
-}
-
-fn lower_using_owned(src: &UsingStmt<&str>, it: &mut Interner) -> UsingStmt<SymId> {
-    UsingStmt {
-        path: Ref {
-            path: src.path.path.iter().map(|&p| sid(it, p)).collect(),
-        },
-        alias: sid(it, src.alias),
-    }
-}
-
-fn lower_item_owned<'a>(
-    src: &HyperItem<'a, &'a str>,
-    it: &mut Interner,
-) -> HyperItem<'static, SymId> {
-    match src {
-        HyperItem::Node(n) => HyperItem::Node(lower_node_owned(n, it)),
-        HyperItem::Edge(e) => HyperItem::Edge(lower_edge_owned(e, it)),
-        HyperItem::Arc(a) => HyperItem::Arc(lower_arc_owned(a, it)),
-    }
-}
-
-fn lower_anno_owned<'a>(src: &Anno<'a, &'a str>, it: &mut Interner) -> Anno<'static, SymId> {
-    Anno {
-        tags: src.tags.iter().map(|&t| sid(it, t)).collect(),
-        value: src.value.as_ref().map(|v| lower_value_owned(v, it)),
-    }
-}
-
-fn lower_node_owned<'a>(
-    src: &NodeDecl<'a, &'a str>,
-    it: &mut Interner,
-) -> NodeDecl<'static, SymId> {
-    HyperAnnotatedElement {
-        anno: lower_anno_owned(&src.anno, it),
-        inner: NodeInner {
-            name: sid(it, src.inner.name),
-            bases: src
-                .inner
-                .bases
-                .iter()
-                .map(|r| lower_signed_ref_owned(r, it))
-                .collect(),
-            body: src
-                .inner
-                .body
-                .as_ref()
-                .map(|xs| xs.iter().map(|x| lower_item_owned(x, it)).collect()),
-        },
-    }
-}
-
-fn lower_edge_owned<'a>(
-    src: &EdgeDecl<'a, &'a str>,
-    it: &mut Interner,
-) -> EdgeDecl<'static, SymId> {
-    HyperAnnotatedElement {
-        anno: lower_anno_owned(&src.anno, it),
-        inner: EdgeInner {
-            name: sid(it, src.inner.name),
-            bases: src
-                .inner
-                .bases
-                .iter()
-                .map(|r| lower_signed_ref_owned(r, it))
-                .collect(),
-            body: src
-                .inner
-                .body
-                .iter()
-                .map(|x| lower_item_owned(x, it))
-                .collect(),
-        },
-    }
-}
-
-fn lower_arc_owned<'a>(src: &HyperArc<'a, &'a str>, it: &mut Interner) -> HyperArc<'static, SymId> {
-    HyperAnnotatedElement {
-        anno: lower_anno_owned(&src.anno, it),
-        inner: ArcInner {
-            refs: src
-                .inner
-                .refs
-                .iter()
-                .map(|r| lower_signed_ref_owned(r, it))
-                .collect(),
-        },
-    }
-}
-
-fn lower_signed_ref_owned<'a>(
-    src: &SignedRef<'a, &'a str>,
-    it: &mut Interner,
-) -> SignedRef<'static, SymId> {
-    match src {
-        SignedRef::Plus(a) => SignedRef::Plus(lower_ref_atom_owned(a, it)),
-        SignedRef::Minus(a) => SignedRef::Minus(lower_ref_atom_owned(a, it)),
-        SignedRef::Neutral(a) => SignedRef::Neutral(lower_ref_atom_owned(a, it)),
-    }
-}
-
-fn lower_ref_atom_owned<'a>(
-    src: &RefAtom<'a, &'a str>,
-    it: &mut Interner,
-) -> RefAtom<'static, SymId> {
-    RefAtom {
-        target: Ref {
-            path: src.target.path.iter().map(|&p| sid(it, p)).collect(),
-        },
-        anno: lower_anno_owned(&src.anno, it),
-    }
-}
-
-fn lower_import_owned<'a>(
-    src: &ImportStmt<'a, &'a str>,
-    it: &mut Interner,
-) -> ImportStmt<'static, SymId> {
-    ImportStmt {
-        path: Cow::Owned(src.path.as_ref().to_string()),
-        alias: src.alias.map(|n| sid(it, n)),
-    }
-}
-
-fn lower_value_owned<'a>(src: &Value<'a, &'a str>, it: &mut Interner) -> Value<'static, SymId> {
-    match src {
-        Value::Str(s) => Value::Str(Cow::Owned(s.as_ref().to_string())),
-        Value::Num(n) => Value::Num(*n),
-        Value::List(xs) => Value::List(xs.iter().map(|v| lower_value_owned(v, it)).collect()),
-        Value::Ref(r) => Value::Ref(Ref {
-            path: r.path.iter().map(|&seg| sid(it, seg)).collect(),
-        }),
-        Value::Expr(e) => Value::Expr(lower_const_expr(e, it)),
+        drop(ast);
+        drop(source);
+        assert_eq!(format!("{owned:?}"), expected);
+        assert!(matches!(owned.imports[0].path, Cow::Owned(_)));
+        assert!(matches!(
+            owned.header[0].anno.value,
+            Some(Value::Str(Cow::Owned(_)))
+        ));
     }
 }

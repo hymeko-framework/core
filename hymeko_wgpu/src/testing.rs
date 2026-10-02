@@ -37,8 +37,8 @@ use std::ops::Deref;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{OnceLock, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-use hymeko::tensor::compute::{ComputeError, TensorShape};
-use hymeko::tensor::representations::tensor_csr::TensorCsr;
+use hymeko_tensor::compute::{ComputeError, TensorShape};
+use hymeko_tensor::representations::tensor_csr::TensorCsr;
 
 use crate::{ActivationKind, ArenaTensor, GpuCsrMatrix, GpuTensor, TrackedSession, WgpuBackend};
 
@@ -498,7 +498,7 @@ pub fn chain_output<'x, T>(a: &'x T, b: &'x T, layers: usize) -> &'x T {
 
 // === Backend-neutral sparse-CSR fixture ===
 //
-// Relocated to `hymeko::tensor::sparse_workload` (P1 benchmark-harness
+// Relocated to `hymeko_tensor::sparse_workload` (P1 benchmark-harness
 // consolidation, `APPROVED-CORE-EDIT: benchmark-harness-consolidation`). It
 // previously lived here byte-for-byte AND in `hymeko_core/benches/sparse_fixture.rs`;
 // the single owner is now `hymeko_core` (the dependency edge is
@@ -508,7 +508,7 @@ pub fn chain_output<'x, T>(a: &'x T, b: &'x T, layers: usize) -> &'x T {
 // byte-identical. `hymeko_core`'s KAT (`tests/sparse_workload_kat.rs`) pins the
 // emitted bytes, so the generated fixtures are unchanged.
 #[doc(hidden)]
-pub use hymeko::tensor::sparse_workload::{DegreeShape, Lcg, SparseSpec};
+pub use hymeko_tensor::sparse_workload::{DegreeShape, Lcg, SparseSpec};
 
 #[cfg(test)]
 mod tests {

@@ -147,9 +147,10 @@ fn retained_guards_still_return_none_for_the_sentinel() {
 fn backlink_validation_survives_the_optimisation() {
     let mut t = fixture();
     let foreign = t.ir.as_node(DeclId::new(1)).expect("decl 1 is a node");
-    let dx = t.fresh_decl(DeclKind::Node);
-    t.ir.bind_node_decl(dx, foreign).unwrap();
-    assert_eq!(t.ir.as_node(dx), Some(foreign), "raw mapping unchanged");
+    let dx = t.node(&["extra"], DeclId::NONE);
+    let own = t.ir.as_node(dx).unwrap();
+    t.ir.nodes.swap(own.raw(), foreign.raw());
+    assert_eq!(t.ir.as_node(dx), Some(own), "raw mapping unchanged");
     assert!(
         t.ir.node_for_decl(dx).is_none(),
         "back-link validation must still refuse a foreign record"

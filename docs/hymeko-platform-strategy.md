@@ -121,7 +121,7 @@ létre `core → consumer → core` ciklust.
 | szintaxis és AST | `parser` | rezidens szemantikai modell |
 | hipergráf-algoritmusok | `hymeko_graph`, `&Ir` + pontos ritka index felett | saját kanonikus Graph/HyperGraph állapot |
 | HNN és tanulási réteg | Nagare | core-ba visszamásolt HNN, saját szemantikai gráf |
-| sparse numerikus kernel | core tensor API + backendek | szemantikai állapot |
+| sparse numerikus kernel | hymeko_tensor API + backendek | szemantikai állapot |
 | WGPU | `hymeko_wgpu` | IR-mutáció és gráfszemantika |
 | emitter/transformation | fogyasztó az `Ir` felett | editor-IR bridge mint állandó modell |
 | WebXR szemantika | `transformation/hymeko_webxr`, az `&Ir` fogyasztója; browser binding downstream | WebXR vocabulary/validator/query a core-ban; `XRSession`/`XRFrame`/GPU/DOM handle az IR-ben |
@@ -339,10 +339,10 @@ Ezek külön, kis kockázatú fázisok; nem keverendők egy perf- vagy wire-vál
 
 - `CompiledProgram.idx` kompatibilitási mező nyugdíjazása;
 - hierarchy/path coherence ellenőrzések konszolidálása az authority flip után;
-- dead `tensor/decomposition.rs` és `module_store/module_view.rs` igazolt törlése;
+- dead decomposition/module-view modulok: törölve 2026-09-23, `core-pipeline-encapsulation-cleanup`;
 - module-store/CBOR dead scaffolding eltávolítása;
-- intern-pass és const-eval twin ágak összevonása;
-- egyetlen total child iterator;
+- intern-pass és const-eval twin ágak: összevonva 2026-09-23;
+- egyetlen total child iterator: bevezetve 2026-09-23;
 - `ir_stream` section-entry offset konstansok és golden image teszt;
 - benchmark-generátorok és CPU oracle-ok közös tulajdonba rendezése.
 

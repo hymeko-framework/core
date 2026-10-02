@@ -5,11 +5,13 @@
 
 use std::sync::Arc;
 
-use hymeko::tensor::compute::{BackendKind, ComputeError, TensorShape, try_u32};
+use hymeko_tensor::compute::{BackendKind, ComputeError, TensorShape, try_u32};
 
+use super::OperandCheck;
+use super::OperationFactory;
 use crate::GpuTensor;
 use crate::operations::dispatch::PreparedDispatch;
-use crate::pipeline::{KernelId, PipelineCache};
+use crate::pipeline::KernelId;
 
 /// WGSL source owned by [`KernelId::GlobalEntropyPool`].
 pub const GLOBAL_ENTROPY_POOL_SHADER: &str = include_str!("../../shaders/global_entropy_pool.wgsl");
@@ -32,18 +34,9 @@ struct GlobalEntropyPoolParams {
 
 const _: () = assert!(std::mem::size_of::<GlobalEntropyPoolParams>() == 32);
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct GlobalEntropyPoolLimits {
-    pub max_workgroups_per_dimension: u32,
-    pub max_invocations_per_workgroup: u32,
-}
-
 /// Builds one validated spatial global-entropy pooling dispatch.
 pub struct GlobalEntropyPoolBuilder<'a> {
-    device: &'a wgpu::Device,
-    queue: &'a wgpu::Queue,
-    cache: &'a PipelineCache,
-    limits: GlobalEntropyPoolLimits,
+    factory: OperationFactory<'a>,
     response: Option<&'a GpuTensor<f32>>,
     output: Option<&'a GpuTensor<f32>>,
     spatial: Option<(usize, usize)>,
@@ -52,17 +45,9 @@ pub struct GlobalEntropyPoolBuilder<'a> {
 }
 
 impl<'a> GlobalEntropyPoolBuilder<'a> {
-    pub(crate) fn new(
-        device: &'a wgpu::Device,
-        queue: &'a wgpu::Queue,
-        cache: &'a PipelineCache,
-        limits: GlobalEntropyPoolLimits,
-    ) -> Self {
+    pub(crate) fn new(factory: OperationFactory<'a>) -> Self {
         Self {
-            device,
-            queue,
-            cache,
-            limits,
+            factory,
             response: None,
             output: None,
             spatial: None,
@@ -103,8 +88,8 @@ impl<'a> GlobalEntropyPoolBuilder<'a> {
 
     /// Validate every operand and prepare a repeatedly encodable dispatch.
     pub fn prepare(self) -> Result<PreparedGlobalEntropyPool<'a>, ComputeError> {
-        let response = supplied(self.response, "global entropy response")?;
-        let output = supplied(self.output, "global entropy output")?;
+        let response = OperandCheck("global entropy response").supplied(self.response)?;
+        let output = OperandCheck("global entropy output").supplied(self.output)?;
         let (height, width) = self.spatial.ok_or(ComputeError::ShapeMismatch {
             operand: "global entropy spatial shape",
             expected: 2,
@@ -118,18 +103,14 @@ impl<'a> GlobalEntropyPoolBuilder<'a> {
                 value: height,
             })?;
         if channels == 0 || height == 0 || width == 0 {
-            return shape_error("global entropy dimensions", 1, 0);
+            return OperandCheck("global entropy dimensions").mismatch(1, 0);
         }
         if response.shape().cols != area {
-            return shape_error(
-                "global entropy response columns",
-                area,
-                response.shape().cols,
-            );
+            return OperandCheck("global entropy response columns")
+                .mismatch(area, response.shape().cols);
         }
         if output.shape() != TensorShape::new(channels, 3) {
-            return shape_error(
-                "global entropy output shape",
+            return OperandCheck("global entropy output shape").mismatch(
                 channels.saturating_mul(3),
                 output.shape().checked_elements().unwrap_or(usize::MAX),
             );
@@ -140,12 +121,13 @@ impl<'a> GlobalEntropyPoolBuilder<'a> {
                 message: "global entropy response and output alias the same buffer".to_owned(),
             });
         }
-        if self.workgroup == 0 || self.workgroup > self.limits.max_invocations_per_workgroup {
+        if self.workgroup == 0 || self.workgroup > self.factory.limits.max_invocations_per_workgroup
+        {
             return Err(ComputeError::Backend {
                 backend: BackendKind::Wgpu,
                 message: format!(
                     "global entropy workgroup {} outside 1..={}",
-                    self.workgroup, self.limits.max_invocations_per_workgroup
+                    self.workgroup, self.factory.limits.max_invocations_per_workgroup
                 ),
             });
         }
@@ -154,7 +136,7 @@ impl<'a> GlobalEntropyPoolBuilder<'a> {
         let area = try_u32("global entropy raster area", area)?;
         let groups = count
             .div_ceil(self.workgroup)
-            .min(self.limits.max_workgroups_per_dimension);
+            .min(self.factory.limits.max_workgroups_per_dimension);
         let stride = groups
             .checked_mul(self.workgroup)
             .ok_or(ComputeError::IndexOverflow {
@@ -172,27 +154,26 @@ impl<'a> GlobalEntropyPoolBuilder<'a> {
             _pad2: 0,
         };
         let kernel = KernelId::GlobalEntropyPool;
-        let bundle = self.cache.bundle(self.device, kernel, self.workgroup, 1)?;
-        let params_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("global_entropy_pool.params"),
-            size: std::mem::size_of::<GlobalEntropyPoolParams>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        self.queue
-            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
-        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("global_entropy_pool.bind_group"),
-            layout: bundle.bind_group_layout(),
-            entries: &[
-                entry(0, response),
-                entry(1, output),
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: params_buffer.as_entire_binding(),
-                },
-            ],
-        });
+        let bundle = self
+            .factory
+            .cache
+            .bundle(self.factory.device, kernel, self.workgroup, 1)?;
+        let params_buffer = self.factory.uniform("global_entropy_pool.params", &params);
+        let bind_group = self
+            .factory
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("global_entropy_pool.bind_group"),
+                layout: bundle.bind_group_layout(),
+                entries: &[
+                    response.binding(0),
+                    output.binding(1),
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: params_buffer.as_entire_binding(),
+                    },
+                ],
+            });
         Ok(PreparedGlobalEntropyPool {
             _operands: core::marker::PhantomData,
             dispatch: PreparedDispatch::new(
@@ -232,32 +213,5 @@ impl PreparedGlobalEntropyPool<'_> {
     #[must_use]
     pub const fn elements(&self) -> usize {
         self.elements
-    }
-}
-
-fn supplied<'a, T>(value: Option<&'a T>, operand: &'static str) -> Result<&'a T, ComputeError> {
-    value.ok_or(ComputeError::ShapeMismatch {
-        operand,
-        expected: 1,
-        actual: 0,
-    })
-}
-
-fn shape_error<T>(
-    operand: &'static str,
-    expected: usize,
-    actual: usize,
-) -> Result<T, ComputeError> {
-    Err(ComputeError::ShapeMismatch {
-        operand,
-        expected,
-        actual,
-    })
-}
-
-fn entry<'a, T>(binding: u32, tensor: &'a GpuTensor<T>) -> wgpu::BindGroupEntry<'a> {
-    wgpu::BindGroupEntry {
-        binding,
-        resource: tensor.buffer().as_entire_binding(),
     }
 }

@@ -1,0 +1,19 @@
+\begin{tikzpicture}[
+ box/.style={draw,rounded corners,align=center,font=\small,text width=44mm,minimum height=12mm},
+ arrow/.style={-{Latex[length=2mm]},thick},node distance=9mm and 6mm]
+\node[box] (source) {Parser / ModuleStore\\CompiledModel + interner};
+\node[box,below=of source,fill=blue!6] (storage) {Canonical ownership\\CellStorage [proposed]\\Ir layout [compatibility]};
+\node[box,below=of storage] (hyper) {Existing borrowed\\Ir / IncidenceView};
+\node[box,left=of hyper] (matroid) {Graph matroid policies\\MatroidRef [existing]\\generic policies [proposed]};
+\node[box,right=of hyper] (flat) {Order / flat queries\\{[proposed]}\\no lattice materialization};
+\node[box,below=of hyper] (clients) {Web / desktop / XR\\Hive / Robotics / RL bridge};
+\node[box,left=of clients] (search) {Search workspace\\masks + reversible trail\\{[proposed]}};
+\node[box,right=of clients] (compute) {Nagare / Tensor\\budgeted derived\\numerical buffers};
+\draw[arrow] (source) -- (storage);
+\draw[arrow] (storage) -- node[right,font=\scriptsize]{borrow} (hyper);
+\draw[arrow] (storage.west) -| (matroid.north);
+\draw[arrow] (storage.east) -| (flat.north);
+\draw[arrow] (hyper) -- (clients);
+\draw[arrow] (matroid) -- (search);
+\draw[arrow,dashed] (hyper.east) -- (compute.north west);
+\end{tikzpicture}

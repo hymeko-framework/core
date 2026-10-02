@@ -6,10 +6,12 @@
 
 use std::sync::Arc;
 
-use hymeko::tensor::compute::{BackendKind, ComputeError, TensorShape, try_u32};
+use hymeko_tensor::compute::{BackendKind, ComputeError, TensorShape, try_u32};
 
+use super::OperandCheck;
+use super::OperationFactory;
 use crate::operations::dispatch::PreparedDispatch;
-use crate::pipeline::{KernelId, PipelineCache};
+use crate::pipeline::KernelId;
 use crate::{GpuCsrMatrix, GpuTensor};
 
 /// WGSL source owned by [`KernelId::RotorAttention`].
@@ -33,19 +35,9 @@ struct RotorAttentionParams {
 
 const _: () = assert!(std::mem::size_of::<RotorAttentionParams>() == 32);
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct RotorAttentionLimits {
-    pub max_workgroups_per_dimension: u32,
-    pub max_invocations_per_workgroup: u32,
-    pub max_storage_buffers_per_stage: u32,
-}
-
 /// Builds one validated sparse rotor-attention dispatch.
 pub struct RotorAttentionBuilder<'a> {
-    device: &'a wgpu::Device,
-    queue: &'a wgpu::Queue,
-    cache: &'a PipelineCache,
-    limits: RotorAttentionLimits,
+    factory: OperationFactory<'a>,
     queries: Option<&'a GpuTensor<f32>>,
     keys: Option<&'a GpuTensor<f32>>,
     values: Option<&'a GpuTensor<f32>>,
@@ -58,17 +50,9 @@ pub struct RotorAttentionBuilder<'a> {
 }
 
 impl<'a> RotorAttentionBuilder<'a> {
-    pub(crate) fn new(
-        device: &'a wgpu::Device,
-        queue: &'a wgpu::Queue,
-        cache: &'a PipelineCache,
-        limits: RotorAttentionLimits,
-    ) -> Self {
+    pub(crate) fn new(factory: OperationFactory<'a>) -> Self {
         Self {
-            device,
-            queue,
-            cache,
-            limits,
+            factory,
             queries: None,
             keys: None,
             values: None,
@@ -137,20 +121,17 @@ impl<'a> RotorAttentionBuilder<'a> {
 
     /// Validate every operand and prepare a repeatedly encodable dispatch.
     pub fn prepare(self) -> Result<PreparedRotorAttention<'a>, ComputeError> {
-        let queries = supplied(self.queries, "rotor-attention queries")?;
-        let keys = supplied(self.keys, "rotor-attention keys")?;
-        let values = supplied(self.values, "rotor-attention values")?;
-        let preferred = supplied(self.preferred, "rotor-attention preferred rotor")?;
-        let adjacency = supplied(self.adjacency, "rotor-attention adjacency")?;
-        let output = supplied(self.output, "rotor-attention output")?;
+        let queries = OperandCheck("rotor-attention queries").supplied(self.queries)?;
+        let keys = OperandCheck("rotor-attention keys").supplied(self.keys)?;
+        let values = OperandCheck("rotor-attention values").supplied(self.values)?;
+        let preferred = OperandCheck("rotor-attention preferred rotor").supplied(self.preferred)?;
+        let adjacency = OperandCheck("rotor-attention adjacency").supplied(self.adjacency)?;
+        let output = OperandCheck("rotor-attention output").supplied(self.output)?;
         let tokens = queries.shape().rows;
         let shape = TensorShape::new(tokens, 4);
         if tokens == 0 || queries.shape().cols != 4 {
-            return shape_error(
-                "rotor-attention queries must be non-empty tokens x 4",
-                4,
-                queries.shape().cols,
-            );
+            return OperandCheck("rotor-attention queries must be non-empty tokens x 4")
+                .mismatch(4, queries.shape().cols);
         }
         for (name, actual) in [
             ("rotor-attention keys", keys.shape()),
@@ -158,24 +139,21 @@ impl<'a> RotorAttentionBuilder<'a> {
             ("rotor-attention output", output.shape()),
         ] {
             if actual != shape {
-                return shape_error(
-                    name,
+                return OperandCheck(name).mismatch(
                     shape.checked_elements().unwrap_or(usize::MAX),
                     actual.checked_elements().unwrap_or(usize::MAX),
                 );
             }
         }
         if preferred.shape() != TensorShape::new(1, 4) {
-            return shape_error(
-                "rotor-attention preferred rotor",
+            return OperandCheck("rotor-attention preferred rotor").mismatch(
                 4,
                 preferred.shape().checked_elements().unwrap_or(usize::MAX),
             );
         }
         let sparse = adjacency.shape();
         if sparse.rows != tokens || sparse.cols != tokens {
-            return shape_error(
-                "rotor-attention square adjacency",
+            return OperandCheck("rotor-attention square adjacency").mismatch(
                 tokens.saturating_mul(tokens),
                 sparse.rows.saturating_mul(sparse.cols),
             );
@@ -186,20 +164,23 @@ impl<'a> RotorAttentionBuilder<'a> {
                 message: "rotor-attention kappa must be finite and non-negative".to_owned(),
             });
         }
-        if self.limits.max_storage_buffers_per_stage < 7 {
+        if self.factory.limits.max_storage_buffers_per_stage < 7 {
             return Err(ComputeError::Backend {
                 backend: BackendKind::Wgpu,
                 message: format!(
                     "rotor attention requires 7 storage buffers, device exposes {}",
-                    self.limits.max_storage_buffers_per_stage
+                    self.factory.limits.max_storage_buffers_per_stage
                 ),
             });
         }
-        validate_workgroup(self.workgroup, self.limits.max_invocations_per_workgroup)?;
+        validate_workgroup(
+            self.workgroup,
+            self.factory.limits.max_invocations_per_workgroup,
+        )?;
         let count = try_u32("rotor-attention token count", tokens)?;
         let groups = count
             .div_ceil(self.workgroup)
-            .min(self.limits.max_workgroups_per_dimension);
+            .min(self.factory.limits.max_workgroups_per_dimension);
         let stride = groups
             .checked_mul(self.workgroup)
             .ok_or(ComputeError::IndexOverflow {
@@ -217,32 +198,37 @@ impl<'a> RotorAttentionBuilder<'a> {
             _pad2: 0,
         };
         let kernel = KernelId::RotorAttention;
-        let bundle = self.cache.bundle(self.device, kernel, self.workgroup, 1)?;
-        let params_buffer =
-            uniform_buffer(self.device, self.queue, "rotor_attention.params", &params);
-        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("rotor_attention.bind_group"),
-            layout: bundle.bind_group_layout(),
-            entries: &[
-                entry(0, queries),
-                entry(1, keys),
-                entry(2, values),
-                entry(3, preferred),
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: adjacency.row_ptr().as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: adjacency.col_ind().as_entire_binding(),
-                },
-                entry(6, output),
-                wgpu::BindGroupEntry {
-                    binding: 7,
-                    resource: params_buffer.as_entire_binding(),
-                },
-            ],
-        });
+        let bundle = self
+            .factory
+            .cache
+            .bundle(self.factory.device, kernel, self.workgroup, 1)?;
+        let params_buffer = self.factory.uniform("rotor_attention.params", &params);
+        let bind_group = self
+            .factory
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("rotor_attention.bind_group"),
+                layout: bundle.bind_group_layout(),
+                entries: &[
+                    queries.binding(0),
+                    keys.binding(1),
+                    values.binding(2),
+                    preferred.binding(3),
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: adjacency.row_ptr().as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: adjacency.col_ind().as_entire_binding(),
+                    },
+                    output.binding(6),
+                    wgpu::BindGroupEntry {
+                        binding: 7,
+                        resource: params_buffer.as_entire_binding(),
+                    },
+                ],
+            });
         Ok(PreparedRotorAttention {
             _operands: core::marker::PhantomData,
             dispatch: PreparedDispatch::new(
@@ -284,26 +270,6 @@ impl PreparedRotorAttention<'_> {
     }
 }
 
-fn supplied<'a, T>(value: Option<&'a T>, operand: &'static str) -> Result<&'a T, ComputeError> {
-    value.ok_or(ComputeError::ShapeMismatch {
-        operand,
-        expected: 1,
-        actual: 0,
-    })
-}
-
-fn shape_error<T>(
-    operand: &'static str,
-    expected: usize,
-    actual: usize,
-) -> Result<T, ComputeError> {
-    Err(ComputeError::ShapeMismatch {
-        operand,
-        expected,
-        actual,
-    })
-}
-
 fn validate_workgroup(workgroup: u32, maximum: u32) -> Result<(), ComputeError> {
     if workgroup == 0 || workgroup > maximum {
         Err(ComputeError::Backend {
@@ -313,27 +279,4 @@ fn validate_workgroup(workgroup: u32, maximum: u32) -> Result<(), ComputeError> 
     } else {
         Ok(())
     }
-}
-
-fn entry<'a, T>(binding: u32, tensor: &'a GpuTensor<T>) -> wgpu::BindGroupEntry<'a> {
-    wgpu::BindGroupEntry {
-        binding,
-        resource: tensor.buffer().as_entire_binding(),
-    }
-}
-
-fn uniform_buffer<T: bytemuck::Pod>(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    label: &str,
-    value: &T,
-) -> wgpu::Buffer {
-    let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some(label),
-        size: std::mem::size_of::<T>() as u64,
-        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    });
-    queue.write_buffer(&buffer, 0, bytemuck::bytes_of(value));
-    buffer
 }

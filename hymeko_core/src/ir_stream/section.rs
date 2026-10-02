@@ -52,6 +52,7 @@
 
 use super::error::WireError;
 use super::limits::DecodeLimits;
+use super::reader::{LittleEndianReader, LittleEndianValue};
 
 /// Bytes per section-table entry.
 pub const ENTRY_BYTES: usize = 32;
@@ -319,9 +320,7 @@ impl<'a> ValidatedSection<'a> {
     /// [`WireError::SectionLengthMismatch`] if the declared element kind is not
     /// [`ElementKind::U32`].
     pub fn to_u32_vec(&self) -> Result<Vec<u32>, WireError> {
-        self.typed_copy(ElementKind::U32, |c| {
-            u32::from_le_bytes([c[0], c[1], c[2], c[3]])
-        })
+        self.typed_copy(ElementKind::U32)
     }
 
     /// Copy the body as `f32`s. Copies rather than reinterprets.
@@ -330,16 +329,10 @@ impl<'a> ValidatedSection<'a> {
     ///
     /// As [`Self::to_u32_vec`].
     pub fn to_f32_vec(&self) -> Result<Vec<f32>, WireError> {
-        self.typed_copy(ElementKind::F32, |c| {
-            f32::from_le_bytes([c[0], c[1], c[2], c[3]])
-        })
+        self.typed_copy(ElementKind::F32)
     }
 
-    fn typed_copy<T>(
-        &self,
-        want: ElementKind,
-        convert: impl Fn(&[u8]) -> T,
-    ) -> Result<Vec<T>, WireError> {
+    fn typed_copy<T: LittleEndianValue>(&self, want: ElementKind) -> Result<Vec<T>, WireError> {
         if self.entry.element_kind != want {
             return Err(WireError::SectionTypeMismatch {
                 expected: want,
@@ -349,7 +342,11 @@ impl<'a> ValidatedSection<'a> {
         let step = want.size_usize();
         // `byte_len == element_count * size` was proved during validation, so
         // this division is exact and the collect cannot be short.
-        Ok(self.body.chunks_exact(step).map(convert).collect())
+        Ok(self
+            .body
+            .chunks_exact(step)
+            .map(|chunk| LittleEndianReader::new(chunk).read(0))
+            .collect())
     }
 }
 
@@ -374,8 +371,9 @@ pub(crate) fn validate_sections<'a>(
         });
     }
 
-    let count = u32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]);
-    let reserved = u32::from_le_bytes([payload[4], payload[5], payload[6], payload[7]]);
+    let reader = LittleEndianReader::new(payload);
+    let count = reader.read::<u32>(0);
+    let reserved = reader.read::<u32>(4);
     if reserved != 0 {
         return Err(WireError::ReservedNotZero {
             field: "section table reserved",
@@ -411,20 +409,20 @@ pub(crate) fn validate_sections<'a>(
 
     for index in 0..count as usize {
         let base = TABLE_PREFIX_BYTES + index * ENTRY_BYTES;
-        let e = &payload[base..base + ENTRY_BYTES];
+        let entry = LittleEndianReader::new(&payload[base..base + ENTRY_BYTES]);
 
-        let entry_reserved = u32::from_le_bytes([e[4], e[5], e[6], e[7]]);
+        let entry_reserved = entry.read::<u32>(4);
         if entry_reserved != 0 {
             return Err(WireError::ReservedNotZero {
                 field: "section entry reserved",
             });
         }
 
-        let kind = SectionKind::try_from_wire(u16::from_le_bytes([e[0], e[1]]), index)?;
-        let element_kind = ElementKind::try_from_wire(u16::from_le_bytes([e[2], e[3]]), index)?;
-        let element_count = rd_u64(e, 8);
-        let byte_offset = rd_u64(e, 16);
-        let byte_len = rd_u64(e, 24);
+        let kind = SectionKind::try_from_wire(entry.read(0), index)?;
+        let element_kind = ElementKind::try_from_wire(entry.read(2), index)?;
+        let element_count = entry.read::<u64>(8);
+        let byte_offset = entry.read::<u64>(16);
+        let byte_len = entry.read::<u64>(24);
 
         if element_count > limits.max_elements_per_section {
             return Err(WireError::TooManyElements {
@@ -538,12 +536,6 @@ pub(crate) fn validate_sections<'a>(
     }
 
     Ok(out)
-}
-
-fn rd_u64(b: &[u8], off: usize) -> u64 {
-    let mut t = [0u8; 8];
-    t.copy_from_slice(&b[off..off + 8]);
-    u64::from_le_bytes(t)
 }
 
 #[cfg(test)]

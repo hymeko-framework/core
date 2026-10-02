@@ -7,7 +7,7 @@
 //!
 //! # Where `ActivationKind` lives
 //!
-//! In this crate, **not** in `hymeko_core::tensor::compute`. The core
+//! In this crate, **not** in `hymeko_tensor::compute`. The core
 //! vocabulary rule is that a type earns its place there only with a concrete
 //! CPU *and* GPU consumer. The CPU layers apply ReLU and LeakyReLU inline
 //! (`conv/hgnn.rs`, `conv/signed_hgnn.rs`) with the slope hard-coded; none of
@@ -16,8 +16,9 @@
 
 use std::sync::Arc;
 
-use hymeko::tensor::compute::{BackendKind, ComputeError, TensorShape, try_u32};
+use hymeko_tensor::compute::{BackendKind, ComputeError, TensorShape, try_u32};
 
+use super::OperationFactory;
 use crate::operations::dispatch::PreparedDispatch;
 use crate::pipeline::{ActivationEntry, KernelId};
 use crate::resources::GpuTensor;
@@ -163,19 +164,9 @@ struct ActivationParams {
 
 const _: () = assert!(std::mem::size_of::<ActivationParams>() == 16);
 
-/// Device limits an activation validates against.
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct ActivationLimits {
-    pub max_workgroups_per_dimension: u32,
-    pub max_invocations_per_workgroup: u32,
-}
-
 /// Builds and validates a [`PreparedActivation`].
 pub struct ActivationBuilder<'a, S: EncodeScope = Untracked> {
-    device: &'a wgpu::Device,
-    queue: &'a wgpu::Queue,
-    cache: &'a crate::PipelineCache,
-    limits: ActivationLimits,
+    factory: OperationFactory<'a>,
     kind: ActivationKind,
     input: Option<&'a GpuTensor<f32>>,
     output: Option<&'a GpuTensor<f32>>,
@@ -196,17 +187,9 @@ pub const ACTIVATION_WORKGROUP_SWEEP: [u32; 3] = [64, 128, 256];
 pub const DEFAULT_ACTIVATION_WORKGROUP: u32 = 256;
 
 impl<'a> ActivationBuilder<'a, Untracked> {
-    pub(crate) fn new(
-        device: &'a wgpu::Device,
-        queue: &'a wgpu::Queue,
-        cache: &'a crate::PipelineCache,
-        limits: ActivationLimits,
-    ) -> Self {
+    pub(crate) fn new(factory: OperationFactory<'a>) -> Self {
         Self {
-            device,
-            queue,
-            cache,
-            limits,
+            factory,
             kind: ActivationKind::Relu,
             input: None,
             output: None,
@@ -221,10 +204,7 @@ impl<'a, S: EncodeScope> ActivationBuilder<'a, S> {
     /// Carry every field across a scope change; see `SpmmBuilder::retype`.
     fn retype<S2: EncodeScope>(self) -> ActivationBuilder<'a, S2> {
         ActivationBuilder {
-            device: self.device,
-            queue: self.queue,
-            cache: self.cache,
-            limits: self.limits,
+            factory: self.factory,
             kind: self.kind,
             input: self.input,
             output: self.output,
@@ -339,12 +319,12 @@ impl<'a, S: EncodeScope> ActivationBuilder<'a, S> {
                 message: "activation workgroup size must be non-zero".to_owned(),
             });
         }
-        if self.workgroup > self.limits.max_invocations_per_workgroup {
+        if self.workgroup > self.factory.limits.max_invocations_per_workgroup {
             return Err(ComputeError::Backend {
                 backend: BackendKind::Wgpu,
                 message: format!(
                     "activation workgroup {} exceeds the device limit of {} invocations",
-                    self.workgroup, self.limits.max_invocations_per_workgroup
+                    self.workgroup, self.factory.limits.max_invocations_per_workgroup
                 ),
             });
         }
@@ -358,7 +338,7 @@ impl<'a, S: EncodeScope> ActivationBuilder<'a, S> {
         // is allowed to take, and it costs nothing when the grid already fits:
         // `stride >= count` makes the loop body run exactly once.
         let ideal_groups = count.div_ceil(self.workgroup);
-        let groups = ideal_groups.min(self.limits.max_workgroups_per_dimension);
+        let groups = ideal_groups.min(self.factory.limits.max_workgroups_per_dimension);
         let stride = groups
             .checked_mul(self.workgroup)
             .ok_or(ComputeError::IndexOverflow {
@@ -375,7 +355,10 @@ impl<'a, S: EncodeScope> ActivationBuilder<'a, S> {
         } else {
             KernelId::ActivationOutOfPlace(self.kind.entry())
         };
-        let bundle = self.cache.bundle(self.device, kernel, self.workgroup, 1)?;
+        let bundle = self
+            .factory
+            .cache
+            .bundle(self.factory.device, kernel, self.workgroup, 1)?;
 
         let params = ActivationParams {
             count,
@@ -383,49 +366,46 @@ impl<'a, S: EncodeScope> ActivationBuilder<'a, S> {
             stride,
             _pad1: 0,
         };
-        let params_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("activation.params"),
-            size: std::mem::size_of::<ActivationParams>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        self.queue
-            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
+        let params_buffer = self.factory.uniform("activation.params", &params);
 
         let bind_group = if in_place {
-            self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("activation.bind_group.in_place"),
-                layout: bundle.bind_group_layout(),
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: output.buffer().as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: params_buffer.as_entire_binding(),
-                    },
-                ],
-            })
+            self.factory
+                .device
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("activation.bind_group.in_place"),
+                    layout: bundle.bind_group_layout(),
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: output.buffer().as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: params_buffer.as_entire_binding(),
+                        },
+                    ],
+                })
         } else {
-            self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("activation.bind_group"),
-                layout: bundle.bind_group_layout(),
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: input.buffer().as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: output.buffer().as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: params_buffer.as_entire_binding(),
-                    },
-                ],
-            })
+            self.factory
+                .device
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("activation.bind_group"),
+                    layout: bundle.bind_group_layout(),
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: input.buffer().as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: output.buffer().as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: params_buffer.as_entire_binding(),
+                        },
+                    ],
+                })
         };
 
         let label = self

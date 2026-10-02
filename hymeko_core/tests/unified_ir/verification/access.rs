@@ -172,14 +172,14 @@ fn mapping_pointing_at_a_foreign_record_returns_none_rather_than_the_wrong_recor
     // answer rather than a visible absence.
     let mut t = fixture();
     let foreign = t.ir.as_node(DeclId::new(1)).expect("decl 1 is a node");
-    // A fresh, unbound declaration force-bound to decl 1's node record: the slot
-    // is representable, but the record's backlink names decl 1, not this decl.
-    let dx = t.fresh_decl(DeclKind::Node);
-    t.ir.bind_node_decl(dx, foreign).unwrap();
+    // Corrupt a valid mapping by swapping its concrete records.
+    let dx = t.node(&["extra"], DeclId::NONE);
+    let own = t.ir.as_node(dx).unwrap();
+    t.ir.nodes.swap(own.raw(), foreign.raw());
 
     assert_eq!(
         t.ir.as_node(dx),
-        Some(foreign),
+        Some(own),
         "the raw mapping still reports the foreign id"
     );
     assert!(
@@ -191,11 +191,10 @@ fn mapping_pointing_at_a_foreign_record_returns_none_rather_than_the_wrong_recor
 #[test]
 fn mapping_pointing_out_of_range_returns_none_and_does_not_panic() {
     let mut t = fixture();
-    // In-domain but past the node table: encodes and stores, yet resolves to no
-    // record. A fresh decl avoids the no-conflict guard on an already-bound slot.
-    let dx = t.fresh_decl(DeclKind::Node);
-    let out_of_table = NodeId::new(t.ir.nodes.len() + 64);
-    t.ir.bind_node_decl(dx, out_of_table).unwrap();
+    // Truncating a record table after valid construction leaves a dangling mapping.
+    let dx = t.node(&["extra"], DeclId::NONE);
+    let out_of_table = t.ir.as_node(dx).unwrap();
+    t.ir.nodes.pop(); // corrupt storage after a valid binding
     assert!(t.ir.node_for_decl(dx).is_none());
     assert!(t.ir.node(out_of_table).is_none());
     // Beyond the 62-bit dispatch domain the binding is refused at encode time,
@@ -341,14 +340,22 @@ fn child_order_matches_the_existing_iterator() {
 
 #[test]
 fn child_iteration_terminates_on_a_sibling_cycle() {
-    // The pre-existing `decl_children` would loop forever here; the total
-    // iterator is bounded by the declaration count.
+    // Every compatibility entry must use the same bounded iterator.
     let mut t = fixture();
     let root = DeclId::new(0);
     let first = t.ir.decl_nodes[root.raw()].first_child;
     t.ir.decl_nodes[first.raw()].next_sibling = first;
     let n = t.ir.decl_count();
-    assert!(t.ir.child_decls(root).count() <= n, "walk was not bounded");
+    for count in [
+        t.ir.child_decls(root).count(),
+        t.ir.decl_children(root).count(),
+        t.ir.children(root).count(),
+    ] {
+        assert!(count <= n, "walk was not bounded");
+    }
+    t.ir.decl_nodes[first.raw()].next_sibling = DeclId::new(HUGE);
+    assert_eq!(t.ir.decl_children(root).collect::<Vec<_>>(), vec![first]);
+    assert_eq!(t.ir.children(DeclId::new(HUGE)).count(), 0);
 }
 
 #[test]
@@ -407,11 +414,12 @@ fn arc_for_decl_checks_presence_only_and_agrees_with_as_arc() {
 fn node_and_edge_for_decl_validate_the_backlink_but_as_node_does_not() {
     let mut t = fixture();
     let foreign = t.ir.as_node(DeclId::new(1)).expect("decl 1 is a node");
-    let dx = t.fresh_decl(DeclKind::Node);
-    t.ir.bind_node_decl(dx, foreign).unwrap();
+    let dx = t.node(&["extra"], DeclId::NONE);
+    let own = t.ir.as_node(dx).unwrap();
+    t.ir.nodes.swap(own.raw(), foreign.raw());
 
     // map-only contract: reports the mapping verbatim
-    assert_eq!(t.ir.as_node(dx), Some(foreign));
+    assert_eq!(t.ir.as_node(dx), Some(own));
     // checked-composite contract: refuses it
     assert!(t.ir.node_for_decl(dx).is_none());
 }

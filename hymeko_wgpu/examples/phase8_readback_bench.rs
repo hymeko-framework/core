@@ -33,7 +33,7 @@
 
 use std::time::Instant;
 
-use hymeko::tensor::compute::TensorShape;
+use hymeko_tensor::compute::TensorShape;
 use hymeko_wgpu::profiling::{ReadbackPlan, timed_readback};
 use hymeko_wgpu::{StagingStorage, WgpuBackend};
 

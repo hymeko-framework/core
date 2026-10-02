@@ -5,14 +5,55 @@ flowchart TD
     C --> I[Index and aliases]
     I --> L[Lower references: resolve values once]
     L --> W[Reuse resolved values for weights; preserve IR layout]
-    L --> H[Legacy hash; build canonical paths once]
+    L --> H[Canonical structure hash; build canonical paths once]
     H --> N[Validate namespace and hash using shared paths]
     N --> E[Compact Pruefer: degree and neighbor XOR]
     E --> R[Compiled program cache]
+    H --> CI[CanonicalIncidence: one record order and encoder]
+    CI --> CS[Output trait]
+    H --> CP[CanonicalPrufer owns SkeletonForest and labels]
+    CP --> SF[Reverse root-first fold; shared sorting buffer and leaf hashes]
+    H --> CFG[CanonHashCfg owns header and chunk hashing]
+    H --> PATHS[CanonicalPaths owns path construction]
+    PATHS --> NV[NamespaceValidator borrows paths for boundary checks]
+    CP --> PT[PruferTraversal implements Iterator]
+    PT --> CS
+    CS --> CB[bytes: Vec of u8]
+    CS --> CH[hash: CanonicalHasher batches into fixed 16 KiB BLAKE3 input]
     R --> Q[Prepared execution]
     C -.profile.-> D[Choose measurable optimization]
     L -.profile.-> D
     H -.profile.-> D
     D --> V[Parity + before/after latency and memory]
+    IR[SignedRefR] --> RM[target and sign methods; free duplicates removed]
+    AS[TransactionAssembler: seven staging limit guards] --> SL[One staging_limit_exceeded outcome constructor]
+    SL --> AB[apply abandons pending state; retains committed version and replay position]
+    LE[LittleEndianReader: generic read] --> LV[LittleEndianValue: associated bytes and static conversion]
+    ENV[Envelope decoder] --> LE
+    SEC[Section table and typed bodies] --> LE
+    VER[SnapshotVersion] --> LE
 
 %% PERF-1 2026-09-09T18:54:44+02:00: released course control -> measured optimization integration -> native/WASM parity -> GitHub/LAN publication.
+
+%% 2026-09-23: combined source audit -> existing CPU benchmarks -> raw samples and peak RSS -> report/archive.
+
+    OWN[Owned incidence index] --> API[Shared inherent API template; explicit data lifetime]
+    VIEW[Borrowed incidence view] --> API
+    API --> DATA[IncidenceIndexData: single numerical implementation]
+    ACCESS[Four typed record families] --> DECL[Shared iteration/count/containment declarations]
+    APPLY[TransactionAssembler.apply] --> RESYNC[ResyncRequired: one abandon boundary]
+
+    TESTS[Assembler cases / taxonomy / model tests] --> RUN[AssemblerRunner owns Producer and consumer]
+    RUN --> WIRE[Real wire validation and shared resync assertions]
+
+    GPU[Eight GPU builders] --> FACT[OperationFactory: one context and limits; uniform upload]
+    GPU --> CHECK[OperandCheck and GpuTensor binding]
+    AST[Node and edge fields] --> DF[DeclarationFields trait]
+    DF --> INTERN[AstInterner: one declaration mapping]
+    DF --> CONST[ConstValues: one declaration substitution]
+
+    LIVE[IncidenceView: canonical sign and weight] --> COEFF[IncidenceCoefficients]
+    PREP[IncidenceOperatorPlan: retained coefficients] --> COEFF
+    COEFF --> ROW[IncidenceIndexData: one ordered transpose row]
+    ROW --> SERIAL[Shared serial traversal]
+    ROW --> PAR[Rayon disjoint node outputs]
