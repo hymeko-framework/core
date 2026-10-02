@@ -40,7 +40,9 @@ impl StdFsProvider {
 
 impl SourceProvider for StdFsProvider {
     fn canonicalize(&self, p: &Path) -> Result<PathBuf, String> {
-        let absolute = if p.is_absolute() { p.to_path_buf() } else {
+        let absolute = if p.is_absolute() {
+            p.to_path_buf()
+        } else {
             std::env::current_dir().map_err(|e| e.to_string())?.join(p)
         };
         // Validate traversal at the filesystem root, but let the filesystem resolve
@@ -90,7 +92,8 @@ pub struct MemProvider {
 impl MemProvider {
     pub fn insert_file(&mut self, path: impl Into<PathBuf>, content: impl Into<Arc<str>>) {
         let path = path.into();
-        self.files.insert(normalize_path(&path).unwrap_or(path), content.into());
+        self.files
+            .insert(normalize_path(&path).unwrap_or(path), content.into());
     }
 
     pub fn with_file(mut self, path: impl Into<PathBuf>, content: impl Into<Arc<str>>) -> Self {
@@ -100,7 +103,10 @@ impl MemProvider {
 
     pub fn read_count(&self, p: impl AsRef<Path>) -> usize {
         let m = self.reads.lock().unwrap();
-        normalize_path(p.as_ref()).ok().and_then(|path| m.get(&path).copied()).unwrap_or(0)
+        normalize_path(p.as_ref())
+            .ok()
+            .and_then(|path| m.get(&path).copied())
+            .unwrap_or(0)
     }
 }
 
@@ -138,7 +144,8 @@ impl SourceProvider for MemProvider {
 }
 
 fn normalize_path(path: &Path) -> Result<PathBuf, String> {
-    normalize_components(path.components()).map_err(|reason| format!("{reason}: {}", path.display()))
+    normalize_components(path.components())
+        .map_err(|reason| format!("{reason}: {}", path.display()))
 }
 
 pub(crate) fn normalize_components<'a>(
@@ -150,7 +157,10 @@ pub(crate) fn normalize_components<'a>(
         match component {
             Component::CurDir => {}
             Component::ParentDir => {
-                if !matches!(normalized.components().next_back(), Some(Component::Normal(_))) {
+                if !matches!(
+                    normalized.components().next_back(),
+                    Some(Component::Normal(_))
+                ) {
                     return Err("path escapes provider root");
                 }
                 normalized.pop();

@@ -409,6 +409,32 @@ crates:
           - digest bytes and CBOR admission are unchanged; the CBOR round-trip test compares paths as text, because SymIds are snapshot-local after symbol compaction
           - no commit or push beyond the feature branch the user merges
 
+      # APPROVED-CORE-EDIT: core-rustfmt (2026-09-30, user chat)
+      - slug: core-rustfmt
+        date: 2026-09-30
+        scope: >
+          User, 2026-09-30 20:4x: "OK" to the recommended first steps of
+          docs/plans/2026-09-30-core-after-extraction, which named this slug (T1).
+          Format hymeko_core with the workspace rustfmt; nothing else.
+        constraints:
+          - formatting only, in one commit of its own; no token, item or behaviour change
+          - cargo test --workspace and clippy unchanged before and after
+
+      # APPROVED-CORE-EDIT: model-incidence-cache (2026-09-30, user chat)
+      - slug: model-incidence-cache
+        date: 2026-09-30
+        scope: >
+          User, 2026-09-30 20:4x: "OK" to the recommended first steps of
+          docs/plans/2026-09-30-core-after-extraction, which named this slug (C1).
+          CompiledModel derives the reverse-incidence index of its IR once, on first
+          use, and lends it as an IncidenceView (CompiledModel::incidences); models
+          derived by checked value updates share it. IncidenceView gains a
+          crate-private pair constructor for the owners that hold both parts.
+        constraints:
+          - additive public API only; PreparedIr, IncidenceIndex and the wire are unchanged
+          - the index is never serialized and never paired with a foreign Ir
+          - value updates may share it only because they keep every declaration, arc and slot
+
   # `hymeko_hnn` was RELOCATED 2026-08-31 to hymeko/nagare (hymeko_nagare::hnn) and no longer
   # exists in this workspace (Cargo.toml members = [hymeko_core, hymeko_wgpu]; the directory is
   # gone). Its stale crate declaration was removed here on 2026-09-01 under

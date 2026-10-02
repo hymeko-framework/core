@@ -2,9 +2,9 @@
 mod ir_blake3_hash_tests {
     use crate::test_helpers::{log_test_footer, log_test_header};
     use hymeko::common::pathkey::PathKey;
+    use hymeko::ir::canonical_hash::Canon;
     use hymeko::ir::hash::HashId;
     use hymeko::ir::lower::lower_to_ir;
-    use hymeko::ir::canonical_hash::Canon;
     use hymeko::resolution::intern_pass::Interned;
     use hymeko::resolution::intern_pass::intern_ast;
     use hymeko::resolution::resolve::build_index_sym;

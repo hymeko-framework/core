@@ -273,9 +273,7 @@ fn bench_semantic_digest(c: &mut Criterion) {
         .warm_up_time(Duration::from_secs(1))
         .measurement_time(Duration::from_secs(3));
     group.bench_function("full", |b| {
-        b.iter(|| {
-            Canon::new(black_box(&model.program().ir), black_box(model.interner())).hash()
-        })
+        b.iter(|| Canon::new(black_box(&model.program().ir), black_box(model.interner())).hash())
     });
     group.bench_function("cached", |b| b.iter(|| black_box(&model).semantic_digest()));
     group.bench_function("checked_leaf_update", |b| {

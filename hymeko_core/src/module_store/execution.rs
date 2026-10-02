@@ -18,8 +18,9 @@ pub use value_updates::{ValueUpdate, ValueUpdateError};
 
 use super::module_store::{CompiledProgram, HymekoParser, ModuleLoadError, ModuleStore};
 use super::source_provider::SourceProvider;
-use crate::ir::semantic_digest::{SemanticDigestState, SemanticModelDigestV2};
 use crate::ir::canonical_hash::{Canon, CanonHashCfg, CanonicalIdentity};
+use crate::ir::incidence::{IncidenceError, IncidenceIndexData, IncidenceView};
+use crate::ir::semantic_digest::{SemanticDigestState, SemanticModelDigestV2};
 use crate::resolution::interner::Interner;
 use std::fmt;
 use std::path::Path;
@@ -34,6 +35,10 @@ pub struct CompiledModel {
     program: Arc<CompiledProgram>,
     interner: Interner,
     semantic: OnceLock<SemanticDigestState>,
+    /// The reverse-incidence index of `program.ir`, derived on first use and never
+    /// serialized. Checked value updates change leaf values only, never arcs or
+    /// declarations, so the models they derive share it.
+    incidence: OnceLock<Result<Arc<IncidenceIndexData>, IncidenceError>>,
 }
 
 impl CompiledModel {
@@ -56,6 +61,7 @@ impl CompiledModel {
             program,
             interner: store.it,
             semantic: OnceLock::new(),
+            incidence: OnceLock::new(),
         })
     }
 
@@ -82,6 +88,7 @@ impl CompiledModel {
             }),
             interner,
             semantic: OnceLock::new(),
+            incidence: OnceLock::new(),
         }
     }
 
@@ -108,6 +115,22 @@ impl CompiledModel {
     fn semantic_state(&self) -> &SemanticDigestState {
         self.semantic
             .get_or_init(|| SemanticDigestState::new(&self.program.ir, &self.interner))
+    }
+
+    /// The program's incidences, over the reverse-incidence index this model derives
+    /// once. Repeated calls, and the models checked value updates derive from this one,
+    /// reuse that index: no copy of the IR, no rebuild. The view is zero-allocation.
+    ///
+    /// # Errors
+    /// The IR's [`IncidenceError`], which is kept as well.
+    // APPROVED-CORE-EDIT: model-incidence-cache (2026-09-30, user chat).
+    pub fn incidences(&self) -> Result<IncidenceView<'_, '_>, IncidenceError> {
+        let data = self
+            .incidence
+            .get_or_init(|| IncidenceIndexData::build(&self.program.ir).map(Arc::new))
+            .as_ref()
+            .map_err(|error| *error)?;
+        Ok(IncidenceView::pair(&self.program.ir, data))
     }
 }
 
@@ -276,8 +299,8 @@ mod tests;
 mod snapshot_tests {
     use super::*;
     use crate::{
-        ir::ir::ValueR, ir_stream::DecodeLimits,
-        module_store::source_provider::MemProvider, writers::cbor_writer,
+        ir::ir::ValueR, ir_stream::DecodeLimits, module_store::source_provider::MemProvider,
+        writers::cbor_writer,
     };
     use std::sync::atomic::{AtomicUsize, Ordering};
 

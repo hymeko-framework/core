@@ -79,7 +79,6 @@ impl Canon<'_> {
         context.declaration_hashes(&records)
     }
 
-
     /// Return the whole-model digest, with complete concrete-record coverage.
     ///
     /// # Preconditions
@@ -400,7 +399,12 @@ impl SemanticContext<'_> {
         RecordHashes { nodes, edges, arcs }
     }
 
-    fn record_header(&self, domain: &[u8; 8], declaration: DeclId, bases: &[SignedRefR]) -> DigestWriter {
+    fn record_header(
+        &self,
+        domain: &[u8; 8],
+        declaration: DeclId,
+        bases: &[SignedRefR],
+    ) -> DigestWriter {
         let mut h = self.header(domain);
         self.write_target(&mut h, declaration);
         self.write_signed_refs(&mut h, bases);
@@ -634,7 +638,6 @@ const fn kind_tag(kind: DeclKind) -> u8 {
         DeclKind::HyperArc => 3,
     }
 }
-
 
 #[cfg(test)]
 thread_local! { static HASH_WORK: std::cell::Cell<[usize; 4]> = const { std::cell::Cell::new([0; 4]) }; }

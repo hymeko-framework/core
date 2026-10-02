@@ -144,7 +144,9 @@ fn v1_known_answer_vectors_are_unchanged() {
     for (name, t, expected) in cases {
         validate_namespace_roots(&t.ir, &t.idx).expect("fixture paths agree");
         assert_eq!(
-            hex(&Canon::new(&t.ir, &t.it).structure(CanonHashCfg::default()).0),
+            hex(&Canon::new(&t.ir, &t.it)
+                .structure(CanonHashCfg::default())
+                .0),
             expected,
             "FROZEN v1 VECTOR CHANGED for `{name}`. This is a change to \
              CanonHashCfg algo_version=1 output, which M0.6 forbids. Either the \
