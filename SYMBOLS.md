@@ -13,7 +13,7 @@ Extracted by grammar -- tree-sitter for Rust and C++, `ast` for Python -- so tha
 `pub(crate)`, a `pub fn` inside a private `mod`, and a `def` written inside a
 docstring are all excluded for a stated reason rather than by luck.
 
-**3 package(s), 836 public symbol(s).**
+**3 package(s), 840 public symbol(s).**
 
 ## docs (rust)
 
@@ -43,6 +43,7 @@ _No public symbols._
 - `IncVal` — `hymeko_core/src/tensor/tensor_val.rs`
 - `Real` — `hymeko_core/src/tensor/common.rs`
 - `RefValueExtractor` — `hymeko_core/src/tensor/tensor_val.rs`
+- `ResolvableDesign` — `hymeko_core/src/generators.rs`
 - `SourceProvider` — `hymeko_core/src/module_store/source_provider.rs`
 - `SparseTensorContract` — `hymeko_core/src/tensor/representations/sparse.rs`
 - `WeightInit` — `hymeko_core/src/tensor/conv/weight_init/weight_init.rs`
@@ -86,6 +87,7 @@ _No public symbols._
 - `ExecutionState` — `hymeko_core/src/module_store/execution.rs`
 - `ExpansionHeader` — `hymeko_core/src/tensor/shared_state.rs`
 - `ExpansionOffsets` — `hymeko_core/src/tensor/shared_state.rs`
+- `HammingLines` — `hymeko_core/src/generators.rs`
 - `HashId` — `hymeko_core/src/ir/hash.rs`
 - `Host` — `hymeko_core/src/tensor/compute/arena/host.rs`
 - `HostArena` — `hymeko_core/src/tensor/compute/arena/host.rs`
@@ -331,7 +333,6 @@ _No public symbols._
 - `from_vec` — `hymeko_core/src/resolution/string_table.rs`
 - `get` — `hymeko_core/src/module_store/module_store.rs`
 - `get_id` — `hymeko_core/src/resolution/interner.rs`
-- `hamming_lines` — `hymeko_core/src/generators.rs`
 - `has_fitting` — `hymeko_core/src/tensor/compute/arena/pool.rs`
 - `has_open_transaction` — `hymeko_core/src/ir_stream/assembler.rs`
 - `hash` — `hymeko_core/src/ir/canonical_hash.rs`
@@ -341,6 +342,7 @@ _No public symbols._
 - `header_bytes` — `hymeko_core/src/ir_stream/envelope.rs`
 - `hit_rate` — `hymeko_core/src/tensor/compute/arena/mod.rs`
 - `hosvd` — `hymeko_core/src/tensor/decomposition.rs`
+- `hypercube` — `hymeko_core/src/generators.rs`
 - `incidence_count` — `hymeko_core/src/ir/incidence.rs`
 - `incidences` — `hymeko_core/src/ir/incidence.rs`
 - `incident_arcs` — `hymeko_core/src/ir/incidence.rs`
@@ -407,6 +409,7 @@ _No public symbols._
 - `n_edges` — `hymeko_core/src/generators.rs`
 - `namespace_prefix` — `hymeko_core/src/ir/ir.rs`
 - `new` — `hymeko_core/src/common/ids.rs`
+- `new` — `hymeko_core/src/generators.rs`
 - `new` — `hymeko_core/src/ir/canonical_hash.rs`
 - `new` — `hymeko_core/src/ir/incidence.rs`
 - `new` — `hymeko_core/src/ir/ir.rs`
@@ -465,6 +468,7 @@ _No public symbols._
 - `push` — `hymeko_core/src/tensor/representations/tensor_coo.rs`
 - `push_anonymous_arc` — `hymeko_core/src/ir/ir.rs`
 - `push_decl` — `hymeko_core/src/ir/ir.rs`
+- `radices` — `hymeko_core/src/generators.rs`
 - `rank` — `hymeko_core/src/tensor/representations/sparse.rs`
 - `raw` — `hymeko_core/src/common/ids.rs`
 - `read_count` — `hymeko_core/src/module_store/source_provider.rs`
