@@ -56,6 +56,37 @@ crates:
       propagates to every downstream crate and invalidates published
       benchmarks.
     approved_edits:
+      # User, 2026-10-11: proceed with the next measured optimization.
+      - slug: coherence-borrowed-index
+        date: 2026-10-11
+        scope: >
+          Borrow typed path slices in the existing hierarchy coherence validator
+          and reuse Index prefix lookup instead of cloning paths and building
+          a second hash table. Preserve deterministic ordered/capped findings.
+          Eliminate lossy u32 symbol narrowing and test wide-symbol distinctions.
+        constraints:
+          - all hierarchy and model validation remain enabled
+          - no public API, dependency, hash algorithm or wire-format change
+          - paired measurement against the preserved first optimization
+          - PDF report; notify before any push or merge
+
+      # User, 2026-10-11: proceed from the measured profile to optimization; deliver PDFs.
+      - slug: checked-value-update-symbol-work
+        date: 2026-10-11
+        scope: >
+          Remove the redundant base-interner copy for updates without new text.
+          Keep the existing SymbolCompaction walk, but avoid reconstructing path
+          and alias hash tables during its read-only marking pass. Extend the
+          existing digest benchmark to cover numeric and text updates at scale.
+          Numeric and declaration-reference scalar values contain no symbol IDs;
+          skip allocating a symbol-walk worklist for those scalar roots.
+        constraints:
+          - full coherence and model validation remain enabled
+          - identical hash bytes, symbols, errors, limits and retained-old-reader behavior
+          - no public API, dependency, wire-format or alternate-implementation change
+          - targeted correctness and paired before/after latency and memory evidence
+          - deliver reports as PDF; notify before any push or merge
+
       # Explicit user direction, 2026-10-11: remove numbered identity type names.
       - slug: canonical-identity-names
         date: 2026-10-11

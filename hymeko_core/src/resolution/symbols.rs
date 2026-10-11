@@ -15,11 +15,15 @@ pub(crate) struct SymbolError {
 }
 
 trait SymbolVisitor {
+    /// Only a remapping visitor may change IDs stored in hash-map keys.
+    const REWRITES_KEYS: bool;
     fn symbol(&mut self, id: &mut SymId, field: &'static str) -> Result<(), SymbolError>;
 }
 
 struct LiveSymbols<'a>(&'a mut [bool]);
 impl SymbolVisitor for LiveSymbols<'_> {
+    const REWRITES_KEYS: bool = false;
+
     fn symbol(&mut self, id: &mut SymId, field: &'static str) -> Result<(), SymbolError> {
         let used = self.0.get_mut(id.raw()).ok_or(SymbolError {
             field,
@@ -32,6 +36,8 @@ impl SymbolVisitor for LiveSymbols<'_> {
 
 struct DenseSymbols<'a>(&'a [SymId]);
 impl SymbolVisitor for DenseSymbols<'_> {
+    const REWRITES_KEYS: bool = true;
+
     fn symbol(&mut self, id: &mut SymId, field: &'static str) -> Result<(), SymbolError> {
         *id = self
             .0
@@ -87,7 +93,7 @@ struct ProgramSymbols<'a> {
     imports: &'a mut [(SymId, ModuleKey)],
 }
 impl ProgramSymbols<'_> {
-    fn visit(&mut self, visitor: &mut impl SymbolVisitor) -> Result<(), SymbolError> {
+    fn visit<V: SymbolVisitor>(&mut self, visitor: &mut V) -> Result<(), SymbolError> {
         for declaration in &mut self.ir.decl_nodes {
             visitor.symbol(&mut declaration.name, "declaration name")?;
             Self::anno(&mut declaration.anno, visitor)?;
@@ -123,11 +129,21 @@ impl ProgramSymbols<'_> {
                 }
             }
         }
-        let paths = std::mem::take(&mut self.index.by_path);
-        self.index.by_path.reserve(paths.len());
-        for (mut path, declaration) in paths {
-            Self::path(&mut path.0, "path-index symbol", visitor)?;
-            self.index.by_path.insert(path, declaration);
+        if V::REWRITES_KEYS {
+            let paths = std::mem::take(&mut self.index.by_path);
+            self.index.by_path.reserve(paths.len());
+            for (mut path, declaration) in paths {
+                Self::path(&mut path.0, "path-index symbol", visitor)?;
+                self.index.by_path.insert(path, declaration);
+            }
+        } else {
+            // Marking validates IDs but cannot change a key. Keep the existing
+            // buckets and paths instead of allocating and rehashing the index.
+            for path in self.index.by_path.keys() {
+                for mut symbol in path.0.iter().copied() {
+                    visitor.symbol(&mut symbol, "path-index symbol")?;
+                }
+            }
         }
         Self::aliases(&mut self.index.aliases, visitor)?;
         for (_, aliases) in &mut self.index.module_aliases {
@@ -150,10 +166,18 @@ impl ProgramSymbols<'_> {
         Ok(())
     }
 
-    fn aliases(
+    fn aliases<V: SymbolVisitor>(
         aliases: &mut FxHashMap<SymId, Vec<SymId>>,
-        visitor: &mut impl SymbolVisitor,
+        visitor: &mut V,
     ) -> Result<(), SymbolError> {
+        if !V::REWRITES_KEYS {
+            for (&alias, path) in aliases.iter_mut() {
+                let mut symbol = alias;
+                visitor.symbol(&mut symbol, "alias")?;
+                Self::path(path, "alias path symbol", visitor)?;
+            }
+            return Ok(());
+        }
         let old = std::mem::take(aliases);
         aliases.reserve(old.len());
         for (mut alias, mut path) in old {
@@ -187,6 +211,11 @@ impl ProgramSymbols<'_> {
     }
 
     fn value(root: &mut ValueR, visitor: &mut impl SymbolVisitor) -> Result<(), SymbolError> {
+        // Neither scalar contains a SymId. Most incidence weights are numeric;
+        // allocating a traversal stack for each of them serves no visitor work.
+        if matches!(root, ValueR::Num(_) | ValueR::Ref(_)) {
+            return Ok(());
+        }
         let mut pending = vec![root];
         while let Some(value) = pending.pop() {
             match value {
@@ -333,6 +362,41 @@ mod tests {
                 imports: vec![(namespace, ModuleKey("modules/library.hymeko".into()))],
             }
         }
+    }
+
+    #[test]
+    fn marking_keeps_path_and_alias_maps_in_place() {
+        let mut f = Fixture::new();
+        let mut symbol = SymId::NONE;
+        let (alias, path) = f.index.aliases.iter().next().unwrap();
+        let aliases_before = (*alias, path.clone(), alias as *const SymId as usize);
+        let (path, declaration) = f.index.by_path.iter().next().unwrap();
+        let path_before = (path.clone(), *declaration, path as *const _ as usize);
+        let mut used = vec![false; f.strings.iter().count()];
+        ProgramSymbols {
+            ir: &mut f.ir,
+            index: &mut f.index,
+            imports: &mut f.imports,
+        }
+        .visit(&mut LiveSymbols(&mut used))
+        .unwrap();
+        let (path, declaration) = f.index.by_path.get_key_value(&path_before.0).unwrap();
+        assert_eq!(*declaration, path_before.1);
+        assert_eq!(
+            path as *const _ as usize, path_before.2,
+            "marking must not rebuild the path map"
+        );
+        let (alias, path) = f.index.aliases.get_key_value(&aliases_before.0).unwrap();
+        assert_eq!(path, &aliases_before.1);
+        assert_eq!(
+            alias as *const SymId as usize, aliases_before.2,
+            "marking must not rebuild the alias map"
+        );
+        assert!(
+            LiveSymbols(&mut used)
+                .symbol(&mut symbol, "invalid probe")
+                .is_err()
+        );
     }
 
     #[test]

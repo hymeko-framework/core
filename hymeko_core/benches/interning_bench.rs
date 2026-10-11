@@ -222,7 +222,18 @@ fn bench_semantic_digest(c: &mut Criterion) {
     use hymeko::ir::ir::ValueR;
     use hymeko::module_store::execution::{CompiledModel, ValueUpdate};
 
-    let input: Arc<str> = generate_large_hypergraph(1_000, "[0.5]")
+    let nodes = std::env::var("HYMEKO_DIGEST_NODES")
+        .map(|value| {
+            value
+                .parse::<usize>()
+                .expect("HYMEKO_DIGEST_NODES must be an integer")
+        })
+        .unwrap_or(1_000);
+    assert!(
+        nodes > 0 && nodes <= 500_000,
+        "supported digest fixture size: 1..=500000"
+    );
+    let input: Arc<str> = generate_large_hypergraph(nodes, "[0.5]")
         .replacen(
             "Benchmark_Graph {",
             "Benchmark_Graph { benchmark_value 0;",
@@ -261,13 +272,28 @@ fn bench_semantic_digest(c: &mut Criterion) {
         Canon::new(&changed.program().ir, changed.interner()).hash()
     );
     eprintln!(
-        "DIGEST_FIXTURE nodes=1000 bytes={} blake3={} decls={}",
+        "DIGEST_FIXTURE nodes={nodes} bytes={} blake3={} decls={}",
         input.len(),
         blake3::hash(input.as_bytes()),
         model.program().ir.decl_nodes.len()
     );
 
-    let mut group = c.benchmark_group("semantic_digest_1k");
+    let text_updates = [ValueUpdate::Text {
+        declaration,
+        value: "new observation",
+    }];
+    let text_changed = model.with_value_updates(&text_updates).unwrap();
+    assert_ne!(before, text_changed.semantic_digest());
+    assert_eq!(
+        text_changed.semantic_digest(),
+        Canon::new(&text_changed.program().ir, text_changed.interner()).hash()
+    );
+    let scale = if nodes % 1_000 == 0 {
+        format!("{}k", nodes / 1_000)
+    } else {
+        nodes.to_string()
+    };
+    let mut group = c.benchmark_group(format!("semantic_digest_{scale}"));
     group
         .sample_size(20)
         .warm_up_time(Duration::from_secs(1))
@@ -276,19 +302,24 @@ fn bench_semantic_digest(c: &mut Criterion) {
         b.iter(|| Canon::new(black_box(&model.program().ir), black_box(model.interner())).hash())
     });
     group.bench_function("cached", |b| b.iter(|| black_box(&model).semantic_digest()));
-    group.bench_function("checked_leaf_update", |b| {
-        b.iter_batched(
-            || (),
-            |()| {
-                let next = black_box(&model)
-                    .with_value_updates(black_box(&updates))
-                    .unwrap();
-                black_box(next.semantic_digest());
-                next
-            },
-            BatchSize::PerIteration,
-        )
-    });
+    for (name, updates) in [
+        ("checked_leaf_update", updates.as_slice()),
+        ("checked_text_update", text_updates.as_slice()),
+    ] {
+        group.bench_function(name, |b| {
+            b.iter_batched(
+                || (),
+                |()| {
+                    let next = black_box(&model)
+                        .with_value_updates(black_box(&updates))
+                        .unwrap();
+                    black_box(next.semantic_digest());
+                    next
+                },
+                BatchSize::PerIteration,
+            )
+        });
+    }
     group.finish();
 }
 

@@ -61,13 +61,17 @@ function Get-Estimates {
 
             # benchmark.json carries the canonical id and the declared throughput.
             $benchJson = Join-Path $dir.FullName 'benchmark.json'
+            $throughputKind = 'elements'
             if (Test-Path $benchJson) {
                 $meta = Get-Content $benchJson -Raw | ConvertFrom-Json
                 $id = $meta.full_id
                 $elems = $null
                 if ($meta.throughput) {
                     if ($meta.throughput.Elements)   { $elems = [double]$meta.throughput.Elements }
-                    elseif ($meta.throughput.Bytes)  { $elems = [double]$meta.throughput.Bytes }
+                    elseif ($meta.throughput.Bytes)  {
+                        $elems = [double]$meta.throughput.Bytes
+                        $throughputKind = 'bytes'
+                    }
                 }
             } else {
                 # Fall back to the directory path relative to target/criterion.
@@ -94,6 +98,7 @@ function Get-Estimates {
                 ci_hi_ns    = [double]$est.median.confidence_interval.upper_bound
                 mean_ns     = [double]$est.mean.point_estimate
                 elements    = $elems
+                throughput_kind = $throughputKind
                 sample_count = $samples.Count
                 q1_ns       = Get-Quantile $samples 0.25
                 q3_ns       = Get-Quantile $samples 0.75
@@ -121,9 +126,15 @@ function Format-Time {
 }
 
 function Format-Throughput {
-    param([double]$Ns, $Elements)
+    param([double]$Ns, $Elements, [string]$Kind = 'elements')
     if ($null -eq $Elements -or $Ns -le 0) { return '' }
     $eps = $Elements / ($Ns / 1e9)
+    if ($Kind -eq 'bytes') {
+        if ($eps -ge 1GB) { return ('{0:N2} GiB/s' -f ($eps / 1GB)) }
+        if ($eps -ge 1MB) { return ('{0:N2} MiB/s' -f ($eps / 1MB)) }
+        if ($eps -ge 1KB) { return ('{0:N2} KiB/s' -f ($eps / 1KB)) }
+        return ('{0:N2} B/s' -f $eps)
+    }
     if ($eps -ge 1e9) { return ('{0:N2} Gelem/s' -f ($eps / 1e9)) }
     if ($eps -ge 1e6) { return ('{0:N2} Melem/s' -f ($eps / 1e6)) }
     return ('{0:N2} Kelem/s' -f ($eps / 1e3))
@@ -146,7 +157,7 @@ $table = foreach ($id in ($base.Keys | Sort-Object)) {
         benchmark  = $id
         median     = Format-Time $b.median_ns
         ci         = '[{0} .. {1}]' -f (Format-Time $b.ci_lo_ns), (Format-Time $b.ci_hi_ns)
-        throughput = Format-Throughput $b.median_ns $b.elements
+        throughput = Format-Throughput $b.median_ns $b.elements $b.throughput_kind
         median_ns  = $b.median_ns
         q1_ns      = $b.q1_ns
         q3_ns      = $b.q3_ns
@@ -159,7 +170,7 @@ $table = foreach ($id in ($base.Keys | Sort-Object)) {
             $c = $cmp[$id]
             $delta = (($c.median_ns - $b.median_ns) / $b.median_ns) * 100.0
             $row['after']      = Format-Time $c.median_ns
-            $row['after_tput'] = Format-Throughput $c.median_ns $c.elements
+            $row['after_tput'] = Format-Throughput $c.median_ns $c.elements $c.throughput_kind
             $row['delta_pct']  = '{0:+0.0;-0.0;0.0}' -f $delta
             $row['speedup']    = '{0:N2}x' -f ($b.median_ns / [math]::Max($c.median_ns, 1e-9))
             $row['gate']       = if ($delta -gt 10) { 'REGRESSION >10%' }

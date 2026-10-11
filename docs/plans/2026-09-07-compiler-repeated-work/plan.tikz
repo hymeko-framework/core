@@ -1,3 +1,6 @@
+% 2026-10-11: profile merged Core with the existing Criterion workloads;
+% keep CPU sampling separate from repeated latency and peak-working-set results.
+% Second optimization: borrow Index paths, retain all hierarchy checks and report ordering.
 \begin{tikzpicture}[node distance=5mm, every node/.style={draw,rounded corners,font=\small},>=Stealth]
 \node (s) {Source (generation excluded)};
 \node (p) [below=of s] {Parse and intern; resolve constants};

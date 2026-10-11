@@ -19,7 +19,7 @@
 //! Returns `Ok(())` when no check fires, otherwise `Err(CoherenceReport)` whose
 //! `findings` are ordered deterministically and capped.
 
-use crate::common::ids::DeclId;
+use crate::common::ids::{DeclId, SymId};
 use crate::ir::ir::{DeclKind, Ir, dispatch};
 use crate::ir::ir::{ModelFacet, PortDirection, TensorRole};
 use crate::resolution::interner::Interner;
@@ -160,12 +160,16 @@ pub fn validate_hierarchy_index_coherence(
     // --- index -> declaration ---------------------------------------------
     // Deterministic order: sort the index by (decl index, path) before use, so
     // a `HashMap` iteration order cannot reorder the report.
-    let mut indexed: Vec<(DeclId, Vec<u32>)> = index
+    // Paths stay in the existing Index. Keep full-width typed IDs: narrowing
+    // them would let distinct malformed prefixes compare equal.
+    let mut indexed: Vec<(DeclId, &[SymId])> = index
         .by_path
         .iter()
-        .map(|(pk, &d)| (d, pk.0.iter().map(|s| s.raw() as u32).collect()))
+        .map(|(pk, &d)| (d, pk.0.as_slice()))
         .collect();
-    indexed.sort_by(|a, b| a.0.0.cmp(&b.0.0).then_with(|| a.1.cmp(&b.1)));
+    // Path keys are unique, so the total ordering has no ties requiring
+    // stability; an unstable sort also avoids a second sorting buffer.
+    indexed.sort_unstable_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(b.1)));
 
     let mut path_of: Vec<Option<usize>> = vec![None; n];
     for (slot, (decl, _)) in indexed.iter().enumerate() {
@@ -185,9 +189,6 @@ pub fn validate_hierarchy_index_coherence(
 
     // Path-prefix parent: the nearest strictly-shorter prefix that is itself
     // indexed. Mirrors what `canonical_hash::SkeletonForest::new` computes.
-    let by_path_lookup: std::collections::HashMap<&[u32], DeclId> =
-        indexed.iter().map(|(d, p)| (p.as_slice(), *d)).collect();
-
     for (decl_idx, slot) in path_of.iter().enumerate() {
         let Some(slot) = *slot else {
             // Not in the index. Only a finding for kinds that carry a name;
@@ -201,10 +202,10 @@ pub fn validate_hierarchy_index_coherence(
             }
             continue;
         };
-        let path = &indexed[slot].1;
+        let path = indexed[slot].1;
         let mut by_path = DeclId::NONE;
         for cut in (0..path.len()).rev() {
-            if let Some(&p) = by_path_lookup.get(&path[..cut]) {
+            if let Some(&p) = index.by_path.get(&path[..cut]) {
                 by_path = p;
                 break;
             }

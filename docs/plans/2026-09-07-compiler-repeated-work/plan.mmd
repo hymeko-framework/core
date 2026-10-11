@@ -57,3 +57,12 @@ flowchart TD
     COEFF --> ROW[IncidenceIndexData: one ordered transpose row]
     ROW --> SERIAL[Shared serial traversal]
     ROW --> PAR[Rayon disjoint node outputs]
+
+    BASE[2026-10-11: merged Core b66cb4d] --> EXIST[Existing Criterion workloads]
+    EXIST --> LAT[Repeated latency samples and peak working set]
+    EXIST --> CPU[Separate symbolized Samply CPU captures]
+    LAT --> FIND[Evidence-based optimization candidates]
+    CPU --> FIND
+    FIND --> COHERENCE[Hierarchy validation: borrow existing typed paths]
+    COHERENCE --> LOOKUP[Reuse Index prefix lookup; deterministic findings]
+    LOOKUP --> VERIFY[Corruption tests and repeated update measurements]

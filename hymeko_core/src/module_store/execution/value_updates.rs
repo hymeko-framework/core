@@ -108,18 +108,31 @@ impl CompiledModel {
                 ValueUpdate::Clear { .. } => {}
             }
         }
-        let mut interner = Interner::new();
-        for (id, text) in self.interner.iter() {
-            let copied = interner.intern(text);
-            debug_assert_eq!(id, copied);
-        }
+        // Compaction produces the candidate's owned interner. Only previously
+        // unseen text needs an extended table before that pass; other edits
+        // keep using the base model's symbol IDs without copying its strings.
+        let mut extended_interner: Option<Interner> = None;
         let mut ir = self.program.ir.clone();
         let values = updates
             .iter()
             .map(|update| {
                 let value = match update {
                     ValueUpdate::Set { value, .. } => Some(value.clone()),
-                    ValueUpdate::Text { value, .. } => Some(ValueR::Str(interner.intern(value))),
+                    ValueUpdate::Text { value, .. } => {
+                        let symbol = self.interner.get_id(value).unwrap_or_else(|| {
+                            extended_interner
+                                .get_or_insert_with(|| {
+                                    let mut copied = Interner::new();
+                                    for (id, text) in self.interner.iter() {
+                                        let copied_id = copied.intern(text);
+                                        debug_assert_eq!(id, copied_id);
+                                    }
+                                    copied
+                                })
+                                .intern(value)
+                        });
+                        Some(ValueR::Str(symbol))
+                    }
                     ValueUpdate::Clear { .. } => None,
                 };
                 (update.declaration(), value)
@@ -129,9 +142,14 @@ impl CompiledModel {
             .map_err(|_| ValueUpdateError::InvalidModel)?;
         let mut index = self.program.idx.clone();
         let mut imports = self.program.imports.clone();
-        let compacted = SymbolCompaction::apply(&mut ir, &mut index, &mut imports, &interner)
-            .map_err(|_| ValueUpdateError::InvalidModel)?;
-        interner = compacted.interner;
+        let compacted = SymbolCompaction::apply(
+            &mut ir,
+            &mut index,
+            &mut imports,
+            extended_interner.as_ref().unwrap_or(&self.interner),
+        )
+        .map_err(|_| ValueUpdateError::InvalidModel)?;
+        let interner = compacted.interner;
         validate_hierarchy_index_coherence(&ir, &index, &interner, CoherenceLimits::default())
             .map_err(|_| ValueUpdateError::InvalidModel)?;
         validate_model_contract(&ir, &interner).map_err(|_| ValueUpdateError::InvalidModel)?;
@@ -264,6 +282,55 @@ mod tests {
             .anno
             .value
             .as_ref()
+    }
+
+    #[test]
+    fn text_edits_reuse_base_and_new_symbols_within_one_batch() {
+        let base = model();
+        let next = base
+            .with_value_updates(&[
+                ValueUpdate::Text {
+                    declaration: id(&base, "label"),
+                    value: "world",
+                },
+                ValueUpdate::Text {
+                    declaration: id(&base, "state"),
+                    value: "new shared text",
+                },
+                ValueUpdate::Text {
+                    declaration: id(&base, "position"),
+                    value: "new shared text",
+                },
+            ])
+            .unwrap();
+        for (name, text) in [
+            ("label", "world"),
+            ("state", "new shared text"),
+            ("position", "new shared text"),
+        ] {
+            let Some(ValueR::Str(symbol)) = value(&next, name) else {
+                panic!("expected text")
+            };
+            assert_eq!(next.interner().resolve(*symbol), text);
+        }
+        assert_eq!(
+            next.interner()
+                .iter()
+                .filter(|(_, s)| *s == "new shared text")
+                .count(),
+            1
+        );
+        assert!(next.interner().get_id("initial").is_none());
+        assert!(base.interner().get_id("initial").is_some());
+        assert!(base.interner().get_id("new shared text").is_none());
+        assert_eq!(
+            next.semantic_digest(),
+            Canon::new(&next.program().ir, next.interner()).hash()
+        );
+        assert_eq!(
+            next.program().canon.structure(),
+            base.program().canon.structure()
+        );
     }
 
     #[test]

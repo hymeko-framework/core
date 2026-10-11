@@ -613,4 +613,103 @@ symbol and duplication gates. Entry: 449 runs / 8543 marked lines / 185 files.
 No performance experiment or speed claim: current request is consolidation.
 Plan compile before source edit; write report and archive to Samba at completion.
 
+\paragraph{Profiling continuation, 2026-10-11 17:11 +02:00.}
+The user explicitly requests Core performance profiling and a fastest-framework
+objective. Measure merged Core \texttt{b66cb4d} in the existing checkout; the source
+tree is clean before this documentation amendment. ETA: 15--20 minutes for the
+bounded initial characterization, including build, repeated cells, CPU capture and
+analysis. Reuse \texttt{interning\_bench}, \texttt{ir\_bench},
+\texttt{scripts/dev/measure\_peak\_memory.ps1}, \texttt{source\_manifest.ps1}
+and \texttt{criterion\_report.ps1}. No new benchmark owner or dependency is needed.
+
+\paragraph{Initial matrix and hypotheses.} First measure the existing 50k frontend
+phases, full/cached semantic identity and a checked leaf update. Repeat the main
+cells in two separate processes. After a bounded smoke, measure the existing
+500k frontend's cold compile and structural hash, keeping its distinct source
+identity. Cover true higher-arity structure with the existing IR hash cells
+(1k and 10k nodes, arity 4 and 32). The competing explanations are parsing/lowering,
+canonical encoding, and immutable-model copying/validation; attribute each using
+symbolized stacks before selecting an optimization. Phase timings are not additive.
+
+\paragraph{Measurement controls.} Criterion release with debug information, fixed
+fixture hashes, raw samples, median/IQR/worst batch mean, and two repetitions.
+Samply records separate 10-second CPU windows for cold compilation and semantic
+digest/update paths; profiler times are not benchmark times. The existing Windows
+monitor records peak working set and observes the 16 GiB cap. Keep individual
+benchmark invocations below 180 seconds; log real progress, executable hashes,
+commands, CPU/power context and host interference. OS profiler consent may require
+user interaction; report it if capture is blocked. No services or other workloads
+are stopped. Save a timestamped report and numerical/profile/plot artifacts under
+\path{reports/2026-10-11-core-profile/}; archive with the shared report tool.
+
+\paragraph{Acceptance and limits.} Existing Core correctness gates are green on
+this revision (178 library, 152 IR verification and 7 doctests; Clippy clean).
+Fixture parity assertions must pass in the benchmark too. This phase changes no
+production code, hashes, public API or wire encoding. A profile justifies a
+specific subsequent optimization; it does not establish a world ranking. Such a
+ranking needs equivalent semantics, workloads and a separately agreed competitor
+matrix. RL, renderer migration and unrelated numerical/GPU campaigns stay excluded.
+
+\paragraph{Optimization continuation, 2026-10-11 18:13 +02:00.}
+The user explicitly asks to proceed with optimization and to deliver PDF reports.
+The completed CPU profile identifies symbol visitation and copying as update costs.
+Core owns both changes: \path{module_store/execution/value_updates.rs} lazily copies
+the base interner only when an update interns new text; \path{resolution/symbols.rs}
+keeps its one typed walk but marks path/alias keys without rebuilding their hash maps.
+Full hierarchy and model validation stay enabled. No representation, public API,
+hash byte, error contract, snapshot isolation or symbol-lifetime change.
+
+Extend the existing \path{benches/interning_bench.rs} with an explicit digest fixture
+size and checked text updates. Preserve the original production binary/PDB pair after
+building this same harness, then change production. Reuse the benchmark's existing
+parity assertions; add a map-stability regression to symbol-compaction tests and run
+it against the old implementation first. Existing mixed/nested-value, text lifetime,
+invalid-input, old-reader and full/incremental parity tests remain discriminating gates.
+Run the 1k and 50k update workloads in paired ABBA order, with raw samples and the same
+Windows peak-working-set monitor. Measure full/cached digest controls at 1k. No new
+benchmark owner or dependency. Preserve the 16 GiB / 180-second per-process budgets.
+
+Expected implementation, tests and measurements: 20--30 minutes. The copy-elision
+must retain the original symbol IDs until the existing compactor rewrites them;
+text edits must still own their extended interner. Marking must validate every
+symbol while leaving map keys and allocations intact; dense rewriting still rebuilds
+maps. Reject a regression exceeding 10 percent and investigate its cause. Record the
+result in a PDF beside the existing profiling artifacts, not a new Markdown report.
+Rollback only the named optimization/test/benchmark hunks, preserving prior task work.
+The existing checkout is reused on \texttt{perf/checked-value-update-symbols}; no new
+worktree. No push or merge is performed without the requested notification.
+
+\paragraph{Measured continuation, 2026-10-11 18:31 +02:00.}
+The first ABBA sequence shows numeric-update gains but no consistent text-update
+gain. The same symbol visitor allocates a worklist even for a numeric or DeclId
+reference scalar, neither of which contains a SymId. Return immediately for these
+two scalar roots; string/list traversal and all validation remain unchanged.
+Preserve the first measured candidate and use separately named final ABBA samples,
+against the same original binary and unchanged benchmark harness.
+
+\paragraph{Second optimization, 2026-10-11 19:05 +02:00.}
+The user authorizes the next measured Core optimization. The previous candidate's
+symbolized update profile attributes 30.5 percent of selected stacks to hierarchy
+coherence validation: copied path vectors, sorting and a second lookup table.
+Core's existing \path{ir/coherence.rs} owns this validator; \path{PathKey} already
+supports borrowed symbol-slice lookup. Borrow the existing paths and query the
+existing Index instead of allocating per-path vectors and rebuilding a HashMap.
+Keep deterministic declaration/path ordering with an unstable sort: Index keys are
+unique, so ties cannot occur. All checks and report limits remain active.
+Typed SymId paths also avoid the previous lossy u32 conversion; add a regression
+for distinct 64-bit symbols with identical low 32 bits, plus exact ordered/capped
+findings across reversed index insertion and nearest-prefix/empty-path cases.
+This intentionally corrects false prefix matches for malformed wide symbol IDs;
+ordinary graph findings, public API and hash/serialization algorithms are unchanged.
+
+Extend the existing coherence integration suite. Reuse the preserved first-candidate
+EXE/PDB as baseline and the unchanged interning benchmark. Run bounded 1k/50k smoke,
+then numeric/text update ABBA comparisons and the 1k digest controls; 16 GiB cap,
+under 180 seconds per process. Capture the optimized CPU profile and preserve source
+manifests. Run Core library/unified-IR correctness, Clippy and downstream checks.
+Report this second step and cumulative gains separately in PDF. Estimated duration:
+15--25 minutes including build, paired measurements and reporting. Reuse this dirty
+task checkout and branch; preserve prior changes. Rollback only this continuation's
+coherence/test hunks. No commit, push or merge is requested by this continuation.
+
 \end{document}
