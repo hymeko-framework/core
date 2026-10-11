@@ -49,12 +49,16 @@ pub const SEMANTIC_DIGEST_SCHEMA_VERSION: u16 = 2;
 pub const SEMANTIC_DIGEST_ALGO_VERSION: u16 = 3;
 
 /// Structural identity: excludes annotation values and incidence weights.
+///
+/// This and [`SemanticModelDigest`] identify different aspects of the same model.
+/// Encoding versions belong to the hash header, not the Rust type name.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct ProgramStructureHashV1(pub HashId);
+pub struct ProgramStructureHash(pub HashId);
 
 /// Semantic identity under the canonical/raw-ID domains documented by this module.
+/// Includes annotation values and incidence weights omitted by [`ProgramStructureHash`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct SemanticModelDigestV2(pub HashId);
+pub struct SemanticModelDigest(pub HashId);
 
 impl Canon<'_> {
     /// Return one contribution per declaration, in DeclId order.
@@ -91,7 +95,7 @@ impl Canon<'_> {
     /// # Panics
     /// Invalid symbol or bound-record indices may panic.
     #[must_use]
-    pub fn hash(&self) -> SemanticModelDigestV2 {
+    pub fn hash(&self) -> SemanticModelDigest {
         let layout = SemanticLayout::borrowed(self);
         let context = SemanticContext {
             ir: self.ir(),
@@ -115,7 +119,7 @@ pub(crate) struct SemanticDigestState {
     sorted_records: Arc<RecordHashes>,
     declarations: Vec<HashId>,
     sorted_declarations: Vec<HashId>,
-    digest: SemanticModelDigestV2,
+    digest: SemanticModelDigest,
 }
 
 impl SemanticDigestState {
@@ -143,7 +147,7 @@ impl SemanticDigestState {
         }
     }
 
-    pub(crate) fn digest(&self) -> SemanticModelDigestV2 {
+    pub(crate) fn digest(&self) -> SemanticModelDigest {
         self.digest
     }
 
@@ -221,7 +225,7 @@ fn model_digest(
     context: &SemanticContext<'_>,
     declarations: &[HashId],
     records: &RecordHashes,
-) -> SemanticModelDigestV2 {
+) -> SemanticModelDigest {
     let mut h = context.header(DOMAIN_MODEL);
     for (domain, hashes) in [
         (DOMAIN_DECL, declarations),
@@ -235,7 +239,7 @@ fn model_digest(
             h.update(&hash.0);
         }
     }
-    SemanticModelDigestV2(HashId(*h.finalize().as_bytes()))
+    SemanticModelDigest(HashId(*h.finalize().as_bytes()))
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

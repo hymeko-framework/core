@@ -9,3 +9,6 @@
 \draw[->] (src)--(store); \draw[->] (store)--(canon); \draw[->] (canon)--(id); \draw[->] (canon)--(wire); \draw[->] (id)--(nagare);
 \end{tikzpicture}
 \end{center}
+\noindent Naming correction (2026-10-11): \texttt{hash()} returns
+\texttt{SemanticModelDigest}; \texttt{structure()} returns
+\texttt{ProgramStructureHash}. Encoding versions remain in the hash headers.
