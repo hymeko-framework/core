@@ -12,6 +12,9 @@
 //!   (`n ≡ 1 mod 6`).
 //! * Sunflower / Δ-systems — `petals` edges sharing a common `core`.
 //! * Complete `r`-uniform K_n^(r) — every size-`r` subset of `n` vertices.
+//! * The lines of a Hamming graph over mixed radices — the vertices differing in one digit,
+//!   grouped by digit; each group is a partition of the vertices. Over radix 2 they are the
+//!   hypercube's edges grouped by direction, its 1-factorisation (the butterfly's levels).
 //!
 //! The mirror of these generators in the web editor
 //! (`docs/editor/views/generators.js`) is validated by the same "every pair
@@ -52,6 +55,8 @@ pub enum GeneratorError {
     },
     /// Complete-uniform arity out of range (`2 ≤ r ≤ n`).
     InvalidComplete { n: usize, r: usize },
+    /// Hamming radices out of range: none, one below 2, or a vertex count beyond `usize`.
+    InvalidHamming { radices: Vec<usize> },
 }
 
 impl std::fmt::Display for GeneratorError {
@@ -77,6 +82,10 @@ impl std::fmt::Display for GeneratorError {
                 f,
                 "complete r-uniform K_n^(r) needs 2 <= r <= n; got n={n}, r={r}"
             ),
+            Self::InvalidHamming { radices } => write!(
+                f,
+                "Hamming lines need at least one radix, each >= 2, with a product that fits usize; got {radices:?}"
+            ),
         }
     }
 }
@@ -98,6 +107,9 @@ pub enum HypergraphGenerator {
     },
     /// Complete `r`-uniform hypergraph K_n^(r): every size-`r` subset of `n`.
     CompleteUniform { n: usize, r: usize },
+    /// The hypercube Q_`dimension`: its edges grouped by direction, the lines of the Hamming
+    /// graph over `dimension` radices of 2 ([`hamming_lines`]).
+    Hypercube { dimension: usize },
 }
 
 impl HypergraphGenerator {
@@ -115,6 +127,7 @@ impl HypergraphGenerator {
                 petal,
             } => sunflower_design(petals, core, petal),
             Self::CompleteUniform { n, r } => complete_uniform_design(n, r),
+            Self::Hypercube { dimension } => hamming_lines(&vec![2; dimension]),
         }
     }
 }
@@ -373,6 +386,55 @@ pub fn complete_uniform_design(n: usize, r: usize) -> Result<HypergraphDesign, G
 }
 
 // ---------------------------------------------------------------------------
+// Hamming lines
+// ---------------------------------------------------------------------------
+
+/// The lines of the Hamming graph over `radices`: the vertices are the mixed-radix numbers
+/// `v = Σ_l d_l Π_{m<l} r_m` (digit `l` in `0..r_l`, digit 0 the least significant), and a line of
+/// digit `l` is the `r_l` vertices that differ in digit `l` alone.
+///
+/// # Postconditions
+/// - `n_vertices = Π r_l`.
+/// - Edges come grouped by digit, digit 0 first. Digit `l` contributes `n / r_l` edges of `r_l`
+///   members each, which partition the vertices: a parallel class.
+/// - Within a class, edges are ordered by their smallest member; within an edge, members ascend
+///   with the digit.
+/// - Over `[2; d]` the edges are the hypercube Q_d's, `{v, v ⊕ 2^l}`, and the `d` classes are its
+///   1-factorisation, the levels of a butterfly. Over mixed radices, the classes are the factors of
+///   a Kronecker product.
+///
+/// # Errors
+/// [`GeneratorError::InvalidHamming`] for no radix, a radix below 2, or a vertex count beyond
+/// `usize`.
+pub fn hamming_lines(radices: &[usize]) -> Result<HypergraphDesign, GeneratorError> {
+    let invalid = || GeneratorError::InvalidHamming {
+        radices: radices.to_vec(),
+    };
+    if radices.is_empty() || radices.iter().any(|&r| r < 2) {
+        return Err(invalid());
+    }
+    let n = radices
+        .iter()
+        .try_fold(1usize, |n, &r| n.checked_mul(r))
+        .ok_or_else(invalid)?;
+    let mut edges = Vec::with_capacity(radices.iter().map(|&r| n / r).sum());
+    let mut place = 1usize;
+    for &radix in radices {
+        // A vertex starts a line of this digit exactly when its digit is zero.
+        edges.extend(
+            (0..n)
+                .filter(|v| (v / place).is_multiple_of(radix))
+                .map(|first| (0..radix).map(|d| first + d * place).collect::<Vec<_>>()),
+        );
+        place *= radix;
+    }
+    Ok(HypergraphDesign {
+        n_vertices: n,
+        edges,
+    })
+}
+
+// ---------------------------------------------------------------------------
 // Combinatorial helpers
 // ---------------------------------------------------------------------------
 
@@ -445,6 +507,62 @@ fn every_pair_covered_once(n: usize, edges: &[Vec<usize>]) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_hypercube_is_grouped_into_its_perfect_matchings() {
+        let design = super::HypergraphGenerator::Hypercube { dimension: 3 }
+            .design()
+            .unwrap();
+        assert_eq!((design.n_vertices, design.n_edges()), (8, 12));
+        for (direction, class) in design.edges.chunks_exact(4).enumerate() {
+            let mut seen = [false; 8];
+            for edge in class {
+                assert_eq!(edge.len(), 2);
+                assert_eq!(edge[1], edge[0] ^ (1 << direction), "{edge:?}");
+                for &v in edge {
+                    assert!(!seen[v], "class {direction} repeats vertex {v}");
+                    seen[v] = true;
+                }
+            }
+            assert!(
+                seen.iter().all(|&s| s),
+                "class {direction} is a perfect matching"
+            );
+        }
+    }
+
+    #[test]
+    fn mixed_radix_lines_partition_the_vertices_class_by_class() {
+        let design = super::hamming_lines(&[4, 3]).unwrap();
+        assert_eq!(design.n_vertices, 12);
+        // Digit 0: 3 lines of 4; digit 1: 4 lines of 3.
+        assert_eq!(design.n_edges(), 7);
+        let (first, second) = design.edges.split_at(3);
+        assert_eq!(first[0], vec![0, 1, 2, 3]);
+        assert_eq!(first[2], vec![8, 9, 10, 11]);
+        assert_eq!(second[0], vec![0, 4, 8]);
+        assert_eq!(second[3], vec![3, 7, 11]);
+        for class in [first, second] {
+            let mut members: Vec<usize> = class.iter().flatten().copied().collect();
+            members.sort_unstable();
+            assert_eq!(members, (0..12).collect::<Vec<_>>());
+        }
+    }
+
+    #[test]
+    fn hamming_radices_out_of_range_are_refused() {
+        for radices in [vec![], vec![2, 1], vec![usize::MAX, 2]] {
+            assert!(matches!(
+                super::hamming_lines(&radices),
+                Err(super::GeneratorError::InvalidHamming { .. })
+            ));
+        }
+        assert!(
+            super::HypergraphGenerator::Hypercube { dimension: 0 }
+                .design()
+                .is_err()
+        );
+    }
+
     use super::*;
 
     #[test]

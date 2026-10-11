@@ -13,7 +13,7 @@ Extracted by grammar -- tree-sitter for Rust and C++, `ast` for Python -- so tha
 `pub(crate)`, a `pub fn` inside a private `mod`, and a `def` written inside a
 docstring are all excluded for a stated reason rather than by luck.
 
-**3 package(s), 835 public symbol(s).**
+**3 package(s), 836 public symbol(s).**
 
 ## docs (rust)
 
@@ -331,6 +331,7 @@ _No public symbols._
 - `from_vec` — `hymeko_core/src/resolution/string_table.rs`
 - `get` — `hymeko_core/src/module_store/module_store.rs`
 - `get_id` — `hymeko_core/src/resolution/interner.rs`
+- `hamming_lines` — `hymeko_core/src/generators.rs`
 - `has_fitting` — `hymeko_core/src/tensor/compute/arena/pool.rs`
 - `has_open_transaction` — `hymeko_core/src/ir_stream/assembler.rs`
 - `hash` — `hymeko_core/src/ir/canonical_hash.rs`
