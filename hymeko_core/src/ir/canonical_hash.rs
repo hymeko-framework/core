@@ -5,7 +5,7 @@ use crate::common::ids::DeclId;
 use crate::common::pathkey::PathKey;
 use crate::ir::hash::HashId;
 use crate::ir::ir::{DeclKind, DeclNode, EdgeRec, Ir, SignedRefR};
-use crate::ir::semantic_digest::{ProgramStructureHashV1, SemanticModelDigestV2};
+use crate::ir::semantic_digest::{ProgramStructureHash, SemanticModelDigest};
 use crate::resolution::interner::Interner;
 use crate::resolution::resolve::Index;
 
@@ -49,7 +49,7 @@ impl CanonHashCfg {
 
 /// The canonical view of one [`Ir`]: the IR, its interner, and every named declaration's canonical
 /// path, derived once. Every identity of the IR is a method of this view --
-/// [`Self::structure`] (V1), `Self::hash` (the semantic V2 digest, in `ir::semantic_digest`) and
+/// [`Self::structure`] (structural), `Self::hash` (semantic, in `ir::semantic_digest`) and
 /// `Self::declaration_hashes` -- so the paths are derived once however many are asked for.
 ///
 /// Borrowing the IR prevents changes that would invalidate the derived paths.
@@ -108,15 +108,15 @@ impl<'ir> Canon<'ir> {
         self.duplicate.map_or(Ok(()), Err)
     }
 
-    /// Canonical program hash V1: `H( header || H(skeleton_prufer) || H(incidence_bytes) )`.
+    /// Canonical structural hash: `H( header || H(skeleton_prufer) || H(incidence_bytes) )`.
     /// Structural only: annotation values and incidence weights are not covered; `Self::hash` is
     /// the identity that covers them. See [`CanonicalPaths::hash`] for its preconditions.
     ///
     /// # Postconditions
     /// Deterministic; independent of dense `DeclId` assignment (name/path-based).
     #[must_use]
-    pub fn structure(&self, cfg: CanonHashCfg) -> ProgramStructureHashV1 {
-        ProgramStructureHashV1(self.paths.hash(cfg, self.it))
+    pub fn structure(&self, cfg: CanonHashCfg) -> ProgramStructureHash {
+        ProgramStructureHash(self.paths.hash(cfg, self.it))
     }
 
     /// The lowering-boundary check: the IR's links reproduce the resolution `Index` hierarchy.
@@ -134,8 +134,8 @@ impl<'ir> Canon<'ir> {
 /// hash, computed once, through one [`Canon`], where the IR is built.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct CanonicalIdentity {
-    hash: SemanticModelDigestV2,
-    structure: ProgramStructureHashV1,
+    hash: SemanticModelDigest,
+    structure: ProgramStructureHash,
 }
 
 impl CanonicalIdentity {
@@ -151,21 +151,21 @@ impl CanonicalIdentity {
     /// An identity whose parts were computed elsewhere: a checked value update keeps the
     /// structural hash (values are not structure) and supplies its incremental semantic digest.
     pub(crate) const fn from_parts(
-        hash: SemanticModelDigestV2,
-        structure: ProgramStructureHashV1,
+        hash: SemanticModelDigest,
+        structure: ProgramStructureHash,
     ) -> Self {
         Self { hash, structure }
     }
 
     /// The semantic identity: every declaration, annotation value, record and arc.
     #[must_use]
-    pub const fn hash(&self) -> SemanticModelDigestV2 {
+    pub const fn hash(&self) -> SemanticModelDigest {
         self.hash
     }
 
     /// The structural identity, blind to annotation values and incidence weights.
     #[must_use]
-    pub const fn structure(&self) -> ProgramStructureHashV1 {
+    pub const fn structure(&self) -> ProgramStructureHash {
         self.structure
     }
 }

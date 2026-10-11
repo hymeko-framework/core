@@ -89,12 +89,12 @@ _No public symbols._
 - `PathKey` — `hymeko_core/src/common/pathkey.rs`
 - `PreparedCompilation` — `hymeko_core/src/module_store/execution.rs`
 - `PreparedIr` — `hymeko_core/src/ir/incidence.rs`
-- `ProgramStructureHashV1` — `hymeko_core/src/ir/semantic_digest.rs`
+- `ProgramStructureHash` — `hymeko_core/src/ir/semantic_digest.rs`
 - `RealParser` — `hymeko_core/src/util/real_parser.rs`
 - `RefAtomR` — `hymeko_core/src/ir/ir.rs`
 - `ScalarWeightExtractor` — `hymeko_core/src/tensor/tensor_val.rs`
 - `SectionEntry` — `hymeko_core/src/ir_stream/section.rs`
-- `SemanticModelDigestV2` — `hymeko_core/src/ir/semantic_digest.rs`
+- `SemanticModelDigest` — `hymeko_core/src/ir/semantic_digest.rs`
 - `SnapshotMessageDraft` — `hymeko_core/src/writers/cbor_writer/stream.rs`
 - `SnapshotVersion` — `hymeko_core/src/ir_stream/version.rs`
 - `StagedSection` — `hymeko_core/src/ir_stream/assembler.rs`

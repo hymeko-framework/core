@@ -56,6 +56,23 @@ crates:
       propagates to every downstream crate and invalidates published
       benchmarks.
     approved_edits:
+      # Explicit user direction, 2026-10-11: remove numbered identity type names.
+      - slug: canonical-identity-names
+        date: 2026-10-11
+        scope: >
+          Restore ProgramStructureHash and SemanticModelDigest in their existing
+          owner, callers and tests. The 2026-09-30 merge restored numbered names
+          after their removal; this correction supersedes the V1/V2-name retention
+          under canonical-identity-tensor-extraction-merge. These are two semantic
+          contracts, not successive implementations of one hash. Keep Canon and
+          CanonicalIdentity as the public entry points.
+        constraints:
+          - no compatibility aliases or parallel implementations
+          - hash bytes, encoding versions, CBOR and dependencies unchanged
+          - Core only; RL and other consumer repositories are outside this task
+          - user approved a Core-only commit and push to fix/canonical-identity-names on 2026-10-11
+          - no merge or publication of consumer repositories is authorized
+
       # User chat, 2026-09-23: numeric tensor code belongs in the tensor repository.
       - slug: tensor-numeric-owner-extraction
         date: 2026-09-23

@@ -283,7 +283,7 @@ fn a_symbolic_extent_is_interner_order_independent() {
 // ---------------------------------------------------------------------------------------------
 
 /// Replacing every annotation tag with a meaningless word leaves the model VALID: validation reads
-/// the typed contract, never the tags. (The digest does move — V2 covers annotations — which is why
+/// the typed contract, never the tags. (The semantic digest covers annotations, which is why
 /// the claim under test is about authority, not about digest identity.)
 #[test]
 fn meaningless_tags_do_not_invalidate_a_typed_model() {
@@ -383,10 +383,14 @@ fn an_empty_operator_identity_is_rejected() {
 /// The v1 structural hash does not see the facet: same structure, same v1 value, model or not.
 /// This is what keeps every frozen v1 golden valid.
 #[test]
-fn v1_is_blind_to_the_model_facet() {
+fn structural_hash_is_blind_to_the_model_facet() {
     let (plain_ir, _) = plain();
     let (model_ir, _) = model();
-    assert_ne!(digest(&plain_ir), digest(&model_ir), "V2 does see it");
+    assert_ne!(
+        digest(&plain_ir),
+        digest(&model_ir),
+        "the semantic digest does see it"
+    );
     assert_eq!(
         v1(&plain_ir),
         v1(&model_ir),

@@ -20,7 +20,7 @@ use super::module_store::{CompiledProgram, HymekoParser, ModuleLoadError, Module
 use super::source_provider::SourceProvider;
 use crate::ir::canonical_hash::{Canon, CanonHashCfg, CanonicalIdentity};
 use crate::ir::incidence::{IncidenceError, IncidenceIndexData, IncidenceView};
-use crate::ir::semantic_digest::{SemanticDigestState, SemanticModelDigestV2};
+use crate::ir::semantic_digest::{SemanticDigestState, SemanticModelDigest};
 use crate::resolution::interner::Interner;
 use std::fmt;
 use std::path::Path;
@@ -108,7 +108,7 @@ impl CompiledModel {
     /// derived contributions; repeated calls reuse them. Checked value updates
     /// rehash only edited declarations with the same encoder as the full digest.
     #[must_use]
-    pub fn semantic_digest(&self) -> SemanticModelDigestV2 {
+    pub fn semantic_digest(&self) -> SemanticModelDigest {
         self.semantic_state().digest()
     }
 
