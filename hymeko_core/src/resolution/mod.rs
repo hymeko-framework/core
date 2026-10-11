@@ -3,3 +3,4 @@ pub mod intern_pass;
 pub mod interner;
 pub mod resolve;
 pub mod string_table;
+pub(crate) mod symbols;

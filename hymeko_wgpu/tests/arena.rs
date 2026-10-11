@@ -14,8 +14,8 @@
 //!    against the same computation run with freshly allocated buffers. The
 //!    reference is the Phase 2/3 path that already has its own tests.
 
-use hymeko::tensor::compute::{ComputeError, TensorShape};
-use hymeko::tensor::representations::tensor_csr::TensorCsr;
+use hymeko_tensor::compute::{ComputeError, TensorShape};
+use hymeko_tensor::representations::tensor_csr::TensorCsr;
 use hymeko_wgpu::testing::SparseSpec;
 use hymeko_wgpu::testing::fresh_gpu;
 use hymeko_wgpu::{ActivationKind, ReusePolicy, SubmissionEpoch, TensorArenaConfig};

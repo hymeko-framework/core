@@ -131,11 +131,8 @@ fn missing_child_backlink_is_detected() {
 #[test]
 fn mismatched_decl_to_map_is_detected() {
     let mut t = good();
-    // A fresh Node declaration whose dispatch slot is bound with the Edge tag:
-    // the slot's kind disagrees with the declaration's kind.
-    let dx = t.fresh_decl(DeclKind::Node);
-    t.ir.bind_edge_decl(dx, hymeko::common::ids::EdgeId::new(0))
-        .unwrap();
+    let edge = t.ir.edges[0].decl;
+    t.ir.decl_nodes[edge.raw()].kind = DeclKind::Node;
     let f = findings(&t);
     assert!(
         f.iter().any(|x| label(x) == "KindMapMismatch")
@@ -147,21 +144,15 @@ fn mismatched_decl_to_map_is_detected() {
 #[test]
 fn edge_record_backlink_mismatch_is_detected() {
     let mut t = good();
-    // A fresh Edge declaration bound to edge record 0, whose backlink names the
-    // original edge declaration, not this one.
-    let dx = t.fresh_decl(DeclKind::Edge);
-    t.ir.bind_edge_decl(dx, hymeko::common::ids::EdgeId::new(0))
-        .unwrap();
+    t.ir.edges[0].decl = DeclId::new(0);
     assert!(has(&t, "RecordBacklinkMismatch"), "{:?}", findings(&t));
 }
 
 #[test]
 fn arc_record_out_of_range_is_detected() {
     let mut t = good();
-    // A fresh HyperArc declaration mapped past the arc table.
-    let dx = t.fresh_decl(DeclKind::HyperArc);
-    let oor = hymeko::common::ids::HyperArcId::new(t.ir.arcs.len() + 5);
-    t.ir.bind_arc_decl(dx, oor).unwrap();
+    t.attach_arc_decls();
+    t.ir.arcs.clear();
     assert!(has(&t, "RecordBacklinkMismatch"), "{:?}", findings(&t));
 }
 
@@ -203,7 +194,7 @@ fn index_path_disagreement_is_detected() {
 #[test]
 fn parallel_array_length_mismatch_is_detected() {
     let mut t = good();
-    t.ir.decl_hash.pop();
+    t.ir.decl_nodes.pop();
     assert!(has(&t, "ParallelArrayLengthMismatch"), "{:?}", findings(&t));
 }
 

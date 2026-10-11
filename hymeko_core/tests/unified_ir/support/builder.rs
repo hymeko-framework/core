@@ -78,7 +78,6 @@ impl TestIr {
             next_sibling: DeclId::NONE,
             anno: AnnoR::default(),
         });
-        self.ir.decl_hash.push(None);
         self.idx.by_path.insert(pk, id);
         id
     }
@@ -133,7 +132,6 @@ impl TestIr {
             in_edge: edge_decl,
             refs: built,
         });
-        self.ir.arc_hash.push(None);
         self.ir.edges[eid.raw()].arcs.push(aid);
         aid
     }
@@ -183,36 +181,10 @@ impl TestIr {
 }
 
 impl TestIr {
-    /// Fault-injection seam. Append a fresh declaration of `kind` whose dispatch
-    /// slot starts NONE, so a following `bind_*_decl` is a first binding (never a
-    /// conflicting rebind) and can install a deliberately-malformed mapping. The
-    /// compact dispatch makes most malformations unrepresentable through normal
-    /// construction; this reproduces them for the accessor/coherence tests by
-    /// exploiting that `bind_*` checks index-representability but not kind
-    /// agreement, table range, or the record backlink.
-    pub fn fresh_decl(&mut self, kind: DeclKind) -> DeclId {
-        let d = self.ir.push_decl(DeclNode {
-            kind,
-            name: SymId::new(0),
-            parent: DeclId::NONE,
-            first_child: DeclId::NONE,
-            last_child: DeclId::NONE,
-            next_sibling: DeclId::NONE,
-            anno: AnnoR::default(),
-        });
-        self.ir.decl_hash.push(None);
-        d
-    }
-
     /// Give every `ArcRec` a matching `HyperArc` **declaration** and register it
     /// in `decl_to_arc`.
     ///
-    /// [`TestIr::arc`] creates records without declarations, mirroring what the
-    /// editor bridge does. Anything that resolves an arc through `as_arc` /
-    /// `arc_for_decl`, or that walks arcs via the merkle pass, needs the
-    /// declaration side to exist as well. M0.6 learned this the hard way: a
-    /// missing arc declaration made `compute_merkle_hashes` look as though it
-    /// ignored incidence signs, when in fact the fixture never reached them.
+    /// Bind record-only arcs to declarations for dispatch and hierarchy checks.
     pub fn attach_arc_decls(&mut self) {
         for ai in 0..self.ir.arcs.len() {
             let target = HyperArcId::new(ai);
@@ -231,7 +203,6 @@ impl TestIr {
                 next_sibling: DeclId::NONE,
                 anno: AnnoR::default(),
             });
-            self.ir.decl_hash.push(None);
             self.ir.bind_arc_decl(did, target).unwrap();
         }
     }

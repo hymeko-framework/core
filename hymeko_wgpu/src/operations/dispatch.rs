@@ -26,7 +26,7 @@
 
 use std::sync::Arc;
 
-use hymeko::tensor::compute::ComputeError;
+use hymeko_tensor::compute::ComputeError;
 
 /// A dispatch that has passed every check and can be encoded repeatedly.
 ///

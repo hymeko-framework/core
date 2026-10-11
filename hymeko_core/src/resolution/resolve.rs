@@ -1,7 +1,7 @@
 // src/resolve.rs
 use crate::common::ids::{DeclId, SymId};
 use crate::common::pathkey::PathKey;
-use crate::ir::ir::{AnnoR, PortDirection, RefAtomR, SignedRefR, ValueR};
+use crate::ir::ir::{AnnoR, DeclKind, DeclNode, PortDirection, RefAtomR, SignedRefR, ValueR};
 use crate::resolution::interner::Interner;
 use crate::sym_ast::AstSym;
 use parser::ast::{
@@ -49,6 +49,10 @@ pub enum ResolveError {
     MissingDecl {
         detail: String,
     },
+    UnevaluatedConst {
+        from_scope: String,
+    },
+    InvalidIr(crate::ir::ir::dispatch::DispatchError),
     UnexpectedTopLevelArc {
         detail: String,
     },
@@ -57,60 +61,8 @@ pub enum ResolveError {
 pub fn build_index_sym<'a>(d: &AstSym<'a>, it: &Interner) -> Result<Index, ResolveError> {
     let mut idx = Index::default();
     let mut next: usize = 0;
-    let mut path = Vec::new();
-
-    for n in &d.header {
-        index_node(&mut idx, &mut next, &mut path, n, it)?;
-    }
-
-    index_items(&mut idx, &mut next, &mut path, &d.items, it)?;
-
+    build_index_sym_with_prefix(d, &[], it, &mut idx, &mut next)?;
     Ok(idx)
-}
-
-/// Process `using path as alias` statements.
-/// Call AFTER build_index_sym and AFTER imports are indexed.
-pub fn apply_usings(
-    idx: &mut Index,
-    usings: &[UsingStmt<SymId>],
-    import_namespaces: &[SymId],
-    it: &Interner,
-) -> Result<(), ResolveError> {
-    for u in usings {
-        // Try each import namespace as prefix (e.g., kinematics.elements
-        // lives at [meta_kinematics, kinematics, elements] in the index)
-        let mut resolved = false;
-        for &ns in import_namespaces {
-            let mut prefixed = vec![ns];
-            prefixed.extend_from_slice(&u.path.path);
-            let key = PathKey(prefixed.clone());
-            if idx.by_path.contains_key(&key) {
-                // Store FULL path so alias expansion maps directly to index entries
-                idx.aliases.insert(u.alias, prefixed);
-                resolved = true;
-                break;
-            }
-        }
-        if !resolved {
-            // Try without prefix (root-level refs)
-            let key = PathKey(u.path.path.clone());
-            if idx.by_path.contains_key(&key) {
-                idx.aliases.insert(u.alias, u.path.path.clone());
-            } else {
-                return Err(ResolveError::UnresolvedRef {
-                    from_scope: "<using>".into(),
-                    target: u
-                        .path
-                        .path
-                        .iter()
-                        .map(|&s| it.resolve(s))
-                        .collect::<Vec<_>>()
-                        .join("."),
-                });
-            }
-        }
-    }
-    Ok(())
 }
 
 pub(crate) fn module_aliases(
@@ -120,8 +72,10 @@ pub(crate) fn module_aliases(
     imports: &[(SymId, SymId)],
     it: &Interner,
 ) -> Result<FxHashMap<SymId, Vec<SymId>>, ResolveError> {
-    let mut aliases: FxHashMap<_, _> = imports.iter()
-        .map(|&(local, linked)| (local, vec![linked])).collect();
+    let mut aliases: FxHashMap<_, _> = imports
+        .iter()
+        .map(|&(local, linked)| (local, vec![linked]))
+        .collect();
     for u in usings {
         let mut candidates = Vec::new();
         // A qualified local import name names its linked module even when another
@@ -141,7 +95,9 @@ pub(crate) fn module_aliases(
         let mut local = prefix.to_vec();
         local.extend_from_slice(&u.path.path);
         candidates.push(local);
-        let resolved = candidates.into_iter().find(|path| idx.by_path.contains_key(path.as_slice()))
+        let resolved = candidates
+            .into_iter()
+            .find(|path| idx.by_path.contains_key(path.as_slice()))
             .ok_or_else(|| ResolveError::UnresolvedRef {
                 from_scope: "<using>".into(),
                 target: fmt_path_from_slice(&u.path.path, it),
@@ -207,9 +163,11 @@ fn resolve_value<'a>(
         // Tier B: const expressions must be evaluated by the
         // pre-resolve const pass; if one survives to this point it is
         // a pipeline-ordering bug.
-        Value::Expr(_) => unreachable!(
-            "const expression in resolve_value — const-resolution pass must run before resolve"
-        ),
+        Value::Expr(_) => {
+            return Err(ResolveError::UnevaluatedConst {
+                from_scope: fmt_scope(scope, it),
+            });
+        }
     })
 }
 
@@ -263,15 +221,6 @@ fn index_node<'a>(
     Ok(())
 }
 
-pub fn resolve_arc_anno<'a>(
-    idx: &Index,
-    scope: &[SymId],
-    arc: &HyperArc<'a, SymId>,
-    it: &mut Interner,
-) -> Result<AnnoR, ResolveError> {
-    resolve_anno(idx, scope, &arc.anno, it)
-}
-
 fn index_edge<'a>(
     idx: &mut Index,
     next: &mut usize,
@@ -301,13 +250,19 @@ pub fn resolve_ref_to_declid(
     target: &Ref<SymId>,
     it: &Interner,
 ) -> Result<DeclId, ResolveError> {
-    let owner = (0..=scope.len()).rev()
+    let owner = (0..=scope.len())
+        .rev()
         .find_map(|end| idx.by_path.get(&scope[..end]));
-    let aliases = owner.and_then(|id| {
-        let module = idx.module_aliases.partition_point(|(range, _)| range.end <= id.raw());
-        idx.module_aliases.get(module).filter(|(range, _)| range.contains(&id.raw()))
-            .map(|(_, aliases)| aliases)
-    })
+    let aliases = owner
+        .and_then(|id| {
+            let module = idx
+                .module_aliases
+                .partition_point(|(range, _)| range.end <= id.raw());
+            idx.module_aliases
+                .get(module)
+                .filter(|(range, _)| range.contains(&id.raw()))
+                .map(|(_, aliases)| aliases)
+        })
         .unwrap_or(&idx.aliases);
     // ── Alias expansion ──────────────────────────────────────
     let expanded;
@@ -407,15 +362,6 @@ pub fn resolve_signed_refs<'a>(
     Ok(out)
 }
 
-pub fn resolve_node_bases<'a>(
-    idx: &Index,
-    scope: &[SymId],
-    refs: &[SignedRef<'a, SymId>],
-    it: &mut Interner,
-) -> Result<Vec<SignedRefR>, ResolveError> {
-    resolve_signed_refs(idx, scope, refs, it)
-}
-
 pub fn resolve_arc_refs<'a>(
     idx: &Index,
     scope: &[SymId],
@@ -430,77 +376,177 @@ pub fn validate_all_refs_sym<'a>(
     idx: &Index,
     it: &mut Interner,
 ) -> Result<(), ResolveError> {
-    let mut path = Vec::new();
-    validate_items(&mut path, &d.items, idx, it)
+    validate_all_refs_sym_with_prefix(d, &[], idx, it)
 }
 
-pub fn validate_all_refs_sym_with_prefix<'a>(
-    d: &AstSym<'a>,
+pub fn validate_all_refs_sym_with_prefix(
+    d: &AstSym<'_>,
     prefix: &[SymId],
     idx: &Index,
     it: &mut Interner,
 ) -> Result<(), ResolveError> {
-    let mut path = prefix.to_vec();
-    validate_items(&mut path, &d.items, idx, it)
+    ResolutionWalk::new(idx, it, ()).description(d, prefix)
 }
 
-fn validate_items<'a>(
-    path: &mut Vec<SymId>,
-    items: &[HyperItem<'a, SymId>],
-    idx: &Index,
-    it: &mut Interner,
-) -> Result<(), ResolveError> {
-    for item in items {
-        match item {
-            HyperItem::Node(n) => {
-                let _ = resolve_node_bases(idx, path.as_slice(), &n.inner.bases, it)?;
-                if let Some(body) = &n.inner.body {
-                    let scope_len = path.len();
-                    path.push(n.inner.name);
-                    validate_items(path, body, idx, it)?;
-                    path.truncate(scope_len);
-                }
-            }
-            HyperItem::Edge(e) => {
-                let _ = resolve_node_bases(idx, path.as_slice(), &e.inner.bases, it)?;
-                let scope_len = path.len();
-                path.push(e.inner.name);
-                validate_items(path, &e.inner.body, idx, it)?;
-                path.truncate(scope_len);
-            }
-            HyperItem::Arc(a) => {
-                let _ = resolve_arc_refs(idx, path.as_slice(), a, it)?;
-                if let Some(v) = &a.anno.value {
-                    validate_value(path.as_slice(), v, idx, it)?;
-                }
-            }
-        }
-    }
-    Ok(())
+/// A phase consumes resolved declarations without owning another AST traversal.
+/// `()` validates only; IR construction supplies the checked mutation owner.
+pub(crate) trait ResolvedDeclarations {
+    fn named(
+        &mut self,
+        id: DeclId,
+        node: DeclNode,
+        bases: Vec<SignedRefR>,
+        namespace: &[SymId],
+    ) -> Result<(), ResolveError>;
+    fn arc(
+        &mut self,
+        parent: DeclId,
+        anno: AnnoR,
+        refs: Vec<SignedRefR>,
+    ) -> Result<(), ResolveError>;
 }
 
-fn validate_value<'a>(
-    scope: &[SymId],
-    v: &Value<'a, SymId>,
-    idx: &Index,
-    it: &Interner,
-) -> Result<(), ResolveError> {
-    match v {
-        Value::Ref(r) => {
-            let _ = resolve_ref_to_declid(idx, scope, r, it)?;
+impl ResolvedDeclarations for () {
+    fn named(
+        &mut self,
+        _: DeclId,
+        _: DeclNode,
+        _: Vec<SignedRefR>,
+        _: &[SymId],
+    ) -> Result<(), ResolveError> {
+        Ok(())
+    }
+    fn arc(&mut self, _: DeclId, _: AnnoR, _: Vec<SignedRefR>) -> Result<(), ResolveError> {
+        Ok(())
+    }
+}
+
+/// Private state: neither phase can change the path, interner or index outside
+/// the traversal. The sink owns the phase-specific state (the IR when lowering).
+pub(crate) struct ResolutionWalk<'a, S> {
+    idx: &'a Index,
+    it: &'a mut Interner,
+    path: Vec<SymId>,
+    sink: S,
+}
+
+impl<'a, S: ResolvedDeclarations> ResolutionWalk<'a, S> {
+    pub(crate) fn new(idx: &'a Index, it: &'a mut Interner, sink: S) -> Self {
+        Self {
+            idx,
+            it,
+            path: Vec::new(),
+            sink,
         }
-        Value::List(xs) => {
-            for x in xs {
-                validate_value(scope, x, idx, it)?;
+    }
+
+    pub(crate) fn description(
+        &mut self,
+        ast: &AstSym<'_>,
+        prefix: &[SymId],
+    ) -> Result<(), ResolveError> {
+        self.path.clear();
+        self.path.extend_from_slice(prefix);
+        for node in &ast.header {
+            self.node(node)?;
+        }
+        self.items(&ast.items, false)
+    }
+
+    fn items(
+        &mut self,
+        items: &[HyperItem<'_, SymId>],
+        arcs_allowed: bool,
+    ) -> Result<(), ResolveError> {
+        for item in items {
+            match item {
+                HyperItem::Node(node) => self.node(node)?,
+                HyperItem::Edge(edge) => self.named(
+                    edge.inner.name,
+                    DeclKind::Edge,
+                    &edge.anno,
+                    &edge.inner.bases,
+                    &edge.inner.body,
+                )?,
+                HyperItem::Arc(arc) if arcs_allowed => self.arc(arc)?,
+                HyperItem::Arc(arc) => {
+                    return Err(ResolveError::UnexpectedTopLevelArc {
+                        detail: format!("{:?}", arc.inner.refs),
+                    });
+                }
             }
         }
-        Value::Str(_) | Value::Num(_) => {}
-        // Tier B: see resolve_value above.
-        Value::Expr(_) => unreachable!(
-            "const expression in validate_value — const-resolution pass must run before validate_value"
-        ),
+        Ok(())
     }
-    Ok(())
+
+    fn node(&mut self, node: &NodeDecl<'_, SymId>) -> Result<(), ResolveError> {
+        self.named(
+            node.inner.name,
+            DeclKind::Node,
+            &node.anno,
+            &node.inner.bases,
+            node.inner.body.as_deref().unwrap_or_default(),
+        )
+    }
+
+    fn named(
+        &mut self,
+        name: SymId,
+        kind: DeclKind,
+        anno: &Anno<'_, SymId>,
+        bases: &[SignedRef<'_, SymId>],
+        body: &[HyperItem<'_, SymId>],
+    ) -> Result<(), ResolveError> {
+        let scope_len = self.path.len();
+        let parent = self
+            .idx
+            .by_path
+            .get(self.path.as_slice())
+            .copied()
+            .unwrap_or(DeclId::NONE);
+        self.path.push(name);
+        let result = (|| {
+            let id = self.declaration()?;
+            // This is the compiler's original order and scope, shared by validation.
+            let anno = resolve_anno(self.idx, &self.path, anno, self.it)?;
+            let bases = resolve_signed_refs(self.idx, &self.path, bases, self.it)?;
+            let node = DeclNode {
+                kind,
+                name,
+                parent,
+                anno,
+                first_child: DeclId::NONE,
+                last_child: DeclId::NONE,
+                next_sibling: DeclId::NONE,
+            };
+            let namespace = if parent.is_none() {
+                &self.path[..scope_len]
+            } else {
+                &[]
+            };
+            self.sink.named(id, node, bases, namespace)?;
+            self.items(body, kind == DeclKind::Edge)
+        })();
+        self.path.truncate(scope_len);
+        result
+    }
+
+    fn declaration(&self) -> Result<DeclId, ResolveError> {
+        self.idx
+            .by_path
+            .get(self.path.as_slice())
+            .copied()
+            .ok_or_else(|| ResolveError::MissingDecl {
+                detail: format!("No DeclId for path {:?}", self.path),
+            })
+    }
+
+    fn arc(&mut self, arc: &HyperArc<'_, SymId>) -> Result<(), ResolveError> {
+        let parent = self.declaration()?;
+        let anno = resolve_anno(self.idx, &self.path, &arc.anno, self.it)?;
+        let refs = resolve_arc_refs(self.idx, &self.path, arc, self.it)?;
+        self.sink.arc(parent, anno, refs)
+    }
 }
 
 fn fmt_scope(scope: &[SymId], it: &Interner) -> String {
@@ -520,4 +566,58 @@ fn fmt_path(p: &PathKey, it: &Interner) -> String {
         .map(|&s| it.resolve(s))
         .collect::<Vec<_>>()
         .join(".")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ir::lower::lower_to_ir;
+    use crate::resolution::{const_resolve::resolve_consts, intern_pass::intern_ast};
+
+    #[test]
+    fn validation_and_lowering_agree_on_all_reference_positions_and_order() {
+        for source in [
+            "description { header missing; } root {}",
+            "description {} root -> missing;",
+            "description {} @edge <tag> missing {}",
+            "description {} root: local { local {} }",
+            "description {} base {} root: base { base {} }",
+            "description {} @edge { (+missing [other]); }",
+            "description {} root { (+root); }",
+            "description { const A = 2.0; header (A * 3.0); } root { n (A + 1.0); }",
+        ] {
+            let parsed =
+                parser::parse_description(source).unwrap_or_else(|e| panic!("{source}: {e:?}"));
+            let mut interned = intern_ast(&parsed);
+            resolve_consts(&mut interned.ast, &interned.interner).unwrap();
+            let idx = build_index_sym(&interned.ast, &interned.interner).unwrap();
+            let validation = validate_all_refs_sym(&interned.ast, &idx, &mut interned.interner);
+            let lowering = lower_to_ir(&interned.ast, &idx, &mut interned.interner);
+            assert_eq!(
+                format!("{:?}", validation.err()),
+                format!("{:?}", lowering.err()),
+                "{source}"
+            );
+        }
+    }
+
+    #[test]
+    fn unprocessed_const_is_a_shared_error_and_succeeds_after_const_resolution() {
+        let parsed =
+            parser::parse_description("description { const A = 2.0; } root (A + 1.0);").unwrap();
+        let mut interned = intern_ast(&parsed);
+        let idx = build_index_sym(&interned.ast, &interned.interner).unwrap();
+        assert!(matches!(
+            validate_all_refs_sym(&interned.ast, &idx, &mut interned.interner),
+            Err(ResolveError::UnevaluatedConst { .. })
+        ));
+        assert!(matches!(
+            lower_to_ir(&interned.ast, &idx, &mut interned.interner),
+            Err(ResolveError::UnevaluatedConst { .. })
+        ));
+        resolve_consts(&mut interned.ast, &interned.interner).unwrap();
+        validate_all_refs_sym(&interned.ast, &idx, &mut interned.interner).unwrap();
+        let ir = lower_to_ir(&interned.ast, &idx, &mut interned.interner).unwrap();
+        assert_eq!(ir.decl_nodes[0].anno.value, Some(ValueR::Num(3.0)));
+    }
 }

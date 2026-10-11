@@ -2,7 +2,7 @@
 
 Read-only audit (Stage 2), branch `feat/core-generational-arenas` @ `67771c9`,
 2026-08-31. Metrics are reproducible from the scripts noted below; no production
-source was edited to produce this map.
+source was edited to produce this map. These counts describe that historical snapshot, not the current checkout.
 
 ## Scale
 
@@ -68,15 +68,23 @@ By complexity metrics the crate is **healthy**: 614 detected functions, only 3
 over 150 LOC and 2 over 7 params. The audit's leverage is in **duplication and
 module organization**, not oversized functions.
 
-## Hierarchy traversal (centralized, with two seams)
+## Current compiler and hierarchy boundary (2026-09-23)
 
-The decl tree is walked through a proper iterator API (`Ir::decl_children` /
-`child_decls`, `first_child_of` / `next_sibling_of`). Raw `first_child` /
-`next_sibling` access remains only where it is legitimate: `coherence.rs`
-(validating the links themselves) and `lower.rs` (building the links). One
-redundancy: **two child-iterator types** — `DeclChildren` (ir.rs, panics on a
-malformed link, 2 callers) and `ChildDecls` (access.rs, total/bounded, **0
-callers**). See the simplification candidates.
+The compiler's shared reference traversal is `resolution::resolve::ResolutionWalk`.
+Validation supplies a sink without IR writes; lowering supplies `IrConstruction`,
+which exclusively borrows the IR and commits checked declaration/record/link
+changes. Header and declaration annotations are included, and unresolved constant
+expressions produce a typed error instead of a panic. Module linking and aliases
+remain owned by `ModuleStore::compile`.
+
+Every child-iterator entry delegates to `ir/access.rs::ChildDecls`. It terminates
+on invalid links and is bounded on cycles. `DeclChildren` is a compatibility type
+alias used by Nagare; it has no implementation body. The coherence validator keeps
+its diagnostic walk because reporting the precise broken link is a different
+contract. Compiler hierarchy writes now live in `ir/ir.rs`, not `lower.rs`.
+
+The decomposition module described in the historical counts was unused and has
+been deleted. See the resolved entries in `core-simplification-candidates.md`.
 
 ## Reproduce
 

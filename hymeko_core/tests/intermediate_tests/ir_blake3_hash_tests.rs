@@ -1,11 +1,9 @@
 #[cfg(test)]
 mod ir_blake3_hash_tests {
     use crate::test_helpers::{log_test_footer, log_test_header};
-    use blake3::Hasher;
     use hymeko::common::pathkey::PathKey;
+    use hymeko::ir::canonical_hash::Canon;
     use hymeko::ir::hash::HashId;
-    use hymeko::ir::hash_pass::compute_merkle_hashes;
-    use hymeko::ir::ir::DeclKind;
     use hymeko::ir::lower::lower_to_ir;
     use hymeko::resolution::intern_pass::Interned;
     use hymeko::resolution::intern_pass::intern_ast;
@@ -16,11 +14,6 @@ mod ir_blake3_hash_tests {
     use std::collections::HashMap;
     use std::time::Instant;
 
-    const SINGLETON_SRC: &str = r#"
-        HashDoc {}
-        Root;
-        "#;
-    const ROOT_NAME: &str = "Root";
     const CONTEXT_NAME: &str = "context";
     const EDGE_FIXTURE: &str = "../data/minimal_examples/testing_edges/minimal_example_with_hierarchy_ref_edges_with_values.hymeko";
     const HIERARCHY_FIXTURE: &str =
@@ -52,76 +45,27 @@ mod ir_blake3_hash_tests {
         log_test_footer(name, Some(start.elapsed()), summary);
     }
 
-    #[test]
-    fn singleton_node_hash_matches_blake3_preimage() {
-        let timer = start(
-            "singleton_node_hash_matches_blake3_preimage",
-            "Verifies raw BLAKE3 digest for a single node matches compute_merkle_hashes output.",
-        );
-        let desc: AstStr = parse_description(SINGLETON_SRC).expect("parse failed");
-        let Interned { ast, mut interner } = intern_ast(&desc);
-        let idx = build_index_sym(&ast, &mut interner).expect("index build failed");
-        let mut ir = lower_to_ir(&ast, &idx, &mut interner).expect("lower_to_ir failed");
-
-        compute_merkle_hashes(&mut ir, &interner);
-
-        let sid_root = interner.intern(ROOT_NAME);
-        let did_root = *idx
-            .by_path
-            .get(&PathKey(vec![sid_root]))
-            .expect("missing Root decl");
-
-        let actual = ir.decl_hash[did_root.raw() as usize].expect("Root hash not computed");
-
-        // Manually reproduce the hashing preimage for this simple node.
-        let mut hasher = Hasher::new();
-        hasher.update(&[DeclKind::Node as u8]);
-        hasher.update(ROOT_NAME.as_bytes());
-        hasher.update(&(0u64).to_le_bytes()); // zero tags
-        hasher.update(&[0]); // no value present
-        let expected = HashId(*hasher.finalize().as_bytes());
-
-        assert_eq!(
-            actual.0, expected.0,
-            "Root hash must match raw BLAKE3 digest"
-        );
-        info!("Singleton hash {:02x?}", &actual.0[..4]);
-        finish(
-            "singleton_node_hash_matches_blake3_preimage",
-            timer,
-            "Manual BLAKE3 preimage matched the IR hashing pipeline.",
-        );
-    }
-
-    fn context_hash_from_file(path: &str) -> HashId {
+    fn model_hash_from_file(path: &str) -> HashId {
         let source_code = parser::read_source_file(&path).expect("failed to read source file");
 
         // 2. Parse it, tying the AST lifetimes to the String
         let desc = parser::parse_description(&source_code).unwrap();
         let Interned { ast, mut interner } = intern_ast(&desc);
         let idx = build_index_sym(&ast, &interner).expect("index build failed");
-        let mut ir = lower_to_ir(&ast, &idx, &mut interner).expect("lower_to_ir failed");
+        let ir = lower_to_ir(&ast, &idx, &mut interner).expect("lower_to_ir failed");
 
-        compute_merkle_hashes(&mut ir, &interner);
-
-        let sid_context = interner.intern(CONTEXT_NAME);
-        let did_context = *idx
-            .by_path
-            .get(&PathKey(vec![sid_context]))
-            .expect("context missing");
-
-        ir.decl_hash[did_context.raw() as usize].expect("context hash missing")
+        Canon::new(&ir, &interner).hash().0
     }
 
     #[test]
-    fn context_hash_differs_between_examples() {
+    fn model_hash_differs_between_examples() {
         let timer = start(
-            "context_hash_differs_between_examples",
-            "Confirms different fixtures yield distinct context hashes.",
+            "model_hash_differs_between_examples",
+            "Confirms different fixtures yield distinct model digests.",
         );
-        let edge_hash = context_hash_from_file(EDGE_FIXTURE);
-        let hierarchy_hash = context_hash_from_file(HIERARCHY_FIXTURE);
-        let edge_hash_again = context_hash_from_file(EDGE_FIXTURE);
+        let edge_hash = model_hash_from_file(EDGE_FIXTURE);
+        let hierarchy_hash = model_hash_from_file(HIERARCHY_FIXTURE);
+        let edge_hash_again = model_hash_from_file(EDGE_FIXTURE);
 
         assert_eq!(
             edge_hash.0, edge_hash_again.0,
@@ -129,7 +73,7 @@ mod ir_blake3_hash_tests {
         );
         assert_ne!(
             edge_hash.0, hierarchy_hash.0,
-            "distinct descriptions must yield distinct context hashes"
+            "distinct descriptions must yield distinct model digests"
         );
         info!(
             "edge={:02x?}, hierarchy={:02x?}",
@@ -137,9 +81,9 @@ mod ir_blake3_hash_tests {
             &hierarchy_hash.0[..4]
         );
         finish(
-            "context_hash_differs_between_examples",
+            "model_hash_differs_between_examples",
             timer,
-            "Context hashes stayed deterministic and differed between fixtures.",
+            "Model digests stayed deterministic and differed between fixtures.",
         );
     }
 
@@ -148,9 +92,9 @@ mod ir_blake3_hash_tests {
         let desc = parser::parse_description(&source_code).unwrap();
         let Interned { ast, mut interner } = intern_ast(&desc);
         let idx = build_index_sym(&ast, &interner).expect("index build failed");
-        let mut ir = lower_to_ir(&ast, &idx, &mut interner).expect("lower_to_ir failed");
+        let ir = lower_to_ir(&ast, &idx, &mut interner).expect("lower_to_ir failed");
 
-        compute_merkle_hashes(&mut ir, &interner);
+        let hashes = Canon::new(&ir, &interner).declaration_hashes();
 
         let mut out = HashMap::new();
         for spec in specs {
@@ -163,8 +107,7 @@ mod ir_blake3_hash_tests {
                 .by_path
                 .get(&PathKey(path_syms.clone()))
                 .unwrap_or_else(|| panic!("missing path {key}"));
-            let hash = ir.decl_hash[did.raw() as usize]
-                .unwrap_or_else(|| panic!("missing hash for {key}"));
+            let hash = hashes[did.raw()];
             out.insert(key, hash);
         }
         out

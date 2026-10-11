@@ -21,8 +21,6 @@ pub mod test_helpers;
 
 mod aggregations;
 mod basic;
-mod computations;
-mod hash;
 mod test_tensor_representations;
 
 // APPROVED-CORE-EDIT: unified-ir-m0-5-tests-and-benchmarks (2026-08-28).
@@ -34,11 +32,6 @@ mod test_tensor_representations;
 // APPROVED-CORE-EDIT: unified-ir-m2b-vv-core-consumers (2026-08-29).
 #[path = "unified_ir/mod.rs"]
 mod unified_ir;
-
-// P1 benchmark-harness consolidation: frozen-identity KAT for the shared
-// deterministic sparse-CSR fixture (no core-src change; tests/ is allowlisted).
-#[path = "sparse_workload_kat.rs"]
-mod sparse_workload_kat;
 
 mod ir_stream_admission;
 
@@ -61,5 +54,4 @@ mod prepared_ir_backbone;
 #[path = "bx_profile.rs"]
 mod bx_profile;
 
-// APPROVED-CORE-EDIT: generic-arena-contract (2026-09-27): Pool<B> and HostArena.
-mod compute_arena;
+// The generic arena (Pool<B>, HostArena) moved to hymeko_tensor with its tests.

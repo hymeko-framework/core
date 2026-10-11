@@ -1,0 +1,9 @@
+flowchart TD
+  Base[Immutable base and matching interner] --> Update[Checked leaf updates]
+  Update --> Symbols[Shared typed symbol traversal]
+  Symbols --> Dense[Keep reachable strings and remap all references]
+  Dense --> Next[Current graph with stable DeclIds]
+  Dense --> Cache[Refresh symbolic path layout and reuse hashes]
+  Next --> CBOR[Existing canonical CBOR boundary]
+  CBOR --> Symbols
+  Base --> Old[Explicit old readers stay valid]

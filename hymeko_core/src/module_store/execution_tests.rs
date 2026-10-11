@@ -137,7 +137,7 @@ fn foreign_candidate_is_rejected_even_at_the_same_revision() {
     assert_eq!(first.snapshot().unwrap().revision(), 0);
 }
 
-struct CallbackParser<F>(F);
+pub(super) struct CallbackParser<F>(pub(super) F);
 
 impl<F: Fn()> HymekoParser for CallbackParser<F> {
     fn parse<'a>(&self, source: &'a str) -> Result<parser::ast::AstStr<'a>, String> {
@@ -283,4 +283,86 @@ fn revision_exhaustion_and_poison_are_explicit_and_do_not_wrap() {
     assert!(error.to_string().contains("Poisoned"));
     assert_eq!(original.revision(), u64::MAX);
     assert!(names(&original).contains(&"initial"));
+}
+
+fn incidence_model() -> CompiledModel {
+    let input = MemProvider::default().with_file(
+        "model.hymeko",
+        "world {} network { a { w 1; } b {} c {} @e { (+ a, - b); } @f { (+ b, ~ c, - a); } }",
+    );
+    CompiledModel::compile(input, Parser, Path::new("model.hymeko")).unwrap()
+}
+
+/// The model lends the index of its own IR: equal to a fresh build, the same one on every call.
+#[test]
+fn model_incidences_are_derived_once_and_match_a_fresh_index() {
+    let model = incidence_model();
+    let ir = &model.program().ir;
+    let incidences: usize = ir.arcs.iter().map(|arc| arc.refs.len()).sum();
+    assert_eq!(
+        (ir.arcs.len(), incidences),
+        (2, 5),
+        "two hyperedges, five incidences"
+    );
+    let view = model.incidences().unwrap();
+    let fresh = crate::ir::incidence::PreparedIr::new(ir.clone()).unwrap();
+    for decl in (0..ir.decl_nodes.len()).map(crate::common::ids::DeclId::new) {
+        assert_eq!(
+            view.incident_arcs(decl),
+            fresh.incidences().incident_arcs(decl)
+        );
+        assert_eq!(
+            view.incident_slots(decl),
+            fresh.incidences().incident_slots(decl)
+        );
+    }
+    assert!(std::ptr::eq(view.ir(), ir));
+    assert!(std::ptr::eq(
+        view.data(),
+        model.incidences().unwrap().data()
+    ));
+}
+
+/// Checked value updates keep every declaration, arc and slot, so the updated model shares a
+/// built index, which stays exact for its IR. An unbuilt one is left to be built on demand.
+#[test]
+fn value_updated_models_share_the_incidence_index() {
+    let base = incidence_model();
+    let (w, _) = base
+        .program()
+        .ir
+        .decls()
+        .find(|(_, decl)| base.interner().resolve(decl.name) == "w")
+        .unwrap();
+    let update = [ValueUpdate::Set {
+        declaration: w,
+        value: crate::ir::ir::ValueR::Num(2.),
+    }];
+    assert!(
+        base.with_value_updates(&update)
+            .unwrap()
+            .incidence
+            .get()
+            .is_none()
+    );
+    let built: *const _ = base.incidences().unwrap().data();
+    let updated = base.with_value_updates(&update).unwrap();
+    let view = updated.incidences().unwrap();
+    assert!(std::ptr::eq(view.data(), built));
+    assert!(view.data().validate(&updated.program().ir).is_ok());
+}
+
+/// A broken IR reports the error a direct build reports, and keeps it.
+#[test]
+fn a_broken_ir_reports_and_keeps_its_incidence_error() {
+    let mut model = incidence_model();
+    Arc::get_mut(&mut model.program)
+        .unwrap()
+        .ir
+        .decl_nodes
+        .truncate(1);
+    let expected =
+        crate::ir::incidence::IncidenceIndexData::build(&model.program().ir).unwrap_err();
+    assert_eq!(model.incidences().err(), Some(expected));
+    assert_eq!(model.incidences().err(), Some(expected));
 }

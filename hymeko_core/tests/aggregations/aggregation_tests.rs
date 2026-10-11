@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::test_helpers::{log_test_footer, log_test_header};
-    use hymeko::tensor::aggregation::{AggCfg, SignAgg, WeightAgg, agg_sign, agg_weight, clamp01};
+    use hymeko_tensor::aggregation::{AggCfg, SignAgg, WeightAgg, agg_sign, agg_weight, clamp01};
     use log::info;
     use std::time::Instant;
 

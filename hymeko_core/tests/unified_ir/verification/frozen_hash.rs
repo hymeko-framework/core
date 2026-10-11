@@ -1,4 +1,4 @@
-//! Part C — frozen known-answer vectors for `canonical_program_hash` v1.
+//! Part C — frozen known-answer vectors for `CanonicalPaths::hash` v1.
 //!
 //! APPROVED-CORE-EDIT: unified-ir-m0-6-hash-and-traversal (2026-08-28).
 //!
@@ -19,7 +19,9 @@
 //! and read the `[frozen]` lines.
 
 use hymeko::common::ids::DeclId;
-use hymeko::ir::canonical_hash::{Canon, CanonHashCfg};
+use hymeko::ir::canonical_hash::{
+    Canon, CanonHashCfg, CanonicalIncidence, CanonicalPrufer, validate_namespace_roots,
+};
 
 use crate::unified_ir::support::builder::{S, TestIr};
 
@@ -140,8 +142,11 @@ fn v1_known_answer_vectors_are_unchanged() {
         ("dense_permuted", vec_dense_permuted(), KAT_DENSE_PERMUTED),
     ];
     for (name, t, expected) in cases {
+        validate_namespace_roots(&t.ir, &t.idx).expect("fixture paths agree");
         assert_eq!(
-            v1(&t),
+            hex(&Canon::new(&t.ir, &t.it)
+                .structure(CanonHashCfg::default())
+                .0),
             expected,
             "FROZEN v1 VECTOR CHANGED for `{name}`. This is a change to \
              CanonHashCfg algo_version=1 output, which M0.6 forbids. Either the \
@@ -192,6 +197,7 @@ fn v1_known_answer_vectors_are_unchanged() {
                 },
             ] {
                 aggregate.update(&Canon::new(&t.ir, &t.it).structure(cfg).0.0);
+                assert_prufer_outputs(&t, cfg);
             }
         }
     }
@@ -302,4 +308,214 @@ fn dense_permutation_uses_genuinely_different_declids() {
         v1(&b),
         "link and index hash disagree on the permutation"
     );
+}
+
+/// Independent header construction checks the relationship between both sinks.
+fn assert_incidence_outputs(t: &TestIr) -> Vec<u8> {
+    let mut payload = None;
+    for cfg in [
+        CanonHashCfg::default(),
+        CanonHashCfg {
+            schema_version: 2,
+            algo_version: 7,
+            flags: 13,
+        },
+    ] {
+        let incidence = CanonicalIncidence::new(cfg, &t.ir, &t.it);
+        let bytes = incidence.bytes();
+        let mut expected = blake3::Hasher::new();
+        expected.update(b"HYMEKOCNINCIDENC");
+        expected.update(&cfg.schema_version.to_le_bytes());
+        expected.update(&cfg.algo_version.to_le_bytes());
+        expected.update(&cfg.flags.to_le_bytes());
+        expected.update(&bytes);
+        assert_eq!(incidence.hash().0, *expected.finalize().as_bytes());
+        assert_eq!(incidence.hash(), incidence.hash());
+        if let Some(previous) = &payload {
+            assert_eq!(previous, &bytes);
+        }
+        payload = Some(bytes);
+    }
+    payload.unwrap()
+}
+
+#[test]
+fn incidence_outputs_preserve_fixed_payload_and_empty_input() {
+    assert!(assert_incidence_outputs(&TestIr::new()).is_empty());
+    let expected = b"\x03\x00s.e\x00\x00\x00\x00\x01\x03\x00s.a\x03\x00s.e\x00\x00\x01\x00\xff\x03\x00s.b\x03\x00s.e\x00\x00\x02\x00\x00\x03\x00s.c";
+    assert_eq!(assert_incidence_outputs(&vec_ordered_signs()), expected);
+    assert_eq!(
+        assert_incidence_outputs(&vec_small_hierarchy()),
+        assert_incidence_outputs(&vec_dense_permuted()),
+    );
+    assert_ne!(
+        assert_incidence_outputs(&vec_duplicate_incidences()),
+        assert_incidence_outputs(&vec_slot_permuted()),
+    );
+}
+
+#[test]
+fn incidence_outputs_order_edges_and_duplicate_paths() {
+    let mut t = TestIr::new();
+    let target = t.node(&["n"], DeclId::NONE);
+    for name in ["z", "a"] {
+        let edge = t.edge(&[name], DeclId::NONE);
+        t.arc(edge, &[(target, S::Plus)]);
+    }
+    let bytes = assert_incidence_outputs(&t);
+    assert_eq!(bytes[2], b'a');
+    assert_eq!(bytes[13], b'z');
+    // A second concrete edge with the same path, but a different sign,
+    // requires global record ordering rather than edge-only ordering.
+    let edge = t.edge(&["a"], DeclId::NONE);
+    t.arc(edge, &[(target, S::Minus), (target, S::Neutral)]);
+    let bytes = assert_incidence_outputs(&t);
+    let keys: Vec<_> = bytes.chunks_exact(11).map(|r| (r[2], r[5], r[6])).collect();
+    assert_eq!(
+        keys,
+        vec![(b'a', 0, 0), (b'a', 0, 0), (b'a', 1, 0), (b'z', 0, 0)]
+    );
+    let mut signs: Vec<_> = bytes.chunks_exact(11).map(|r| r[7]).collect();
+    signs.sort_unstable();
+    assert_eq!(signs, [0, 1, 1, 255]);
+}
+
+#[test]
+fn incidence_outputs_order_wrapped_slots_and_arcs() {
+    let mut t = TestIr::new();
+    let target = t.node(&["n"], DeclId::NONE);
+    let edge = t.edge(&["e"], DeclId::NONE);
+    t.arc(edge, &[(target, S::Plus)]);
+    let reference = t.ir.arcs[0].refs[0].clone();
+    t.ir.arcs[0].refs = vec![reference; 65_537];
+    let bytes = assert_incidence_outputs(&t);
+    assert_eq!(bytes.len(), 65_537 * 11);
+    let slots: Vec<_> = bytes
+        .chunks_exact(11)
+        .map(|r| u16::from_le_bytes([r[5], r[6]]))
+        .collect();
+    assert_eq!(&slots[..3], &[0, 0, 1]);
+    assert!(slots.windows(2).all(|pair| pair[0] <= pair[1]));
+    t.ir.arcs[0].refs.truncate(1);
+    let arc = t.ir.edges[0].arcs[0];
+    t.ir.edges[0].arcs = vec![arc; 65_537];
+    let bytes = assert_incidence_outputs(&t);
+    assert_eq!(bytes.len(), 65_537 * 11);
+    let arcs: Vec<_> = bytes
+        .chunks_exact(11)
+        .map(|r| u16::from_le_bytes([r[3], r[4]]))
+        .collect();
+    assert_eq!(&arcs[..3], &[0, 0, 1]);
+    assert!(arcs.windows(2).all(|pair| pair[0] <= pair[1]));
+}
+
+#[test]
+fn incidence_outputs_preserve_path_prefix_limit() {
+    let mut t = TestIr::new();
+    let target = t.node(&["n"], DeclId::NONE);
+    let name = "x".repeat(65_536);
+    let edge = t.edge(&[&name], DeclId::NONE);
+    t.arc(edge, &[(target, S::Plus)]);
+    let bytes = assert_incidence_outputs(&t);
+    assert_eq!(&bytes[..2], &[255, 255]);
+    assert!(bytes[2..65_537].iter().all(|&b| b == b'x'));
+    assert_eq!(bytes.len(), 65_545);
+}
+
+#[test]
+#[should_panic]
+fn incidence_rejects_invalid_arc_indices() {
+    let mut t = vec_small_hierarchy();
+    t.ir.arcs.clear();
+    CanonicalIncidence::new(CanonHashCfg::default(), &t.ir, &t.it);
+}
+
+fn assert_prufer_outputs(t: &TestIr, cfg: CanonHashCfg) -> Vec<u8> {
+    let prufer = CanonicalPrufer::new(cfg, &t.ir, &t.it);
+    let bytes = prufer.bytes();
+    let mut expected = blake3::Hasher::new();
+    expected.update(b"HYMEKOCNSKELETON");
+    expected.update(&cfg.schema_version.to_le_bytes());
+    expected.update(&cfg.algo_version.to_le_bytes());
+    expected.update(&cfg.flags.to_le_bytes());
+    expected.update(&bytes);
+    assert_eq!(prufer.hash().0, *expected.finalize().as_bytes());
+    assert_eq!(
+        prufer.bytes(),
+        bytes,
+        "each output starts a fresh traversal"
+    );
+    let vertices =
+        t.ir.decl_nodes
+            .iter()
+            .filter(|node| {
+                matches!(
+                    node.kind,
+                    hymeko::ir::ir::DeclKind::Node | hymeko::ir::ir::DeclKind::Edge
+                )
+            })
+            .count();
+    assert_eq!(bytes.len(), vertices.saturating_sub(1) * 32);
+    bytes
+}
+
+#[test]
+fn prufer_outputs_preserve_empty_single_and_multiple_roots() {
+    let cfg = CanonHashCfg::default();
+    let mut t = TestIr::new();
+    assert!(assert_prufer_outputs(&t, cfg).is_empty());
+    t.node(&["a"], DeclId::NONE);
+    assert!(assert_prufer_outputs(&t, cfg).is_empty());
+    t.node(&["b"], DeclId::NONE);
+    let mut root_label = blake3::Hasher::new();
+    root_label.update(b"HYMEKOCNROOTNODE");
+    root_label.update(&cfg.schema_version.to_le_bytes());
+    root_label.update(&cfg.algo_version.to_le_bytes());
+    root_label.update(&cfg.flags.to_le_bytes());
+    root_label.update(b"ROOT");
+    assert_eq!(
+        assert_prufer_outputs(&t, cfg),
+        root_label.finalize().as_bytes()
+    );
+    assert_eq!(
+        assert_prufer_outputs(&vec_small_hierarchy(), cfg),
+        assert_prufer_outputs(&vec_dense_permuted(), cfg),
+    );
+    // Independent roots emit only the synthetic-root token. Exercise the hash
+    // sink immediately before, at and after full 16 KiB output blocks.
+    for index in 2..1026 {
+        t.node(&[&format!("root_{index}")], DeclId::NONE);
+        let roots = index + 1;
+        if [512, 513, 514, 1025, 1026].contains(&roots) {
+            assert_eq!(
+                assert_prufer_outputs(&t, cfg),
+                root_label.finalize().as_bytes().repeat(roots - 1),
+            );
+        }
+    }
+}
+
+#[test]
+fn prufer_rejects_cycle_without_removable_leaves() {
+    for with_root in [false, true] {
+        let mut t = TestIr::new();
+        let a = t.node(&["a"], DeclId::NONE);
+        let b = t.node(&["b"], a);
+        let c = t.node(&["c"], b);
+        t.ir.decl_nodes[a.raw()].parent = c;
+        if with_root {
+            t.node(&["root"], DeclId::NONE);
+            t.node(&["a", "leaf"], a);
+        }
+        let result = std::panic::catch_unwind(|| {
+            CanonicalPrufer::new(CanonHashCfg::default(), &t.ir, &t.it).hash()
+        });
+        let error = result.expect_err("a disconnected cycle must not become a valid forest");
+        let message = error
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| error.downcast_ref::<&str>().copied())
+            .expect("panic message");
+        assert!(message.contains("Pruefer traversal requires an acyclic skeleton"));
+    }
 }

@@ -10,7 +10,7 @@
 //! difference between "this machine has no GPU" and "the backend is broken",
 //! and collapsing the two would let real regressions pass silently in CI.
 
-use hymeko::tensor::compute::{ComputeError, SparseCsrShape, TensorShape};
+use hymeko_tensor::compute::{ComputeError, SparseCsrShape, TensorShape};
 use hymeko_wgpu::KernelId;
 use hymeko_wgpu::testing::{fresh_gpu, shared_gpu};
 

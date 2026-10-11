@@ -1,0 +1,5 @@
+flowchart LR
+  bytes[Canonical CBOR] --> decode[Core decode]
+  decode --> payload[DecodedCborPayload]
+  payload --> install[CompiledModel.from_decoded_cbor]
+  install --> state[Existing ExecutionState publication]

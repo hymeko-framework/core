@@ -2,8 +2,18 @@
 
 The HyMeKo semantic core — a standalone cargo workspace.
 
-- **`hymeko_core/`** — the **IR** (`ir/`), **encoding**/serialization (`writers/` — CBOR + IR writers), and tensor primitives (`tensor/`: COO/CSR representations, aggregation, conv traits).
-- **`hymeko_hnn/`** — the **hypergraph representation** (`traversal/`: `HyperGraphView`, incidence views) and the **tensor-transformation** operators (`tensor/`: HGNN / signed-HGNN / message-passing).
+Checked value updates retain only the current graph's referenced symbols.
+Canonical CBOR export and admitted decode use the same symbol compaction;
+superseded timestamp/text values do not accumulate in the current snapshot.
+Declaration IDs, graph semantics and canonical digests are preserved. Symbol IDs
+are local to a snapshot and may be renumbered: pair them with that snapshot's
+interner/index. Explicitly retained old snapshots remain unchanged and readable.
+See [the symbol-lifetime plan](docs/plans/2026-09-25-symbol-lifetime/plan.pdf).
+
+- **`hymeko_core/`** — the **IR** (`ir/`), **encoding**/serialization (`writers/` — CBOR + IR writers), and canonical IR-to-tensor adapters (`tensor/`: reference-weight extraction and `TensorInc`).
+- **`hymeko_wgpu/`**: WGPU compute backend, consuming `hymeko_tensor` directly.
+
+The `hymeko_hnn` implementation lives in `hymeko_nagare::hnn` (the Nagare repository). It owns the **hypergraph representation** (`traversal/`: `HyperGraphView`, incidence views) and the **tensor-transformation** operators (`tensor/`: HGNN / signed-HGNN / message-passing).
 
 `parser` is an external repository (`hymeko/parser`), pulled as a `git` dependency.
 
@@ -14,7 +24,11 @@ cargo build --workspace
 cargo test  --workspace
 ```
 
-Optional features (off by default): `hymeko_core/arrow-schema` (Arrow tensor schema), `hymeko_core/ipc` (iceoryx2 IPC).
+Generic numeric contracts, COO/CSR kernels and initialization now belong to
+`hymeko_tensor`. Its optional `sparse`, `interop` and `arrow-schema` features enable
+parallel sparse storage, Nalgebra/JAX conversion and Arrow schemas. Core uses its
+dependency-free default. The retired Iceoryx scaffold is removed; `ir_stream` owns
+Core transport. See [the migration and local integration status](docs/hymeko-kernel-ownership.md#tensor-extraction-authorized-2026-09-23).
 
 ## Fixtures
 

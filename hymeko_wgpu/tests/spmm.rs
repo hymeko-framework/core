@@ -17,8 +17,8 @@
 //! Only a missing adapter is a skip. A shader that fails to compile, a
 //! validation error, a mapping failure or a numerical mismatch is a defect.
 
-use hymeko::tensor::compute::{ComputeError, SparseCsrShape, TensorShape};
-use hymeko::tensor::representations::tensor_csr::TensorCsr;
+use hymeko_tensor::compute::{ComputeError, SparseCsrShape, TensorShape};
+use hymeko_tensor::representations::tensor_csr::TensorCsr;
 use hymeko_wgpu::testing::{DegreeShape, SparseSpec};
 use hymeko_wgpu::testing::{fresh_gpu, shared_gpu};
 use hymeko_wgpu::{GpuCsrMatrix, GpuTensor, PreparedSpmm, WgpuBackend, WorkgroupShape};
@@ -816,5 +816,49 @@ fn test_all_workgroup_variants_agree_with_cpu() {
     for wg in WorkgroupShape::sweep() {
         let gpu = run_gpu(&backend, &csr, &x, fd, wg);
         assert_close(&gpu, &cpu, &format!("workgroup {wg}"));
+    }
+}
+
+#[test]
+fn the_upload_signature_takes_one_bound_proof_and_not_a_tensor_receipt_pair() {
+    // The API-level gate for the same property, checked against the adapter's source: a two-argument
+    // form would re-open the replay even though the types above are sound. If someone adds
+    // `tensor:` and `receipt:` parameters back, this fails.
+    let source = include_str!("../src/resources.rs");
+    let start = source
+        .find("pub fn upload_validated_csr")
+        .expect("upload_validated_csr exists");
+    let signature = &source[start..start + source[start..].find(')').unwrap_or(0) + 1];
+    assert!(
+        signature.contains("validated: &ValidatedSparse<'_, TensorCsr<f32>>"),
+        "upload_validated_csr no longer takes a single bound proof: `{signature}`"
+    );
+    assert!(
+        !signature.contains("receipt:"),
+        "a detachable receipt parameter reappeared: `{signature}`"
+    );
+}
+
+#[test]
+fn the_canonical_validator_is_the_only_structural_implementation() {
+    // Source gate. The device adapter must translate Tensor's verdict, never re-derive it. If any of
+    // these rule phrases reappears as a check in `resources.rs`, two authorities exist again.
+    let adapter = include_str!("../src/resources.rs");
+    assert!(
+        adapter.contains("validate_csr_parts("),
+        "the adapter stopped delegating to the canonical validator"
+    );
+    // The phrases may appear in the TRANSLATION table (mapping Tensor's verdict to operand strings),
+    // but never beside a comparison operator that would make them a check.
+    for forbidden in [
+        "if row_ptr[0] != 0",
+        "for pair in row_ptr.windows(2)",
+        "row_ptr[shape.rows]",
+        "col_ind.iter().find(",
+    ] {
+        assert!(
+            !adapter.contains(forbidden),
+            "the adapter re-implements the structural check `{forbidden}`"
+        );
     }
 }

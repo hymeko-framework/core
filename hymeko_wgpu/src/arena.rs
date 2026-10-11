@@ -69,8 +69,8 @@
 //! # Where the policy lives
 //!
 //! The free list, pending and retired sets, budgets, eviction and statistics
-//! are `hymeko_core`'s generic [`Pool`], shared with the host arena
-//! ([`hymeko::tensor::compute::arena::HostArena`]). This module is the WGPU
+//! are `hymeko_tensor`'s generic [`Pool`], shared with the host arena
+//! ([`hymeko_tensor::compute::arena::HostArena`]). This module is the WGPU
 //! deployment of it: [`WgpuBackend`] as the [`ArenaBackend`], the completion
 //! tracker as the epoch source, the tracked sessions, and a lease that borrows
 //! the arena. The policy types are re-exported here under their former names.
@@ -86,16 +86,16 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use hymeko::tensor::compute::arena::{ArenaBackend, ArenaConfig, Pool};
-use hymeko::tensor::compute::{BackendKind, ComputeError, TensorShape};
+use hymeko_tensor::compute::arena::{ArenaBackend, ArenaConfig, Pool};
+use hymeko_tensor::compute::{BackendKind, ComputeError, TensorShape};
 
 use crate::backend::WgpuBackend;
 use crate::completion::{CompletionTracker, SubmissionEpoch};
 use crate::resources::GpuTensor;
 
-pub use hymeko::tensor::compute::arena::{ArenaStats, ReusePolicy};
+pub use hymeko_tensor::compute::arena::{ArenaStats, ReusePolicy};
 
-/// Budget and policy for a [`TensorArena`]: `hymeko_core`'s [`ArenaConfig`],
+/// Budget and policy for a [`TensorArena`]: `hymeko_tensor`'s [`ArenaConfig`],
 /// whose default is this arena's measured budget (512 MiB / 64 buffers, exact
 /// size).
 pub type TensorArenaConfig = ArenaConfig;
@@ -105,7 +105,7 @@ pub type TensorArenaConfig = ArenaConfig;
 /// Usage is the class, not a compatibility test: `wgpu` fixes a buffer's usage
 /// at creation, and binding a buffer for a usage it was not created with is a
 /// validation error.
-pub type AllocationKey = hymeko::tensor::compute::arena::AllocationKey<wgpu::BufferUsages>;
+pub type AllocationKey = hymeko_tensor::compute::arena::AllocationKey<wgpu::BufferUsages>;
 
 /// The device as the arena sees it: whole `wgpu::Buffer`s, classed by usage,
 /// dated by submission.

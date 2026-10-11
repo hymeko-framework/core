@@ -8,6 +8,147 @@ use hymeko::ir::ir::Ir;
 
 use super::incidence_support::{arc, bits_eq, dense_bt, median_ms, node, r, windowed};
 
+/// Runs independent expected results through live, prepared and Rayon applies.
+struct TransposeCase {
+    ir: Ir,
+    y: Vec<f64>,
+    expected: Vec<f64>,
+}
+
+impl TransposeCase {
+    fn check(&self) {
+        let index = build_incidence_index(&self.ir).unwrap();
+        let plan = index.prepare_operator().unwrap();
+        let n = self.ir.decl_nodes.len();
+        assert_eq!(self.expected.len(), n);
+        let tail = [-0.0, f64::from_bits(0x7ff8_0000_0000_0042)];
+        let mut outputs: [Vec<f64>; 3] = std::array::from_fn(|_| {
+            let mut output = vec![123.0; n];
+            output.extend_from_slice(&tail);
+            output
+        });
+        for _ in 0..2 {
+            for output in &mut outputs {
+                output[..n].fill(123.0);
+            }
+            index.arc_to_node(&self.y, &mut outputs[0]);
+            plan.arc_to_node(&self.y, &mut outputs[1]);
+            plan.par_arc_to_node(&self.y, &mut outputs[2]);
+            for output in &outputs {
+                for (&actual, &expected) in output.iter().zip(&self.expected) {
+                    if expected.is_nan() {
+                        assert!(actual.is_nan());
+                    } else {
+                        assert_eq!(actual.to_bits(), expected.to_bits());
+                    }
+                }
+                assert!(bits_eq(&output[n..], &tail), "output tail changed");
+            }
+        }
+    }
+}
+
+#[test]
+fn transpose_keeps_order_rounding_empty_rows_and_output_tails() {
+    let mut ir = Ir::default();
+    for _ in 0..3 {
+        node(&mut ir);
+    }
+    arc(&mut ir, vec![r(0, 1, Some(vec![1e16])), r(1, 0, None)]);
+    arc(
+        &mut ir,
+        vec![r(0, 1, None), r(0, -1, Some(vec![1e16])), r(0, 1, None)],
+    );
+    arc(&mut ir, vec![]);
+    // Left-to-right: ((1e16 + 1) - 1e16) + 1 == 1, not a regrouped 2.
+    TransposeCase {
+        ir,
+        y: vec![1.0, 1.0, -10.0],
+        expected: vec![1.0, 0.0, 0.0],
+    }
+    .check();
+
+    let mut ir = Ir::default();
+    node(&mut ir);
+    arc(&mut ir, vec![r(0, -1, None)]);
+    arc(&mut ir, vec![r(0, 1, Some(vec![1.0 + 2.0_f64.powi(-27)]))]);
+    // Separate multiplication rounds to 1; fusing into the sum would give -2^-54.
+    TransposeCase {
+        ir,
+        y: vec![1.0, 1.0 - 2.0_f64.powi(-27)],
+        expected: vec![0.0],
+    }
+    .check();
+
+    TransposeCase {
+        ir: Ir::default(),
+        y: vec![],
+        expected: vec![],
+    }
+    .check();
+    let mut ir = Ir::default();
+    node(&mut ir);
+    node(&mut ir);
+    arc(&mut ir, vec![]);
+    TransposeCase {
+        ir,
+        y: vec![f64::INFINITY],
+        expected: vec![0.0, 0.0],
+    }
+    .check();
+}
+
+#[test]
+fn neutral_incidence_still_multiplies_nonfinite_input() {
+    for y in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        let mut ir = Ir::default();
+        node(&mut ir);
+        node(&mut ir);
+        arc(&mut ir, vec![r(0, 0, Some(vec![-0.0]))]);
+        TransposeCase {
+            ir,
+            y: vec![y],
+            expected: vec![f64::NAN, 0.0],
+        }
+        .check();
+    }
+}
+
+#[test]
+fn short_buffers_preserve_serial_partial_writes_and_parallel_preflight() {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+    let mut ir = Ir::default();
+    for _ in 0..3 {
+        node(&mut ir);
+    }
+    arc(&mut ir, vec![r(0, 1, Some(vec![2.0]))]);
+    arc(&mut ir, vec![r(1, 1, Some(vec![3.0]))]);
+    let index = build_incidence_index(&ir).unwrap();
+    let plan = index.prepare_operator().unwrap();
+    for prepared in [false, true] {
+        let mut output = [123.0; 4];
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| {
+                if prepared {
+                    plan.arc_to_node(&[5.0], &mut output);
+                } else {
+                    index.arc_to_node(&[5.0], &mut output);
+                }
+            }))
+            .is_err()
+        );
+        assert!(bits_eq(&output, &[10.0, 0.0, 0.0, 123.0]));
+    }
+    let mut output = [123.0; 2];
+    assert!(
+        catch_unwind(AssertUnwindSafe(|| {
+            plan.par_arc_to_node(&[5.0, 7.0], &mut output);
+        }))
+        .is_err()
+    );
+    assert!(bits_eq(&output, &[123.0; 2]));
+}
+
 #[test]
 fn prepared_equals_legacy_and_oracle_across_sign_weight_variants() {
     // 4 nodes, 3 arcs mixing +/-/~, none/single/multi weight, a duplicate incidence, and -0.0.
@@ -79,20 +220,36 @@ fn empty_and_single_incidence() {
 }
 
 #[test]
-fn nan_and_inf_coefficient_rejected_at_prepare() {
-    for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+fn nonfinite_coefficients_rejected_in_node_order() {
+    for (sign, weights) in [
+        (1, vec![f64::NAN]),
+        (1, vec![f64::INFINITY]),
+        (1, vec![f64::NEG_INFINITY]),
+        (0, vec![f64::INFINITY]),
+        (1, vec![f64::MAX, 2.0]),
+    ] {
         let mut ir = Ir::default();
         node(&mut ir);
         node(&mut ir);
-        arc(&mut ir, vec![r(0, 1, Some(vec![bad])), r(1, 1, None)]);
+        // The first arc/ref is node 1, but prepare must diagnose node 0 first.
+        arc(
+            &mut ir,
+            vec![
+                r(1, 1, Some(vec![f64::INFINITY])),
+                r(0, sign, Some(weights)),
+            ],
+        );
         let idx = build_incidence_index(&ir).unwrap();
         assert!(
             matches!(
                 idx.prepare_operator(),
-                Err(OperatorPlanError::NonFiniteCoefficient { .. })
+                Err(OperatorPlanError::NonFiniteCoefficient { node }) if node.raw() == 0
             ),
-            "coefficient {bad} must be rejected at prepare"
+            "prepare must reject the first nonfinite coefficient in node order"
         );
+        let mut output = [123.0; 2];
+        idx.arc_to_node(&[1.0], &mut output);
+        assert!(output.iter().all(|value| !value.is_finite()));
     }
 }
 

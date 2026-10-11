@@ -35,8 +35,8 @@
 
 use std::time::{Duration, Instant};
 
-use hymeko::tensor::compute::TensorShape;
-use hymeko::tensor::representations::tensor_csr::TensorCsr;
+use hymeko_tensor::compute::TensorShape;
+use hymeko_tensor::representations::tensor_csr::TensorCsr;
 use hymeko_wgpu::testing::{DegreeShape, SparseSpec};
 use hymeko_wgpu::{TensorArenaConfig, WgpuBackend};
 

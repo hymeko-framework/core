@@ -5,11 +5,13 @@
 
 use std::sync::Arc;
 
-use hymeko::tensor::compute::{BackendKind, ComputeError, TensorShape, try_u32};
+use hymeko_tensor::compute::{BackendKind, ComputeError, TensorShape, try_u32};
 
+use super::OperandCheck;
+use super::OperationFactory;
 use crate::GpuTensor;
 use crate::operations::dispatch::PreparedDispatch;
-use crate::pipeline::{KernelId, PipelineCache};
+use crate::pipeline::KernelId;
 
 /// WGSL source owned by [`KernelId::StarRotorSpike`].
 pub const STAR_ROTOR_SPIKE_SHADER: &str = include_str!("../../shaders/star_rotor_spike.wgsl");
@@ -36,19 +38,9 @@ struct StarRotorSpikeParams {
 
 const _: () = assert!(std::mem::size_of::<StarRotorSpikeParams>() == 48);
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct StarRotorSpikeLimits {
-    pub max_workgroups_per_dimension: u32,
-    pub max_invocations_per_workgroup: u32,
-    pub max_storage_buffers_per_stage: u32,
-}
-
 /// Builds one validated star rotor-spike dispatch.
 pub struct StarRotorSpikeBuilder<'a> {
-    device: &'a wgpu::Device,
-    queue: &'a wgpu::Queue,
-    cache: &'a PipelineCache,
-    limits: StarRotorSpikeLimits,
+    factory: OperationFactory<'a>,
     features: Option<&'a GpuTensor<f32>>,
     centres: Option<&'a GpuTensor<f32>>,
     vertices: Option<&'a GpuTensor<u32>>,
@@ -60,17 +52,9 @@ pub struct StarRotorSpikeBuilder<'a> {
 }
 
 impl<'a> StarRotorSpikeBuilder<'a> {
-    pub(crate) fn new(
-        device: &'a wgpu::Device,
-        queue: &'a wgpu::Queue,
-        cache: &'a PipelineCache,
-        limits: StarRotorSpikeLimits,
-    ) -> Self {
+    pub(crate) fn new(factory: OperationFactory<'a>) -> Self {
         Self {
-            device,
-            queue,
-            cache,
-            limits,
+            factory,
             features: None,
             centres: None,
             vertices: None,
@@ -125,37 +109,34 @@ impl<'a> StarRotorSpikeBuilder<'a> {
 
     /// Validate every operand and prepare a repeatedly encodable dispatch.
     pub fn prepare(self) -> Result<PreparedStarRotorSpike<'a>, ComputeError> {
-        let features = supplied(self.features, "star rotor-spike features")?;
-        let centres = supplied(self.centres, "star rotor-spike centres")?;
-        let vertices = supplied(self.vertices, "star rotor-spike vertices")?;
-        let output = supplied(self.output, "star rotor-spike output")?;
+        let features = OperandCheck("star rotor-spike features").supplied(self.features)?;
+        let centres = OperandCheck("star rotor-spike centres").supplied(self.centres)?;
+        let vertices = OperandCheck("star rotor-spike vertices").supplied(self.vertices)?;
+        let output = OperandCheck("star rotor-spike output").supplied(self.output)?;
         let n_nodes = features.shape().rows;
         let hidden = features.shape().cols;
         let n_edges = vertices.shape().rows;
         let arity = vertices.shape().cols;
         let bins = output.shape().cols;
         if n_nodes == 0 || hidden == 0 || n_edges == 0 || arity == 0 || bins == 0 {
-            return shape_error("star rotor-spike dimensions must be non-zero", 1, 0);
+            return OperandCheck("star rotor-spike dimensions must be non-zero").mismatch(1, 0);
         }
         if centres.shape() != TensorShape::new(n_edges, hidden) {
-            return shape_error(
-                "star rotor-spike centre shape",
+            return OperandCheck("star rotor-spike centre shape").mismatch(
                 n_edges.saturating_mul(hidden),
                 centres.shape().checked_elements().unwrap_or(usize::MAX),
             );
         }
         if output.shape().rows != n_edges {
-            return shape_error("star rotor-spike output rows", n_edges, output.shape().rows);
+            return OperandCheck("star rotor-spike output rows")
+                .mismatch(n_edges, output.shape().rows);
         }
         if self.projection.0 >= hidden
             || self.projection.1 >= hidden
             || self.projection.0 == self.projection.1
         {
-            return shape_error(
-                "star rotor-spike projection",
-                hidden,
-                self.projection.0.max(self.projection.1),
-            );
+            return OperandCheck("star rotor-spike projection")
+                .mismatch(hidden, self.projection.0.max(self.projection.1));
         }
         if !self.kappa.is_finite() || self.kappa < 0.0 {
             return Err(ComputeError::Backend {
@@ -163,28 +144,29 @@ impl<'a> StarRotorSpikeBuilder<'a> {
                 message: "star rotor-spike kappa must be finite and non-negative".to_owned(),
             });
         }
-        if self.limits.max_storage_buffers_per_stage < 4 {
+        if self.factory.limits.max_storage_buffers_per_stage < 4 {
             return Err(ComputeError::Backend {
                 backend: BackendKind::Wgpu,
                 message: format!(
                     "star rotor-spike requires 4 storage buffers, device exposes {}",
-                    self.limits.max_storage_buffers_per_stage
+                    self.factory.limits.max_storage_buffers_per_stage
                 ),
             });
         }
-        if self.workgroup == 0 || self.workgroup > self.limits.max_invocations_per_workgroup {
+        if self.workgroup == 0 || self.workgroup > self.factory.limits.max_invocations_per_workgroup
+        {
             return Err(ComputeError::Backend {
                 backend: BackendKind::Wgpu,
                 message: format!(
                     "star rotor-spike workgroup {} outside 1..={}",
-                    self.workgroup, self.limits.max_invocations_per_workgroup
+                    self.workgroup, self.factory.limits.max_invocations_per_workgroup
                 ),
             });
         }
         let count = try_u32("star rotor-spike edge count", n_edges)?;
         let groups = count
             .div_ceil(self.workgroup)
-            .min(self.limits.max_workgroups_per_dimension);
+            .min(self.factory.limits.max_workgroups_per_dimension);
         let stride = groups
             .checked_mul(self.workgroup)
             .ok_or(ComputeError::IndexOverflow {
@@ -206,29 +188,28 @@ impl<'a> StarRotorSpikeBuilder<'a> {
             _pad1: 0,
         };
         let kernel = KernelId::StarRotorSpike;
-        let bundle = self.cache.bundle(self.device, kernel, self.workgroup, 1)?;
-        let params_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("star_rotor_spike.params"),
-            size: std::mem::size_of::<StarRotorSpikeParams>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        self.queue
-            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
-        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("star_rotor_spike.bind_group"),
-            layout: bundle.bind_group_layout(),
-            entries: &[
-                entry(0, features),
-                entry(1, centres),
-                entry(2, vertices),
-                entry(3, output),
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: params_buffer.as_entire_binding(),
-                },
-            ],
-        });
+        let bundle = self
+            .factory
+            .cache
+            .bundle(self.factory.device, kernel, self.workgroup, 1)?;
+        let params_buffer = self.factory.uniform("star_rotor_spike.params", &params);
+        let bind_group = self
+            .factory
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("star_rotor_spike.bind_group"),
+                layout: bundle.bind_group_layout(),
+                entries: &[
+                    features.binding(0),
+                    centres.binding(1),
+                    vertices.binding(2),
+                    output.binding(3),
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: params_buffer.as_entire_binding(),
+                    },
+                ],
+            });
         Ok(PreparedStarRotorSpike {
             _operands: core::marker::PhantomData,
             dispatch: PreparedDispatch::new(
@@ -265,32 +246,5 @@ impl PreparedStarRotorSpike<'_> {
     #[must_use]
     pub const fn elements(&self) -> usize {
         self.elements
-    }
-}
-
-fn supplied<'a, T>(value: Option<&'a T>, operand: &'static str) -> Result<&'a T, ComputeError> {
-    value.ok_or(ComputeError::ShapeMismatch {
-        operand,
-        expected: 1,
-        actual: 0,
-    })
-}
-
-fn shape_error<T>(
-    operand: &'static str,
-    expected: usize,
-    actual: usize,
-) -> Result<T, ComputeError> {
-    Err(ComputeError::ShapeMismatch {
-        operand,
-        expected,
-        actual,
-    })
-}
-
-fn entry<'a, T>(binding: u32, tensor: &'a GpuTensor<T>) -> wgpu::BindGroupEntry<'a> {
-    wgpu::BindGroupEntry {
-        binding,
-        resource: tensor.buffer().as_entire_binding(),
     }
 }

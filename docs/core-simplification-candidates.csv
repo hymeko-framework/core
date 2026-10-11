@@ -1,22 +1,12 @@
 symbol,path,loc,callers,category,risk,expected_gain,required_tests
-decomposition_module,hymeko_core/src/tensor/decomposition.rs:1,262,0,G,none,delete whole private zero-ref module; removes only non-test panic/unreachable in tensor,none (private + zero refs = provably safe in-workspace)
-intern_owned_borrowed_twins,hymeko_core/src/resolution/intern_pass.rs:181,150,2,A,low,collapse 24 lower_* fns to 13 (borrowed output lifetime is vacuous),intern_ast vs intern_ast_into_owned structural equality on fano corpus
-module_view_dead,hymeko_core/src/module_store/module_view.rs:1,45,0,G,none,delete dead index-build twin + unwired ref-validator (divergence trap),none for removal; compile() path covered by consumer_equivalence/corpus
 module_store_scaffolding,hymeko_core/src/module_store/module_store.rs:61,74,0,G,none,retire program_cache+CompiledProgramCache+make_build_id+take_last_ir+CborPayload,compile() idempotency/cache-hit test
 section_entry_offsets,hymeko_core/src/ir_stream/section.rs:246,0,2,F,low,add ENTRY_OFF_* consts; kill duplicated 32-byte magic offsets in encode(:246)+decode(:407),golden section-entry image test (mirror envelope field_offsets)
-assembler_staging_guard,hymeko_core/src/ir_stream/assembler.rs:902,15,7,B,low,collapse 7x abandon()+StagingLimitExceeded into one helper (state-machine hazard),existing staging/superseded limit tests stay green
-sibling_iterators,hymeko_core/src/ir/ir.rs:447,25,2,B,low,consolidate DeclChildren+ChildDecls+coherence inline onto budgeted total iterator,malformed-sibling-cycle test proving survivor does not panic
-const_eval_twins,hymeko_core/src/resolution/const_resolve.rs:108,35,2,B,low,unify eval_expr/eval_in_context via Ref-resolver closure (arith core identical incl div0),const_resolve::tests (arith/forward-ref/cycle/div0) already present
 compile_orchestration,hymeko_core/src/module_store/module_store.rs:181,0,1,C,medium,split 96-line 11-phase compile into load/build_index/lower_and_hash; expose clone ownership,canonical-hash stability before/after
-arc_hash_dead,hymeko_core/src/ir/ir.rs:29,6,0,F,low,remove never-derived parallel array (push(None)+serde only); wire-versioned change,serde roundtrip golden (removal changes wire; flag breaking)
 twin_hierarchy_twin_hash,hymeko_core/src/ir/coherence.rs:8,358,3,F,high,U2: derive path Index from intrusive links; delete coherence module + one hash walk,frozen canonical-hash + merkle KAT corpus byte-identical
 shared_state_ipc,hymeko_core/src/tensor/shared_state.rs:1,279,0,G,medium,delete deprecated ipc scaffolding + ipc feature + iceoryx2 dep once external cdylib consumers confirmed gone,none in-repo (gated on external confirmation)
 tensor_coo_new_with_meta,hymeko_core/src/tensor/tensor_coo.rs:81,9,1,A,low,delete with_meta or delegate (byte-identical to new),TensorCoo construction/len/is_empty test (add)
-ref_target_sign_dup,hymeko_core/src/ir/common.rs:4,15,2,A,low,delete free ref_target/ref_sign; point tests at SignedRefR methods,ir_transformation_tests + fano graph tests
-rd_u64_triplication,hymeko_core/src/ir_stream/section.rs:534,10,3,A,low,one shared LE wire_read helper (section/envelope/version spellings),encoding_is_little_endian + section-read test
 build_skeleton_prefix_walk,hymeko_core/src/ir/canonical_hash.rs:127,10,2,B,high,shared nearest_indexed_prefix helper (canonical_hash + coherence),KAT: helper must return identical DeclId (hash-determining)
 dead_fns_ir_resolution,hymeko_core/src/ir/hash.rs:50,74,0,G,none,delete hash_decl/path_bytes/resolve_arc_anno/Index::iter/intern_ast_into/StringTable,none (unused); confirm no FFI consumer for StringTable
-lower_arc_params,hymeko_core/src/ir/lower.rs:134,41,1,B,low,8 params -> config struct (SS6.5 #6),as_arc mapping unchanged regression test
 message_identity_surface,hymeko_core/src/ir_stream/assembler.rs:231,1,0,E,low,demote MessageIdentity to pub(crate); drop re-export,compile-only
 access_speculative_surface,hymeko_core/src/ir/access.rs:142,60,0,E,low,trim ~10 zero-consumer accessor methods to actual consumers,none (removal); or keep as boundary
 pretty_print_accessor_bypass,hymeko_core/src/util/pretty_print.rs:87,0,1,E,low,use sealed accessor instead of raw did.0 (consistency with ir_writer),accessor-equivalence assertion
@@ -25,3 +15,10 @@ validate_sections_split,hymeko_core/src/ir_stream/section.rs:355,0,1,C,low,extra
 coherence_validator_split,hymeko_core/src/ir/coherence.rs:143,0,3,C,low,split 6 independent checks; preserve call order (report order contractual),corpus finding-order assertions
 interner_unsafe,hymeko_core/src/resolution/interner.rs:22,6,1,H,medium,sole unsafe (Box<str>->&'static); sound but unpinned,Miri over Interner::intern growth
 compile_double_lookup,hymeko_core/src/module_store/module_store.rs:193,3,1,C,low,fold double self.get(root)+non-test unwrap into one binding,compile() path test
+incidence_access_surface,hymeko_core/src/ir/incidence.rs,0,0,resolved,verified,one inherent declaration template preserves owned and borrowed lifetimes,37 unit and 34 integration tests plus Clippy
+record_access_families,hymeko_core/src/ir/access.rs,0,0,resolved,verified,shared typed iteration count and containment declarations,access verification suite
+assembler_resync_cleanup,hymeko_core/src/ir_stream/assembler.rs,0,0,resolved,verified,one apply boundary abandons pending state for every resync outcome,common test driver checks cleanup and preserved metadata
+assembler_test_runner,hymeko_core/src/ir_stream/assembler.rs:1170,0,0,resolved,verified,AssemblerRunner shares fixture admission invariants and transaction execution,36 tests and Clippy pass; test marks 607 to 324
+wgpu_preparation_owner,hymeko_wgpu/src/operations/mod.rs,0,0,resolved,verified,OperationFactory context and limits plus OperandCheck and GpuTensor binding replace builder helper copies,36 GPU tests and Clippy pass
+ast_declaration_walk,hymeko_core/src/sym_ast.rs,0,0,resolved,verified,DeclarationFields supports AstInterner and ConstValues generic declaration walks,11 unit and 51 integration tests pass
+incidence_transpose_row_kernel,hymeko_core/src/ir/incidence.rs,0,0,resolved,verified,one transpose_row via IncidenceCoefficients for direct prepared serial and Rayon; shared serial traversal,26 correctness tests and Clippy; token marks unchanged

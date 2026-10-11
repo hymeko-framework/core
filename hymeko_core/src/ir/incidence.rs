@@ -471,20 +471,42 @@ impl IncidenceIndexData {
 
     /// `z = Bᵀ·y` (node-major via the reverse index). See [`IncidenceIndex::arc_to_node`].
     pub fn arc_to_node(&self, ir: &Ir, y: &[f64], z: &mut [f64]) {
-        let n = ir.decl_nodes.len();
+        let coefficients = IncidenceView { ir, data: self };
+        self.apply_transpose(&coefficients, ir.decl_nodes.len(), y, z);
+    }
+
+    /// Serial output traversal shared by live and prepared coefficients.
+    fn apply_transpose(
+        &self,
+        coefficients: &impl IncidenceCoefficients,
+        n: usize,
+        y: &[f64],
+        z: &mut [f64],
+    ) {
+        // Preserve zeroing and partial writes if a caller supplies a short slice.
         for zi in z.iter_mut().take(n) {
             *zi = 0.0;
         }
         for d in 0..n {
-            let (lo, hi) = self.range(DeclId::new(d));
-            let mut acc = 0.0;
-            for k in lo..hi {
-                let arc = self.arcs[k];
-                let sref = &ir.arcs[arc.raw()].refs[self.slots[k] as usize];
-                acc += f64::from(sref.sign()) * scalar_weight(sref) * y[arc.raw()];
-            }
-            z[d] = acc;
+            z[d] = self.transpose_row(coefficients, DeclId::new(d), y);
         }
+    }
+
+    /// One left-to-right fold for serial and parallel applies. Do not reassociate.
+    #[inline]
+    fn transpose_row(
+        &self,
+        coefficients: &impl IncidenceCoefficients,
+        node: DeclId,
+        y: &[f64],
+    ) -> f64 {
+        let (lo, hi) = self.range(node);
+        let mut acc = 0.0;
+        for k in lo..hi {
+            let arc = self.arcs[k];
+            acc += coefficients.coefficient(k, arc) * y[arc.raw()];
+        }
+        acc
     }
 
     /// `z = Bᵀ·B·x`. See [`IncidenceIndex::star_operator`]. `y_scratch` caller-owned.
@@ -500,13 +522,12 @@ impl IncidenceIndexData {
     /// [`OperatorPlanError::NonFiniteCoefficient`] on a `NaN`/`±∞` coefficient.
     fn build_coeff(&self, ir: &Ir) -> Result<Vec<f64>, OperatorPlanError> {
         let n = ir.decl_nodes.len();
+        let coefficients = IncidenceView { ir, data: self };
         let mut coeff: Vec<f64> = Vec::with_capacity(self.arcs.len());
         for d in 0..n {
             let (lo, hi) = self.range(DeclId::new(d));
             for k in lo..hi {
-                let arc = self.arcs[k];
-                let sref = &ir.arcs[arc.raw()].refs[self.slots[k] as usize];
-                let c = f64::from(sref.sign()) * scalar_weight(sref);
+                let c = coefficients.coefficient(k, self.arcs[k]);
                 if !c.is_finite() {
                     return Err(OperatorPlanError::NonFiniteCoefficient {
                         node: DeclId::new(d),
@@ -519,110 +540,141 @@ impl IncidenceIndexData {
     }
 }
 
+/// Coefficients in reverse-index order; topology and row arithmetic stay in the index.
+/// Static dispatch keeps prepared applies independent of IR weight decoding.
+trait IncidenceCoefficients {
+    fn coefficient(&self, position: usize, arc: HyperArcId) -> f64;
+}
+
+impl IncidenceCoefficients for IncidenceView<'_, '_> {
+    #[inline]
+    fn coefficient(&self, position: usize, arc: HyperArcId) -> f64 {
+        let sref = &self.ir.arcs[arc.raw()].refs[self.data.slots[position] as usize];
+        f64::from(sref.sign()) * scalar_weight(sref)
+    }
+}
+
+impl IncidenceCoefficients for IncidenceOperatorPlan<'_, '_> {
+    #[inline]
+    fn coefficient(&self, position: usize, _arc: HyperArcId) -> f64 {
+        self.coeff[position]
+    }
+}
+
+// Share inherent declarations without shortening a borrowed view's result lifetime.
+// Numerical work remains in IncidenceIndexData. The optional borrow distinguishes
+// owned storage from a Copy reference; callers need no extension-trait import.
+macro_rules! incidence_accessors {
+    ($data:lifetime, $($borrow:tt)?) => {
+        /// The `Ir` this index borrows.
+        #[must_use]
+        pub fn ir(&self) -> &'ir Ir {
+            self.ir
+        }
+
+        /// The derived, lifetime-free index payload (shared with [`PreparedIr`] / [`IncidenceView`]).
+        #[must_use]
+        pub fn data(&self) -> &$data IncidenceIndexData {
+            $($borrow)? self.data
+        }
+
+        /// Incident arc ids of `node`, ascending arc id then ref slot; duplicates kept.
+        #[must_use]
+        pub fn incident_arcs(&self, node: DeclId) -> &$data [HyperArcId] {
+            self.data().incident_arcs(node)
+        }
+
+        /// Incident ref slots of `node`, parallel to [`Self::incident_arcs`].
+        #[must_use]
+        pub fn incident_slots(&self, node: DeclId) -> &$data [u32] {
+            self.data().incident_slots(node)
+        }
+
+        /// Fully-resolved incidences of `node` — each an `O(1)` [`IncidenceRef`].
+        pub fn incidences(&self, node: DeclId) -> impl Iterator<Item = IncidenceRef<'ir>> + $data {
+            self.data().incidences(self.ir, node)
+        }
+
+        /// Resolve one coordinate to a full [`IncidenceRef`]. `O(1)`.
+        #[must_use]
+        pub fn resolve(&self, arc: HyperArcId, slot: u32) -> IncidenceRef<'ir> {
+            self.data().resolve(self.ir, arc, slot)
+        }
+
+        /// Incidence degree of `node` (with multiplicity).
+        #[must_use]
+        pub fn degree(&self, node: DeclId) -> usize {
+            self.data().degree(node)
+        }
+
+        /// Total incidences indexed (`nnz`).
+        #[must_use]
+        pub fn incidence_count(&self) -> usize {
+            self.data().incidence_count()
+        }
+
+        /// Bytes retained by the index arrays (capacity-accurate; real `HyperArcId`).
+        #[must_use]
+        pub fn retained_bytes(&self) -> usize {
+            self.data().retained_bytes()
+        }
+
+        /// Prove the index is an exact bijection with the `Ir` incidences. Diagnostic —
+        /// call once, not per query.
+        ///
+        /// # Errors
+        /// [`CoordError`] on the first coordinate that breaks the bijection.
+        pub fn validate(&self) -> Result<(), CoordError> {
+            self.data().validate(self.ir)
+        }
+
+        /// `y = B·x`: `y[arc] = Σ_slot sign·weight·x[target]`. Arc-major, output-
+        /// partitioned by arc (each arc independent), allocation-free. `x` is indexed
+        /// by `DeclId.raw()` (len ≥ decls), `y` by `HyperArcId.raw()` (len ≥ arcs).
+        /// Deterministic FP order: refs left-to-right within each arc.
+        pub fn node_to_arc(&self, x: &[f64], y: &mut [f64]) {
+            self.data().node_to_arc(self.ir, x, y);
+        }
+
+        /// `z = Bᵀ·y`: `z[node] = Σ_(arc,slot)∈incident(node) sign·weight·y[arc]`.
+        /// **Node-major via the reverse index** — output-partitioned by node, so it is
+        /// allocation-free, deterministic, and (unlike an arc-major scatter) yields
+        /// identical results serial or parallel. `z[0..decls]` is zeroed here.
+        pub fn arc_to_node(&self, y: &[f64], z: &mut [f64]) {
+            self.data().arc_to_node(self.ir, y, z);
+        }
+
+        /// `z = Bᵀ·B·x` — the signed star operator, no materialised graph or matrix.
+        /// `y_scratch` is caller-owned (len ≥ arcs); no allocation.
+        pub fn star_operator(&self, x: &[f64], z: &mut [f64], y_scratch: &mut [f64]) {
+            self.data().star_operator(self.ir, x, z, y_scratch);
+        }
+
+        /// Prepare a caller-owned [`IncidenceOperatorPlan`] — precompute the node-major
+        /// signed coefficient (`sign · scalar_weight`) once per incidence, so a later
+        /// `Bᵀy` / `BᵀBx` apply skips the per-incidence `(arc,slot)` resolution, `sign()`
+        /// match and `scalar_weight` fold (measured ~20× on 1e6 incidences, break-even
+        /// ≈ 1.2 applies). The plan borrows this index's `Ir` + derived data, stores no
+        /// topology or coordinate, and is not part of the canonical `Ir`.
+        ///
+        /// # Errors
+        /// [`OperatorPlanError::NonFiniteCoefficient`] — a deliberate stricter contract:
+        /// the plan rejects a `NaN`/`±∞` coefficient at prepare rather than silently
+        /// propagating it through the operator.
+        pub fn prepare_operator(&self) -> Result<IncidenceOperatorPlan<$data, 'ir>, OperatorPlanError> {
+            let coeff = self.data().build_coeff(self.ir)?;
+            Ok(IncidenceOperatorPlan {
+                ir: self.ir,
+                data: self.data(),
+                coeff,
+            })
+        }
+
+    };
+}
+
 impl<'ir> IncidenceIndex<'ir> {
-    /// The `Ir` this index borrows.
-    #[must_use]
-    pub fn ir(&self) -> &'ir Ir {
-        self.ir
-    }
-
-    /// The derived, lifetime-free index payload (shared with [`PreparedIr`] / [`IncidenceView`]).
-    #[must_use]
-    pub fn data(&self) -> &IncidenceIndexData {
-        &self.data
-    }
-
-    /// Incident arc ids of `node`, ascending arc id then ref slot; duplicates kept.
-    #[must_use]
-    pub fn incident_arcs(&self, node: DeclId) -> &[HyperArcId] {
-        self.data.incident_arcs(node)
-    }
-
-    /// Incident ref slots of `node`, parallel to [`Self::incident_arcs`].
-    #[must_use]
-    pub fn incident_slots(&self, node: DeclId) -> &[u32] {
-        self.data.incident_slots(node)
-    }
-
-    /// Fully-resolved incidences of `node` — each an `O(1)` [`IncidenceRef`].
-    pub fn incidences(&self, node: DeclId) -> impl Iterator<Item = IncidenceRef<'ir>> + '_ {
-        self.data.incidences(self.ir, node)
-    }
-
-    /// Resolve one coordinate to a full [`IncidenceRef`]. `O(1)`.
-    #[must_use]
-    pub fn resolve(&self, arc: HyperArcId, slot: u32) -> IncidenceRef<'ir> {
-        self.data.resolve(self.ir, arc, slot)
-    }
-
-    /// Incidence degree of `node` (with multiplicity).
-    #[must_use]
-    pub fn degree(&self, node: DeclId) -> usize {
-        self.data.degree(node)
-    }
-
-    /// Total incidences indexed (`nnz`).
-    #[must_use]
-    pub fn incidence_count(&self) -> usize {
-        self.data.incidence_count()
-    }
-
-    /// Bytes retained by the index arrays (capacity-accurate; real `HyperArcId`).
-    #[must_use]
-    pub fn retained_bytes(&self) -> usize {
-        self.data.retained_bytes()
-    }
-
-    /// Prove the index is an exact bijection with the `Ir` incidences. Diagnostic —
-    /// call once, not per query.
-    ///
-    /// # Errors
-    /// [`CoordError`] on the first coordinate that breaks the bijection.
-    pub fn validate(&self) -> Result<(), CoordError> {
-        self.data.validate(self.ir)
-    }
-
-    /// `y = B·x`: `y[arc] = Σ_slot sign·weight·x[target]`. Arc-major, output-
-    /// partitioned by arc (each arc independent), allocation-free. `x` is indexed
-    /// by `DeclId.raw()` (len ≥ decls), `y` by `HyperArcId.raw()` (len ≥ arcs).
-    /// Deterministic FP order: refs left-to-right within each arc.
-    pub fn node_to_arc(&self, x: &[f64], y: &mut [f64]) {
-        self.data.node_to_arc(self.ir, x, y);
-    }
-
-    /// `z = Bᵀ·y`: `z[node] = Σ_(arc,slot)∈incident(node) sign·weight·y[arc]`.
-    /// **Node-major via the reverse index** — output-partitioned by node, so it is
-    /// allocation-free, deterministic, and (unlike an arc-major scatter) yields
-    /// identical results serial or parallel. `z[0..decls]` is zeroed here.
-    pub fn arc_to_node(&self, y: &[f64], z: &mut [f64]) {
-        self.data.arc_to_node(self.ir, y, z);
-    }
-
-    /// `z = Bᵀ·B·x` — the signed star operator, no materialised graph or matrix.
-    /// `y_scratch` is caller-owned (len ≥ arcs); no allocation.
-    pub fn star_operator(&self, x: &[f64], z: &mut [f64], y_scratch: &mut [f64]) {
-        self.data.star_operator(self.ir, x, z, y_scratch);
-    }
-
-    /// Prepare a caller-owned [`IncidenceOperatorPlan`] — precompute the node-major
-    /// signed coefficient (`sign · scalar_weight`) once per incidence, so a later
-    /// `Bᵀy` / `BᵀBx` apply skips the per-incidence `(arc,slot)` resolution, `sign()`
-    /// match and `scalar_weight` fold (measured ~20× on 1e6 incidences, break-even
-    /// ≈ 1.2 applies). The plan borrows this index's `Ir` + derived data, stores no
-    /// topology or coordinate, and is not part of the canonical `Ir`.
-    ///
-    /// # Errors
-    /// [`OperatorPlanError::NonFiniteCoefficient`] — a deliberate stricter contract:
-    /// the plan rejects a `NaN`/`±∞` coefficient at prepare rather than silently
-    /// propagating it through the operator.
-    pub fn prepare_operator(&self) -> Result<IncidenceOperatorPlan<'_, 'ir>, OperatorPlanError> {
-        let coeff = self.data.build_coeff(self.ir)?;
-        Ok(IncidenceOperatorPlan {
-            ir: self.ir,
-            data: &self.data,
-            coeff,
-        })
-    }
+    incidence_accessors!('_, &);
 }
 
 /// An `O(1)`, zero-allocation **borrowed** pairing of a `&Ir` with a borrowed
@@ -637,97 +689,15 @@ pub struct IncidenceView<'a, 'ir: 'a> {
 }
 
 impl<'a, 'ir: 'a> IncidenceView<'a, 'ir> {
-    /// The borrowed `Ir`.
-    #[must_use]
-    pub fn ir(&self) -> &'ir Ir {
-        self.ir
+    incidence_accessors!('a,);
+
+    /// Pair an `Ir` with the index derived from it. Crate-private: only the owners that hold
+    /// both ([`PreparedIr`], `CompiledModel`) pair them, so no view spans a foreign `Ir`.
+    pub(crate) fn pair(ir: &'ir Ir, data: &'a IncidenceIndexData) -> Self {
+        Self { ir, data }
     }
 
-    /// The borrowed derived index payload.
-    #[must_use]
-    pub fn data(&self) -> &'a IncidenceIndexData {
-        self.data
-    }
-
-    /// See [`IncidenceIndex::incident_arcs`].
-    #[must_use]
-    pub fn incident_arcs(&self, node: DeclId) -> &'a [HyperArcId] {
-        self.data.incident_arcs(node)
-    }
-
-    /// See [`IncidenceIndex::incident_slots`].
-    #[must_use]
-    pub fn incident_slots(&self, node: DeclId) -> &'a [u32] {
-        self.data.incident_slots(node)
-    }
-
-    /// See [`IncidenceIndex::incidences`].
-    pub fn incidences(&self, node: DeclId) -> impl Iterator<Item = IncidenceRef<'ir>> + 'a {
-        self.data.incidences(self.ir, node)
-    }
-
-    /// See [`IncidenceIndex::resolve`].
-    #[must_use]
-    pub fn resolve(&self, arc: HyperArcId, slot: u32) -> IncidenceRef<'ir> {
-        self.data.resolve(self.ir, arc, slot)
-    }
-
-    /// See [`IncidenceIndex::degree`].
-    #[must_use]
-    pub fn degree(&self, node: DeclId) -> usize {
-        self.data.degree(node)
-    }
-
-    /// See [`IncidenceIndex::incidence_count`].
-    #[must_use]
-    pub fn incidence_count(&self) -> usize {
-        self.data.incidence_count()
-    }
-
-    /// See [`IncidenceIndex::retained_bytes`].
-    #[must_use]
-    pub fn retained_bytes(&self) -> usize {
-        self.data.retained_bytes()
-    }
-
-    /// See [`IncidenceIndex::validate`].
-    ///
-    /// # Errors
-    /// [`CoordError`] on the first coordinate that breaks the bijection.
-    pub fn validate(&self) -> Result<(), CoordError> {
-        self.data.validate(self.ir)
-    }
-
-    /// See [`IncidenceIndex::node_to_arc`].
-    pub fn node_to_arc(&self, x: &[f64], y: &mut [f64]) {
-        self.data.node_to_arc(self.ir, x, y);
-    }
-
-    /// See [`IncidenceIndex::arc_to_node`].
-    pub fn arc_to_node(&self, y: &[f64], z: &mut [f64]) {
-        self.data.arc_to_node(self.ir, y, z);
-    }
-
-    /// See [`IncidenceIndex::star_operator`].
-    pub fn star_operator(&self, x: &[f64], z: &mut [f64], y_scratch: &mut [f64]) {
-        self.data.star_operator(self.ir, x, z, y_scratch);
-    }
-
-    /// See [`IncidenceIndex::prepare_operator`].
-    ///
-    /// # Errors
-    /// [`OperatorPlanError::NonFiniteCoefficient`].
-    pub fn prepare_operator(&self) -> Result<IncidenceOperatorPlan<'a, 'ir>, OperatorPlanError> {
-        let coeff = self.data.build_coeff(self.ir)?;
-        Ok(IncidenceOperatorPlan {
-            ir: self.ir,
-            data: self.data,
-            coeff,
-        })
-    }
-
-    /// Borrowed handle for the implicit sparse signed star operator
-    /// `A_star = BᵀB` — created `O(1)` / zero-alloc, never materialises `A_star`.
+    /// A zero-allocation handle to the signed star operator.
     #[must_use]
     pub fn star(&self) -> StarOperator<'a, 'ir> {
         StarOperator { view: *self }
@@ -887,18 +857,8 @@ impl<'a, 'ir> IncidenceOperatorPlan<'a, 'ir> {
     /// `z = Bᵀ·y` using the prepared coefficients. Node-major, output-partitioned, allocation-free;
     /// bitwise-identical to [`IncidenceIndex::arc_to_node`] for finite weights. `z[0..decls]` is zeroed.
     pub fn arc_to_node(&self, y: &[f64], z: &mut [f64]) {
-        let n = self.ir.decl_nodes.len();
-        for zi in z.iter_mut().take(n) {
-            *zi = 0.0;
-        }
-        for d in 0..n {
-            let (lo, hi) = self.data.range(DeclId::new(d));
-            let mut acc = 0.0;
-            for k in lo..hi {
-                acc += self.coeff[k] * y[self.data.arcs[k].raw()];
-            }
-            z[d] = acc;
-        }
+        self.data
+            .apply_transpose(self, self.ir.decl_nodes.len(), y, z);
     }
 
     /// Rayon `z = Bᵀ·y`: each node's output cell is written exactly once (disjoint partition, no atomics),
@@ -906,15 +866,8 @@ impl<'a, 'ir> IncidenceOperatorPlan<'a, 'ir> {
     pub fn par_arc_to_node(&self, y: &[f64], z: &mut [f64]) {
         use rayon::prelude::*;
         let n = self.ir.decl_nodes.len();
-        let data = self.data;
-        let coeff = &self.coeff;
         z[..n].par_iter_mut().enumerate().for_each(|(d, zi)| {
-            let (lo, hi) = data.range(DeclId::new(d));
-            let mut acc = 0.0;
-            for k in lo..hi {
-                acc += coeff[k] * y[data.arcs[k].raw()];
-            }
-            *zi = acc;
+            *zi = self.data.transpose_row(self, DeclId::new(d), y);
         });
     }
 
@@ -946,7 +899,6 @@ mod fault_tests {
                 next_sibling: DeclId::NONE,
                 anno: AnnoR::default(),
             });
-            ir.decl_hash.push(None);
         }
         ir.nodes.push(NodeRec::new(DeclId::new(0), Vec::new()));
         ir.nodes.push(NodeRec::new(DeclId::new(1), Vec::new()));

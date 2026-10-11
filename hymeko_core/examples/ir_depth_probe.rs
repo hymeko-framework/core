@@ -54,7 +54,6 @@ fn build_chain(depth: usize) -> (Ir, Index, Interner) {
             next_sibling: DeclId::NONE,
             anno: AnnoR::default(),
         });
-        ir.decl_hash.push(None);
         idx.by_path.insert(PathKey(segs.to_vec()), id);
         id
     };
@@ -83,7 +82,6 @@ fn build_chain(depth: usize) -> (Ir, Index, Interner) {
         in_edge: ed,
         refs: vec![SignedRefR::Plus(RefAtomR::plain(last))],
     });
-    ir.arc_hash.push(None);
     ir.edges[eid.raw()].arcs.push(aid);
 
     (ir, idx, it)

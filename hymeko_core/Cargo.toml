@@ -11,14 +11,13 @@ crate-type = ["rlib", "cdylib"]
 
 [features]
 default = []
-ipc = ["dep:iceoryx2"]
-arrow-schema = ["dep:arrow"]
 
 [dependencies]
 #
 # Internal dependencies
 #
 parser = { workspace = true }
+hymeko_tensor = { workspace = true }
 #
 # Common dependencies
 #
@@ -27,16 +26,9 @@ ciborium = "=0.2.2"
 crossbeam-queue = "=0.3.14"
 rustc-hash = "2.1.1"
 blake3 = {  workspace = true }
-nalgebra = "0.34.1"
-num-traits = "0.2.19"
-nalgebra-sparse = "0.11.0"
 rayon = { workspace = true }
-#
-# Heavy feature dependencies
-#
-iceoryx2 = { workspace = true, optional = true }
-arrow = {  workspace = true, optional = true }
 [dev-dependencies]
+hymeko_tensor = { workspace = true, features = ["sparse"] }
 log = { workspace = true }
 env_logger = { version = "0.11.5", default-features = false, features = ["auto-color"] }
 criterion = { version = "0.8.2", default-features = false }
@@ -58,13 +50,6 @@ path = "tests/circular_buffer.rs"
 
 [[bench]]
 name = "interning_bench"
-harness = false
-
-# APPROVED-CORE-EDIT: csr-spmv-spmm-into (2026-08-24, user chat) — bench
-# target for the CSR SpMV/SpMM kernels. Registration is required because
-# this crate sets `autobenches = false`.
-[[bench]]
-name = "csr_bench"
 harness = false
 
 # APPROVED-CORE-EDIT: ir-stream-wire-codec (2026-08-28, Phase 10A brief) — bench

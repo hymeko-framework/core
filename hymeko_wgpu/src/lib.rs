@@ -21,7 +21,7 @@
 //! # Position in the stack
 //!
 //! ```text
-//!   hymeko_core::tensor::compute      backend-independent vocabulary
+//!   hymeko_tensor::compute      backend-independent vocabulary
 //!     TensorShape, SparseCsrShape,    (no wgpu types, no device handles)
 //!     BackendKind, ComputeError
 //!            |                    |
@@ -58,7 +58,7 @@
 //! [`TensorArena`].
 //!
 //! ```no_run
-//! use hymeko::tensor::compute::{SparseCsrShape, TensorShape};
+//! use hymeko_tensor::compute::{SparseCsrShape, TensorShape};
 //! use hymeko_wgpu::WgpuBackend;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -93,7 +93,7 @@
 //! reuses both. After the first read of a given size, neither side allocates.
 //!
 //! ```no_run
-//! use hymeko::tensor::compute::TensorShape;
+//! use hymeko_tensor::compute::TensorShape;
 //! use hymeko_wgpu::WgpuBackend;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -153,7 +153,7 @@ pub use scope::{EncodeScope, JoinScope, Joined, TensorOperand, Tracked, Untracke
 
 /// Re-exported so downstream code can name the shared vocabulary without also
 /// importing `hymeko_core` directly.
-pub use hymeko::tensor::compute::{BackendKind, ComputeError, SparseCsrShape, TensorShape};
+pub use hymeko_tensor::compute::{BackendKind, ComputeError, SparseCsrShape, TensorShape};
 
 /// WGSL source for the skeleton validation kernel.
 ///

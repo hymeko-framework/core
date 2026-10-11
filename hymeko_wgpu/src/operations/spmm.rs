@@ -21,8 +21,9 @@
 
 use std::sync::Arc;
 
-use hymeko::tensor::compute::{BackendKind, ComputeError, SparseCsrShape, TensorShape, try_u32};
+use hymeko_tensor::compute::{BackendKind, ComputeError, SparseCsrShape, TensorShape, try_u32};
 
+use super::OperationFactory;
 use crate::operations::activation::ActivationKind;
 use crate::operations::dispatch::PreparedDispatch;
 use crate::pipeline::KernelId;
@@ -219,10 +220,7 @@ const _: () = assert!(std::mem::size_of::<SpmmParams>() == 16);
 ///
 /// Obtained from [`crate::OperationFactory::spmm`].
 pub struct SpmmBuilder<'a, S: EncodeScope = Untracked> {
-    device: &'a wgpu::Device,
-    queue: &'a wgpu::Queue,
-    cache: &'a crate::PipelineCache,
-    limits: SpmmLimits,
+    factory: OperationFactory<'a>,
     matrix: Option<&'a GpuCsrMatrix<f32>>,
     input: Option<&'a GpuTensor<f32>>,
     output: Option<&'a GpuTensor<f32>>,
@@ -236,26 +234,10 @@ pub struct SpmmBuilder<'a, S: EncodeScope = Untracked> {
     _scope: core::marker::PhantomData<S>,
 }
 
-/// The device limits SpMM validates against.
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct SpmmLimits {
-    pub max_workgroups_per_dimension: u32,
-    pub max_invocations_per_workgroup: u32,
-    pub max_storage_buffers_per_stage: u32,
-}
-
 impl<'a> SpmmBuilder<'a, Untracked> {
-    pub(crate) fn new(
-        device: &'a wgpu::Device,
-        queue: &'a wgpu::Queue,
-        cache: &'a crate::PipelineCache,
-        limits: SpmmLimits,
-    ) -> Self {
+    pub(crate) fn new(factory: OperationFactory<'a>) -> Self {
         Self {
-            device,
-            queue,
-            cache,
-            limits,
+            factory,
             matrix: None,
             input: None,
             output: None,
@@ -275,10 +257,7 @@ impl<'a, S: EncodeScope> SpmmBuilder<'a, S> {
     /// scope is a `PhantomData`, so this is a move of the same layout.
     fn retype<S2: EncodeScope>(self) -> SpmmBuilder<'a, S2> {
         SpmmBuilder {
-            device: self.device,
-            queue: self.queue,
-            cache: self.cache,
-            limits: self.limits,
+            factory: self.factory,
             matrix: self.matrix,
             input: self.input,
             output: self.output,
@@ -450,7 +429,10 @@ impl<'a, S: EncodeScope> SpmmBuilder<'a, S> {
         // Resolved here, not in the constructor, because the rule needs the
         // feature dimension -- which is only known once the operands are set.
         let workgroup = self.workgroup.unwrap_or_else(|| {
-            spmm_workgroup_for(feature_dim, self.limits.max_invocations_per_workgroup)
+            spmm_workgroup_for(
+                feature_dim,
+                self.factory.limits.max_invocations_per_workgroup,
+            )
         });
         let invocations = workgroup.invocations();
         if invocations == 0 {
@@ -459,22 +441,22 @@ impl<'a, S: EncodeScope> SpmmBuilder<'a, S> {
                 message: format!("spmm workgroup {workgroup} has zero invocations"),
             });
         }
-        if invocations > self.limits.max_invocations_per_workgroup {
+        if invocations > self.factory.limits.max_invocations_per_workgroup {
             return Err(ComputeError::Backend {
                 backend: BackendKind::Wgpu,
                 message: format!(
                     "spmm workgroup {} needs {invocations} invocations, device allows {}",
-                    workgroup, self.limits.max_invocations_per_workgroup
+                    workgroup, self.factory.limits.max_invocations_per_workgroup
                 ),
             });
         }
         // 5 storage bindings: row_ptr, col_ind, values, x, y.
-        if self.limits.max_storage_buffers_per_stage < 5 {
+        if self.factory.limits.max_storage_buffers_per_stage < 5 {
             return Err(ComputeError::Backend {
                 backend: BackendKind::Wgpu,
                 message: format!(
                     "spmm needs 5 storage buffers per stage, device allows {}",
-                    self.limits.max_storage_buffers_per_stage
+                    self.factory.limits.max_storage_buffers_per_stage
                 ),
             });
         }
@@ -483,7 +465,7 @@ impl<'a, S: EncodeScope> SpmmBuilder<'a, S> {
         let groups_x = fd_u32.div_ceil(workgroup.x);
         let groups_y = num_rows.div_ceil(workgroup.y);
         for (dim, groups) in [("x", groups_x), ("y", groups_y)] {
-            if groups > self.limits.max_workgroups_per_dimension {
+            if groups > self.factory.limits.max_workgroups_per_dimension {
                 return Err(ComputeError::IndexOverflow {
                     what: if dim == "x" {
                         "spmm dispatch workgroups (feature axis) exceeds device limit"
@@ -521,9 +503,10 @@ impl<'a, S: EncodeScope> SpmmBuilder<'a, S> {
             Some(kind) => KernelId::SpmmActivation(kind.entry()),
         };
 
-        let bundle = self
-            .cache
-            .bundle(self.device, kernel, workgroup.x, workgroup.y)?;
+        let bundle =
+            self.factory
+                .cache
+                .bundle(self.factory.device, kernel, workgroup.x, workgroup.y)?;
 
         // --- params -----------------------------------------------------------
         let params = SpmmParams {
@@ -532,48 +515,44 @@ impl<'a, S: EncodeScope> SpmmBuilder<'a, S> {
             feature_dim: fd_u32,
             alpha: self.fused_activation.map_or(0.0, ActivationKind::alpha),
         };
-        let params_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("spmm.params"),
-            size: std::mem::size_of::<SpmmParams>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        self.queue
-            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
+        let params_buffer = self.factory.uniform("spmm.params", &params);
 
         // --- bind group --------------------------------------------------------
         // Built once against the bundle's layout. Re-dispatch and in-place input
         // rewrites reuse it, because it binds buffers rather than contents.
-        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("spmm.bind_group"),
-            layout: bundle.bind_group_layout(),
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: matrix.row_ptr().as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: matrix.col_ind().as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: matrix.values().as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: input.buffer().as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: output.buffer().as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: params_buffer.as_entire_binding(),
-                },
-            ],
-        });
+        let bind_group = self
+            .factory
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("spmm.bind_group"),
+                layout: bundle.bind_group_layout(),
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: matrix.row_ptr().as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: matrix.col_ind().as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: matrix.values().as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: input.buffer().as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: output.buffer().as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: params_buffer.as_entire_binding(),
+                    },
+                ],
+            });
 
         Ok(PreparedSpmm {
             _operands: core::marker::PhantomData,

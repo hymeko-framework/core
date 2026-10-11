@@ -17,9 +17,7 @@
 #     migrated (hymeko_query, hymeko_client, hymeko_daemon, rtl/, docs/spec/)
 #     are dropped rather than inherited as dead entries, and `hymeko_hnn` was
 #     relocated 2026-08-31 to hymeko/nagare (hymeko_nagare::hnn).
-#   * `nalgebra` is pinned to the version this workspace actually builds
-#     (0.34.1). The monorepo pin (=0.33.0) was stale here and tripped
-#     `on_dependency_drift`; see `dependencies.pinned.rust` below.
+#   * Numeric dependency ownership moved to tensor on 2026-09-23.
 
 schema_version: 1
 
@@ -54,10 +52,52 @@ crates:
     lockdown: full
     reason: >
       Foundational types: IR, interning/resolution, canonical hashing,
-      COO/CSR tensor primitives, the `Real` numeric trait. Any change
+      canonical IR-to-tensor adapters. Any change
       propagates to every downstream crate and invalidates published
       benchmarks.
     approved_edits:
+      # Explicit user direction, 2026-10-11: remove numbered identity type names.
+      - slug: canonical-identity-names
+        date: 2026-10-11
+        scope: >
+          Restore ProgramStructureHash and SemanticModelDigest in their existing
+          owner, callers and tests. The 2026-09-30 merge restored numbered names
+          after their removal; this correction supersedes the V1/V2-name retention
+          under canonical-identity-tensor-extraction-merge. These are two semantic
+          contracts, not successive implementations of one hash. Keep Canon and
+          CanonicalIdentity as the public entry points.
+        constraints:
+          - no compatibility aliases or parallel implementations
+          - hash bytes, encoding versions, CBOR and dependencies unchanged
+          - Core only; RL and other consumer repositories are outside this task
+          - user approved a Core-only commit and push to fix/canonical-identity-names on 2026-10-11
+          - no merge or publication of consumer repositories is authorized
+
+      # User chat, 2026-09-23: numeric tensor code belongs in the tensor repository.
+      - slug: tensor-numeric-owner-extraction
+        date: 2026-09-23
+        scope: >
+          Move generic numeric storage, kernels, contracts, tests and dependencies
+          to hymeko_tensor; Core retains only IR adapters. WGPU consumes Tensor
+          directly. Retire shared_state and its Iceoryx dependency.
+        constraints:
+          - one implementation per operation, no compatibility exports
+          - canonical IR and graph-aware adapters stay in their existing owners
+          - publish and pin the Tensor provider before the Core consumer
+
+      # User chat, 2026-09-23: implement incremental recomputation in Core.
+      - slug: incremental-semantic-digest
+        date: 2026-09-23
+        scope: >
+          CompiledModel-owned derived semantic contributions, reused across checked
+          leaf-value updates through the existing digest encoder. Reuse unchanged
+          structural hashes and migrate retained-model consumers to semantic_digest.
+        constraints:
+          - preserve semantic and structural digest bytes and algorithm versions
+          - keep caches out of serialized IR and behind immutable model ownership
+          - verify full/incremental parity and actual declaration rehash counts
+          - no dependency change, alternate IR or parallel hash implementation
+
       # APPROVED-CORE-EDIT: core-manifest-and-hymeko-core-clippy (2026-05-11)
       # Pre-existing, inherited from the monorepo. Targeted lint allows in
       # src/lib.rs and tests/mod.rs instead of one mega-refactor.
@@ -124,7 +164,7 @@ crates:
         date: 2026-09-05
         scope: >
           New module hymeko_core/src/ir/semantic_digest.rs owning the complete
-          semantic identity of an Ir (SemanticModelDigestV2) and the narrow
+          semantic identity of an Ir (SemanticModelDigest) and the narrow
           structural identity under its own name (ProgramStructureHashV1, a
           delegating wrapper over the unchanged canonical_program_hash).
           hymeko_core/src/ir/mod.rs gains the module declaration.
@@ -331,6 +371,87 @@ crates:
           - no dependency and no manifest change
           - no commit or push beyond the feature branch the user merges
 
+      # APPROVED-CORE-EDIT: mycielskian-generator (2026-09-29, user chat)
+      - slug: mycielskian-generator
+        date: 2026-09-29
+        scope: >
+          Planned in nagare docs/plans/2026-09-29-p52-combinatorial-hypergraph-language-models/
+          (phase L0). hymeko_core/src/generators.rs gains one free function,
+          mycielskian(&HypergraphDesign) -> HypergraphDesign (Mycielski's construction on
+          graphs, one shadowed copy per member on hypergraphs, plus the apex edges), its
+          module-doc line, and its unit tests in the module's tests.
+        constraints:
+          - additive only: no existing signature, enum or variant changes, so no downstream match is affected
+          - infallible: the base design's own invariant is its precondition, and no GeneratorError variant is added
+          - HypergraphGenerator is not extended
+          - no dependency and no manifest change; std only
+          - no commit or push beyond the feature branch the user merges
+
+      # APPROVED-CORE-EDIT: merkle-hash-removal (2026-09-30, user chat)
+      - slug: merkle-hash-removal
+        date: 2026-09-30
+        scope: >
+          User, 2026-09-30, deciding the merge of main into feat/tensor-extraction:
+          "minden frissítsünk ne legyen v2". Remove the obsolete Merkle hash caches,
+          ir/hash_pass.rs (compute_merkle_hashes) and the Ir fields doc_hash, decl_hash
+          and arc_hash, including their serde/CBOR representation, without a CBOR
+          schema version bump, and update every reader. This authorizes the removal the
+          tensor-extraction work made on 2026-09-23 under the unrecorded slug
+          core-pipeline-encapsulation-cleanup. For these three fields it supersedes the
+          `ambiguous -> blocked` classification under semantic-model-digest-v2 and the
+          "cached IR hashes / CBOR wire unchanged" constraints of
+          semantic-digest-canonical-coverage and canonical-identity.
+        constraints:
+          - CBOR_SCHEMA_VERSION stays 1; payloads written before the change still decode (serde ignores the removed fields)
+          - "readers older than this change reject new payloads (IrWire requires decl_hash/arc_hash there): core_cpp, nagare, network, transformation-formula and the HIVE deployments update in the same wave"
+          - V1 structural and V2 semantic digest bytes unchanged; the frozen known-answer vectors pass
+
+      # 2026-09-30: main merged into feat/tensor-extraction (user chat: "WIP beolvasztása main-be").
+      - slug: canonical-identity-tensor-extraction-merge
+        date: 2026-09-30
+        scope: >
+          canonical-identity's public API is kept: Canon, CanonicalIdentity,
+          validate_namespace_roots, build_path_index and the V1/V2 type names. The
+          tensor-extraction work's internals stay behind it: the crate-private
+          CanonicalPaths, NamespaceValidator, SkeletonForest and incremental
+          SemanticDigestState, and the public CanonicalPrufer/CanonicalIncidence
+          canonical forms. Its public free functions (program_structure_hash,
+          semantic_model_digest, semantic_declaration_hashes) and
+          DerivedPathIndex::new are not kept. A checked value update keeps
+          CanonicalIdentity from its incremental digest and the unchanged structural
+          hash (CanonicalIdentity::from_parts). generic-arena-contract's module
+          moved with the tensor extraction to hymeko_tensor::compute::arena (tensor
+          091f4f1); Core no longer carries tensor/compute.
+        constraints:
+          - digest bytes and CBOR admission are unchanged; the CBOR round-trip test compares paths as text, because SymIds are snapshot-local after symbol compaction
+          - no commit or push beyond the feature branch the user merges
+
+      # APPROVED-CORE-EDIT: core-rustfmt (2026-09-30, user chat)
+      - slug: core-rustfmt
+        date: 2026-09-30
+        scope: >
+          User, 2026-09-30 20:4x: "OK" to the recommended first steps of
+          docs/plans/2026-09-30-core-after-extraction, which named this slug (T1).
+          Format hymeko_core with the workspace rustfmt; nothing else.
+        constraints:
+          - formatting only, in one commit of its own; no token, item or behaviour change
+          - cargo test --workspace and clippy unchanged before and after
+
+      # APPROVED-CORE-EDIT: model-incidence-cache (2026-09-30, user chat)
+      - slug: model-incidence-cache
+        date: 2026-09-30
+        scope: >
+          User, 2026-09-30 20:4x: "OK" to the recommended first steps of
+          docs/plans/2026-09-30-core-after-extraction, which named this slug (C1).
+          CompiledModel derives the reverse-incidence index of its IR once, on first
+          use, and lends it as an IncidenceView (CompiledModel::incidences); models
+          derived by checked value updates share it. IncidenceView gains a
+          crate-private pair constructor for the owners that hold both parts.
+        constraints:
+          - additive public API only; PreparedIr, IncidenceIndex and the wire are unchanged
+          - the index is never serialized and never paired with a foreign Ir
+          - value updates may share it only because they keep every declaration, arc and slot
+
   # `hymeko_hnn` was RELOCATED 2026-08-31 to hymeko/nagare (hymeko_nagare::hnn) and no longer
   # exists in this workspace (Cargo.toml members = [hymeko_core, hymeko_wgpu]; the directory is
   # gone). Its stale crate declaration was removed here on 2026-09-01 under
@@ -345,7 +466,7 @@ crates:
       APPROVED-ARCHITECTURE-EVOLUTION: hymeko-compute-framework-wgpu.
       Non-core by design: it is one backend among several planned
       (CUDA/FPGA later), and its churn must not be gated on core review.
-      Depends on hymeko_core only.
+      Depends on hymeko_tensor; no canonical-IR dependency.
       Feature set is deliberately minimal (dx12, vulkan, wgsl, std); GL,
       WebGPU and WebAssembly are OFF because enabling them pulls 26 extra
       crates (~32 MiB) into the shared vendor tree for no benefit here.
@@ -382,16 +503,6 @@ dependencies:
       - name: serde
         version: "1"
         reason: API-stable; minor bumps allowed, major requires approval.
-      - name: nalgebra
-        version: "0.34.1"
-        reason: >
-          Numerical core; FP behaviour must be reproducible. Re-pinned from
-          the monorepo's "=0.33.0" to the version this workspace has built
-          and tested against since the migration. Drift resolved 2026-08-24
-          under the manifest-creation approval rather than left latent.
-      - name: nalgebra-sparse
-        version: "0.11.0"
-        reason: Sparse companion to nalgebra; same reproducibility argument.
       - name: blake3
         version: "1"
         reason: >

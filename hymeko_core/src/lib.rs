@@ -1,4 +1,4 @@
-//! HyMeKo core: AST, IR, tensors, and module store.
+//! HyMeKo core: AST, IR, module store, and IR-to-tensor adapters.
 //!
 //! **APPROVED-CORE-EDIT: core-manifest-and-hymeko-core-clippy** (2026-05-11).
 //! The lint allow-list below is deliberate staging debt so

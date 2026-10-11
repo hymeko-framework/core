@@ -162,6 +162,35 @@ theorem adjacent_replay_is_idempotent (s : Replica) (t : Transaction)
     (rest : List Transaction) : replay s (t :: t :: rest) = replay s (t :: rest) := by
   simp [replay, List.foldl, apply_idempotent]
 
+theorem established_preserved (s : Replica) (t : Transaction)
+    (h : s.established = true) : (apply s t).established = true := by
+  unfold apply
+  split <;> simp_all [installed]
+
+theorem replay_established (transactions : List Transaction) (s : Replica)
+    (h : s.established = true) : (replay s transactions).established = true := by
+  induction transactions generalizing s with
+  | nil => exact h
+  | cons t ts ih => exact ih (apply s t) (established_preserved s t h)
+
+theorem older_or_equal_preserves (s : Replica) (t : Transaction)
+    (he : s.established = true) (hd : s.version.dominates t.target) : apply s t = s := by
+  by_cases hv : t.target = s.version
+  · exact same_version_preserves s t hv he
+  · apply rejected_preserves
+    simp [decision, hd, hv]
+
+/-- Replaying a transaction that was actually installed is harmless even after
+an arbitrary suffix. This does not apply to transactions previously rejected. -/
+theorem committed_replay_after_suffix (s : Replica) (t : Transaction)
+    (suffix : List Transaction) (hi : decision s t = .install) :
+    apply (replay (apply s t) suffix) t = replay (apply s t) suffix := by
+  have hs : apply s t = installed t := by simp [apply, hi]
+  apply older_or_equal_preserves
+  · rw [hs]
+    exact replay_established suffix (installed t) rfl
+  · simpa [hs, installed] using replay_monotone suffix (apply s t)
+
 theorem newer_snapshot_installed (s : Replica) (t : Transaction)
     (hk : t.kind = .snapshot) (hd : t.target.dominates s.version)
     (hne : t.target ≠ s.version) (hc : coherent t.base t.target) :
@@ -203,6 +232,10 @@ theorem restored_zero_not_bootstrap : decision (resume zero 5) zeroSnapshot = .u
 #print axioms incomparable_not_installed
 #print axioms replay_monotone
 #print axioms adjacent_replay_is_idempotent
+#print axioms established_preserved
+#print axioms replay_established
+#print axioms older_or_equal_preserves
+#print axioms committed_replay_after_suffix
 #print axioms newer_snapshot_installed
 #print axioms replicas_converge_on_newer_snapshot
 #print axioms resumed_identity_unknown
@@ -211,6 +244,38 @@ theorem restored_zero_not_bootstrap : decision (resume zero 5) zeroSnapshot = .u
 #print axioms restored_zero_not_bootstrap
 
 end HyMeKo.Distributed
+
+/- Executable bounded oracle: each version axis independently takes 0, 1 or 2.
+Rust also interprets level 2 as u64::MAX, preserving exactly this order.
+Generation is not a proof of Rust refinement; it supplies independent test data. -/
+def HyMeKo.Distributed.boundedVersion (i : Nat) : HyMeKo.Distributed.Version :=
+  ⟨i % 3, (i / 3) % 3, (i / 9) % 3, (i / 27) % 3⟩
+
+def main (args : List String) : IO Unit := do
+  if args != ["--vectors"] then return
+  IO.println "# state current target kind base verdict reason_base"
+  let emit := fun (fresh : Bool) (ci ti : Nat) (kind : HyMeKo.Distributed.Kind)
+      (currentBase : Bool) => do
+    let current := HyMeKo.Distributed.boundedVersion ci
+    let target := HyMeKo.Distributed.boundedVersion ti
+    let base := if currentBase then current else HyMeKo.Distributed.zero
+    let replica := if fresh then HyMeKo.Distributed.empty
+      else HyMeKo.Distributed.resume current 0
+    let d := HyMeKo.Distributed.decision replica ⟨kind, base, target, 0, 0⟩
+    let verdict := match d with
+      | .install => "C" | .superseded => "S" | .unknownIdentity => "U"
+      | .staleBase => "B" | .incomparable | .incoherent => "I"
+      | .duplicate => "D" | .conflictingIdentity => "F"
+    let reasonBase := if d = .incomparable then ci else if currentBase then ci else 0
+    IO.println s!"{if fresh then "F" else "R"} {ci} {ti} {if kind = .snapshot then "S" else "D"} {if currentBase then 1 else 0} {verdict} {reasonBase}"
+  for ci in List.range 81 do
+    for ti in List.range 81 do
+      for kind in [HyMeKo.Distributed.Kind.snapshot, .delta] do
+        for currentBase in [false, true] do
+          emit false ci ti kind currentBase
+  for ti in List.range 81 do
+    for kind in [HyMeKo.Distributed.Kind.snapshot, .delta] do
+      emit true 0 ti kind false
 
 /-!
 2026-09-13: process-local publication abstraction for module_store::execution.

@@ -1,0 +1,44 @@
+\begin{tikzpicture}[
+  font=\footnotesize,
+  box/.style={draw, rounded corners, align=center, minimum height=8mm, inner sep=3pt},
+  new/.style={box, very thick, fill=gray!15},
+  arr/.style={-{Stealth[length=2mm]}},
+  dashedarr/.style={-{Stealth[length=2mm]}, dashed}
+]
+% Authoring and canonical compile
+\node[box] (src) at (0,0) {.hymeko source\\(authoring interface)};
+\node[box] (parser) at (3.4,0) {Parser\\grammar/AST};
+\node[box] (lower) at (7.0,0) {Core resolve + const fold\\+ lower};
+\node[box] (ir) at (11.0,0) {Core IR\\bases, refs, arcs};
+
+% Runtime state
+\node[box] (upd) at (11.0,-2.0) {Core with\_value\_updates\\ExecutionState};
+\node[box] (cbor) at (11.0,-4.0) {Core CBOR + ir\_stream\\Begin/Chunk/Commit};
+\node[box] (hive) at (14.4,-4.0) {HIVE / Axon\\shared state, transport};
+
+% New semantic view
+\node[new] (view) at (7.0,-2.6) {NEW Core BaseView\\C3 linearization, fields,\\instance\_slot (borrowed)};
+
+% Consumers
+\node[box] (query) at (2.2,-4.8) {Transformation Query\\Geometry / Formula};
+\node[box] (rob) at (6.2,-4.8) {Robotics adapters\\navigation, perception};
+\node[box] (ako) at (10.0,-6.2) {AKOIRE\\belief/plan admission};
+\node[box] (graph) at (2.2,-6.6) {Graph\\direct IR search};
+\node[box] (clients) at (14.4,-6.2) {Simulator / XR / Web\\clients};
+
+\draw[arr] (src) -- (parser);
+\draw[arr] (parser) -- (lower);
+\draw[arr] (lower) -- (ir);
+\draw[arr] (ir) -- node[right,align=left]{leaf values\\copy-on-write} (upd);
+\draw[arr] (upd) -- (cbor);
+\draw[arr] (cbor) -- (hive);
+\draw[arr] (ir) -- node[above,sloped]{borrow} (view);
+\draw[arr] (view) -- (query);
+\draw[arr] (view) -- (rob);
+\draw[arr] (rob) -- node[below,sloped]{ValueUpdate on local slot} (upd);
+\draw[arr] (rob) -- (ako);
+\draw[arr] (graph) -- (rob);
+\draw[arr] (query) -- (clients);
+\draw[dashedarr] (hive) -- (clients);
+\draw[dashedarr] (ir) to[bend right=25] node[above]{export only (emit)} (src);
+\end{tikzpicture}

@@ -133,7 +133,7 @@ M2a added the storage-independent read surface M2b migrates onto. **Two of the r
 | **Mutation** | M2a adds no mutable accessors, deliberately. Lowering writes, `push_anonymous_arc`, `preallocate_from_index`. |
 | **Construction / lowering** | Builds the arrays before ids are meaningful — includes `bridge::push_decl` in `transformation`, the second lockstep writer. |
 | **Bulk serialization** | Serde reads fields directly by derive. |
-| **Performance-critical internal algorithm** | `canonical_hash.rs`, `hash_pass.rs` — already inside the boundary; M2a measured the accessor cost at +20…49 % on scalar lookup, so these may keep indexing. |
+| **Performance-critical internal algorithm** | `canonical_hash.rs`, `semantic_digest.rs` — already inside the boundary; M2a measured the accessor cost at +20…49 % on scalar lookup, so these may keep indexing. |
 | **Malformed-state tests** | Construct incoherence on purpose. |
 
 **Nothing in the read paths of the 196-site inventory needs an API M2a did not provide.** M2b can proceed repository by repository without inventing further read APIs.

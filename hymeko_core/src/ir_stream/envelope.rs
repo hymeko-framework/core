@@ -4,8 +4,8 @@
 //!
 //! # Reading discipline
 //!
-//! Every integer is read byte-by-byte as little-endian through [`rd_u16`],
-//! [`rd_u32`] and [`rd_u64`]. The input buffer is **never** cast to a Rust
+//! Every integer is read explicitly as little-endian through the shared
+//! generic `LittleEndianReader`. The input buffer is **never** cast to a Rust
 //! struct, never `transmute`d, and no reference is ever formed into unaligned
 //! wire bytes. That is not stylistic caution: the design this replaces used
 //! `#[repr(C)]` structs containing `usize` and a `#[repr(u32)]` enum, so its
@@ -37,6 +37,7 @@
 //! padding — but nothing here depends on that, because nothing is cast.
 
 use super::error::WireError;
+use super::reader::LittleEndianReader;
 use super::version::{SnapshotVersion, VERSION_WIRE_BYTES};
 
 /// `"HYMKS"` truncated to four bytes. A cheap desynchronisation detector,
@@ -350,12 +351,13 @@ impl ValidatedEnvelope {
             });
         }
 
-        let magic = rd_u32(bytes, OFF_MAGIC);
+        let reader = LittleEndianReader::new(bytes);
+        let magic = reader.read::<u32>(OFF_MAGIC);
         if magic != MAGIC {
             return Err(WireError::BadMagic { got: magic });
         }
 
-        let schema_version = rd_u16(bytes, OFF_SCHEMA);
+        let schema_version = reader.read::<u16>(OFF_SCHEMA);
         if schema_version != SCHEMA_VERSION {
             return Err(WireError::UnsupportedSchema {
                 got: schema_version,
@@ -363,19 +365,19 @@ impl ValidatedEnvelope {
             });
         }
 
-        let header_bytes = rd_u16(bytes, OFF_HEADER_BYTES);
+        let header_bytes = reader.read::<u16>(OFF_HEADER_BYTES);
         if !(HEADER_BYTES..=MAX_HEADER_BYTES).contains(&header_bytes) {
             return Err(WireError::BadHeaderLength { got: header_bytes });
         }
 
-        let reserved = rd_u32(bytes, OFF_RESERVED);
+        let reserved = reader.read::<u32>(OFF_RESERVED);
         if reserved != 0 {
             return Err(WireError::ReservedNotZero { field: "reserved" });
         }
 
-        let msg_type = MessageType::try_from_wire(rd_u16(bytes, OFF_MSG_TYPE))?;
+        let msg_type = MessageType::try_from_wire(reader.read(OFF_MSG_TYPE))?;
 
-        let flags = rd_u16(bytes, OFF_FLAGS);
+        let flags = reader.read::<u16>(OFF_FLAGS);
         if flags & !KNOWN_FLAGS != 0 {
             return Err(WireError::UnknownFlags { got: flags });
         }
@@ -388,45 +390,15 @@ impl ValidatedEnvelope {
             header_bytes,
             msg_type,
             flags,
-            stream_id: rd_u64(bytes, OFF_STREAM_ID),
-            seq: rd_u64(bytes, OFF_SEQ),
-            txn_id: rd_u64(bytes, OFF_TXN_ID),
-            base_version: rd_version(bytes, OFF_BASE_VERSION),
-            target_version: rd_version(bytes, OFF_TARGET_VERSION),
-            payload_len: rd_u64(bytes, OFF_PAYLOAD_LEN),
+            stream_id: reader.read(OFF_STREAM_ID),
+            seq: reader.read(OFF_SEQ),
+            txn_id: reader.read(OFF_TXN_ID),
+            base_version: reader.read(OFF_BASE_VERSION),
+            target_version: reader.read(OFF_TARGET_VERSION),
+            payload_len: reader.read(OFF_PAYLOAD_LEN),
             payload_hash: hash,
         })
     }
-}
-
-// --- explicit little-endian readers ----------------------------------------
-//
-// Each copies into a fixed array first, so no reference is formed into the
-// (possibly unaligned) input and `from_le_bytes` does the byte-order work
-// explicitly rather than relying on the host's.
-
-fn rd_u16(b: &[u8], off: usize) -> u16 {
-    let mut t = [0u8; 2];
-    t.copy_from_slice(&b[off..off + 2]);
-    u16::from_le_bytes(t)
-}
-
-fn rd_u32(b: &[u8], off: usize) -> u32 {
-    let mut t = [0u8; 4];
-    t.copy_from_slice(&b[off..off + 4]);
-    u32::from_le_bytes(t)
-}
-
-fn rd_u64(b: &[u8], off: usize) -> u64 {
-    let mut t = [0u8; 8];
-    t.copy_from_slice(&b[off..off + 8]);
-    u64::from_le_bytes(t)
-}
-
-fn rd_version(b: &[u8], off: usize) -> SnapshotVersion {
-    let mut t = [0u8; VERSION_WIRE_BYTES];
-    t.copy_from_slice(&b[off..off + VERSION_WIRE_BYTES]);
-    SnapshotVersion::from_le_bytes(&t)
 }
 
 #[cfg(test)]
@@ -463,22 +435,27 @@ mod tests {
         // field and check it lands at the documented offset. This is what makes
         // a future field reordering fail loudly.
         let b = sample_bytes();
-        assert_eq!(rd_u32(&b, 0), MAGIC, "magic at 0");
-        assert_eq!(rd_u16(&b, 4), SCHEMA_VERSION, "schema at 4");
-        assert_eq!(rd_u16(&b, 6), HEADER_BYTES, "header_bytes at 6");
+        let reader = LittleEndianReader::new(&b);
+        assert_eq!(reader.read::<u32>(0), MAGIC, "magic at 0");
+        assert_eq!(reader.read::<u16>(4), SCHEMA_VERSION, "schema at 4");
+        assert_eq!(reader.read::<u16>(6), HEADER_BYTES, "header_bytes at 6");
         assert_eq!(
-            rd_u16(&b, 8),
+            reader.read::<u16>(8),
             MessageType::SnapshotBegin.to_wire(),
             "type at 8"
         );
-        assert_eq!(rd_u16(&b, 10), FLAG_LAST_CHUNK, "flags at 10");
-        assert_eq!(rd_u32(&b, 12), 0, "reserved at 12");
-        assert_eq!(rd_u64(&b, 16), 0x1122_3344_5566_7788, "stream_id at 16");
-        assert_eq!(rd_u64(&b, 24), 7, "seq at 24");
-        assert_eq!(rd_u64(&b, 32), 9, "txn_id at 32");
-        assert_eq!(rd_u64(&b, 40), 1, "base.topology at 40");
-        assert_eq!(rd_u64(&b, 72), 2, "target.topology at 72");
-        assert_eq!(rd_u64(&b, 104), 0, "payload_len at 104");
+        assert_eq!(reader.read::<u16>(10), FLAG_LAST_CHUNK, "flags at 10");
+        assert_eq!(reader.read::<u32>(12), 0, "reserved at 12");
+        assert_eq!(
+            reader.read::<u64>(16),
+            0x1122_3344_5566_7788,
+            "stream_id at 16"
+        );
+        assert_eq!(reader.read::<u64>(24), 7, "seq at 24");
+        assert_eq!(reader.read::<u64>(32), 9, "txn_id at 32");
+        assert_eq!(reader.read::<u64>(40), 1, "base.topology at 40");
+        assert_eq!(reader.read::<u64>(72), 2, "target.topology at 72");
+        assert_eq!(reader.read::<u64>(104), 0, "payload_len at 104");
         assert_eq!(&b[112..144], &[0xAB; 32], "hash at 112");
     }
 
@@ -508,6 +485,11 @@ mod tests {
         assert_eq!(v.target_version(), d.target_version);
         assert_eq!(v.schema_version(), SCHEMA_VERSION);
         assert_eq!(v.header_bytes(), HEADER_BYTES);
+        for offset in 0..8 {
+            let mut storage = vec![0xaa; offset];
+            storage.extend_from_slice(&sample_bytes());
+            assert_eq!(ValidatedEnvelope::decode(&storage[offset..]).unwrap(), v);
+        }
     }
 
     #[test]

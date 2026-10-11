@@ -1,4 +1,4 @@
-use hymeko::tensor::aggregation::{AggCfg, SignAgg, WeightAgg};
+use hymeko_tensor::aggregation::{AggCfg, SignAgg, WeightAgg};
 
 pub const LINEAR_EDGE_VALUES_PATH: &str =
     "../data/minimal_examples/testing_edges/linear_edge_values.hymeko";

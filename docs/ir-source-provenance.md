@@ -56,7 +56,7 @@ DeclId in a small single-file example is incidental and must not be assumed.
 ## Identity compatibility
 
 Source metadata is excluded from `ProgramStructureHashV1` and
-`SemanticModelDigestV2`; moving a file does not itself change either digest.
+`SemanticModelDigest`; moving a file does not itself change either digest.
 Serialized IR bytes gain the new fields, while its existing fields retain their
 values. Fixing a string's previously corrupted UTF-8 does change its value and can
 change a complete semantic digest; a structural hash is not a content digest.

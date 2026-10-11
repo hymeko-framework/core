@@ -30,7 +30,7 @@
 use std::time::Duration;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use hymeko::tensor::compute::TensorShape;
+use hymeko_tensor::compute::TensorShape;
 use hymeko_wgpu::testing::SparseSpec;
 use hymeko_wgpu::testing::{Fixture, encode_chain};
 use hymeko_wgpu::{ActivationKind, GpuTensor, TensorArenaConfig, WgpuBackend};

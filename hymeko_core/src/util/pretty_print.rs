@@ -1,6 +1,5 @@
 use crate::common::ids::{DeclId, SymId};
 use crate::common::pathkey::PathKey;
-use crate::ir::hash::HashId;
 use crate::ir::ir::{DeclKind, Ir, SignedRefR};
 use crate::module_store::module_store::CompiledProgram;
 use crate::resolution::interner::Interner;
@@ -28,14 +27,6 @@ fn to_hex(bytes: &[u8]) -> String {
         s.push(HEX[(b & 0x0f) as usize] as char);
     }
     s
-}
-
-// Ha nálad HashId(pub [u8; 32]) jellegű:
-fn fmt_hash_opt(h: Option<HashId>) -> String {
-    match h {
-        Some(h) => to_hex(&h.0),
-        None => "None".to_string(),
-    }
 }
 
 #[derive(Default)]
@@ -71,25 +62,20 @@ fn print_trie(
 
         if let Some(did) = child.did {
             let kind = ir.decl_nodes.get(did.0 as usize).map(|n| n.kind);
-            let hash = ir.decl_hash.get(did.0 as usize).and_then(|x| *x);
 
             let indent = "\t".repeat(depth);
-            let hash_s = match hash {
-                Some(h) => to_hex(&h.0),
-                None => "None".to_string(),
-            };
 
             match kind {
                 Some(DeclKind::Edge) => {
                     // ✅ Edge: arcok + referenciák
                     let details = fmt_edge_arcs(it, ir, did_to_path, did);
-                    println!("{indent}{name}  did={did:?}  kind=Edge  hash={hash_s}{details}");
+                    println!("{indent}{name}  did={did:?}  kind=Edge{details}");
                 }
                 Some(k) => {
-                    println!("{indent}{name}  did={did:?}  kind={k:?}  hash={hash_s}");
+                    println!("{indent}{name}  did={did:?}  kind={k:?}");
                 }
                 None => {
-                    println!("{indent}{name}  did={did:?}  kind=?  hash={hash_s}");
+                    println!("{indent}{name}  did={did:?}  kind=?");
                 }
             }
         } else {

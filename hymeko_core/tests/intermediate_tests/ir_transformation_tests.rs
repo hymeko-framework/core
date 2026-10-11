@@ -3,7 +3,6 @@ mod basic_transformation_tests {
     use crate::test_helpers::{log_test_footer, log_test_header};
     use hymeko::common::ids::{DeclId, SymId};
     use hymeko::common::pathkey::PathKey;
-    use hymeko::ir::common::{ref_sign, ref_target};
     use hymeko::ir::ir::DeclKind;
     use hymeko::ir::lower::lower_to_ir;
     use hymeko::resolution::intern_pass::{Interned, intern_ast};
@@ -391,16 +390,16 @@ mod basic_transformation_tests {
         // Refs: (+Root, -Root0) sorrendben
         assert_eq!(arc.refs.len(), 2, "arc should have 2 refs");
 
-        assert_eq!(ref_sign(&arc.refs[0]), 1, "first ref should be +");
+        assert_eq!(arc.refs[0].sign(), 1, "first ref should be +");
         assert_eq!(
-            ref_target(&arc.refs[0]),
+            arc.refs[0].target(),
             did_root,
             "first ref should target Root"
         );
 
-        assert_eq!(ref_sign(&arc.refs[1]), -1, "second ref should be -");
+        assert_eq!(arc.refs[1].sign(), -1, "second ref should be -");
         assert_eq!(
-            ref_target(&arc.refs[1]),
+            arc.refs[1].target(),
             did_root0,
             "second ref should target Root0"
         );

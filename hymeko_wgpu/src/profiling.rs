@@ -42,7 +42,7 @@
 
 use std::time::{Duration, Instant};
 
-use hymeko::tensor::compute::{BackendKind, ComputeError};
+use hymeko_tensor::compute::{BackendKind, ComputeError};
 
 use crate::WgpuBackend;
 use crate::readback::StagingStorage;
