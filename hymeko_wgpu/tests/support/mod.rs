@@ -163,3 +163,157 @@ pub fn backend() -> Option<&'static WgpuBackend> {
     ANNOUNCED.call_once(|| eprintln!("adapter={}", backend.capabilities().summary()));
     Some(backend)
 }
+
+/// Catmull-Rom evaluation of one channel's `control` points at `raw`: the clamp, the segment, the four
+/// weights and the endpoint-replicated indices of `hymeko_spline::catmull_rom`, in `f32`. Shared by
+/// the HSiKAN suites and the membership suite, which transcribed it separately before.
+pub fn cr(control: &[f32], grid: usize, raw: f32) -> f32 {
+    let (weights, _, indices) = cr_stencil(grid, raw);
+    weights
+        .iter()
+        .zip(indices)
+        .map(|(weight, index)| weight * control[index])
+        .sum()
+}
+
+/// The stencil of `raw` on a grid of `grid`: weights, their `t`-derivatives, control indices.
+fn cr_stencil(grid: usize, raw: f32) -> ([f32; 4], [f32; 4], [usize; 4]) {
+    let x = raw.clamp(-1.0, 1.0);
+    let u = (x + 1.0) * (0.5 * (grid - 1) as f32);
+    let i = (u.floor() as usize).min(grid - 2);
+    let t = u - i as f32;
+    let t2 = t * t;
+    let t3 = t2 * t;
+    (
+        [
+            0.5 * (-t3 + 2.0 * t2 - t),
+            0.5 * (3.0 * t3 - 5.0 * t2 + 2.0),
+            0.5 * (-3.0 * t3 + 4.0 * t2 + t),
+            0.5 * (t3 - t2),
+        ],
+        [
+            0.5 * (-3.0 * t2 + 4.0 * t - 1.0),
+            0.5 * (9.0 * t2 - 10.0 * t),
+            0.5 * (-9.0 * t2 + 8.0 * t + 1.0),
+            0.5 * (3.0 * t2 - 2.0 * t),
+        ],
+        [
+            i.saturating_sub(1).min(grid - 1),
+            i,
+            (i + 1).min(grid - 1),
+            (i + 2).min(grid - 1),
+        ],
+    )
+}
+
+/// `γ_k = k u / (1 - k u)` with `u = 2^-24`: the a-priori relative error of `k` rounded operations
+/// (Higham 2002, §3.1).
+pub fn gamma(k: usize) -> f64 {
+    let unit = f64::from(f32::EPSILON) / 2.0;
+    let ku = k as f64 * unit;
+    ku / (1.0 - ku)
+}
+
+/// The polynomial masses `Σ_m |a_km| t^m` of the four weights and of their `t`-derivatives at `raw`,
+/// with the control indices: the scales of the forward's and the input gradient's rounding (the
+/// primer of P47 Amendment 3, Proposition 3).
+pub fn cr_masses(grid: usize, raw: f32) -> ([f64; 4], [f64; 4], [usize; 4]) {
+    let x = raw.clamp(-1.0, 1.0);
+    let u = (x + 1.0) * (0.5 * (grid - 1) as f32);
+    let i = (u.floor() as usize).min(grid - 2);
+    let t = f64::from(u - i as f32);
+    let (t2, t3) = (t * t, t * t * t);
+    let (_, _, indices) = cr_stencil(grid, raw);
+    (
+        [
+            0.5 * (t3 + 2.0 * t2 + t),
+            0.5 * (3.0 * t3 + 5.0 * t2 + 2.0),
+            0.5 * (3.0 * t3 + 4.0 * t2 + t),
+            0.5 * (t3 + t2),
+        ],
+        [
+            0.5 * (3.0 * t2 + 4.0 * t + 1.0),
+            0.5 * (9.0 * t2 + 10.0 * t),
+            0.5 * (9.0 * t2 + 8.0 * t + 1.0),
+            0.5 * (3.0 * t2 + 2.0 * t),
+        ],
+        indices,
+    )
+}
+
+/// The forward's per-element bound between two correct `f32` evaluations: `2 γ_9 Σ_k w̃_k |c|`.
+pub fn cr_forward_bound(control: &[f32], grid: usize, raw: f32) -> f64 {
+    let (weights, _, indices) = cr_masses(grid, raw);
+    2.0 * gamma(9)
+        * weights
+            .iter()
+            .zip(indices)
+            .map(|(m, j)| m * f64::from(control[j].abs()))
+            .sum::<f64>()
+}
+
+/// The input gradient's per-element bound between two correct `f32` evaluations:
+/// `2 γ_11 |g| s Σ_k d̃_k |c|`, `s = (grid - 1) / 2`.
+pub fn cr_input_gradient_bound(control: &[f32], grid: usize, raw: f32, g: f32) -> f64 {
+    let (_, derivatives, indices) = cr_masses(grid, raw);
+    let span = 0.5 * (grid - 1) as f64;
+    2.0 * gamma(11)
+        * f64::from(g.abs())
+        * span
+        * derivatives
+            .iter()
+            .zip(indices)
+            .map(|(m, j)| m * f64::from(control[j].abs()))
+            .sum::<f64>()
+}
+
+/// The membership pullback of `hymeko_spline::catmull_rom_backward` over `x [rows, channels]`:
+/// the input gradient in `f32` (zero outside `[-1, 1]`), and the control-point gradient summed in
+/// `f64` beside `Σ|g w|` per control point, the scale of its recursive-summation error bound.
+pub struct CrPullback {
+    pub grad_x: Vec<f32>,
+    pub grad_control: Vec<f64>,
+    pub magnitude: Vec<f64>,
+    /// Each control point's term count; zero on a point no element touches.
+    pub terms_per_slot: Vec<usize>,
+    /// The most terms any control point's sum has.
+    pub terms: usize,
+}
+
+pub fn cr_pullback(
+    x: &[f32],
+    control: &[f32],
+    channels: usize,
+    grid: usize,
+    grad_y: &[f32],
+) -> CrPullback {
+    let span = 0.5 * (grid - 1) as f32;
+    let mut grad_x = vec![0.0f32; x.len()];
+    let mut grad_control = vec![0.0f64; control.len()];
+    let mut magnitude = vec![0.0f64; control.len()];
+    let mut terms = vec![0usize; control.len()];
+    for (e, (&raw, &g)) in x.iter().zip(grad_y).enumerate() {
+        let base = (e % channels) * grid;
+        let (weights, dweights, indices) = cr_stencil(grid, raw);
+        let mut dy_dt = 0.0f32;
+        for k in 0..4 {
+            let slot = base + indices[k];
+            grad_control[slot] += f64::from(g) * f64::from(weights[k]);
+            magnitude[slot] += (f64::from(g) * f64::from(weights[k])).abs();
+            terms[slot] += 1;
+            dy_dt += dweights[k] * control[slot];
+        }
+        grad_x[e] = if (-1.0..=1.0).contains(&raw) {
+            g * dy_dt * span
+        } else {
+            0.0
+        };
+    }
+    CrPullback {
+        grad_x,
+        grad_control,
+        magnitude,
+        terms: terms.iter().copied().max().unwrap_or(0),
+        terms_per_slot: terms,
+    }
+}

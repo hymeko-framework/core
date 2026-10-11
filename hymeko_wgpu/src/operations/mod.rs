@@ -9,6 +9,7 @@
 //! it is not a dynamic operation registry.
 
 pub mod activation;
+pub mod catmull_rom;
 pub(crate) mod dispatch;
 pub mod global_entropy_pool;
 pub mod highway;
@@ -21,6 +22,12 @@ pub mod star_rotor_spike;
 pub use activation::{
     ACTIVATION_INPLACE_SHADER, ACTIVATION_SHADER, ACTIVATION_WORKGROUP_SWEEP, ActivationBuilder,
     ActivationKind, DEFAULT_ACTIVATION_WORKGROUP, PreparedActivation,
+};
+pub use catmull_rom::{
+    CATMULL_ROM_FORWARD_SHADER, CATMULL_ROM_PULLBACK_SHADER, CATMULL_ROM_REDUCE_SHADER,
+    CatmullRomForwardBuilder, CatmullRomPullbackBuilder, DEFAULT_CATMULL_ROM_CHUNK_ROWS,
+    DEFAULT_CATMULL_ROM_WORKGROUP, MAX_CATMULL_ROM_GRID, MIN_CATMULL_ROM_GRID,
+    PreparedCatmullRomForward, PreparedCatmullRomPullback,
 };
 pub use global_entropy_pool::{
     DEFAULT_GLOBAL_ENTROPY_POOL_WORKGROUP, GLOBAL_ENTROPY_POOL_SHADER, GlobalEntropyPoolBuilder,
@@ -87,6 +94,18 @@ impl<'a> OperationFactory<'a> {
     #[must_use]
     pub fn activation(&self) -> ActivationBuilder<'a> {
         ActivationBuilder::new(*self)
+    }
+
+    /// Begin building a Catmull-Rom membership forward over `[rows, channels]`.
+    #[must_use]
+    pub fn catmull_rom_forward(&self) -> CatmullRomForwardBuilder<'a> {
+        CatmullRomForwardBuilder::new(*self)
+    }
+
+    /// Begin building a Catmull-Rom membership pullback: input and control-point gradients.
+    #[must_use]
+    pub fn catmull_rom_pullback(&self) -> CatmullRomPullbackBuilder<'a> {
+        CatmullRomPullbackBuilder::new(*self)
     }
 
     /// Begin building spatial global-entropy pooling over `(K,H,W)` responses.

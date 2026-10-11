@@ -93,6 +93,12 @@ pub enum LayoutId {
     ScatterMeanCsr,
     /// step (read), carry (read), gate (read), next (read_write), params.
     HighwayIdentity,
+    /// x (read), control (read), output (read_write), params.
+    CatmullRomForward,
+    /// x (read), control (read), grad_y (read), grad_x (read_write), partials (read_write), params.
+    CatmullRomPullback,
+    /// partials (read), grad_control (read_write), params.
+    CatmullRomReduce,
 }
 
 impl LayoutId {
@@ -107,6 +113,9 @@ impl LayoutId {
             Self::Fill => "fill.layout",
             Self::ScatterMeanCsr => "scatter_mean_csr.layout",
             Self::HighwayIdentity => "highway_identity.layout",
+            Self::CatmullRomForward => "catmull_rom_forward.layout",
+            Self::CatmullRomPullback => "catmull_rom_pullback.layout",
+            Self::CatmullRomReduce => "catmull_rom_reduce.layout",
         }
     }
 
@@ -164,6 +173,25 @@ impl LayoutId {
                 storage_entry(4, false),
                 uniform_entry(5),
             ],
+            Self::CatmullRomForward => vec![
+                storage_entry(0, true),
+                storage_entry(1, true),
+                storage_entry(2, false),
+                uniform_entry(3),
+            ],
+            Self::CatmullRomPullback => vec![
+                storage_entry(0, true),
+                storage_entry(1, true),
+                storage_entry(2, true),
+                storage_entry(3, false),
+                storage_entry(4, false),
+                uniform_entry(5),
+            ],
+            Self::CatmullRomReduce => vec![
+                storage_entry(0, true),
+                storage_entry(1, false),
+                uniform_entry(2),
+            ],
         }
     }
 }
@@ -219,6 +247,12 @@ pub enum KernelId {
     ScatterMeanCsr,
     /// Per-channel identity-transport highway transition.
     HighwayIdentity,
+    /// Catmull-Rom membership over `[rows, channels]`, per channel's control points.
+    CatmullRomForward,
+    /// The membership's input gradient and per-chunk coefficient partials.
+    CatmullRomPullback,
+    /// The membership's coefficient gradient: the partials summed in chunk order.
+    CatmullRomReduce,
     /// Star-centred rotor-spike orientation population code.
     StarRotorSpike,
     /// Skeleton validation kernel. Not an operation; retained because
@@ -246,6 +280,9 @@ impl KernelId {
             Self::Fill => "fill",
             Self::ScatterMeanCsr => "scatter_mean_csr",
             Self::HighwayIdentity => "highway_identity",
+            Self::CatmullRomForward => "catmull_rom_forward",
+            Self::CatmullRomPullback => "catmull_rom_pullback",
+            Self::CatmullRomReduce => "catmull_rom_reduce",
         }
     }
 
@@ -263,6 +300,9 @@ impl KernelId {
             Self::Fill => crate::FILL_SHADER,
             Self::ScatterMeanCsr => crate::operations::SCATTER_MEAN_CSR_SHADER,
             Self::HighwayIdentity => crate::operations::HIGHWAY_IDENTITY_SHADER,
+            Self::CatmullRomForward => crate::operations::CATMULL_ROM_FORWARD_SHADER,
+            Self::CatmullRomPullback => crate::operations::CATMULL_ROM_PULLBACK_SHADER,
+            Self::CatmullRomReduce => crate::operations::CATMULL_ROM_REDUCE_SHADER,
         }
     }
 
@@ -280,6 +320,7 @@ impl KernelId {
             Self::StarRotorSpike => "main",
             Self::ScatterMeanCsr => "main",
             Self::HighwayIdentity => "main",
+            Self::CatmullRomForward | Self::CatmullRomPullback | Self::CatmullRomReduce => "main",
         }
     }
 
@@ -296,6 +337,9 @@ impl KernelId {
             Self::Fill => LayoutId::Fill,
             Self::ScatterMeanCsr => LayoutId::ScatterMeanCsr,
             Self::HighwayIdentity => LayoutId::HighwayIdentity,
+            Self::CatmullRomForward => LayoutId::CatmullRomForward,
+            Self::CatmullRomPullback => LayoutId::CatmullRomPullback,
+            Self::CatmullRomReduce => LayoutId::CatmullRomReduce,
         }
     }
 }
@@ -602,6 +646,9 @@ mod tests {
             KernelId::RotorAttention,
             KernelId::StarRotorSpike,
             KernelId::Fill,
+            KernelId::CatmullRomForward,
+            KernelId::CatmullRomPullback,
+            KernelId::CatmullRomReduce,
         ];
         for (i, a) in all.iter().enumerate() {
             for (j, b) in all.iter().enumerate() {

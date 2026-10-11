@@ -15,7 +15,10 @@ use crate::operations::dispatch::PreparedDispatch;
 use crate::pipeline::KernelId;
 
 /// WGSL source owned by [`KernelId::Hsikan`].
-pub const HSIKAN_SHADER: &str = include_str!("../../shaders/hsikan.wgsl");
+pub const HSIKAN_SHADER: &str = concat!(
+    include_str!("../../shaders/catmull_rom_formulas.wgsl"),
+    include_str!("../../shaders/hsikan.wgsl")
+);
 
 /// Default one-dimensional workgroup for fused HSiKAN inference.
 pub const DEFAULT_HSIKAN_WORKGROUP: u32 = 128;
