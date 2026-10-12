@@ -1,6 +1,8 @@
 % 2026-10-11: profile merged Core with the existing Criterion workloads;
 % keep CPU sampling separate from repeated latency and peak-working-set results.
 % Second optimization: borrow Index paths, retain all hierarchy checks and report ordering.
+% Third optimization: share immutable Interner data; detach on writes and retain only live strings.
+% Shared IR: owned construction -> shared published tables -> detach on first mutation.
 \begin{tikzpicture}[node distance=5mm, every node/.style={draw,rounded corners,font=\small},>=Stealth]
 \node (s) {Source (generation excluded)};
 \node (p) [below=of s] {Parse and intern; resolve constants};
@@ -30,6 +32,24 @@
 \node (reader) [below=of clients] {LittleEndianReader::read<T>};
 \node (value) [below=of reader] {LittleEndianValue: fixed byte array and static conversion};
 \draw[->] (clients)--(reader); \draw[->] (reader)--(value);
+\end{tikzpicture}
+
+% 2026-10-12: all catalogue candidates approved; first dependency pair.
+\begin{tikzpicture}[node distance=5mm, every node/.style={draw,rounded corners,font=\small},>=Stealth]
+\node (values) {Changed old/new leaf values};
+\node (delta) [below=of values] {Sort/combine symbol occurrences; exact cached counts};
+\node (retain) [below=of delta] {All live: shared metadata / dead symbols: existing compaction};
+\node (check) [below=of retain] {Full coherence/model checks and incremental digest};
+\draw[->] (values)--(delta); \draw[->] (delta)--(retain); \draw[->] (retain)--(check);
+\end{tikzpicture}
+
+% 2026-10-12: private SkeletonForest child rows use stable count/prefix/scatter.
+\begin{tikzpicture}[node distance=5mm, every node/.style={draw,rounded corners,font=\small},>=Stealth]
+\node (count) {Named parents: child counts};
+\node (prefix) [below=of count] {Prefix sums: row ends};
+\node (scatter) [below=of prefix] {Reverse scatter: child IDs and row starts};
+\node (fold) [below=of scatter] {Existing bottom-up subtree fold};
+\draw[->] (count)--(prefix); \draw[->] (prefix)--(scatter); \draw[->] (scatter)--(fold);
 \end{tikzpicture}
 
 % PERF-1 2026-09-09T18:54:44+02:00: released course control -> measured optimization integration -> native/WASM parity -> GitHub/LAN publication.

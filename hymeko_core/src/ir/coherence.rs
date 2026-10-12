@@ -116,6 +116,74 @@ struct Collector {
     total: usize,
 }
 
+#[derive(Clone, Copy)]
+enum ParentChain {
+    Unseen,
+    Active,
+    Rooted(usize),
+    Invalid(usize),
+    Cyclic,
+}
+
+/// Classify the parent functional graph once, then report in declaration order.
+/// Distances include the classified vertex; diagnostics start at its parent.
+/// Each vertex enters/exits the explicit stack at most once, including cycles.
+fn validate_parent_chains(ir: &Ir, collector: &mut Collector) {
+    let n = ir.decl_nodes.len();
+    let mut chains = vec![ParentChain::Unseen; n];
+    let mut path = Vec::with_capacity(n);
+    for start in 0..n {
+        if !matches!(chains[start], ParentChain::Unseen) {
+            continue;
+        }
+        let mut current = DeclId::new(start);
+        let mut outcome = loop {
+            if current.is_none() {
+                break ParentChain::Rooted(0);
+            }
+            if current.raw() >= n {
+                break ParentChain::Invalid(0);
+            }
+            let vertex = current.raw();
+            match chains[vertex] {
+                ParentChain::Unseen => {
+                    chains[vertex] = ParentChain::Active;
+                    path.push(vertex);
+                    current = ir.decl_nodes[vertex].parent;
+                }
+                ParentChain::Active => break ParentChain::Cyclic,
+                completed => break completed,
+            }
+        };
+        while let Some(vertex) = path.pop() {
+            outcome = match outcome {
+                ParentChain::Rooted(distance) => ParentChain::Rooted(distance + 1),
+                ParentChain::Invalid(distance) => ParentChain::Invalid(distance + 1),
+                ParentChain::Cyclic => ParentChain::Cyclic,
+                _ => unreachable!("parent walk must have a completed outcome"),
+            };
+            chains[vertex] = outcome;
+        }
+    }
+    // Preserve the existing finite-limit diagnostics without performing those
+    // repeated walks. Saturation also makes a cyclic MAX-limit input terminate.
+    let stopped = collector.limits.max_walk.saturating_add(1);
+    for (declaration, chain) in chains.into_iter().enumerate() {
+        let walked = match chain {
+            ParentChain::Rooted(distance) => (distance - 1 > stopped).then_some(stopped),
+            ParentChain::Invalid(distance) => Some((distance - 1).min(stopped)),
+            ParentChain::Cyclic => Some(stopped),
+            _ => unreachable!("every parent chain must have been classified"),
+        };
+        if let Some(walked) = walked {
+            collector.push(Finding::ParentCycle {
+                decl: DeclId::new(declaration),
+                walked,
+            });
+        }
+    }
+}
+
 impl Collector {
     fn push(&mut self, f: Finding) {
         self.total += 1;
@@ -261,21 +329,7 @@ pub fn validate_hierarchy_index_coherence(
     }
 
     // --- parent acyclicity -------------------------------------------------
-    for d in 0..n {
-        let mut cur = ir.decl_nodes[d].parent;
-        let mut walked = 0usize;
-        while cur.is_some() {
-            if cur.0 >= n || walked > limits.max_walk {
-                c.push(Finding::ParentCycle {
-                    decl: DeclId::new(d),
-                    walked,
-                });
-                break;
-            }
-            cur = ir.decl_nodes[cur.0].parent;
-            walked += 1;
-        }
-    }
+    validate_parent_chains(ir, &mut c);
 
     // --- kind / concrete-record agreement (compact dispatch, option D) ------
     // The single `decl_to_record` slot makes "more than one concrete record" a
@@ -345,6 +399,118 @@ pub fn validate_hierarchy_index_coherence(
             total: c.total,
             truncated,
         })
+    }
+}
+
+#[cfg(test)]
+mod parent_chain_tests {
+    use super::*;
+    use crate::ir::ir::DeclNode;
+
+    fn classify(parents: &[DeclId], max_walk: usize, max_findings: usize) -> Collector {
+        let ir = Ir {
+            decl_nodes: parents
+                .iter()
+                .map(|&parent| DeclNode {
+                    kind: DeclKind::Node,
+                    name: SymId::new(0),
+                    parent,
+                    first_child: DeclId::NONE,
+                    last_child: DeclId::NONE,
+                    next_sibling: DeclId::NONE,
+                    anno: Default::default(),
+                })
+                .collect(),
+            ..Ir::default()
+        };
+        let mut collector = Collector {
+            limits: CoherenceLimits {
+                max_walk,
+                max_findings,
+            },
+            findings: Vec::new(),
+            total: 0,
+        };
+        validate_parent_chains(&ir, &mut collector);
+        collector
+    }
+
+    #[test]
+    fn memoized_parent_chains_preserve_bounded_walk_diagnostics_exhaustively() {
+        for n in 0..=4_u32 {
+            let choices = n as usize + 2;
+            for mut encoding in 0..choices.pow(n) {
+                let mut parents = Vec::new();
+                for _ in 0..n {
+                    let raw = encoding % choices;
+                    encoding /= choices;
+                    parents.push(if raw == n as usize + 1 {
+                        DeclId::NONE
+                    } else {
+                        DeclId::new(raw)
+                    });
+                }
+                for max_walk in [0, 1, n as usize, 2 * n as usize] {
+                    // Independent oracle: literally follow each parent chain,
+                    // without memoization, at deliberately small finite limits.
+                    let mut expected = Vec::new();
+                    for (declaration, &parent) in parents.iter().enumerate() {
+                        let mut current = parent;
+                        let mut walked = 0;
+                        while current.is_some() {
+                            if current.raw() >= parents.len() || walked > max_walk {
+                                expected.push(Finding::ParentCycle {
+                                    decl: DeclId::new(declaration),
+                                    walked,
+                                });
+                                break;
+                            }
+                            current = parents[current.raw()];
+                            walked += 1;
+                        }
+                    }
+                    for cap in [0, 2, 64] {
+                        let actual = classify(&parents, max_walk, cap);
+                        assert_eq!(actual.total, expected.len());
+                        assert_eq!(actual.findings, expected[..expected.len().min(cap)]);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn parent_chains_handle_max_limit_and_shared_long_tails() {
+        let parents: Vec<_> = (0..257)
+            .map(|i| {
+                if i == 0 {
+                    DeclId::NONE
+                } else {
+                    DeclId::new(i - 1)
+                }
+            })
+            .collect();
+        assert_eq!(classify(&parents, usize::MAX, 64).total, 0);
+        // MAX cannot express MAX+1; cyclic diagnostics saturate and terminate.
+        let cycle = classify(
+            &[DeclId::new(1), DeclId::new(0), DeclId::new(1)],
+            usize::MAX,
+            2,
+        );
+        assert_eq!(cycle.total, 3);
+        assert_eq!(
+            cycle.findings,
+            [
+                Finding::ParentCycle {
+                    decl: DeclId::new(0),
+                    walked: usize::MAX
+                },
+                Finding::ParentCycle {
+                    decl: DeclId::new(1),
+                    walked: usize::MAX
+                },
+            ]
+        );
     }
 }
 

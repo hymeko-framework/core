@@ -103,12 +103,13 @@ fn compiled_program_facade_makes_paths_workspace_relative() {
     let canon = CanonicalIdentity::of(&Canon::new(&ir, &interner), CanonHashCfg::default());
     let program = CompiledProgram {
         root: ModuleKey(workspace.join("models/charge.hymeko")),
-        idx: index,
+        idx: index.into(),
         ir,
         imports: vec![(
             SymId::new(0),
             ModuleKey(workspace.join("library/electrical.hymeko")),
-        )],
+        )]
+        .into(),
         canon,
     };
 

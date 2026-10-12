@@ -56,6 +56,68 @@ crates:
       propagates to every downstream crate and invalidates published
       benchmarks.
     approved_edits:
+      # User, 2026-10-12: "engedely megadva mindegyikre" (all catalogue candidates authorized).
+      - slug: incremental-model-bookkeeping
+        date: 2026-10-12
+        scope: >
+          Implement the approved algorithm/storage catalogue in the existing
+          owners, beginning with shared compiled Index/import storage and exact
+          incremental symbol-use counts for checked value edits in Core. Replace
+          repeated parent walks in coherence validation with linear memoized
+          classification, retaining ordered/capped diagnostics and walk limits.
+          Reuse the canonical typed symbol walk and full compaction oracle.
+        constraints:
+          - preserve prior pending work, canonical bytes, validation, limits and old readers
+          - no RL or unrelated renderer migration; Core precedes consumer adaptation
+          - detach shared metadata only for actual symbol-ID remapping
+          - exact counts, including repeated symbols, aliases and metadata; no historical-string retention
+          - remaining heap/pool/layout candidates require their stated applicability conditions
+          - implementation approval does not specify hard deadlines, target hardware or OS
+          - user clarification: platform-independent configurable capacities; refine limits as usage develops
+
+      # User, 2026-10-12: select and implement algorithms and data structures, down to heap storage.
+      - slug: canonical-skeleton-packed-children
+        date: 2026-10-12
+        scope: >
+          Replace SkeletonForest's per-declaration child vectors with packed
+          child IDs and row offsets, built by stable counting and prefix sums.
+          Catalogue algorithms, priority queues and allocation strategies with
+          operation bounds and existing repository ownership in a PDF report.
+        constraints:
+          - preserve canonical bytes, child order, anonymous filtering and invalid-topology behavior
+          - one existing SkeletonForest implementation; no public API or dependency change
+          - preserve pending shared Interner and IR changes; no unrelated consumer or RL edits
+          - correctness checks and analytical bounds; no unmeasured speed or hard-deadline claim
+
+      # User, 2026-10-11: shared IR implementation; Graph/Transformation migration authorized.
+      - slug: shared-ir-tables
+        date: 2026-10-11
+        scope: >
+          Give the existing canonical Ir contiguous copy-on-write record tables.
+          Make symbol marking read-only without duplicating its typed field walk.
+          Preserve old snapshots, IDs, validation and serialized content. Complete
+          Core first, then migrate Graph and Transformation; other consumers later.
+        constraints:
+          - one canonical Ir and one generic table owner; no parallel model or version aliases
+          - table-granular copying, with unchanged tables shared across snapshots
+          - public read accessors, ordering, hashes and wire schema preserved
+          - explicit Vec consumers may need source adaptation; measure compiler and read controls
+          - preserve existing shared-interner candidate and published 8a7d7f5
+
+      # User, 2026-10-11: commit/push the measured fixes, then continue optimization.
+      - slug: shared-interner-storage
+        date: 2026-10-11
+        scope: >
+          Share immutable Interner storage and live string allocations, detaching
+          on insertion. Move retained-symbol table construction into its existing
+          Interner owner and reuse it from SymbolCompaction and value updates.
+        constraints:
+          - unchanged public methods, symbol order, hashes and wire formats
+          - unreachable historical strings are released without retaining old tables
+          - independent old readers and all model validation remain valid
+          - measure compiler construction as well as checked numeric/text updates
+          - PDF evidence; prior two fixes pushed separately as 8a7d7f5
+
       # User, 2026-10-11: proceed with the next measured optimization.
       - slug: coherence-borrowed-index
         date: 2026-10-11

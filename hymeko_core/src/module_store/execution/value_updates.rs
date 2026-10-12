@@ -11,7 +11,7 @@ use crate::{
         coherence::{CoherenceLimits, validate_hierarchy_index_coherence, validate_model_contract},
         ir::{DeclKind, ValueR},
     },
-    resolution::{interner::Interner, symbols::SymbolCompaction},
+    resolution::interner::Interner,
 };
 use std::{collections::HashSet, fmt, sync::Arc};
 
@@ -71,6 +71,9 @@ impl CompiledModel {
     /// This copies the candidate and retains only symbols it actually references.
     /// Repeated updates do not implicitly retain historical text values. Explicit
     /// old snapshot readers retain their independent, unchanged symbol tables.
+    /// The first update counts the base model's symbol occurrences once. Later
+    /// updates adjust only changed values; unchanged symbol multisets share the
+    /// counts. Resolution metadata is shared until symbol IDs need remapping.
     pub fn with_value_updates(
         &self,
         updates: &[ValueUpdate<'_>],
@@ -108,9 +111,8 @@ impl CompiledModel {
                 ValueUpdate::Clear { .. } => {}
             }
         }
-        // Compaction produces the candidate's owned interner. Only previously
-        // unseen text needs an extended table before that pass; other edits
-        // keep using the base model's symbol IDs without copying its strings.
+        // Compaction retains only live strings. Only previously unseen text
+        // needs a detached table; other edits borrow the base symbol IDs.
         let mut extended_interner: Option<Interner> = None;
         let mut ir = self.program.ir.clone();
         let values = updates
@@ -121,14 +123,7 @@ impl CompiledModel {
                     ValueUpdate::Text { value, .. } => {
                         let symbol = self.interner.get_id(value).unwrap_or_else(|| {
                             extended_interner
-                                .get_or_insert_with(|| {
-                                    let mut copied = Interner::new();
-                                    for (id, text) in self.interner.iter() {
-                                        let copied_id = copied.intern(text);
-                                        debug_assert_eq!(id, copied_id);
-                                    }
-                                    copied
-                                })
+                                .get_or_insert_with(|| self.interner.fork())
                                 .intern(value)
                         });
                         Some(ValueR::Str(symbol))
@@ -142,20 +137,25 @@ impl CompiledModel {
             .map_err(|_| ValueUpdateError::InvalidModel)?;
         let mut index = self.program.idx.clone();
         let mut imports = self.program.imports.clone();
-        let compacted = SymbolCompaction::apply(
-            &mut ir,
-            &mut index,
-            &mut imports,
-            extended_interner.as_ref().unwrap_or(&self.interner),
-        )
-        .map_err(|_| ValueUpdateError::InvalidModel)?;
+        let changed: Vec<_> = updates.iter().map(ValueUpdate::declaration).collect();
+        let (compacted, symbol_usage) = self
+            .symbol_usage()
+            .map_err(|_| ValueUpdateError::InvalidModel)?
+            .with_values(
+                &self.program.ir,
+                &mut ir,
+                &mut index,
+                &mut imports,
+                extended_interner.as_ref().unwrap_or(&self.interner),
+                &changed,
+            )
+            .map_err(|_| ValueUpdateError::InvalidModel)?;
         let interner = compacted.interner;
         validate_hierarchy_index_coherence(&ir, &index, &interner, CoherenceLimits::default())
             .map_err(|_| ValueUpdateError::InvalidModel)?;
         validate_model_contract(&ir, &interner).map_err(|_| ValueUpdateError::InvalidModel)?;
         // Values do not participate in the structural hash. No hierarchy, facet,
         // binding or concrete record changes, so their digest contributions remain valid.
-        let changed: Vec<_> = updates.iter().map(ValueUpdate::declaration).collect();
         let semantic =
             self.semantic_state()
                 .with_values(&ir, &interner, &changed, compacted.renumbered);
@@ -167,12 +167,13 @@ impl CompiledModel {
             program: Arc::new(CompiledProgram {
                 root: self.program.root.clone(),
                 idx: index,
-                ir,
+                ir: ir.into_shared(),
                 imports,
                 canon,
             }),
             interner,
             semantic: std::sync::OnceLock::from(semantic),
+            symbol_usage: std::sync::OnceLock::from(Ok(symbol_usage)),
             // `set_leaf_values` edits leaf annotations and compaction renumbers symbols; no
             // declaration, arc or slot moves, so a derived incidence index stays exact.
             incidence: self
@@ -282,6 +283,99 @@ mod tests {
             .anno
             .value
             .as_ref()
+    }
+
+    #[test]
+    fn value_edits_share_metadata_until_live_symbol_ids_move() {
+        let base = model().with_value_updates(&[]).unwrap();
+        let state = id(&base, "state");
+        let numeric = base
+            .with_value_updates(&[ValueUpdate::Set {
+                declaration: state,
+                value: ValueR::Num(2.0),
+            }])
+            .unwrap();
+        assert!(Arc::ptr_eq(&base.program.idx, &numeric.program.idx));
+        assert!(Arc::ptr_eq(&base.program.imports, &numeric.program.imports));
+        assert_eq!(
+            base.symbol_usage().unwrap(),
+            numeric.symbol_usage().unwrap()
+        );
+        let with_text = numeric
+            .with_value_updates(&[ValueUpdate::Text {
+                declaration: state,
+                value: "new-tail-symbol",
+            }])
+            .unwrap();
+        assert!(Arc::ptr_eq(&numeric.program.idx, &with_text.program.idx));
+        let cleared = with_text
+            .with_value_updates(&[ValueUpdate::Clear { declaration: state }])
+            .unwrap();
+        assert!(Arc::ptr_eq(&with_text.program.idx, &cleared.program.idx));
+        assert!(cleared.interner().get_id("new-tail-symbol").is_none());
+        assert!(with_text.interner().get_id("new-tail-symbol").is_some());
+        // Removing a pre-existing interior symbol shifts retained IDs and must
+        // detach metadata; the original index/interner pair stays readable.
+        let remapped = with_text
+            .with_value_updates(&[ValueUpdate::Clear {
+                declaration: id(&with_text, "label"),
+            }])
+            .unwrap();
+        assert!(!Arc::ptr_eq(&with_text.program.idx, &remapped.program.idx));
+        assert!(!Arc::ptr_eq(
+            &with_text.program.imports,
+            &remapped.program.imports
+        ));
+        assert_eq!(
+            remapped.symbol_usage().unwrap(),
+            &crate::resolution::symbols::SymbolUsage::new(
+                &remapped.program.ir,
+                &remapped.program.idx,
+                &remapped.program.imports,
+                &remapped.interner,
+            )
+            .unwrap()
+        );
+        assert_eq!(
+            remapped.semantic_digest(),
+            Canon::new(&remapped.program.ir, &remapped.interner).hash()
+        );
+        assert_eq!(value(&base, "state"), Some(&ValueR::Num(0.0)));
+    }
+
+    #[test]
+    fn value_edits_share_unchanged_tables_and_isolate_later_mutation() {
+        let base = model().with_value_updates(&[]).unwrap();
+        let digest = base.semantic_digest();
+        let next = base
+            .with_value_updates(&[ValueUpdate::Set {
+                declaration: id(&base, "state"),
+                value: ValueR::Num(7.0),
+            }])
+            .unwrap();
+        let old = &base.program().ir;
+        let new = &next.program().ir;
+        assert!(!old.nodes.is_empty() && !old.edges.is_empty() && !old.arcs.is_empty());
+        assert_ne!(old.decl_nodes.as_ptr(), new.decl_nodes.as_ptr());
+        assert_eq!(old.nodes.as_ptr(), new.nodes.as_ptr());
+        assert_eq!(old.edges.as_ptr(), new.edges.as_ptr());
+        assert_eq!(old.arcs.as_ptr(), new.arcs.as_ptr());
+        assert_eq!(old.decl_to_record.as_ptr(), new.decl_to_record.as_ptr());
+        assert_eq!(old.decl_file.as_ptr(), new.decl_file.as_ptr());
+        assert_eq!(value(&base, "state"), Some(&ValueR::Num(0.0)));
+        assert_eq!(value(&next, "state"), Some(&ValueR::Num(7.0)));
+        assert_eq!(
+            Canon::new(new, next.interner()).hash(),
+            next.semantic_digest()
+        );
+        let count = old.arcs[0].refs.len();
+        assert!(count > 0);
+        let mut edited = new.clone();
+        assert_eq!(edited.decl_nodes.as_ptr(), new.decl_nodes.as_ptr());
+        edited.arcs[0].refs.clear();
+        assert_eq!(old.arcs[0].refs.len(), count);
+        assert_eq!(new.arcs[0].refs.len(), count);
+        assert_eq!(Canon::new(old, base.interner()).hash(), digest);
     }
 
     #[test]

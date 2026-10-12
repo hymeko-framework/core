@@ -712,4 +712,267 @@ Report this second step and cumulative gains separately in PDF. Estimated durati
 task checkout and branch; preserve prior changes. Rollback only this continuation's
 coherence/test hunks. No commit, push or merge is requested by this continuation.
 
+\paragraph{Third continuation, 2026-10-11 19:26 +02:00.}
+The user requested commit/push and continued optimization. The previous two steps
+are published as \texttt{8a7d7f5} on \path{perf/checked-value-update-symbols}.
+The latest profile attributes 37.4 percent to deep IR cloning, principally owned
+incidence and weight vectors. Sharing those public Vec fields requires a consumer
+API migration, which is not silently bundled into this step. The next compatible
+copy reduction targets Interner construction (23.4 percent of update samples).
+
+Core's existing \path{resolution/interner.rs} owns a private reference-counted
+table and immutable strings. Existing public methods remain unchanged; private
+fork and retained-symbol operations share unchanged data. Insertion detaches a
+shared table. \path{resolution/symbols.rs} retains the one typed symbol walk and
+uses the Interner-owned dense ID mapping. \path{execution/value_updates.rs} forks
+the symbol table lazily when new text is introduced. No old table is retained by
+a compacted table with dead strings. This also removes the fabricated static
+string references from the old interner. Tests cover detached mutation, dense ID
+mapping, dropped dead-string ownership, retained readers and existing digest/CBOR
+parity. No dependency, public signature or canonical encoding change.
+
+Reuse the preserved \path{after-coherence/} EXE/PDB as baseline and the unchanged
+Criterion harness. Measure 1k/50k numeric and text updates, 1k digest controls,
+and 50k intern/cold-compile controls in ABBA order after bounded smoke. All cells
+retain the 16 GiB and 180-second process bounds. Reject unexplained regressions
+over 10 percent, including the compiler and memory controls. Capture a symbolized
+CPU profile, run owning and downstream correctness, and deliver a separate PDF.
+Estimated work: 20--30 minutes, including construction-regression measurements.
+Rollback only this continuation's Interner/SymbolCompaction/update hunks; keep
+the published first two steps and their evidence. The same checkout is reused.
+
+\paragraph{Shared IR continuation, 2026-10-11 20:47 +02:00.}
+The user explicitly authorizes Core shared storage plus Graph and Transformation
+adaptation; other consumers follow only after Core. Preserve the pending shared
+Interner changes on the current branch (HEAD \texttt{8a7d7f5}); fresh origin fetch
+succeeded, branch upstream is equal, main is one ancestor commit behind.
+Graph \texttt{ed7d0cf} and Transformation \texttt{90d64a8} match their freshly
+fetched feature upstreams. Transformation main diverges by 7/1 (the other commit
+is a material-lobes merge); reuse its existing feature integration base without
+discarding that branch's work or silently merging main. Existing TeX byproducts
+in both consumer checkouts remain untouched.
+
+Core owns \path{ir/table.rs}: one contiguous \texttt{IrTable<T>} over shared Vec
+storage, copied on mutable access. Existing read accessors and ordinary indexing,
+iteration, append and slice operations stay available. Explicit Vec assignments
+or typed clone results may require conversion. Ir clone shares all nine tables;
+a leaf edit copies the declaration table only. This is table-granular, not paged
+or constant-time leaf editing. Meta stays unchanged. Serialization delegates to
+the same vector sequence; existing manual wire admission remains authoritative.
+
+\path{resolution/symbols.rs} uses one macro-defined field walk instantiated with
+shared or mutable borrows; marking cannot detach any Ir table. Dense rewriting
+may detach tables when symbol IDs actually move. All validations stay active.
+Other Core edits: \path{ir/mod.rs}, \path{ir/ir.rs}, direct Vec assignments in
+\path{module_store/module_store.rs}, existing update/symbol tests and any compiler-
+identified table-boundary callers. Update the generated symbol index. Graph's
+explicit owned arc clone uses an explicit deep copy; adapt further proven consumers
+only after Core gates pass. Temporary local patches are integration aids, not
+published dependency pins. Do not publish an uncommitted provider revision.
+
+Before creation: table preflight found StringTable; rejected because it is an
+immutable string/Python snapshot, not an editable generic IR record table.
+The generational-arena artifact is a retired representation experiment; no code
+is copied from it. Reuse existing plans, benchmarks, fixtures and tests.
+Add tests for mutable access/iteration/owned iteration isolation, sequence wire
+parity, retained old snapshots and unchanged-table sharing, including read-only
+symbol marking and dense remapping. Run Core correctness/Clippy first, then Graph
+and Transformation workspaces with one local Core identity. Reuse after-sharing
+EXE/PDB baseline; smoke 1k/50k, ABBA update and cold-compile/intern controls, existing
+IR hash/traversal controls, separate CPU profile, 16 GiB/180-second process bounds.
+Preserve all raw evidence and deliver PDF. Estimate 45--75 minutes: storage/walk
+implementation, ownership tests, consumer compilation and paired measurements.
+Rollback only these storage/migration hunks, retaining the prior Interner step.
+
+\paragraph{Construction-control correction, 2026-10-11 21:00 +02:00.}
+The first Arc-backed table candidate keeps cold compilation within 0.2 percent
+but regresses direct IR construction by 25 percent; it is not accepted. Preserve
+its binary and results. Keep a uniquely owned Vec during construction/mutation,
+and convert it without copying records to shared storage at CompiledProgram and
+CompiledModel publication boundaries. A first write detaches shared storage once;
+later writes use the owned Vec directly. Standalone mutable tables clone deeply;
+published snapshots share. Both preserve independent Clone semantics. No unsafe
+shortcut or reference-count bypass. Recheck the same construction/read controls,
+then run the update matrix. The stored earlier \texttt{ir\_bench} baseline is valid for
+these controls because the preceding Interner/coherence changes do not enter their
+timed construction, raw state fold or accessor traversal; input and benchmark
+source are unchanged. Full digest/compiler/update controls use after-sharing.
+
+\paragraph{CPU closure, 2026-10-11 23:33 +02:00.}
+Windows consent was granted and both delayed captures completed. The rejected
+Arc-table construction candidate contributes 6,273 selected construction samples;
+26.7 percent include Arc mutable-access handling. The final shared-IR update
+capture contains 9,143 samples, 4,850 in the actual value-update function. All 813
+sampled Rust addresses resolve against the preserved final EXE/PDB. The final
+binary and all 191 manifest files still match the measured candidate; no production
+code or timing matrix is changed in this closure.
+
+Compare actual copy stacks, not only a function name whose work moved: the union
+of whole-Ir clone and declaration/node/edge/arc Vec clone frames falls from 52.2 to
+16.9 percent of selected update samples. Topology-table copying has no samples in
+the final numeric workload; declaration-table detachment remains. Inclusive
+shares overlap and are not additive phase times. Keep the measured accessor
+traversal tradeoff and the independently reproduced pre-existing Transformation
+fingerprint failure visible. Update the existing PDF/JSON and archive the new
+profiles, resolved symbols and figures. No new commit or push is authorized here.
+
+\paragraph{Algorithms and storage, 2026-10-12 01:09 +02:00.}
+The user requests algorithm and data-structure selection followed by implementation,
+including heap storage. Fresh Core origin fetch succeeded; HEAD and feature
+upstream remain at 8a7d7f5, one commit ahead of main. Reuse the checkout and retain
+the pending shared Interner and IR work. Core owns canonical skeleton preparation
+and update bookkeeping; Graph owns traversal queues/workspaces; Tensor already
+owns numerical buffer arenas. No sibling source changes, RL work or publication.
+
+Implement stable counting/prefix-sum packing in the existing SkeletonForest:
+replace one child Vec per declaration with a flat child-ID buffer and N+1 offsets.
+Reverse stable scatter may reuse cumulative row ends as cursors, leaving row
+starts without an extra scratch array. Preparation is O(N+E), row lookup O(1),
+row iteration O(degree), and exactly two child-storage buffers replace the outer
+vector plus nonempty row buffers. Keep the existing priority heap, labels,
+bottom-up fold, hash bytes and topology preconditions. No public signature change.
+The generic numerical CSR owner is not an IR hierarchy owner; introduce no new
+generic CSR abstraction. Searches found only this private child-list owner.
+
+Affected files: this plan bundle, CORE.YAML, SYMBOLS.md if generated output changes,
+and \path{hymeko_core/src/ir/canonical_hash.rs}, including private correctness tests.
+Add independent row-oracle checks for empty, chain, star, mixed named/anonymous,
+out-of-range-parent and cyclic inputs, and exhaustive small parent maps. Run
+focused tests, existing frozen-hash/corpus/semantic identity checks and owning
+library checks; run formatting, Clippy and symbol/duplication gates. Worst inputs
+include a chain with a heap buffer for every original nonleaf, a wide star and
+mostly anonymous declarations. Offsets cover the full declaration-ID domain.
+
+Deliver a Hungarian PDF catalogue with primary references, applicability,
+worst-case versus amortized bounds, allocation/reclamation costs and implementation
+order. Investigate delta propagation, inverse symbol-use indices, sparse sets,
+indexed heaps, bounded pools, TLSF and snapshot reclamation. Deadline/hardware/OS,
+maximum graph size and retained-reader bounds are still unspecified; ask for them
+without blocking this deadline-independent storage work. No new timing campaign;
+report analytical storage bounds separately from measured performance. ETA about
+25 minutes: implementation/tests 10, sourced catalogue and PDF verification 15.
+No numerical latency improvement or hard-real-time guarantee is asserted. The
+existing 16 GiB workspace resource cap remains. Roll back only this continuation's
+named hunks, preserving earlier changes. Archive the final PDF and verification
+evidence through the existing report-sync tool.
+
+\paragraph{Packed-child correctness closure, 2026-10-12 01:16 +02:00.}
+Implemented in the existing private owner. Two new tests compare against a direct
+parent-scan oracle: all 3,529 kind/parent combinations for zero through three
+declarations, plus 257-vertex chain, star and branching cases. Core library:
+187 passed, 2 ignored. Unified IR: 181 passed, 7 ignored, including frozen hashes,
+Pruefer cycle rejection and corpus CBOR parity. Strict Clippy and changed-file
+formatting pass; symbol index is current. Duplication remains 448 clones / 8,529
+lines, below the baseline 484 / 10,411. No benchmark or new speedup claim.
+Preflight's filename candidate \path{hymeko_wgpu/tests/skeleton.rs} is a GPU
+backend test suite, not a named-declaration hierarchy representation; rejected.
+No new production type or file was introduced. The implementation and tests are
+covered by source manifest
+\path{322c53db7343f2572b5c7f5cb9a942fe710991bdee16e0ee843f8bc54e70838e}.
+The algorithm/heap/allocation catalogue is delivered as
+\path{reports/2026-10-12-algorithms-storage.pdf}; selected future candidates are
+explicitly distinguished from this implemented storage change.
+
+\paragraph{Approved catalogue continuation, 2026-10-12 01:31 +02:00.}
+The user authorizes every catalogue candidate. Implement in owner order, Core
+before consumers; retain conditional applicability (no arbitrary global allocator
+replacement or invented hard deadline). Fresh origin fetch: feature HEAD/upstream
+8a7d7f5 equal, one ahead of main, existing checkout retained. No new publication
+instruction is inferred. Preserve pending shared storage and packed-child work.
+
+First deliver shared CompiledProgram Index/import ownership through Arc, with
+deep detach only when symbols are renumbered. CompiledProgram public field types
+therefore change; borrowed access coerces as before, owned construction needs
+conversion. Core CBOR wire payload keeps its existing owned Index/Vec types.
+The workspace search found one external constructor in hymeko\_web's WASM
+document owner; adapt only after Core gates, with a fresh fetch and local rules.
+Core direct consumers include pretty-print and namespace-fault tests.
+
+Cache exact model-local symbol-use counts lazily in CompiledModel. Generalize
+the one macro-defined field walk to read visitors; use it for full marking,
+counting and value deltas. Collect signed symbol occurrences only from changed
+old/new leaf values, sort by symbol ID and combine each run before adjusting
+counts. Equal multisets keep the shared count vector. With no unused symbol,
+reuse Interner and metadata without a full mark/retention scan. If a symbol dies,
+reuse the existing dense retention/rewrite path and compact the count vector in
+the same order. Retain all coherence/model validation and final digest folding.
+Numeric updates avoid count-vector copying after lazy initialization. Text updates
+may still copy O(S) counts/interner data and globally remap IDs: do not claim O(k)
+for the whole operation. Sorting a delta of R occurrences costs O(R log R).
+
+Touched: CORE.YAML; this plan bundle; SYMBOLS.md generated index;
+\path{resolution/symbols.rs}; \path{module_store/module_store.rs};
+\path{module_store/execution.rs}; \path{module_store/execution/value_updates.rs};
+\path{writers/cbor_writer/tests.rs}; \path{util/pretty_print.rs};
+\path{tests/unified_ir/verification/namespace_faults.rs}; compiler-identified
+direct Core callers. Reuse existing tests and add multiset/count parity against
+the independent full mark/compaction path; retained readers, no-op, scalar, nested
+lists, shared text, dead suffix, dense remap, invalid symbols, and imports/aliases.
+Check pointer sharing and count state without timing assertions. Run targeted
+Core library/IR/Clippy gates, then affected consumers. PDF evidence and archive.
+ETA 35--50 minutes for this first dependency pair: implementation 15, correctness
+10, integration/report 10--25. No profiling matrix in this step. Existing 16 GiB
+resource cap applies. Roll back only named continuation hunks; preserve earlier work.
+
+\paragraph{Parent-chain algorithm, 2026-10-12 01:40 +02:00.}
+The first pair passes 191 library and 181 unified-IR tests plus Clippy. Continue
+within the approved catalogue: the existing parent-acyclicity validator repeats
+each ancestor chain, O(N times depth), or O(N times max-walk) on cycles. Classify
+each functional-graph vertex once with unseen/active/completed state and unwind
+an explicit path stack. Completed outcomes retain distance to root or invalid
+parent, or cycle reachability. Emit diagnostics afterward in the original
+declaration order and with the same capped collector. O(N) parent classification,
+O(N) scratch; other validator work is unchanged. This is not validation caching:
+every current input is still checked. No identity-equality shortcut.
+
+Keep legacy diagnostic walked values for finite limits: overlong/rootless walks
+report max-walk plus one, invalid parents report the earlier invalid distance.
+At usize::MAX, saturate that diagnostic bound and terminate cycles instead of
+overflowing or looping. Modify only \path{ir/coherence.rs} plus this plan/manifest.
+An independent bounded naive-walk oracle checks every parent map up to four
+vertices at limits 0, 1, N and 2N; include cycles, out-of-range parents and NONE.
+Test usize::MAX cycle termination and existing full-validator faults. Add about
+10 minutes implementation/correctness. Retain all previously stated gates.
+
+\paragraph{Algorithm implementation closure, 2026-10-12 02:05 +02:00.}
+Core: 193 library, 181 unified-IR and 7 doctests passed; 9 ignored; strict Clippy
+passes. All 1,441 parent maps through four vertices match the bounded naive
+diagnostic oracle at four walk limits and three report caps. Delta tests cover
+full counts/compaction parity, repeated symbols, aliases/facets/imports, suffix
+removal, remapping, retained readers and count errors. Source manifest (191 files):
+\path{e516c5e60c5d2f37f2b44d3f0617eec8bd2e54b337c3431f0152e856069f9f54}.
+
+Graph advanced externally to f7ed8c2 during integration; retain it and its
+published 605bc8c arena-test fix. The separately planned indexed frontier passes
+644 Graph tests (30 ignored), including the allocation and path oracles, plus
+strict Clippy. Transformation current feature 0c1a2c5 contains the external emitter
+fingerprint correction: 330 selected tests pass (5 ignored, workflow timing test
+explicitly filtered), and all workspace test targets compile. An earlier suite
+invocation also ran its non-ignored workflow timing test; no performance claim
+is drawn from that incidental measurement. Generated SDF blank lines restored
+only after checking exact provenance/content. Web 4bfe66a needs three ownership
+conversions; 42 native tests and the wasm32 target check pass. All temporary
+lockfile changes were restored after hash checks. Single local provider identities
+were verified; these remain local integration builds, not publication pins.
+
+Core duplication remains 448/8,529 below 484/10,411. Graph's stock gate fails
+against 547/12,629; current HEAD and candidate both measure 577/13,157 using the
+same provider detector. The heap adds zero clones; do not raise the baseline or
+describe that gate as green. Current symbol indices and formatting pass.
+PDF and evidence: \path{reports/2026-10-12-incremental-bookkeeping.pdf}, with
+Graph's copy and source evidence under its indexed-frontier report. Other
+catalogue candidates remain authorized; deadline/platform/capacity requirements
+were requested for the memory/publication work. No commit, push or merge by this
+continuation. Existing uncommitted work and user TeX outputs retained.
+
+\paragraph{Commit and requirements clarification, 2026-10-12 02:14 +02:00.}
+The user requests committing the completed changes. Prepare local commits in
+provider order (Core, Graph, Web); no new push or merge is requested. Existing
+test/source manifests identify the reviewed candidate. The user clarifies that
+hardware, deadlines, graph/delta limits and retained-reader limits are not fixed
+at this early framework stage. Continue with platform-independent APIs and
+configurable capacities, refining concrete limits with later use. These missing
+fixed values are therefore not a reason to stop the authorized algorithm/storage
+work or request the same approval again. Do not invent hard-real-time guarantees.
+
 \end{document}

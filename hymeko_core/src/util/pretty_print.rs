@@ -158,7 +158,7 @@ pub fn pretty_print_compiled(it: &Interner, compiled: &CompiledProgram) {
     if compiled.imports.is_empty() {
         println!("  (none)");
     } else {
-        for (ns, key) in &compiled.imports {
+        for (ns, key) in compiled.imports.iter() {
             println!("  {}  ->  {}", sym(it, *ns), key.0.display());
         }
     }

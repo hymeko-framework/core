@@ -1,5 +1,6 @@
 use crate::common::ids::{DeclId, EdgeId, HyperArcId, NodeId, SymId};
 use crate::ir::meta::Meta;
+use crate::ir::table::IrTable;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -20,22 +21,24 @@ pub struct DeclNode {
     pub anno: AnnoR,
 }
 
+/// Canonical records. Compiled snapshots share tables; mutable access detaches
+/// the affected table so older snapshots retain their records and symbol IDs.
 #[derive(Debug, Default, Clone)]
 pub struct Ir {
     pub meta: Option<Meta>,
     // Unified Arena
-    pub decl_nodes: Vec<DeclNode>,
+    pub decl_nodes: IrTable<DeclNode>,
 
     /// Optional canonical source paths. Metadata, excluded from model hashes.
-    pub files: Vec<String>,
+    pub files: IrTable<String>,
     /// File-table indices keyed by DeclId, never NodeId. Empty means legacy IR
     /// without provenance; u32::MAX means a synthetic declaration with no source.
-    pub decl_file: Vec<u32>,
+    pub decl_file: IrTable<u32>,
 
     // “konkrét” táblák
-    pub nodes: Vec<NodeRec>, // NodeId indexel
-    pub edges: Vec<EdgeRec>, // EdgeId indexel
-    pub arcs: Vec<ArcRec>,   // ArcId indexel
+    pub nodes: IrTable<NodeRec>, // NodeId indexel
+    pub edges: IrTable<EdgeRec>, // EdgeId indexel
+    pub arcs: IrTable<ArcRec>,   // ArcId indexel
 
     // Compact declaration dispatch (option D, 2026-08-31): one 8-byte slot per
     // decl replaces the former three `Vec<Option<Id>>` maps (48 B/decl -> 8 B/decl).
@@ -44,7 +47,7 @@ pub struct Ir {
     // through the checked typed mutators `bind_{node,edge,arc}_decl`. See the
     // `dispatch` module for the checked encoding. The legacy three-map serde wire is
     // preserved byte-for-byte by the manual `Serialize`/`Deserialize` impls below.
-    pub(crate) decl_to_record: Vec<u64>,
+    pub(crate) decl_to_record: IrTable<u64>,
 
     // Canonical namespace roots (U2.1, 2026-08-31): the import namespace prefix
     // lowering applies to each imported module's root declarations -- the one piece
@@ -55,7 +58,7 @@ pub struct Ir {
     // Invariant: sorted ascending by `DeclId`; each `DeclId` is a live link-root;
     // prefixes are non-empty (single-module roots absent -> zero cost). Storage is
     // PRIVATE; reads via `namespace_prefix`, writes via `record_namespace_root`.
-    pub(crate) namespace_roots: Vec<(DeclId, Box<[SymId]>)>,
+    pub(crate) namespace_roots: IrTable<(DeclId, Box<[SymId]>)>,
 
     // APPROVED-CORE-EDIT: executable-model-contract (2026-09-06).
     //
@@ -73,7 +76,7 @@ pub struct Ir {
     // Storage is PRIVATE: reads via `model_facet`, writes via `set_model_facet`. The wire is
     // additive and conditional (see `Serialize`), so a document without facets serializes
     // byte-identically to the pre-facet form.
-    pub(crate) decl_model: Vec<Option<ModelFacet>>,
+    pub(crate) decl_model: IrTable<Option<ModelFacet>>,
 }
 
 /// What role a tensor plays in an executable model.
@@ -409,6 +412,16 @@ macro_rules! ir_tables {
 }
 
 impl Ir {
+    /// Publish completed tables without copying records. Owned construction and
+    /// edits stay cheap; all subsequent snapshot clones share these allocations.
+    pub(crate) fn into_shared(mut self) -> Self {
+        macro_rules! share {
+            ($ir:expr; $($table:ident),*) => { $( $ir.$table.share(); )* };
+        }
+        ir_tables!(share!(self));
+        self
+    }
+
     pub(crate) fn validate_source_provenance(&self) -> Result<(), IrDecodeError> {
         if self.files.is_empty() && self.decl_file.is_empty() {
             return Ok(());
@@ -1355,15 +1368,15 @@ impl Ir {
             }
         };
         Ok(Ir {
-            files,
-            decl_file,
+            files: files.into(),
+            decl_file: decl_file.into(),
             meta: w.meta,
-            decl_nodes: w.decl_nodes,
-            nodes: w.nodes,
-            edges: w.edges,
-            arcs: w.arcs,
-            decl_to_record,
-            namespace_roots,
+            decl_nodes: w.decl_nodes.into(),
+            nodes: w.nodes.into(),
+            edges: w.edges.into(),
+            arcs: w.arcs.into(),
+            decl_to_record: decl_to_record.into(),
+            namespace_roots: namespace_roots.into(),
             // Fail-closed: a facet table that disagrees with the declaration count is a malformed
             // payload, not something to pad silently. An ABSENT table (the pre-facet wire) is the
             // legitimate empty case and stays empty.
@@ -1377,7 +1390,7 @@ impl Ir {
                         arc: m.len(),
                     });
                 }
-                m
+                m.into()
             },
         })
     }

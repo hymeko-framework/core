@@ -22,6 +22,7 @@ use crate::ir::canonical_hash::{Canon, CanonHashCfg, CanonicalIdentity};
 use crate::ir::incidence::{IncidenceError, IncidenceIndexData, IncidenceView};
 use crate::ir::semantic_digest::{SemanticDigestState, SemanticModelDigest};
 use crate::resolution::interner::Interner;
+use crate::resolution::symbols::{SymbolError, SymbolUsage};
 use std::fmt;
 use std::path::Path;
 use std::sync::{Arc, OnceLock, RwLock};
@@ -35,6 +36,7 @@ pub struct CompiledModel {
     program: Arc<CompiledProgram>,
     interner: Interner,
     semantic: OnceLock<SemanticDigestState>,
+    symbol_usage: OnceLock<Result<SymbolUsage, SymbolError>>,
     /// The reverse-incidence index of `program.ir`, derived on first use and never
     /// serialized. Checked value updates change leaf values only, never arcs or
     /// declarations, so the models they derive share it.
@@ -61,6 +63,7 @@ impl CompiledModel {
             program,
             interner: store.it,
             semantic: OnceLock::new(),
+            symbol_usage: OnceLock::new(),
             incidence: OnceLock::new(),
         })
     }
@@ -81,15 +84,30 @@ impl CompiledModel {
         Self {
             program: Arc::new(CompiledProgram {
                 root: super::module_store::ModuleKey(payload.root_path),
-                idx: payload.index,
-                ir: payload.ir,
-                imports: payload.imports,
+                idx: Arc::new(payload.index),
+                ir: payload.ir.into_shared(),
+                imports: Arc::new(payload.imports),
                 canon,
             }),
             interner,
             semantic: OnceLock::new(),
+            symbol_usage: OnceLock::new(),
             incidence: OnceLock::new(),
         }
+    }
+
+    fn symbol_usage(&self) -> Result<&SymbolUsage, SymbolError> {
+        self.symbol_usage
+            .get_or_init(|| {
+                SymbolUsage::new(
+                    &self.program.ir,
+                    &self.program.idx,
+                    &self.program.imports,
+                    &self.interner,
+                )
+            })
+            .as_ref()
+            .map_err(|&error| error)
     }
 
     /// The canonical compiler's result, borrowed for this model's lifetime.
@@ -323,7 +341,7 @@ mod snapshot_tests {
         let installed = CompiledModel::from_decoded_cbor(decoded);
         assert_eq!(installed.program().ir.decl_nodes.as_ptr(), nodes);
         assert_eq!(installed.program().root.0, Path::new("scene.hymeko"));
-        assert_eq!(installed.program().imports, imported);
+        assert_eq!(installed.program().imports.as_ref(), &imported);
         assert_eq!(installed.program().canon, original.program().canon);
         assert_eq!(
             Canon::new(&installed.program().ir, installed.interner()).hash(),

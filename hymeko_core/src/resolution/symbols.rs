@@ -1,12 +1,13 @@
-//! Model-local symbol lifetime. One typed walk serves marking and dense rewriting.
-//! Callers own the candidate IR/index; immutable source snapshots are never changed.
+//! Model-local symbol lifetime. One typed field walk serves marking and rewriting.
+//! Marking borrows shared IR tables; only dense rewriting may detach them.
 use crate::{
-    common::ids::SymId,
+    common::ids::{DeclId, SymId},
     ir::ir::{AnnoR, Extent, Ir, ModelFacet, SignedRefR, ValueR},
     module_store::module_store::ModuleKey,
     resolution::{interner::Interner, resolve::Index},
 };
 use rustc_hash::FxHashMap;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct SymbolError {
@@ -14,17 +15,13 @@ pub(crate) struct SymbolError {
     pub symbol: usize,
 }
 
-trait SymbolVisitor {
-    /// Only a remapping visitor may change IDs stored in hash-map keys.
-    const REWRITES_KEYS: bool;
-    fn symbol(&mut self, id: &mut SymId, field: &'static str) -> Result<(), SymbolError>;
+trait SymbolReader {
+    fn symbol(&mut self, id: &SymId, field: &'static str) -> Result<(), SymbolError>;
 }
 
 struct LiveSymbols<'a>(&'a mut [bool]);
-impl SymbolVisitor for LiveSymbols<'_> {
-    const REWRITES_KEYS: bool = false;
-
-    fn symbol(&mut self, id: &mut SymId, field: &'static str) -> Result<(), SymbolError> {
+impl SymbolReader for LiveSymbols<'_> {
+    fn symbol(&mut self, id: &SymId, field: &'static str) -> Result<(), SymbolError> {
         let used = self.0.get_mut(id.raw()).ok_or(SymbolError {
             field,
             symbol: id.raw(),
@@ -34,10 +31,164 @@ impl SymbolVisitor for LiveSymbols<'_> {
     }
 }
 
-struct DenseSymbols<'a>(&'a [SymId]);
-impl SymbolVisitor for DenseSymbols<'_> {
-    const REWRITES_KEYS: bool = true;
+/// Exact occurrences, including immutable topology, metadata and resolution paths.
+/// Derived state belongs to one immutable program/interner pair, never the wire.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SymbolUsage {
+    counts: Arc<Vec<usize>>,
+    unused: usize,
+}
 
+struct CountSymbols<'a>(&'a mut [usize]);
+impl SymbolReader for CountSymbols<'_> {
+    fn symbol(&mut self, id: &SymId, field: &'static str) -> Result<(), SymbolError> {
+        let error = SymbolError {
+            field,
+            symbol: id.raw(),
+        };
+        let count = self.0.get_mut(id.raw()).ok_or(error)?;
+        *count = count.checked_add(1).ok_or(error)?;
+        Ok(())
+    }
+}
+
+struct SymbolDelta {
+    occurrences: Vec<(usize, bool)>,
+    adding: bool,
+    symbols: usize,
+}
+impl SymbolReader for SymbolDelta {
+    fn symbol(&mut self, id: &SymId, field: &'static str) -> Result<(), SymbolError> {
+        if id.raw() >= self.symbols {
+            return Err(SymbolError {
+                field,
+                symbol: id.raw(),
+            });
+        }
+        self.occurrences.push((id.raw(), self.adding));
+        Ok(())
+    }
+}
+
+impl SymbolUsage {
+    pub(crate) fn new(
+        ir: &Ir,
+        index: &Index,
+        imports: &[(SymId, ModuleKey)],
+        source: &Interner,
+    ) -> Result<Self, SymbolError> {
+        let mut counts = vec![0; source.iter().count()];
+        ProgramSymbols { ir, index, imports }.mark(&mut CountSymbols(&mut counts))?;
+        Ok(Self {
+            unused: counts.iter().filter(|&&count| count == 0).count(),
+            counts: Arc::new(counts),
+        })
+    }
+
+    /// Change counts only for the supplied leaf values. Topology, annotations
+    /// other than values, index and imports must still match the base snapshot.
+    pub(crate) fn with_values(
+        &self,
+        before: &Ir,
+        after: &mut Ir,
+        index: &mut Arc<Index>,
+        imports: &mut Arc<Vec<(SymId, ModuleKey)>>,
+        source: &Interner,
+        changed: &[DeclId],
+    ) -> Result<(SymbolCompaction, Self), SymbolError> {
+        let symbols = source.iter().count();
+        if symbols < self.counts.len() {
+            return Err(SymbolError {
+                field: "symbol usage table",
+                symbol: self.counts.len(),
+            });
+        }
+        let mut delta = SymbolDelta {
+            occurrences: Vec::new(),
+            adding: false,
+            symbols,
+        };
+        for &declaration in changed {
+            for (ir, adding) in [(before, false), (&*after, true)] {
+                delta.adding = adding;
+                if let Some(value) = &ir.decl_nodes[declaration.raw()].anno.value {
+                    ProgramSymbols::read_value(value, &mut delta)?;
+                }
+            }
+        }
+        // Combine before mutating so swaps and equal symbol multisets neither
+        // detach the counts nor transiently remove a still-referenced string.
+        delta
+            .occurrences
+            .sort_unstable_by_key(|&(symbol, _)| symbol);
+        let mut next = self.clone();
+        if symbols > next.counts.len() {
+            next.unused += symbols - next.counts.len();
+            Arc::make_mut(&mut next.counts).resize(symbols, 0);
+        }
+        let mut cursor = 0;
+        while cursor < delta.occurrences.len() {
+            let symbol = delta.occurrences[cursor].0;
+            let mut added = 0;
+            let mut removed = 0;
+            while cursor < delta.occurrences.len() && delta.occurrences[cursor].0 == symbol {
+                if delta.occurrences[cursor].1 {
+                    added += 1;
+                } else {
+                    removed += 1;
+                }
+                cursor += 1;
+            }
+            let old = next.counts[symbol];
+            let new = old
+                .checked_sub(removed)
+                .and_then(|n| n.checked_add(added))
+                .ok_or(SymbolError {
+                    field: "symbol usage count",
+                    symbol,
+                })?;
+            if old != new {
+                Arc::make_mut(&mut next.counts)[symbol] = new;
+                if old == 0 {
+                    next.unused -= 1;
+                }
+                if new == 0 {
+                    next.unused += 1;
+                }
+            }
+        }
+        if next.unused == 0 {
+            return Ok((
+                SymbolCompaction {
+                    interner: source.fork(),
+                    renumbered: false,
+                },
+                next,
+            ));
+        }
+        let used: Vec<_> = next.counts.iter().map(|&count| count != 0).collect();
+        let compacted = SymbolCompaction::retain(source, &used, |mapping| {
+            ProgramSymbols::rewrite(
+                after,
+                Arc::make_mut(index),
+                Arc::make_mut(imports).as_mut_slice(),
+                &mut DenseSymbols(mapping),
+            )
+        })?;
+        next.counts = Arc::new(
+            next.counts
+                .iter()
+                .copied()
+                .filter(|&count| count != 0)
+                .collect(),
+        );
+        next.unused = 0;
+        Ok((compacted, next))
+    }
+}
+
+struct DenseSymbols<'a>(&'a [SymId]);
+impl DenseSymbols<'_> {
     fn symbol(&mut self, id: &mut SymId, field: &'static str) -> Result<(), SymbolError> {
         *id = self
             .0
@@ -64,21 +215,22 @@ impl SymbolCompaction {
         source: &Interner,
     ) -> Result<Self, SymbolError> {
         let mut used = vec![false; source.iter().count()];
-        let mut program = ProgramSymbols { ir, index, imports };
-        program.visit(&mut LiveSymbols(&mut used))?;
-        let mut mapping = vec![SymId::NONE; used.len()];
-        let mut interner = Interner::new();
-        let mut renumbered = false;
-        // Retain original relative order, independent of HashMap traversal order.
-        for (old, text) in source.iter() {
-            if used[old.raw()] {
-                let new = interner.intern(text);
-                mapping[old.raw()] = new;
-                renumbered |= old != new;
-            }
-        }
-        if renumbered {
-            program.visit(&mut DenseSymbols(&mapping))?;
+        let program = ProgramSymbols { ir, index, imports };
+        program.mark(&mut LiveSymbols(&mut used))?;
+        Self::retain(source, &used, |mapping| {
+            ProgramSymbols::rewrite(ir, index, imports, &mut DenseSymbols(mapping))
+        })
+    }
+
+    fn retain(
+        source: &Interner,
+        used: &[bool],
+        rewrite: impl FnOnce(&[SymId]) -> Result<(), SymbolError>,
+    ) -> Result<Self, SymbolError> {
+        let (interner, mapping) = source.retained(used);
+        let renumbered = mapping.is_some();
+        if let Some(mapping) = mapping {
+            rewrite(&mapping)?;
         }
         Ok(Self {
             interner,
@@ -88,141 +240,164 @@ impl SymbolCompaction {
 }
 
 struct ProgramSymbols<'a> {
-    ir: &'a mut Ir,
-    index: &'a mut Index,
-    imports: &'a mut [(SymId, ModuleKey)],
+    ir: &'a Ir,
+    index: &'a Index,
+    imports: &'a [(SymId, ModuleKey)],
 }
-impl ProgramSymbols<'_> {
-    fn visit<V: SymbolVisitor>(&mut self, visitor: &mut V) -> Result<(), SymbolError> {
-        for declaration in &mut self.ir.decl_nodes {
-            visitor.symbol(&mut declaration.name, "declaration name")?;
-            Self::anno(&mut declaration.anno, visitor)?;
-        }
-        for (_, prefix) in &mut self.ir.namespace_roots {
-            Self::path(prefix, "namespace prefix symbol", visitor)?;
-        }
-        for refs in self
-            .ir
-            .nodes
-            .iter_mut()
-            .map(|n| &mut n.bases)
-            .chain(self.ir.edges.iter_mut().map(|e| &mut e.bases))
-        {
-            Self::refs(refs, visitor)?;
-        }
-        for arc in &mut self.ir.arcs {
-            Self::anno(&mut arc.anno, visitor)?;
-            Self::refs(&mut arc.refs, visitor)?;
-        }
-        for facet in self.ir.decl_model.iter_mut().flatten() {
-            match facet {
-                ModelFacet::Tensor(tensor) => {
-                    for dimension in &mut tensor.shape {
-                        match dimension {
-                            Extent::Symbolic(id) => visitor.symbol(id, "tensor symbolic extent")?,
-                            Extent::Static(_) => {}
+
+// One field schema, instantiated with shared or mutable borrows. Merely asking
+// for mutable iteration would detach a shared table, even when no ID changes.
+// The visitor signatures enforce that the marking expansion cannot write.
+macro_rules! symbol_walk {
+    ($walk:ident, $path:ident, $anno:ident, $refs:ident, $value:ident,
+     $visitor:ty, $iter:ident $(, $mutable:tt)?) => {
+        impl ProgramSymbols<'_> {
+            fn $walk(ir: & $($mutable)? Ir, visitor: &mut $visitor) -> Result<(), SymbolError> {
+                for declaration in & $($mutable)? ir.decl_nodes {
+                    visitor.symbol(& $($mutable)? declaration.name, "declaration name")?;
+                    Self::$anno(& $($mutable)? declaration.anno, visitor)?;
+                }
+                for (_, prefix) in & $($mutable)? ir.namespace_roots {
+                    Self::$path(prefix, "namespace prefix symbol", visitor)?;
+                }
+                for refs in ir.nodes.$iter().map(|n| & $($mutable)? n.bases)
+                    .chain(ir.edges.$iter().map(|e| & $($mutable)? e.bases)) {
+                    Self::$refs(refs, visitor)?;
+                }
+                for arc in & $($mutable)? ir.arcs {
+                    Self::$anno(& $($mutable)? arc.anno, visitor)?;
+                    Self::$refs(& $($mutable)? arc.refs, visitor)?;
+                }
+                for facet in ir.decl_model.$iter().flatten() {
+                    match facet {
+                        ModelFacet::Tensor(tensor) => {
+                            for dimension in & $($mutable)? tensor.shape {
+                                match dimension {
+                                    Extent::Symbolic(id) => visitor.symbol(id, "tensor symbolic extent")?,
+                                    Extent::Static(_) => {}
+                                }
+                            }
                         }
+                        ModelFacet::Operator(operator) =>
+                            visitor.symbol(& $($mutable)? operator.identity, "operator identity")?,
                     }
                 }
-                ModelFacet::Operator(operator) => {
-                    visitor.symbol(&mut operator.identity, "operator identity")?
+                Ok(())
+            }
+
+            fn $path(path: & $($mutable)? [SymId], field: &'static str,
+                     visitor: &mut $visitor) -> Result<(), SymbolError> {
+                for id in path { visitor.symbol(id, field)?; }
+                Ok(())
+            }
+
+            fn $anno(anno: & $($mutable)? AnnoR, visitor: &mut $visitor) -> Result<(), SymbolError> {
+                Self::$path(& $($mutable)? anno.tags, "annotation tag", visitor)?;
+                if let Some(value) = & $($mutable)? anno.value { Self::$value(value, visitor)?; }
+                Ok(())
+            }
+
+            fn $refs(refs: & $($mutable)? [SignedRefR], visitor: &mut $visitor) -> Result<(), SymbolError> {
+                for reference in refs {
+                    let (SignedRefR::Plus(atom) | SignedRefR::Minus(atom) | SignedRefR::Neutral(atom)) = reference;
+                    Self::$anno(& $($mutable)? atom.anno, visitor)?;
+                    if let Some(weights) = & $($mutable)? atom.weights {
+                        for value in weights { Self::$value(value, visitor)?; }
+                    }
                 }
+                Ok(())
             }
-        }
-        if V::REWRITES_KEYS {
-            let paths = std::mem::take(&mut self.index.by_path);
-            self.index.by_path.reserve(paths.len());
-            for (mut path, declaration) in paths {
-                Self::path(&mut path.0, "path-index symbol", visitor)?;
-                self.index.by_path.insert(path, declaration);
-            }
-        } else {
-            // Marking validates IDs but cannot change a key. Keep the existing
-            // buckets and paths instead of allocating and rehashing the index.
-            for path in self.index.by_path.keys() {
-                for mut symbol in path.0.iter().copied() {
-                    visitor.symbol(&mut symbol, "path-index symbol")?;
+
+            fn $value(root: & $($mutable)? ValueR, visitor: &mut $visitor) -> Result<(), SymbolError> {
+                if matches!(root, ValueR::Num(_) | ValueR::Ref(_)) { return Ok(()); }
+                let mut pending = vec![root];
+                while let Some(value) = pending.pop() {
+                    match value {
+                        ValueR::Str(id) => visitor.symbol(id, "string value")?,
+                        ValueR::List(values) => pending.extend(values),
+                        ValueR::Num(_) | ValueR::Ref(_) => {}
+                    }
                 }
+                Ok(())
             }
         }
-        Self::aliases(&mut self.index.aliases, visitor)?;
-        for (_, aliases) in &mut self.index.module_aliases {
-            Self::aliases(aliases, visitor)?;
+    };
+}
+
+symbol_walk!(
+    read_ir,
+    read_path,
+    read_anno,
+    read_refs,
+    read_value,
+    impl SymbolReader,
+    iter
+);
+symbol_walk!(
+    write_ir,
+    write_path,
+    write_anno,
+    write_refs,
+    write_value,
+    DenseSymbols<'_>,
+    iter_mut,
+    mut
+);
+
+impl ProgramSymbols<'_> {
+    fn mark(&self, visitor: &mut impl SymbolReader) -> Result<(), SymbolError> {
+        Self::read_ir(self.ir, visitor)?;
+        for path in self.index.by_path.keys() {
+            Self::read_path(&path.0, "path-index symbol", visitor)?;
         }
-        for (namespace, _) in &mut *self.imports {
+        for aliases in std::iter::once(&self.index.aliases)
+            .chain(self.index.module_aliases.iter().map(|(_, aliases)| aliases))
+        {
+            for (alias, path) in aliases {
+                visitor.symbol(alias, "alias")?;
+                Self::read_path(path, "alias path symbol", visitor)?;
+            }
+        }
+        for (namespace, _) in self.imports.iter() {
             visitor.symbol(namespace, "import namespace")?;
         }
         Ok(())
     }
 
-    fn path(
-        path: &mut [SymId],
-        field: &'static str,
-        visitor: &mut impl SymbolVisitor,
+    fn rewrite(
+        ir: &mut Ir,
+        index: &mut Index,
+        imports: &mut [(SymId, ModuleKey)],
+        visitor: &mut DenseSymbols<'_>,
     ) -> Result<(), SymbolError> {
-        for id in path {
-            visitor.symbol(id, field)?;
+        Self::write_ir(ir, visitor)?;
+        // A dense rewrite changes keys, so it must rebuild their maps.
+        let paths = std::mem::take(&mut index.by_path);
+        index.by_path.reserve(paths.len());
+        for (mut path, declaration) in paths {
+            Self::write_path(&mut path.0, "path-index symbol", visitor)?;
+            index.by_path.insert(path, declaration);
+        }
+        Self::rewrite_aliases(&mut index.aliases, visitor)?;
+        for (_, aliases) in &mut index.module_aliases {
+            Self::rewrite_aliases(aliases, visitor)?;
+        }
+        for (namespace, _) in imports {
+            visitor.symbol(namespace, "import namespace")?;
         }
         Ok(())
     }
 
-    fn aliases<V: SymbolVisitor>(
+    fn rewrite_aliases(
         aliases: &mut FxHashMap<SymId, Vec<SymId>>,
-        visitor: &mut V,
+        visitor: &mut DenseSymbols<'_>,
     ) -> Result<(), SymbolError> {
-        if !V::REWRITES_KEYS {
-            for (&alias, path) in aliases.iter_mut() {
-                let mut symbol = alias;
-                visitor.symbol(&mut symbol, "alias")?;
-                Self::path(path, "alias path symbol", visitor)?;
-            }
-            return Ok(());
-        }
         let old = std::mem::take(aliases);
         aliases.reserve(old.len());
         for (mut alias, mut path) in old {
             visitor.symbol(&mut alias, "alias")?;
-            Self::path(&mut path, "alias path symbol", visitor)?;
+            Self::write_path(&mut path, "alias path symbol", visitor)?;
             aliases.insert(alias, path);
-        }
-        Ok(())
-    }
-
-    fn anno(anno: &mut AnnoR, visitor: &mut impl SymbolVisitor) -> Result<(), SymbolError> {
-        Self::path(&mut anno.tags, "annotation tag", visitor)?;
-        if let Some(value) = &mut anno.value {
-            Self::value(value, visitor)?;
-        }
-        Ok(())
-    }
-
-    fn refs(refs: &mut [SignedRefR], visitor: &mut impl SymbolVisitor) -> Result<(), SymbolError> {
-        for reference in refs {
-            let (SignedRefR::Plus(atom) | SignedRefR::Minus(atom) | SignedRefR::Neutral(atom)) =
-                reference;
-            Self::anno(&mut atom.anno, visitor)?;
-            if let Some(weights) = &mut atom.weights {
-                for value in weights {
-                    Self::value(value, visitor)?;
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn value(root: &mut ValueR, visitor: &mut impl SymbolVisitor) -> Result<(), SymbolError> {
-        // Neither scalar contains a SymId. Most incidence weights are numeric;
-        // allocating a traversal stack for each of them serves no visitor work.
-        if matches!(root, ValueR::Num(_) | ValueR::Ref(_)) {
-            return Ok(());
-        }
-        let mut pending = vec![root];
-        while let Some(value) = pending.pop() {
-            match value {
-                ValueR::Str(id) => visitor.symbol(id, "string value")?,
-                ValueR::List(values) => pending.extend(values),
-                ValueR::Num(_) | ValueR::Ref(_) => {}
-            }
         }
         Ok(())
     }
@@ -365,9 +540,184 @@ mod tests {
     }
 
     #[test]
+    fn incremental_usage_matches_full_compaction_with_aliases_and_metadata() {
+        let mut f = Fixture::new();
+        let a = f.ir.nodes[1].decl;
+        let b = f.ir.nodes[2].decl;
+        let mut index = Arc::new(f.index);
+        let mut imports = Arc::new(f.imports);
+        let mut usage = SymbolUsage::new(&f.ir, &index, &imports, &f.strings).unwrap();
+        for step in 0..24 {
+            let mut source = f.strings.fork();
+            let fresh = source.intern(&format!("new-value-{step}"));
+            // A dead suffix must be removed even if no retained ID needs moving.
+            source.intern("unused-suffix");
+            let tag = source.get_id("tag").unwrap();
+            let mut edited = f.ir.clone();
+            edited.decl_nodes[a.raw()].anno.value = Some(ValueR::List(vec![
+                ValueR::Str(tag),
+                ValueR::Str(fresh),
+                ValueR::List(vec![ValueR::Str(fresh), ValueR::Num(step as f64)]),
+            ]));
+            edited.decl_nodes[b.raw()].anno.value = if step % 2 == 0 {
+                Some(ValueR::Str(fresh))
+            } else {
+                None
+            };
+            let mut reference_ir = edited.clone();
+            let mut reference_index = index.as_ref().clone();
+            let mut reference_imports = imports.as_ref().clone();
+            let reference = SymbolCompaction::apply(
+                &mut reference_ir,
+                &mut reference_index,
+                &mut reference_imports,
+                &source,
+            )
+            .unwrap();
+            let old_index = Arc::clone(&index);
+            let old_imports = Arc::clone(&imports);
+            let old_usage = usage.clone();
+            let (actual, next) = usage
+                .with_values(
+                    &f.ir,
+                    &mut edited,
+                    &mut index,
+                    &mut imports,
+                    &source,
+                    &[a, b],
+                )
+                .unwrap();
+            assert_eq!(
+                serde_json::to_vec(&edited).unwrap(),
+                serde_json::to_vec(&reference_ir).unwrap()
+            );
+            assert_eq!(index.by_path, reference_index.by_path);
+            assert_eq!(index.aliases, reference_index.aliases);
+            assert_eq!(index.module_aliases, reference_index.module_aliases);
+            assert_eq!(imports.as_ref(), &reference_imports);
+            assert_eq!(actual.renumbered, reference.renumbered);
+            assert_eq!(
+                actual.interner.iter().collect::<Vec<_>>(),
+                reference.interner.iter().collect::<Vec<_>>()
+            );
+            assert_eq!(
+                next,
+                SymbolUsage::new(&edited, &index, &imports, &actual.interner).unwrap()
+            );
+            assert_eq!(usage, old_usage);
+            assert_eq!(
+                usage,
+                SymbolUsage::new(&f.ir, &old_index, &old_imports, &f.strings).unwrap()
+            );
+            assert_eq!(Arc::ptr_eq(&old_index, &index), !actual.renumbered);
+            assert_eq!(Arc::ptr_eq(&old_imports, &imports), !actual.renumbered);
+            assert!(actual.interner.get_id("unused-suffix").is_none());
+            f.ir = edited;
+            f.strings = actual.interner;
+            usage = next;
+        }
+    }
+
+    #[test]
+    fn numeric_and_equal_symbol_multisets_keep_shared_counts() {
+        let mut f = Fixture::new();
+        let compact =
+            SymbolCompaction::apply(&mut f.ir, &mut f.index, &mut f.imports, &f.strings).unwrap();
+        f.strings = compact.interner;
+        let target = f.ir.nodes[2].decl;
+        let tag = f.strings.get_id("tag").unwrap();
+        for (before, after) in [
+            (Some(ValueR::Num(0.0)), Some(ValueR::Num(1.0))),
+            (
+                Some(ValueR::List(vec![
+                    ValueR::Str(tag),
+                    ValueR::Num(0.0),
+                    ValueR::Str(tag),
+                ])),
+                Some(ValueR::List(vec![
+                    ValueR::Str(tag),
+                    ValueR::List(vec![ValueR::Str(tag)]),
+                    ValueR::Num(2.0),
+                ])),
+            ),
+        ] {
+            f.ir.decl_nodes[target.raw()].anno.value = before;
+            let mut edited = f.ir.clone();
+            edited.decl_nodes[target.raw()].anno.value = after;
+            let mut index = Arc::new(f.index.clone());
+            let mut imports = Arc::new(f.imports.clone());
+            let old_index = Arc::clone(&index);
+            let old_imports = Arc::clone(&imports);
+            let usage = SymbolUsage::new(&f.ir, &index, &imports, &f.strings).unwrap();
+            let (compacted, next) = usage
+                .with_values(
+                    &f.ir,
+                    &mut edited,
+                    &mut index,
+                    &mut imports,
+                    &f.strings,
+                    &[target],
+                )
+                .unwrap();
+            assert!(Arc::ptr_eq(&usage.counts, &next.counts));
+            assert!(Arc::ptr_eq(&old_index, &index));
+            assert!(Arc::ptr_eq(&old_imports, &imports));
+            assert!(!compacted.renumbered);
+            assert_eq!(
+                next,
+                SymbolUsage::new(&edited, &index, &imports, &compacted.interner).unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn usage_rejects_bad_symbols_and_count_underflow_without_changing_base() {
+        let f = Fixture::new();
+        let target = f.ir.nodes[1].decl;
+        let usage = SymbolUsage::new(&f.ir, &f.index, &f.imports, &f.strings).unwrap();
+        let base = usage.clone();
+        let mut index = Arc::new(f.index);
+        let mut imports = Arc::new(f.imports);
+        let mut edited = f.ir.clone();
+        edited.decl_nodes[target.raw()].anno.value = Some(ValueR::Str(SymId::NONE));
+        assert!(SymbolUsage::new(&edited, &index, &imports, &f.strings).is_err());
+        assert!(
+            usage
+                .with_values(
+                    &f.ir,
+                    &mut edited,
+                    &mut index,
+                    &mut imports,
+                    &f.strings,
+                    &[target]
+                )
+                .is_err()
+        );
+        edited.decl_nodes[target.raw()].anno.value = None;
+        // Internal misuse: removing the same single-use value twice must fail
+        // closed instead of wrapping a counter and retaining a dead symbol.
+        assert!(
+            usage
+                .with_values(
+                    &f.ir,
+                    &mut edited,
+                    &mut index,
+                    &mut imports,
+                    &f.strings,
+                    &[target, target]
+                )
+                .is_err()
+        );
+        assert_eq!(usage, base);
+        assert!(Arc::ptr_eq(&usage.counts, &base.counts));
+    }
+
+    #[test]
     fn marking_keeps_path_and_alias_maps_in_place() {
         let mut f = Fixture::new();
-        let mut symbol = SymId::NONE;
+        f.ir = f.ir.into_shared();
+        let retained = f.ir.clone();
+        let symbol = SymId::NONE;
         let (alias, path) = f.index.aliases.iter().next().unwrap();
         let aliases_before = (*alias, path.clone(), alias as *const SymId as usize);
         let (path, declaration) = f.index.by_path.iter().next().unwrap();
@@ -378,8 +728,12 @@ mod tests {
             index: &mut f.index,
             imports: &mut f.imports,
         }
-        .visit(&mut LiveSymbols(&mut used))
+        .mark(&mut LiveSymbols(&mut used))
         .unwrap();
+        assert_eq!(f.ir.decl_nodes.as_ptr(), retained.decl_nodes.as_ptr());
+        assert_eq!(f.ir.nodes.as_ptr(), retained.nodes.as_ptr());
+        assert_eq!(f.ir.edges.as_ptr(), retained.edges.as_ptr());
+        assert_eq!(f.ir.arcs.as_ptr(), retained.arcs.as_ptr());
         let (path, declaration) = f.index.by_path.get_key_value(&path_before.0).unwrap();
         assert_eq!(*declaration, path_before.1);
         assert_eq!(
@@ -394,7 +748,7 @@ mod tests {
         );
         assert!(
             LiveSymbols(&mut used)
-                .symbol(&mut symbol, "invalid probe")
+                .symbol(&symbol, "invalid probe")
                 .is_err()
         );
     }
@@ -402,6 +756,8 @@ mod tests {
     #[test]
     fn symbol_lifetime_covers_all_typed_symbol_positions_and_is_idempotent() {
         let mut f = Fixture::new();
+        f.ir = f.ir.into_shared();
+        let retained = f.ir.clone();
         let semantic = Canon::new(&f.ir, &f.strings).hash();
         let structural = Canon::new(&f.ir, &f.strings)
             .structure(CanonHashCfg::default())
@@ -414,6 +770,7 @@ mod tests {
         let compact =
             SymbolCompaction::apply(&mut f.ir, &mut f.index, &mut f.imports, &f.strings).unwrap();
         assert!(compact.renumbered);
+        assert_eq!(Canon::new(&retained, &f.strings).hash(), semantic);
         assert!(
             compact
                 .interner
