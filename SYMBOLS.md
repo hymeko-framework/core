@@ -13,7 +13,7 @@ Extracted by grammar -- tree-sitter for Rust and C++, `ast` for Python -- so tha
 `pub(crate)`, a `pub fn` inside a private `mod`, and a `def` written inside a
 docstring are all excluded for a stated reason rather than by luck.
 
-**3 package(s), 653 public symbol(s).**
+**3 package(s), 658 public symbol(s).**
 
 ## docs (rust)
 
@@ -33,6 +33,7 @@ _No public symbols._
 
 - `HymekoParser` — `hymeko_core/src/module_store/module_store.rs`
 - `RefValueExtractor` — `hymeko_core/src/tensor/tensor_val.rs`
+- `ResolvableDesign` — `hymeko_core/src/generators.rs`
 - `SourceProvider` — `hymeko_core/src/module_store/source_provider.rs`
 
 ### structs
@@ -62,6 +63,7 @@ _No public symbols._
 - `EnvelopeDraft` — `hymeko_core/src/ir_stream/envelope.rs`
 - `ExecutionSnapshot` — `hymeko_core/src/module_store/execution.rs`
 - `ExecutionState` — `hymeko_core/src/module_store/execution.rs`
+- `HammingLines` — `hymeko_core/src/generators.rs`
 - `HashId` — `hymeko_core/src/ir/hash.rs`
 - `HyperArcTag` — `hymeko_core/src/common/ids.rs`
 - `HypergraphDesign` — `hymeko_core/src/generators.rs`
@@ -235,6 +237,7 @@ _No public symbols._
 - `hash` — `hymeko_core/src/ir/canonical_hash.rs`
 - `hash` — `hymeko_core/src/ir/semantic_digest.rs`
 - `header_bytes` — `hymeko_core/src/ir_stream/envelope.rs`
+- `hypercube` — `hymeko_core/src/generators.rs`
 - `incidence_count` — `hymeko_core/src/ir/incidence.rs`
 - `incidences` — `hymeko_core/src/ir/incidence.rs`
 - `incidences` — `hymeko_core/src/module_store/execution.rs`
@@ -287,6 +290,7 @@ _No public symbols._
 - `n_edges` — `hymeko_core/src/generators.rs`
 - `namespace_prefix` — `hymeko_core/src/ir/ir.rs`
 - `new` — `hymeko_core/src/common/ids.rs`
+- `new` — `hymeko_core/src/generators.rs`
 - `new` — `hymeko_core/src/ir/canonical_hash.rs`
 - `new` — `hymeko_core/src/ir/incidence.rs`
 - `new` — `hymeko_core/src/ir/ir.rs`
@@ -329,6 +333,7 @@ _No public symbols._
 - `provider_mut` — `hymeko_core/src/module_store/module_store.rs`
 - `push_anonymous_arc` — `hymeko_core/src/ir/ir.rs`
 - `push_decl` — `hymeko_core/src/ir/ir.rs`
+- `radices` — `hymeko_core/src/generators.rs`
 - `raw` — `hymeko_core/src/common/ids.rs`
 - `read_count` — `hymeko_core/src/module_store/source_provider.rs`
 - `replay_memory_bytes` — `hymeko_core/src/ir_stream/assembler.rs`
