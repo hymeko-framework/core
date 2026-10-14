@@ -13,7 +13,7 @@ Extracted by grammar -- tree-sitter for Rust and C++, `ast` for Python -- so tha
 `pub(crate)`, a `pub fn` inside a private `mod`, and a `def` written inside a
 docstring are all excluded for a stated reason rather than by luck.
 
-**3 package(s), 658 public symbol(s).**
+**3 package(s), 668 public symbol(s).**
 
 ## docs (rust)
 
@@ -79,6 +79,7 @@ _No public symbols._
 - `IoDiag` — `hymeko_core/src/module_store/module_store.rs`
 - `Ir` — `hymeko_core/src/ir/ir.rs`
 - `IrWriter` — `hymeko_core/src/writers/ir_writer.rs`
+- `LatticePyramid` — `hymeko_core/src/generators/pyramid.rs`
 - `MemProvider` — `hymeko_core/src/module_store/source_provider.rs`
 - `MessageIdentity` — `hymeko_core/src/ir_stream/assembler.rs`
 - `Meta` — `hymeko_core/src/ir/meta.rs`
@@ -92,6 +93,8 @@ _No public symbols._
 - `PreparedCompilation` — `hymeko_core/src/module_store/execution.rs`
 - `PreparedIr` — `hymeko_core/src/ir/incidence.rs`
 - `ProgramStructureHash` — `hymeko_core/src/ir/semantic_digest.rs`
+- `PyramidCover` — `hymeko_core/src/generators/pyramid.rs`
+- `PyramidLevel` — `hymeko_core/src/generators/pyramid.rs`
 - `RealParser` — `hymeko_core/src/util/real_parser.rs`
 - `RefAtomR` — `hymeko_core/src/ir/ir.rs`
 - `ScalarWeightExtractor` — `hymeko_core/src/tensor/tensor_val.rs`
@@ -188,6 +191,7 @@ _No public symbols._
 - `compile` — `hymeko_core/src/module_store/execution.rs`
 - `compile` — `hymeko_core/src/module_store/module_store.rs`
 - `complete_uniform_design` — `hymeko_core/src/generators.rs`
+- `cover` — `hymeko_core/src/generators/pyramid.rs`
 - `current_commit_digest` — `hymeko_core/src/ir_stream/assembler.rs`
 - `current_version` — `hymeko_core/src/ir_stream/assembler.rs`
 - `cwd` — `hymeko_core/src/module_store/source_provider.rs`
@@ -203,9 +207,11 @@ _No public symbols._
 - `decode` — `hymeko_core/src/writers/cbor_writer.rs`
 - `decode_snapshot` — `hymeko_core/src/writers/cbor_writer/stream.rs`
 - `degree` — `hymeko_core/src/ir/incidence.rs`
+- `depth` — `hymeko_core/src/generators/pyramid.rs`
 - `design` — `hymeko_core/src/generators.rs`
 - `did_to_path` — `hymeko_core/src/ir/canonical_hash.rs`
 - `digest` — `hymeko_core/src/ir_stream/assembler.rs`
+- `dim` — `hymeko_core/src/generators/pyramid.rs`
 - `dominates` — `hymeko_core/src/ir_stream/version.rs`
 - `edge` — `hymeko_core/src/ir/access.rs`
 - `edge_for_decl` — `hymeko_core/src/ir/access.rs`
@@ -277,6 +283,7 @@ _No public symbols._
 - `last_child_of` — `hymeko_core/src/ir/access.rs`
 - `last_seq` — `hymeko_core/src/ir_stream/assembler.rs`
 - `len` — `hymeko_core/src/ir/canonical_hash.rs`
+- `level` — `hymeko_core/src/generators/pyramid.rs`
 - `load_recursive` — `hymeko_core/src/module_store/module_store.rs`
 - `lower_program_to_ir` — `hymeko_core/src/ir/lower.rs`
 - `lower_program_to_ir_with_meta` — `hymeko_core/src/ir/lower.rs`
@@ -291,6 +298,7 @@ _No public symbols._
 - `namespace_prefix` — `hymeko_core/src/ir/ir.rs`
 - `new` — `hymeko_core/src/common/ids.rs`
 - `new` — `hymeko_core/src/generators.rs`
+- `new` — `hymeko_core/src/generators/pyramid.rs`
 - `new` — `hymeko_core/src/ir/canonical_hash.rs`
 - `new` — `hymeko_core/src/ir/incidence.rs`
 - `new` — `hymeko_core/src/ir/ir.rs`
@@ -310,6 +318,7 @@ _No public symbols._
 - `node` — `hymeko_core/src/ir/access.rs`
 - `node_for_decl` — `hymeko_core/src/ir/access.rs`
 - `node_to_arc` — `hymeko_core/src/ir/incidence.rs`
+- `nodes` — `hymeko_core/src/generators/pyramid.rs`
 - `now_ms` — `hymeko_core/src/ir/time.rs`
 - `now_ns` — `hymeko_core/src/ir/time.rs`
 - `now_ns_u128` — `hymeko_core/src/ir/time.rs`
@@ -325,6 +334,7 @@ _No public symbols._
 - `payload_hash` — `hymeko_core/src/ir_stream/envelope.rs`
 - `payload_len` — `hymeko_core/src/ir_stream/envelope.rs`
 - `plain` — `hymeko_core/src/ir/ir.rs`
+- `positions` — `hymeko_core/src/generators/pyramid.rs`
 - `preallocate_from_index` — `hymeko_core/src/ir/ir.rs`
 - `prepare` — `hymeko_core/src/module_store/execution.rs`
 - `prepare_model_at` — `hymeko_core/src/module_store/execution/value_updates.rs`
