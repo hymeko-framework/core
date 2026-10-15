@@ -18,12 +18,19 @@
 //!   in one digit, grouped by digit; each group is a partition of the vertices. Over radix 2 they
 //!   are the hypercube's edges grouped by direction, its 1-factorisation (the butterfly's levels).
 //!
+//! * The pyramid of a lattice ([`LatticePyramid`], module `pyramid`) — level after level of coarser
+//!   cells, each the hyperedge of the finer cells its window reads: orthants (laminar), overlapped
+//!   windows, or a same-resolution stencil, as each level's stencil, stride and anchor say.
+//!
 //! A family whose edges come in parallel classes is a [`ResolvableDesign`]: a consumer that applies
 //! the classes in turn reads them as classes, not as a flat edge list regrouped by its order.
 //!
 //! The mirror of these generators in the web editor
 //! (`docs/editor/views/generators.js`) is validated by the same "every pair
 //! covered once" / "C(n,r) distinct edges" properties.
+
+mod pyramid;
+pub use pyramid::{LatticePyramid, PyramidCover, PyramidLevel};
 
 /// An index-level hypergraph: `n_vertices` vertices labelled `0..n_vertices`,
 /// and `edges`, each a list of member-vertex indices.
@@ -62,6 +69,20 @@ pub enum GeneratorError {
     InvalidComplete { n: usize, r: usize },
     /// Hamming radices out of range: none, one below 2, or a vertex count beyond `usize`.
     InvalidHamming { radices: Vec<usize> },
+    /// A pyramid's lattice out of range: no axis, an empty axis, an offset of another length, no
+    /// level, or a size beyond `usize`.
+    InvalidPyramid {
+        extent: Vec<usize>,
+        offset: Vec<usize>,
+    },
+    /// A pyramid level that is not a cover (`stride >= 1`, `stencil >= stride + anchor`), or whose
+    /// window's places pass `usize`.
+    InvalidPyramidLevel {
+        level: usize,
+        stencil: usize,
+        stride: usize,
+        anchor: usize,
+    },
 }
 
 impl std::fmt::Display for GeneratorError {
@@ -90,6 +111,21 @@ impl std::fmt::Display for GeneratorError {
             Self::InvalidHamming { radices } => write!(
                 f,
                 "Hamming lines need at least one radix, each >= 2, with a product that fits usize; got {radices:?}"
+            ),
+            Self::InvalidPyramid { extent, offset } => write!(
+                f,
+                "a lattice pyramid needs at least one axis, none empty, an offset of the same length or none, \
+                 at least one level and a size within usize; got extent {extent:?}, offset {offset:?}"
+            ),
+            Self::InvalidPyramidLevel {
+                level,
+                stencil,
+                stride,
+                anchor,
+            } => write!(
+                f,
+                "pyramid level {level} is not a cover: it needs stride >= 1 and stencil >= stride + anchor \
+                 (and stencil^dim within usize); got stencil {stencil}, stride {stride}, anchor {anchor}"
             ),
         }
     }
