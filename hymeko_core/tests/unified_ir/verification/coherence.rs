@@ -19,6 +19,7 @@ use crate::unified_ir::support::builder::{S, TestIr};
 
 pub fn label(f: &Finding) -> &'static str {
     match f {
+        Finding::InvalidPayload { .. } => "InvalidPayload",
         Finding::InvalidSourceProvenance => "InvalidSourceProvenance",
         Finding::IndexedDeclOutOfRange { .. } => "IndexedDeclOutOfRange",
         Finding::DeclHasMultiplePaths { .. } => "DeclHasMultiplePaths",

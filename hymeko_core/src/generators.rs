@@ -19,6 +19,32 @@
 //! (`docs/editor/views/generators.js`) is validated by the same "every pair
 //! covered once" / "C(n,r) distinct edges" properties.
 
+/// Representation-independent graph construction.
+/// A generator's representation is selected by its associated output type.
+pub trait GraphGenerator {
+    /// Graph representation owned by the implementing layer.
+    type Output;
+    /// Invalid request or construction failure.
+    type Error;
+
+    /// Generate a fresh graph without modifying this generator.
+    ///
+    /// # Errors
+    /// The implementation's documented domain or construction errors.
+    fn generate(&self) -> Result<Self::Output, Self::Error>;
+}
+
+/// Reproducible synthetic generation with an explicitly controlled seed.
+/// Repeated generation with the same configuration and seed must agree.
+pub trait SyntheticGenerator: GraphGenerator {
+    /// Seed representation; no implicit entropy source is permitted.
+    type Seed: Copy;
+    /// Return the seed used by the next generation.
+    fn seed(&self) -> Self::Seed;
+    /// Replace the seed; all other configuration remains unchanged.
+    fn reseed(&mut self, seed: Self::Seed);
+}
+
 /// An index-level hypergraph: `n_vertices` vertices labelled `0..n_vertices`,
 /// and `edges`, each a list of member-vertex indices.
 ///
@@ -118,6 +144,15 @@ impl HypergraphGenerator {
             } => sunflower_design(petals, core, petal),
             Self::CompleteUniform { n, r } => complete_uniform_design(n, r),
         }
+    }
+}
+
+impl GraphGenerator for HypergraphGenerator {
+    type Output = HypergraphDesign;
+    type Error = GeneratorError;
+
+    fn generate(&self) -> Result<Self::Output, Self::Error> {
+        self.design()
     }
 }
 
@@ -695,6 +730,10 @@ mod tests {
 
     #[test]
     fn generator_enum_dispatches_to_the_free_functions() {
+        let generator = HypergraphGenerator::CompleteUniform { n: 5, r: 3 };
+        assert_eq!(GraphGenerator::generate(&generator), generator.design());
+        let invalid = HypergraphGenerator::CompleteUniform { n: 3, r: 5 };
+        assert_eq!(GraphGenerator::generate(&invalid), invalid.design());
         assert_eq!(
             HypergraphGenerator::SteinerTriple { n: 13 }
                 .design()

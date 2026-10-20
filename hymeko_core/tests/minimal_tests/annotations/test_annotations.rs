@@ -145,13 +145,16 @@ mod test_annotations {
         let n10_id = ir.as_node(node10).expect("node10 should be a node");
         let n10 = &ir.nodes[n10_id.raw()];
 
-        assert_eq!(n10.bases.len(), 1);
+        assert_eq!(ir[n10.bases].len(), 1);
 
         // 3) base ref ellenőrzés
         let isa_sym = it.get_id(TAG_ISA).expect("isa should be interned");
 
-        match &n10.bases[0] {
-            SignedRefR::Plus(atom) => {
+        match (
+            (&ir[n10.bases][0]).sign_kind(),
+            ir.reference_atom(&(&ir[n10.bases][0])).unwrap(),
+        ) {
+            (hymeko::ir::ir::IncidenceSign::Plus, atom) => {
                 assert_eq!(atom.target, node0);
                 assert!(atom.anno.tags.contains(&isa_sym));
             }
@@ -160,7 +163,7 @@ mod test_annotations {
         info!(
             "lowered node {} base count {}",
             NODE10_NAME,
-            n10.bases.len()
+            ir[n10.bases].len()
         );
         log_test_footer(
             "lowers_node_bases_into_ir_with_isa_tag",
@@ -189,9 +192,12 @@ mod test_annotations {
 
         // --- node10 bases ---
         let n10 = get_node(ir, node10);
-        assert_eq!(n10.bases.len(), 1);
-        match &n10.bases[0] {
-            SignedRefR::Plus(a) => {
+        assert_eq!(ir[n10.bases].len(), 1);
+        match (
+            (&ir[n10.bases][0]).sign_kind(),
+            ir.reference_atom(&(&ir[n10.bases][0])).unwrap(),
+        ) {
+            (hymeko::ir::ir::IncidenceSign::Plus, a) => {
                 assert_eq!(a.target, node0);
                 assert!(has_tag(it, &a.anno.tags, TAG_ISA));
             }
@@ -200,11 +206,14 @@ mod test_annotations {
 
         // --- node11 bases: +isa node0, +impl node2, neutral isa node10 ---
         let n11 = get_node(ir, node11);
-        assert_eq!(n11.bases.len(), 3);
+        assert_eq!(ir[n11.bases].len(), 3);
 
         // 1) + <isa> node0
-        match &n11.bases[0] {
-            SignedRefR::Plus(a) => {
+        match (
+            (&ir[n11.bases][0]).sign_kind(),
+            ir.reference_atom(&(&ir[n11.bases][0])).unwrap(),
+        ) {
+            (hymeko::ir::ir::IncidenceSign::Plus, a) => {
                 assert_eq!(a.target, node0);
                 assert!(has_tag(it, &a.anno.tags, TAG_ISA));
             }
@@ -212,8 +221,11 @@ mod test_annotations {
         }
 
         // 2) + <impl> node2
-        match &n11.bases[1] {
-            SignedRefR::Plus(a) => {
+        match (
+            (&ir[n11.bases][1]).sign_kind(),
+            ir.reference_atom(&(&ir[n11.bases][1])).unwrap(),
+        ) {
+            (hymeko::ir::ir::IncidenceSign::Plus, a) => {
                 assert_eq!(a.target, node2);
                 assert!(has_tag(it, &a.anno.tags, TAG_IMPL));
             }
@@ -221,8 +233,11 @@ mod test_annotations {
         }
 
         // 3) <isa> node10  (no sign => Neutral default)
-        match &n11.bases[2] {
-            SignedRefR::Neutral(a) => {
+        match (
+            (&ir[n11.bases][2]).sign_kind(),
+            ir.reference_atom(&(&ir[n11.bases][2])).unwrap(),
+        ) {
+            (hymeko::ir::ir::IncidenceSign::Neutral, a) => {
                 assert_eq!(a.target, node10);
                 assert!(has_tag(it, &a.anno.tags, TAG_ISA));
             }
@@ -231,7 +246,7 @@ mod test_annotations {
 
         // --- node2 bases should be empty ---
         let n2 = get_node(ir, node2);
-        assert!(n2.bases.is_empty());
+        assert!(ir[n2.bases].is_empty());
 
         // --- optional: check e0 arc weights still parse/lower ---
         let e0 = find_decl(ir, it, EDGE_E0_NAME, DeclKind::Edge);
@@ -243,19 +258,25 @@ mod test_annotations {
 
         assert_eq!(arc.refs.len(), 2);
 
-        match &arc.refs[0] {
-            SignedRefR::Minus(a) => {
+        match (
+            (&arc.refs[0]).sign_kind(),
+            ir.reference_atom(&(&arc.refs[0])).unwrap(),
+        ) {
+            (hymeko::ir::ir::IncidenceSign::Minus, a) => {
                 assert_eq!(a.target, node0);
-                let w = weight0(&arc.refs[0]);
+                let w = weight0(ir, &arc.refs[0]);
                 assert!((w - 0.85).abs() < 1e-9);
             }
             other => panic!("arc[0]: expected Minus(node0), got {:?}", other),
         }
 
-        match &arc.refs[1] {
-            SignedRefR::Plus(a) => {
+        match (
+            (&arc.refs[1]).sign_kind(),
+            ir.reference_atom(&(&arc.refs[1])).unwrap(),
+        ) {
+            (hymeko::ir::ir::IncidenceSign::Plus, a) => {
                 assert_eq!(a.target, node10);
-                let w = weight0(&arc.refs[1]);
+                let w = weight0(ir, &arc.refs[1]);
                 assert!((w - 0.9).abs() < 1e-9);
             }
             other => panic!("arc[1]: expected Plus(node10), got {:?}", other),

@@ -12,6 +12,6 @@ blake3 = "1.8.3"
 rayon = "1.11.0"
 log = "0.4.22"
 parser = { git = "ssh://git@192.168.1.228:2222/hymeko/parser.git", rev = "f11628591a8183586492807ecdf43c64e6d31c5f" }
-# Tensor extraction provider, published on tensor feat/tensor-extraction; ledger in
+# Virtual-operator provider, published on tensor feat/virtual-operators; ledger in
 # docs/hymeko-kernel-ownership.md (tensor extraction, 2026-09-23).
-hymeko_tensor = { git = "ssh://git@192.168.1.228:2222/hymeko/tensor.git", rev = "091f4f139e4759fc0c800fe98a5d15a8d5fd6e32" }
+hymeko_tensor = { git = "ssh://git@192.168.1.228:2222/hymeko/tensor.git", rev = "9317ecf773d55a0e7968273a63bc2f4e8dbcc7c7" }

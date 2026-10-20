@@ -49,6 +49,9 @@ impl Default for CoherenceLimits {
 /// large payload back.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Finding {
+    /// A compact payload handle is invalid, or an editable annotation slot is
+    /// shared by another declaration, arc or reference.
+    InvalidPayload { field: &'static str, id: usize },
     /// Optional source-file metadata must cover declarations with valid file IDs.
     InvalidSourceProvenance,
     /// The `Index` maps a path to a `DeclId` outside `decl_nodes`.
@@ -185,6 +188,66 @@ fn validate_parent_chains(ir: &Ir, collector: &mut Collector) {
 }
 
 impl Collector {
+    fn payloads(&mut self, ir: &Ir) {
+        let mut owned = rustc_hash::FxHashSet::default();
+        for id in ir
+            .decl_nodes
+            .iter()
+            .map(|d| d.anno)
+            .chain(ir.arcs.iter().map(|a| a.anno))
+        {
+            if id.is_some() && (ir.annotation(id).is_none() || !owned.insert(id)) {
+                self.push(Finding::InvalidPayload {
+                    field: "exclusive annotation",
+                    id: id.raw(),
+                });
+            }
+        }
+        for id in ir
+            .nodes
+            .iter()
+            .map(|n| n.bases)
+            .chain(ir.edges.iter().map(|e| e.bases))
+        {
+            match ir.bases(id) {
+                Some(refs) => self.reference_payloads(ir, refs, &owned),
+                None => self.push(Finding::InvalidPayload {
+                    field: "base list",
+                    id: id.raw(),
+                }),
+            }
+        }
+        for arc in &ir.arcs {
+            self.reference_payloads(ir, &arc.refs, &owned);
+        }
+    }
+
+    fn reference_payloads(
+        &mut self,
+        ir: &Ir,
+        refs: &[crate::ir::ir::SignedRefR],
+        owned: &rustc_hash::FxHashSet<crate::common::ids::AnnotationId>,
+    ) {
+        for reference in refs {
+            let id = reference.annotation_id();
+            if owned.contains(&id) {
+                self.push(Finding::InvalidPayload {
+                    field: "exclusive annotation",
+                    id: id.raw(),
+                });
+            }
+            if let Err(error) = ir.reference_atom(reference) {
+                let (field, id) = match error {
+                    crate::ir::ir::ReferenceError::Annotation(id) => {
+                        ("reference annotation", id.raw())
+                    }
+                    crate::ir::ir::ReferenceError::Weights(id) => ("reference weights", id.raw()),
+                };
+                self.push(Finding::InvalidPayload { field, id });
+            }
+        }
+    }
+
     fn push(&mut self, f: Finding) {
         self.total += 1;
         if self.findings.len() < self.limits.max_findings {
@@ -215,6 +278,7 @@ pub fn validate_hierarchy_index_coherence(
     if ir.validate_source_provenance().is_err() {
         c.push(Finding::InvalidSourceProvenance);
     }
+    c.payloads(ir);
 
     // --- parallel array lengths -------------------------------------------
     if ir.decl_to_record.len() != n {
@@ -331,16 +395,40 @@ pub fn validate_hierarchy_index_coherence(
     // --- parent acyclicity -------------------------------------------------
     validate_parent_chains(ir, &mut c);
 
+    validate_record_bindings(ir, &mut c);
+
+    let _ = it; // reserved: name-based findings would need it; none are emitted
+
+    if c.total == 0 {
+        Ok(())
+    } else {
+        let truncated = c.total > c.findings.len();
+        Err(CoherenceReport {
+            findings: c.findings,
+            total: c.total,
+            truncated,
+        })
+    }
+}
+
+// Length mismatches are already reported by the caller. Missing slots must
+// not be indexed while collecting the remaining bounded diagnostics.
+fn validate_record_bindings(ir: &Ir, c: &mut Collector) {
     // --- kind / concrete-record agreement (compact dispatch, option D) ------
     // The single `decl_to_record` slot makes "more than one concrete record" a
     // structural impossibility. We instead validate: the slot decodes (reserved /
     // malformed tags are always an error), the slot tag agrees with `DeclKind`, the
     // record index is in range, and the record's back-pointer matches. NONE is
     // permitted (partial/malformed test states).
-    for d in 0..n {
+    for (d, &slot) in ir
+        .decl_to_record
+        .iter()
+        .take(ir.decl_nodes.len())
+        .enumerate()
+    {
         let did = DeclId::new(d);
         let kind = ir.decl_nodes[d].kind;
-        let decoded = match dispatch::decode_checked(ir.decl_to_record[d]) {
+        let decoded = match dispatch::decode_checked(slot) {
             Ok(x) => x,
             Err(_) => {
                 c.push(Finding::ReservedDispatchSlot { decl: did });
@@ -387,25 +475,38 @@ pub fn validate_hierarchy_index_coherence(
             }
         }
     }
-
-    let _ = it; // reserved: name-based findings would need it; none are emitted
-
-    if c.total == 0 {
-        Ok(())
-    } else {
-        let truncated = c.total > c.findings.len();
-        Err(CoherenceReport {
-            findings: c.findings,
-            total: c.total,
-            truncated,
-        })
-    }
 }
 
 #[cfg(test)]
 mod parent_chain_tests {
     use super::*;
     use crate::ir::ir::DeclNode;
+
+    #[test]
+    fn short_dispatch_table_reports_length_instead_of_panicking() {
+        let mut ir = Ir::default();
+        ir.push_decl(DeclNode::root(
+            DeclKind::Node,
+            SymId::new(0),
+            Default::default(),
+        ));
+        ir.decl_to_record.clear();
+        let report = validate_hierarchy_index_coherence(
+            &ir,
+            &Index::default(),
+            &Interner::new(),
+            CoherenceLimits::default(),
+        )
+        .unwrap_err();
+        assert!(report.findings.iter().any(|finding| matches!(
+            finding,
+            Finding::ParallelArrayLengthMismatch {
+                array: "decl_to_record",
+                len: 0,
+                expected: 1
+            }
+        )));
+    }
 
     fn classify(parents: &[DeclId], max_walk: usize, max_findings: usize) -> Collector {
         let ir = Ir {
@@ -418,7 +519,7 @@ mod parent_chain_tests {
                     first_child: DeclId::NONE,
                     last_child: DeclId::NONE,
                     next_sibling: DeclId::NONE,
-                    anno: Default::default(),
+                    anno: crate::common::ids::AnnotationId::NONE,
                 })
                 .collect(),
             ..Ir::default()
@@ -674,8 +775,7 @@ pub fn validate_model_contract(ir: &Ir, it: &Interner) -> Result<(), Vec<ModelFi
         let arc_decl = arc.in_edge;
         let (mut saw_in, mut saw_out, mut declared) = (false, false, false);
         for (slot, reference) in arc.refs.iter().enumerate() {
-            let atom = reference.atom();
-            match atom.direction {
+            match reference.direction() {
                 PortDirection::Unspecified => continue,
                 PortDirection::In => {
                     declared = true;
@@ -684,12 +784,12 @@ pub fn validate_model_contract(ir: &Ir, it: &Interner) -> Result<(), Vec<ModelFi
                 PortDirection::Out => {
                     declared = true;
                     saw_out = true;
-                    if let Some(ModelFacet::Tensor(t)) = ir.model_facet(atom.target) {
+                    if let Some(ModelFacet::Tensor(t)) = ir.model_facet(reference.target()) {
                         if matches!(t.role, TensorRole::Input | TensorRole::Parameter) {
                             findings.push(ModelFinding::ProducedInputOrParameter {
                                 arc: DeclId::new(ai),
                                 slot,
-                                target: atom.target,
+                                target: reference.target(),
                                 role: t.role,
                             });
                         }

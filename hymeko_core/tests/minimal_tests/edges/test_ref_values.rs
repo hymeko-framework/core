@@ -2,8 +2,8 @@
 mod test_ref_values {
     use hymeko::common::ids::{DeclId, SymId};
     use hymeko::common::pathkey::PathKey;
-    use hymeko::ir::ir::{PortDirection, RefAtomR, SignedRefR, ValueR};
-    use hymeko::ir::lower::lower_to_ir;
+    use hymeko::ir::ir::{Ir, PortDirection, ReferenceView, ValueR};
+    use hymeko::ir::lower::{IrBuilder, IrLowering};
     use hymeko::resolution::intern_pass::{Interned, intern_ast};
     use hymeko::resolution::interner::Interner;
     use hymeko::resolution::resolve::{Index, ResolveError, build_index_sym, resolve_signed_refs};
@@ -89,15 +89,19 @@ mod test_ref_values {
         collected
     }
 
-    fn dir_and_atom_ir<'a>(signed: &'a SignedRefR) -> (&'static str, &'a RefAtomR) {
-        match signed {
-            SignedRefR::Plus(atom) => ("+", atom),
-            SignedRefR::Minus(atom) => ("-", atom),
-            SignedRefR::Neutral(atom) => ("~", atom),
-        }
+    fn dir_and_atom_ir<'a>(
+        ir: &'a Ir,
+        signed: &hymeko::ir::ir::SignedRefR,
+    ) -> (&'static str, ReferenceView<'a>) {
+        let sign = match signed.sign() {
+            1 => "+",
+            -1 => "-",
+            _ => "~",
+        };
+        (sign, ir.reference_atom(signed).unwrap())
     }
 
-    fn assert_ir_weights(weights: &Option<Vec<ValueR>>, expected: &[f64]) -> Vec<f64> {
+    fn assert_ir_weights(weights: &Option<&[ValueR]>, expected: &[f64]) -> Vec<f64> {
         let actual = weights.as_ref().expect("weights must be present");
         assert_eq!(actual.len(), expected.len(), "weight arity mismatch");
         let mut collected = Vec::with_capacity(actual.len());
@@ -198,7 +202,7 @@ mod test_ref_values {
         let desc = parser::parse_description(&source_code).unwrap();
         let Interned { ast, mut interner } = intern_ast(&desc);
         let idx = build_index_sym(&ast, &interner).unwrap();
-        let ir = lower_to_ir(&ast, &idx, &mut interner).unwrap();
+        let ir = IrLowering::new(&ast, &idx, &mut interner).build().unwrap();
 
         let did_context = decl_id_for_path(&mut interner, &idx, &[CONTEXT_NODE_NAME]);
         let did_node_lev_0 =
@@ -247,7 +251,7 @@ mod test_ref_values {
         let mut flattened_weights = Vec::new();
 
         for (signed, (dir, target, weights)) in arc.refs.iter().zip(expectations.into_iter()) {
-            let (actual_dir, atom) = dir_and_atom_ir(signed);
+            let (actual_dir, atom) = dir_and_atom_ir(&ir, signed);
             assert_eq!(actual_dir, dir, "unexpected reference direction");
             assert_eq!(atom.target, target, "reference target mismatch");
             let nums = assert_ir_weights(&atom.weights, &weights);

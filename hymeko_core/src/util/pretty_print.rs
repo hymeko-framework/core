@@ -1,6 +1,6 @@
 use crate::common::ids::{DeclId, SymId};
 use crate::common::pathkey::PathKey;
-use crate::ir::ir::{DeclKind, Ir, SignedRefR};
+use crate::ir::ir::{DeclKind, Ir};
 use crate::module_store::module_store::CompiledProgram;
 use crate::resolution::interner::Interner;
 use crate::resolution::resolve::Index;
@@ -128,11 +128,12 @@ fn fmt_edge_arcs(
                 out.push_str(", ");
             }
 
-            let (sgn, target) = match r {
-                SignedRefR::Plus(a) => ("+", a.target),
-                SignedRefR::Minus(a) => ("-", a.target),
-                SignedRefR::Neutral(a) => ("0", a.target),
+            let sgn = match r.sign() {
+                1 => "+",
+                -1 => "-",
+                _ => "0",
             };
+            let target = r.target();
 
             let t = fmt_decl(it, did_to_path, target);
             out.push_str(&format!("{sgn}{t}"));

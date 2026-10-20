@@ -4,7 +4,7 @@ mod ir_blake3_hash_tests {
     use hymeko::common::pathkey::PathKey;
     use hymeko::ir::canonical_hash::Canon;
     use hymeko::ir::hash::HashId;
-    use hymeko::ir::lower::lower_to_ir;
+    use hymeko::ir::lower::{IrBuilder, IrLowering};
     use hymeko::resolution::intern_pass::Interned;
     use hymeko::resolution::intern_pass::intern_ast;
     use hymeko::resolution::resolve::build_index_sym;
@@ -52,7 +52,9 @@ mod ir_blake3_hash_tests {
         let desc = parser::parse_description(&source_code).unwrap();
         let Interned { ast, mut interner } = intern_ast(&desc);
         let idx = build_index_sym(&ast, &interner).expect("index build failed");
-        let ir = lower_to_ir(&ast, &idx, &mut interner).expect("lower_to_ir failed");
+        let ir = IrLowering::new(&ast, &idx, &mut interner)
+            .build()
+            .expect("IR lowering failed");
 
         Canon::new(&ir, &interner).hash().0
     }
@@ -92,7 +94,9 @@ mod ir_blake3_hash_tests {
         let desc = parser::parse_description(&source_code).unwrap();
         let Interned { ast, mut interner } = intern_ast(&desc);
         let idx = build_index_sym(&ast, &interner).expect("index build failed");
-        let ir = lower_to_ir(&ast, &idx, &mut interner).expect("lower_to_ir failed");
+        let ir = IrLowering::new(&ast, &idx, &mut interner)
+            .build()
+            .expect("IR lowering failed");
 
         let hashes = Canon::new(&ir, &interner).declaration_hashes();
 

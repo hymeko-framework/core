@@ -4,7 +4,7 @@
 //! Data files: hymeko_core/data/
 
 use hymeko::common::ids::DeclId;
-use hymeko::ir::ir::{DeclKind, Ir, SignedRefR, ValueR};
+use hymeko::ir::ir::{DeclKind, Ir, ValueR};
 use hymeko::resolution::interner::Interner;
 
 // ─── Value inspection helpers ─────────────────────────────────────────────
@@ -33,13 +33,6 @@ fn describe(v: &ValueR) -> String {
         }
         other => format!("{:?}", other),
     }
-}
-
-fn weights_of(r: &SignedRefR) -> &[ValueR] {
-    let atom = match r {
-        SignedRefR::Plus(a) | SignedRefR::Minus(a) | SignedRefR::Neutral(a) => a,
-    };
-    atom.weights.as_deref().unwrap_or(&[])
 }
 
 fn count_kind(ir: &Ir, kind: DeclKind) -> usize {

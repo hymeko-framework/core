@@ -263,7 +263,7 @@ impl<'ir> CanonicalPaths<'ir> {
 
 /// Named declaration topology, shared by labeling and leaf elimination.
 struct SkeletonForest<'ir> {
-    nodes: &'ir [DeclNode],
+    nodes: &'ir crate::ir::table::IrTable<DeclNode>,
     vertices: Vec<DeclId>,
     parent: Vec<Option<DeclId>>,
     child_offsets: Vec<usize>,
@@ -425,7 +425,7 @@ mod skeleton_tests {
                     first_child: DeclId::NONE,
                     last_child: DeclId::NONE,
                     next_sibling: DeclId::NONE,
-                    anno: Default::default(),
+                    anno: crate::common::ids::AnnotationId::NONE,
                 })
                 .collect(),
             ..Ir::default()
@@ -848,11 +848,7 @@ struct IncidenceRecord<'ir> {
 
 impl IncidenceRecord<'_> {
     fn encode(self, paths: &[String], sink: &mut impl CanonicalSink) {
-        let (sign, target) = match self.reference {
-            SignedRefR::Plus(atom) => (1i8, atom.target),
-            SignedRefR::Minus(atom) => (-1i8, atom.target),
-            SignedRefR::Neutral(atom) => (0i8, atom.target),
-        };
+        let (sign, target) = (self.reference.sign(), self.reference.target());
         sink.string(&paths[self.edge.raw()]);
         sink.write(&self.arc.to_le_bytes());
         sink.write(&self.slot.to_le_bytes());

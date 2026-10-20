@@ -56,6 +56,132 @@ crates:
       propagates to every downstream crate and invalidates published
       benchmarks.
     approved_edits:
+      - slug: ordered-parallel-source-pagerank
+        date: 2026-10-20
+        authority: user requests fixing vertex-number dependence, then parallel execution and Hymeko-based model/execution handling
+        scope: shared Core execution-coordinate views, mapped Tensor contraction, Graph planner/parallel consumer and compiled source policies; canonical IR and numeric certification preserved
+        plan: docs/plans/2026-09-07-compiler-repeated-work/plan.pdf
+      - slug: dense-base-reuse
+        date: 2026-10-20
+        authority: user asks to fix the dense-metadata regression overnight
+        scope: canonical immutable base-list reuse before payload conversion, wire integration and correctness; user additionally approves dense profiling and five-repeat empty/dense before-after controls on 2026-10-20
+        plan: docs/plans/2026-09-07-compiler-repeated-work/plan.pdf
+      - slug: compact-storage-control
+        date: 2026-10-20
+        authority: user approves the proposed matched construction, metadata and update measurements
+        scope: existing Criterion input adapters and dispatch, archived baseline instrumentation and existing process runner; no production-library change
+        plan: docs/plans/2026-09-07-compiler-repeated-work/plan.pdf
+      - slug: compact-canonical-payloads
+        date: 2026-10-20
+        authority: user approves compact annotation and base-list storage
+        scope: canonical IR payload IDs, COW updates, logical wire preservation and Core-first consumer migration; correctness only
+        plan: docs/plans/2026-09-07-compiler-repeated-work/plan.pdf
+      - slug: construction-commit
+        date: 2026-10-19
+        authority: user requests pursuing construction-time and storage improvements
+        scope: one final declaration publication and streaming references in existing IrConstruction; public record layouts and wire preserved; no dependency changes
+        plan: docs/plans/2026-09-07-compiler-repeated-work/plan.pdf
+      - slug: structural-pagerank
+        date: 2026-10-19
+        authority: user explicitly requests structural BnB integration and profile-guided acceleration
+        scope: shared bounded planner and range operators; canonical projection; component certificates; guarded PageRank; no new dependencies
+        plan: ../core/docs/plans/2026-09-07-compiler-repeated-work/plan.pdf
+      - slug: contraction-runtime-cell-matroids
+        date: 2026-10-19
+        authority: user requests the proposed runtime measurement and matroids over cells
+        scope: Tensor chain execution on existing CSR kernel; Graph shared Levi engine over graded cells and canonical IR; correctness and explicit measurements
+        plan: ../core/docs/plans/2026-09-07-compiler-repeated-work/plan.pdf
+      - slug: virtual-operator-planning
+        date: 2026-10-19
+        authority: user explicitly requests implementing virtual operators, bounded planning and entropy-guided Berge search
+        scope: shared Tensor row contracts and planner; Core IR adapters; existing Graph PageRank and informed-search integration; correctness tests only
+        plan: ../core/docs/plans/2026-09-07-compiler-repeated-work/plan.pdf
+      - slug: implicit-incidence
+        date: 2026-10-19
+        scope: >
+          User approves shared virtual incidence rows and broader algorithm measurements.
+          Extend existing Core projection/row owners with lossless data-derived views,
+          preserve ordered arithmetic, canonical IR and arbitrary-row behavior;
+          validate and measure existing Graph consumers without parallel engines.
+        plan: docs/plans/2026-09-07-compiler-repeated-work/plan.pdf
+      - slug: pair-incidence
+        date: 2026-10-18
+        scope: >
+          User requests repairing the measured two-vertex PageRank overhead.
+          Extend the shared accumulator with a default lazy pair reduction and
+          specialize two-slot gather/scatter while preserving ordered semantics.
+        plan: docs/plans/2026-09-07-compiler-repeated-work/plan.pdf
+      - slug: exact-count-reduction
+        date: 2026-10-18
+        scope: >
+          User requests continuing the shared-IR performance optimization.
+          Add defaulted first-term initialization to the existing ordered
+          accumulator contract; preserve arithmetic order and empty input.
+        plan: docs/plans/2026-09-07-compiler-repeated-work/plan.pdf
+      - slug: shared-incidence-pagerank
+        date: 2026-10-18
+        scope: >
+          User requests PageRank integration with the existing shared virtual
+          incidence preparation. Extend the Core incidence owner with reusable
+          projections and row operations, retain signed operator semantics, and
+          correct retained reference capacity under the earlier compact-reference approval.
+        plan: docs/plans/2026-09-07-compiler-repeated-work/plan.pdf
+      - slug: unified-construction-compact-references
+        date: 2026-10-17
+        scope: >
+          Explicit user request: deferred known-size construction/allocation,
+          compact SignedRefR with a byte-sized sign, annotation IDs and vector
+          weights; finish integration through owner structs/traits and build()
+          methods. Extend IrConstruction/IrTable, migrate manual benchmark and
+          emitter construction, preserve semantic identity and wire meaning.
+        plan: docs/plans/2026-09-07-compiler-repeated-work/plan.pdf
+      - slug: construction-family-consolidation
+        date: 2026-10-14
+        scope: >
+          User requested a broader whole-family consolidation. Extend existing
+          IrConstruction, canonical record constructors and equivalent Core/Graph
+          consumers; preserve malformed fixtures and independent reference checks.
+        plan: ../graph/docs/plans/2026-10-13-typed-graph-internals/plan.pdf
+      - slug: shared-generation-and-measurement
+        date: 2026-10-14
+        scope: >
+          User requested common GraphGenerator/SyntheticGenerator contracts and
+          Core-owned typed measurement runners, clock strategy, reusable sample
+          storage, allocation instrumentation and migration of Core/Graph callers.
+          Additive APIs; no automatic measurement or installed global allocator.
+        plan: ../graph/docs/plans/2026-10-13-typed-graph-internals/plan.pdf
+      # User, 2026-10-12 evening assignment: finish the approved algorithmic work.
+      - slug: algorithmic-completion
+        date: 2026-10-12
+        scope: >
+          Complete remaining applicable catalogue work in owner order: validated
+          structure reuse, inverted symbol-use maintenance and selective remapping,
+          bounded publication/reclamation, Graph sparse visitation and existing
+          Tensor arena reclamation. Evaluate paged storage/allocator alternatives
+          against current public contracts and actual use rather than adding
+          competing unused implementations. Preserve the pending update workspace.
+        constraints:
+          - immutable model-bound evidence, never structural-hash equality as a validation proof
+          - configurable capacities, no invented platform/deadline requirement
+          - preserve hashes, wire content, old readers and checked-update error behavior
+          - no RL or unrelated renderer work; reuse the existing owners
+          - do not replace an application global allocator from a framework library
+
+      # User, 2026-10-12: continue all approved algorithms; capacities configurable, no fixed RT target.
+      - slug: reusable-value-update-workspace
+        date: 2026-10-12
+        scope: >
+          Add a caller-owned capacity-bounded ValueUpdateWorkspace and one shared
+          update implementation. Reuse target sorting, staged values, changed IDs,
+          symbol-delta and semantic-delta buffers. Replace duplicate-target hashing
+          with deterministic sorting while preserving input-order error precedence.
+        constraints:
+          - retain the existing entry point, error variants, input caps and wire/hash contracts
+          - bounded workspace never grows its configured buffers during update; capacity failure is explicit
+          - clear scratch payloads on success and ordinary error; preserve source snapshots
+          - output snapshots, nested-value walks, compaction and validators may still allocate
+          - no global allocator replacement, unsafe lifetime extension or new dependency
+
       # User, 2026-10-12: "engedely megadva mindegyikre" (all catalogue candidates authorized).
       - slug: incremental-model-bookkeeping
         date: 2026-10-12

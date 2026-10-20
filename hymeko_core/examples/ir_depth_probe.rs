@@ -19,72 +19,82 @@
 //! usage. A crash (stack overflow) surfaces as an abnormal termination status,
 //! which is exactly the signal the caller is looking for.
 //!
-//! Deliberately duplicates a *minimal* chain builder rather than sharing the
-//! richer one in `tests/unified_ir_m05/builder.rs`: a Cargo example cannot link
-//! against test-only code. The duplication is ~25 lines and is confined to this
-//! file.
+//! Chain input uses the same Core construction owner as source lowering.
 
 use std::process::ExitCode;
 
-use hymeko::common::ids::{DeclId, EdgeId, HyperArcId, NodeId};
+use hymeko::common::ids::{DeclId, SymId};
 use hymeko::common::pathkey::PathKey;
 use hymeko::ir::canonical_hash::{Canon, CanonHashCfg};
 use hymeko::ir::ir::{
-    AnnoR, ArcRec, DeclKind, DeclNode, EdgeRec, Ir, NodeRec, RefAtomR, SignedRefR,
+    AnnoR, ArcPlacement, DeclKind, DeclNode, IncidenceSign, Ir, IrBuilder, IrCapacities,
+    IrConstruction, ReferenceDraft, dispatch,
 };
 use hymeko::resolution::interner::Interner;
 use hymeko::resolution::resolve::Index;
 
-/// One chain of `depth` nested declarations plus a terminal edge and arc.
-fn build_chain(depth: usize) -> (Ir, Index, Interner) {
-    let mut ir = Ir::default();
-    let mut idx = Index::new();
-    let mut it = Interner::new();
-
-    let mut segs: Vec<hymeko::common::ids::SymId> = Vec::new();
-    let mut last = DeclId::NONE;
-
-    let push = |ir: &mut Ir, idx: &mut Index, segs: &[hymeko::common::ids::SymId], kind, parent| {
-        let id = ir.push_decl(DeclNode {
-            kind,
-            name: *segs.last().expect("non-empty path"),
-            parent,
-            first_child: DeclId::NONE,
-            last_child: DeclId::NONE,
-            next_sibling: DeclId::NONE,
-            anno: AnnoR::default(),
-        });
-        idx.by_path.insert(PathKey(segs.to_vec()), id);
-        id
-    };
-
-    for i in 0..depth {
-        segs.push(it.intern(&format!("l{i}")));
-        let d = push(&mut ir, &mut idx, &segs, DeclKind::Node, last);
-        let nid = NodeId::new(ir.nodes.len());
-        ir.nodes.push(NodeRec::new(d, Vec::new()));
-        ir.bind_node_decl(d, nid)
-            .expect("probe: node index representable");
-        last = d;
+/// Input adapter for a depth probe; Core owns record/link/binding population.
+struct ChainBuilder {
+    depth: usize,
+    index: Index,
+    interner: Interner,
+}
+impl ChainBuilder {
+    fn new(depth: usize) -> Self {
+        Self {
+            depth,
+            index: Index::new(),
+            interner: Interner::new(),
+        }
     }
-
-    let mut esegs = segs.clone();
-    esegs.push(it.intern("e"));
-    let ed = push(&mut ir, &mut idx, &esegs, DeclKind::Edge, last);
-    let eid = EdgeId::new(ir.edges.len());
-    ir.edges.push(EdgeRec::new(ed, Vec::new()));
-    ir.bind_edge_decl(ed, eid)
-        .expect("probe: edge index representable");
-
-    let aid = HyperArcId::new(ir.arcs.len());
-    ir.arcs.push(ArcRec {
-        anno: AnnoR::default(),
-        in_edge: ed,
-        refs: vec![SignedRefR::Plus(RefAtomR::plain(last))],
-    });
-    ir.edges[eid.raw()].arcs.push(aid);
-
-    (ir, idx, it)
+    fn named(
+        &mut self,
+        construction: &mut IrConstruction<'_>,
+        path: &[SymId],
+        kind: DeclKind,
+        parent: DeclId,
+    ) -> Result<DeclId, dispatch::DispatchError> {
+        let mut node = DeclNode::root(
+            kind,
+            *path.last().expect("non-empty path"),
+            AnnoR::default(),
+        );
+        node.parent = parent;
+        let id = construction.append_named(node, Vec::new(), &[])?;
+        self.index.by_path.insert(PathKey(path.to_vec()), id);
+        Ok(id)
+    }
+}
+impl IrBuilder for ChainBuilder {
+    type Output = (Ir, Index, Interner);
+    type Error = dispatch::DispatchError;
+    fn capacities(&self) -> IrCapacities {
+        IrCapacities {
+            declarations: self.depth + 2,
+            nodes: self.depth,
+            edges: 1,
+            arcs: 1,
+        }
+    }
+    fn populate(&mut self, construction: &mut IrConstruction<'_>) -> Result<(), Self::Error> {
+        let mut path = Vec::with_capacity(self.depth + 1);
+        let mut last = DeclId::NONE;
+        for i in 0..self.depth {
+            path.push(self.interner.intern(&format!("l{i}")));
+            last = self.named(construction, &path, DeclKind::Node, last)?;
+        }
+        path.push(self.interner.intern("e"));
+        let owner = self.named(construction, &path, DeclKind::Edge, last)?;
+        construction.append_arc(
+            ArcPlacement::under_owner(owner),
+            AnnoR::default(),
+            vec![ReferenceDraft::plain(last, IncidenceSign::Plus)],
+        )?;
+        Ok(())
+    }
+    fn finish(self, ir: Ir) -> Self::Output {
+        (ir, self.index, self.interner)
+    }
 }
 
 fn main() -> ExitCode {
@@ -96,12 +106,12 @@ fn main() -> ExitCode {
     let do_hash = args.iter().any(|a| a == "--hash");
 
     eprintln!("probe: building chain depth={depth}");
-    let (ir, _idx, it) = build_chain(depth);
+    let (ir, _idx, it) = ChainBuilder::new(depth).build().expect("valid chain");
     eprintln!("probe: built decls={}", ir.decl_nodes.len());
 
     // Iterative traversal of the intrusive parent chain — this one is a loop,
     // so it is expected to survive any depth.
-    let mut cur = DeclId::new(ir.decl_nodes.len() - 2);
+    let mut cur = DeclId::new(depth.saturating_sub(1));
     let mut steps = 0usize;
     while cur.is_some() {
         cur = ir.decl_nodes[cur.raw()].parent;

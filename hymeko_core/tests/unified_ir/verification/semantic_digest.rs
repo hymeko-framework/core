@@ -20,12 +20,7 @@ use crate::unified_ir::support::builder::{S, TestIr};
 /// The shared builder's `S::wrap` is private and this module needs to replace one reference in an
 /// already-built arc, which no builder method does.
 fn plain(sign: S, target: DeclId) -> SignedRefR {
-    let atom = RefAtomR::plain(target);
-    match sign {
-        S::Plus => SignedRefR::Plus(atom),
-        S::Minus => SignedRefR::Minus(atom),
-        S::Neutral => SignedRefR::Neutral(atom),
-    }
+    SignedRefR::plain(target, sign.kind())
 }
 
 /// Link `child` into `parent`'s intrusive chain.
@@ -115,7 +110,7 @@ fn program(r_value: Option<ValueR>) -> TestIr {
     t.tag(a, &["alpha"]);
     let b = tagged_node(&mut t, root, "b", &["beta"]);
     let r = t.node(&["m", "r"], root);
-    t.ir.decl_nodes[r.raw()].anno.value = r_value;
+    t.ir.decl_annotation_mut(r).unwrap().value = r_value;
     let (e, _) = signed_edge(&mut t, root, [a, b]);
     t.attach_arc_decls();
     link_children(&mut t, root, &[a, b, r, e]);
@@ -151,27 +146,21 @@ fn assert_program_mutation(
     assert_distinct_models(&left, &right, changed, message);
 }
 
-fn first_plus_atom(t: &mut TestIr) -> &mut RefAtomR {
-    match &mut t.ir.arcs[0].refs[0] {
-        SignedRefR::Plus(atom) => atom,
-        _ => panic!("slot 0 is Plus"),
-    }
-}
-
 /// Observation floor: the mutation must have changed the `Ir`, or the comparison proves nothing.
 fn assert_changed(left: &Ir, right: &Ir, what: &str) {
-    let differs = left.decl_nodes.len() != right.decl_nodes.len()
-        || left
-            .decl_nodes
-            .iter()
-            .zip(&right.decl_nodes)
-            .any(|(x, y)| x.anno != y.anno || x.kind != y.kind || x.name != y.name)
-        || left.arcs.len() != right.arcs.len()
-        || left
-            .arcs
-            .iter()
-            .zip(&right.arcs)
-            .any(|(x, y)| x.refs != y.refs || x.anno != y.anno);
+    let differs =
+        left.decl_nodes.len() != right.decl_nodes.len()
+            || left.decl_nodes.iter().zip(&right.decl_nodes).any(|(x, y)| {
+                left[x.anno] != right[y.anno] || x.kind != y.kind || x.name != y.name
+            })
+            || left.arcs.len() != right.arcs.len()
+            || left.arcs.iter().zip(&right.arcs).any(|(x, y)| {
+                left[x.anno] != right[y.anno]
+                    || x.refs.len() != y.refs.len()
+                    || x.refs.iter().zip(&y.refs).any(|(a, b)| {
+                        left.reference_draft(a).unwrap() != right.reference_draft(b).unwrap()
+                    })
+            });
     assert!(
         differs,
         "observation floor: `{what}` did not change the Ir, so the digest result is vacuous"
@@ -208,7 +197,7 @@ fn semantic_moves_on_a_forward_reference_target() {
         let (mut t, root, [r, a]) = named_nodes(["r", "a"], None);
         t.tag(a, &["alpha"]);
         let b = tagged_node(&mut t, root, "b", &["beta"]);
-        t.ir.decl_nodes[r.raw()].anno.value = Some(ValueR::Ref(if to_a { a } else { b }));
+        t.ir.decl_annotation_mut(r).unwrap().value = Some(ValueR::Ref(if to_a { a } else { b }));
         link_children(&mut t, root, &[r, a, b]);
         t
     };
@@ -245,8 +234,8 @@ fn semantic_is_stable_under_sharing_and_sensitive_to_multiplicity() {
 fn semantic_terminates_deterministically_on_a_reference_cycle() {
     let mut t = program(None);
     // r -> a and a -> r: a cycle through annotation values.
-    t.ir.decl_nodes[R.raw()].anno.value = Some(ValueR::Ref(A));
-    t.ir.decl_nodes[A.raw()].anno.value = Some(ValueR::Ref(R));
+    t.ir.decl_annotation_mut(R).unwrap().value = Some(ValueR::Ref(A));
+    t.ir.decl_annotation_mut(A).unwrap().value = Some(ValueR::Ref(R));
     let first = digest(&t);
     assert_eq!(
         digest(&t),
@@ -277,7 +266,7 @@ fn semantic_moves_on_annotation_tag_value_weight_sign_slot_and_target() {
         "value",
     );
     assert_program_mutation(None, "incidence weight", "weight", |t| {
-        first_plus_atom(t).weights = Some(vec![ValueR::Num(2.0)]);
+        t.edit_reference(0, 0, |atom| atom.weights = Some(vec![ValueR::Num(2.0)]));
     });
     assert_program_mutation(None, "incidence sign", "sign", |t| {
         t.ir.arcs[0].refs[0] = plain(S::Minus, A);
@@ -285,7 +274,7 @@ fn semantic_moves_on_annotation_tag_value_weight_sign_slot_and_target() {
     assert_program_mutation(None, "slot order", "slot", |t| t.ir.arcs[0].refs.swap(0, 1));
     assert_program_mutation(None, "reference-atom annotation", "atom annotation", |t| {
         let marked = t.it.intern("marked");
-        first_plus_atom(t).anno.tags.push(marked);
+        t.edit_reference(0, 0, |atom| atom.anno.tags.push(marked));
     });
 }
 
@@ -558,6 +547,7 @@ fn unbound_record_fixture(kind: hymeko::ir::ir::DeclKind, to_a: bool) -> TestIr 
     let (mut t, root, [a, b]) = named_nodes(["a", "b"], None);
     let unbound = t.decl(&["m", "unbound"], kind, root);
     let bases = vec![plain(S::Plus, if to_a { a } else { b })];
+    let bases = t.ir.store_bases(bases);
     match kind {
         DeclKind::Node => t.ir.nodes.push(NodeRec::new(unbound, bases)),
         DeclKind::Edge => t.ir.edges.push(EdgeRec::new(unbound, bases)),
@@ -594,14 +584,14 @@ fn assert_unbound_record_change(
 #[test]
 fn semantic_covers_validated_unbound_node_record() {
     assert_unbound_record_change(hymeko::ir::ir::DeclKind::Node, |t| {
-        &t.ir.nodes.last().unwrap().bases
+        &t.ir[t.ir.nodes.last().unwrap().bases]
     });
 }
 
 #[test]
 fn semantic_covers_validated_unbound_edge_record() {
     assert_unbound_record_change(hymeko::ir::ir::DeclKind::Edge, |t| {
-        &t.ir.edges.last().unwrap().bases
+        &t.ir[t.ir.edges.last().unwrap().bases]
     });
 }
 

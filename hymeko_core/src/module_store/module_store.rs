@@ -1,7 +1,7 @@
 use crate::common::ids::SymId;
 use crate::ir::canonical_hash::{Canon, CanonicalIdentity};
 use crate::ir::ir::Ir;
-use crate::ir::lower::lower_program_to_ir;
+use crate::ir::lower::{IrBuilder, IrLowering};
 use crate::module_store::source_provider::SourceProvider;
 use crate::resolution::const_resolve::resolve_consts;
 use crate::resolution::intern_pass::intern_ast_into;
@@ -263,7 +263,9 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
             .collect();
 
         // 7) Lower the canonical program IR.
-        let mut ir = lower_program_to_ir(root_ast, &imported, &idx, &mut self.it)
+        let mut ir = IrLowering::new(root_ast, &idx, &mut self.it)
+            .with_imports(&imported)
+            .build()
             .map_err(|e| ModuleLoadError::Parse(format!("lower failed: {e:?}")))?;
 
         ir.files = modules

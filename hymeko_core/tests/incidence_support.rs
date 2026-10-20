@@ -3,68 +3,46 @@
 //! dense-Bᵀ oracle — used by both `incidence_precompute_profile` (P2) and
 //! `prepared_ir_backbone` (P2.1). Wired into `tests/mod.rs` (autotests=false).
 
-use std::time::Instant;
+use hymeko::ir::ir::IrConstruction;
+use hymeko::util::measurement::{MeasurementRunner, Runner};
 
 use hymeko::common::ids::{DeclId, NodeId, SymId};
-use hymeko::ir::incidence::{IncidenceIndex, scalar_weight};
+use hymeko::ir::incidence::IncidenceIndex;
 use hymeko::ir::ir::{
-    AnnoR, ArcRec, DeclKind, DeclNode, Ir, NodeRec, PortDirection, RefAtomR, SignedRefR, ValueR,
+    AnnoR, ArcRec, DeclKind, DeclNode, IncidenceSign, Ir, NodeRec, PortDirection, RefAtomR,
+    ReferenceDraft, ValueR,
 };
 
 /// Median of `iters` timed calls (2 warm-ups first), in milliseconds.
-pub(crate) fn median_ms(iters: usize, mut f: impl FnMut()) -> f64 {
-    for _ in 0..2 {
-        f();
-    }
-    let mut s = Vec::with_capacity(iters);
-    for _ in 0..iters {
-        let t = Instant::now();
-        f();
-        s.push(t.elapsed().as_secs_f64() * 1e3);
-    }
-    s.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    s[s.len() / 2]
+pub(crate) fn median_ms(iters: usize, f: impl FnMut()) -> f64 {
+    MeasurementRunner::new(2, iters).run(f).median / 1000.0
 }
 
 /// Push a bound `Node` declaration, returning its `DeclId`.
 pub(crate) fn node(ir: &mut Ir) -> DeclId {
-    let d = ir.push_decl(DeclNode {
-        kind: DeclKind::Node,
-        name: SymId::new(0),
-        parent: DeclId::NONE,
-        first_child: DeclId::NONE,
-        last_child: DeclId::NONE,
-        next_sibling: DeclId::NONE,
-        anno: AnnoR::default(),
-    });
-    let nid = NodeId::new(ir.nodes.len());
-    ir.nodes.push(NodeRec::new(d, Vec::new()));
-    ir.bind_node_decl(d, nid).unwrap();
-    d
+    IrConstruction::new(ir)
+        .append_node(SymId::new(0), AnnoR::default(), Vec::new())
+        .unwrap()
 }
 
 /// A ref with sign in {+1, −1, 0} and an optional weight list.
-pub(crate) fn r(target: usize, sign: i8, weights: Option<Vec<f64>>) -> SignedRefR {
-    let atom = RefAtomR {
-        target: DeclId::new(target),
-        anno: AnnoR::default(),
-        weights: weights.map(|ws| ws.into_iter().map(ValueR::Num).collect()),
-        direction: PortDirection::Unspecified,
-    };
+pub(crate) fn r(target: usize, sign: i8, weights: Option<Vec<f64>>) -> ReferenceDraft {
+    let atom = RefAtomR::plain(DeclId::new(target))
+        .with_weights(weights.map(|ws| ws.into_iter().map(ValueR::Num).collect()));
     match sign {
-        s if s < 0 => SignedRefR::Minus(atom),
-        s if s > 0 => SignedRefR::Plus(atom),
-        _ => SignedRefR::Neutral(atom),
+        s if s < 0 => ReferenceDraft::new(IncidenceSign::Minus, atom),
+        s if s > 0 => ReferenceDraft::new(IncidenceSign::Plus, atom),
+        _ => ReferenceDraft::new(IncidenceSign::Neutral, atom),
     }
 }
 
 /// Push an arc with the given refs (no owning edge).
-pub(crate) fn arc(ir: &mut Ir, refs: Vec<SignedRefR>) {
-    ir.arcs.push(ArcRec {
-        anno: AnnoR::default(),
-        in_edge: DeclId::NONE,
-        refs,
-    });
+pub(crate) fn arc(ir: &mut Ir, refs: Vec<ReferenceDraft>) {
+    let refs = refs
+        .into_iter()
+        .map(|reference| ir.store_reference(reference))
+        .collect();
+    ir.arcs.push(ArcRec::unowned(refs));
 }
 
 /// A `k`-wide sliding window over `m` nodes (`m − k + 1` arcs); sign flips on every
@@ -96,7 +74,7 @@ pub(crate) fn dense_bt(ir: &Ir, index: &IncidenceIndex<'_>, y: &[f64]) -> Vec<f6
         for (i, &a) in index.incident_arcs(DeclId::new(d)).iter().enumerate() {
             let slot = index.incident_slots(DeclId::new(d))[i];
             let sref = &ir.arcs[a.raw()].refs[slot as usize];
-            acc += f64::from(sref.sign()) * scalar_weight(sref) * y[a.raw()];
+            acc += f64::from(sref.sign()) * sref.scalar_weight(ir) * y[a.raw()];
         }
         z[d] = acc;
     }

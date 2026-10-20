@@ -3,7 +3,7 @@ mod ir_value_tests {
     use crate::test_helpers::{log_test_footer, log_test_header};
     use hymeko::common::pathkey::PathKey;
     use hymeko::ir::ir::ValueR;
-    use hymeko::ir::lower::lower_to_ir;
+    use hymeko::ir::lower::{IrBuilder, IrLowering};
     use hymeko::resolution::intern_pass;
     use hymeko::resolution::intern_pass::Interned;
     use hymeko::resolution::resolve::build_index_sym;
@@ -47,7 +47,7 @@ mod ir_value_tests {
         // Intern and resolve as needed, then lower to IR.
         let Interned { ast, mut interner } = intern_pass::intern_ast(&desc);
         let idx = build_index_sym(&ast, &interner).unwrap();
-        let ir = lower_to_ir(&ast, &idx, &mut interner).unwrap();
+        let ir = IrLowering::new(&ast, &idx, &mut interner).build().unwrap();
 
         let sid_context = interner.intern(SYM_CONTEXT);
         let sid_val0 = interner.intern(SYM_VAL0);
@@ -73,22 +73,27 @@ mod ir_value_tests {
 
         // tags + value
         let sid_int = interner.intern(TAG_INT);
-        assert!(ir.decl_nodes[did_val0.raw()].anno.tags.contains(&sid_int));
+        assert!(
+            ir.decl_annotation(did_val0)
+                .unwrap()
+                .tags
+                .contains(&sid_int)
+        );
         assert_eq!(
-            ir.decl_nodes[did_val0.raw()].anno.value,
+            ir.decl_annotation(did_val0).unwrap().value,
             Some(ValueR::Num(56.0))
         );
 
         let sid_string = interner.intern(TAG_STRING);
         let sid_vakond = interner.intern(STR_VAKOND);
         assert!(
-            ir.decl_nodes[did_val1.raw()]
-                .anno
+            ir.decl_annotation(did_val1)
+                .unwrap()
                 .tags
                 .contains(&sid_string)
         );
         assert_eq!(
-            ir.decl_nodes[did_val1.raw()].anno.value,
+            ir.decl_annotation(did_val1).unwrap().value,
             Some(ValueR::Str(sid_vakond))
         );
 
@@ -99,13 +104,14 @@ mod ir_value_tests {
             .get(&PathKey(vec![sid_context, sid_val_neg]))
             .expect("val_neg missing");
         assert_eq!(
-            ir.decl_nodes[did_val_neg.raw()].anno.value,
+            ir.decl_annotation(did_val_neg).unwrap().value,
             Some(ValueR::Num(-42.0))
         );
 
         // vector list
-        match ir.decl_nodes[did_vector.raw()]
-            .anno
+        match ir
+            .decl_annotation(did_vector)
+            .unwrap()
             .value
             .as_ref()
             .expect("vector has no value")
@@ -133,12 +139,12 @@ mod ir_value_tests {
             .get(&PathKey(vec![sid_context, sid_val_undef]))
             .expect("val_undef missing");
         assert!(
-            ir.decl_nodes[did_val_undef.raw()]
-                .anno
+            ir.decl_annotation(did_val_undef)
+                .unwrap()
                 .tags
                 .contains(&sid_real)
         );
-        assert!(ir.decl_nodes[did_val_undef.raw()].anno.value.is_none());
+        assert!(ir.decl_annotation(did_val_undef).unwrap().value.is_none());
 
         // sanity: context itself exists
         let _ = did_context;

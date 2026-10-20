@@ -14,18 +14,54 @@
 //! Completion order is not submission order; there is no latest-request-wins rule.
 
 mod value_updates;
-pub use value_updates::{ValueUpdate, ValueUpdateError};
+pub use value_updates::{ValueUpdate, ValueUpdateError, ValueUpdateWorkspace};
 
 use super::module_store::{CompiledProgram, HymekoParser, ModuleLoadError, ModuleStore};
 use super::source_provider::SourceProvider;
 use crate::ir::canonical_hash::{Canon, CanonHashCfg, CanonicalIdentity};
+use crate::ir::coherence::{
+    CoherenceLimits, validate_hierarchy_index_coherence, validate_model_contract,
+};
 use crate::ir::incidence::{IncidenceError, IncidenceIndexData, IncidenceView};
 use crate::ir::semantic_digest::{SemanticDigestState, SemanticModelDigest};
 use crate::resolution::interner::Interner;
+use crate::resolution::resolve::Index;
 use crate::resolution::symbols::{SymbolError, SymbolUsage};
-use std::fmt;
 use std::path::Path;
 use std::sync::{Arc, OnceLock, RwLock};
+use std::{collections::VecDeque, fmt};
+
+/// Private evidence bound to an immutable program/interner pair. Only the
+/// checked value-edit boundary may inherit it, and only while symbol IDs in
+/// structural fields remain stable.
+/// It retains no earlier program or string table.
+#[derive(Clone, Copy)]
+struct StructureValidation;
+
+impl StructureValidation {
+    fn check(
+        ir: &crate::ir::ir::Ir,
+        index: &Index,
+        interner: &Interner,
+    ) -> Result<Self, ValueUpdateError> {
+        #[cfg(test)]
+        STRUCTURE_CHECKS.with(|count| count.set(count.get() + 1));
+        validate_hierarchy_index_coherence(ir, index, interner, CoherenceLimits::default())
+            .map_err(|_| ValueUpdateError::InvalidModel)?;
+        validate_model_contract(ir, interner).map_err(|_| ValueUpdateError::InvalidModel)?;
+        Ok(Self)
+    }
+}
+
+#[cfg(test)]
+std::thread_local! {
+    static STRUCTURE_CHECKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn take_structure_checks() -> usize {
+    STRUCTURE_CHECKS.with(|count| count.replace(0))
+}
 
 /// An inseparable, read-only compiled program and symbol table.
 ///
@@ -35,8 +71,9 @@ use std::sync::{Arc, OnceLock, RwLock};
 pub struct CompiledModel {
     program: Arc<CompiledProgram>,
     interner: Interner,
-    semantic: OnceLock<SemanticDigestState>,
+    semantic: OnceLock<Arc<SemanticDigestState>>,
     symbol_usage: OnceLock<Result<SymbolUsage, SymbolError>>,
+    validation: OnceLock<Result<StructureValidation, ValueUpdateError>>,
     /// The reverse-incidence index of `program.ir`, derived on first use and never
     /// serialized. Checked value updates change leaf values only, never arcs or
     /// declarations, so the models they derive share it.
@@ -64,6 +101,7 @@ impl CompiledModel {
             interner: store.it,
             semantic: OnceLock::new(),
             symbol_usage: OnceLock::new(),
+            validation: OnceLock::new(),
             incidence: OnceLock::new(),
         })
     }
@@ -92,8 +130,15 @@ impl CompiledModel {
             interner,
             semantic: OnceLock::new(),
             symbol_usage: OnceLock::new(),
+            validation: OnceLock::new(),
             incidence: OnceLock::new(),
         }
+    }
+
+    fn structure_validation(&self) -> Result<StructureValidation, ValueUpdateError> {
+        *self.validation.get_or_init(|| {
+            StructureValidation::check(&self.program.ir, &self.program.idx, &self.interner)
+        })
     }
 
     fn symbol_usage(&self) -> Result<&SymbolUsage, SymbolError> {
@@ -122,6 +167,61 @@ impl CompiledModel {
         &self.interner
     }
 
+    /// Create an equivalent model with copy-on-write declaration pages.
+    ///
+    /// Default compiled storage remains contiguous. This opt-in layout favors
+    /// small edits: indexed writes copy directory handles and affected pages.
+    /// Explicit Vec/slice access may materialize O(N) contiguous records, while
+    /// ordinary accessors and iteration stream pages. Hashes, IDs, cached derived
+    /// state and old readers are preserved. Conversion can copy all declarations.
+    ///
+    /// # Errors
+    /// `page_size` must be a nonzero power of two, measured in records.
+    pub fn with_declaration_pages(
+        &self,
+        page_size: usize,
+    ) -> Result<Self, crate::ir::table::IrPageSizeError> {
+        if !page_size.is_power_of_two() {
+            return Err(crate::ir::table::IrPageSizeError(page_size));
+        }
+        let mut ir = self.program.ir.clone();
+        ir.decl_nodes.share_pages(page_size)?;
+        ir.annotations.share_pages(page_size)?;
+        Ok(Self {
+            program: Arc::new(CompiledProgram {
+                root: self.program.root.clone(),
+                idx: Arc::clone(&self.program.idx),
+                ir,
+                imports: Arc::clone(&self.program.imports),
+                canon: CanonicalIdentity::from_parts(
+                    self.program.canon.hash(),
+                    self.program.canon.structure(),
+                ),
+            }),
+            interner: self.interner.fork(),
+            semantic: self
+                .semantic
+                .get()
+                .cloned()
+                .map_or_else(OnceLock::new, OnceLock::from),
+            symbol_usage: self
+                .symbol_usage
+                .get()
+                .cloned()
+                .map_or_else(OnceLock::new, OnceLock::from),
+            validation: self
+                .validation
+                .get()
+                .copied()
+                .map_or_else(OnceLock::new, OnceLock::from),
+            incidence: self
+                .incidence
+                .get()
+                .cloned()
+                .map_or_else(OnceLock::new, OnceLock::from),
+        })
+    }
+
     /// Value-sensitive identity of this immutable snapshot. The first call builds
     /// derived contributions; repeated calls reuse them. Checked value updates
     /// rehash only edited declarations with the same encoder as the full digest.
@@ -132,7 +232,7 @@ impl CompiledModel {
 
     fn semantic_state(&self) -> &SemanticDigestState {
         self.semantic
-            .get_or_init(|| SemanticDigestState::new(&self.program.ir, &self.interner))
+            .get_or_init(|| Arc::new(SemanticDigestState::new(&self.program.ir, &self.interner)))
     }
 
     /// The program's incidences, over the reverse-incidence index this model derives
@@ -200,6 +300,111 @@ impl fmt::Display for PublicationError {
 }
 
 impl std::error::Error for PublicationError {}
+
+/// Caller-owned roots awaiting destruction on a caller-selected worker.
+///
+/// Capacity counts snapshots, not bytes. Live readers keep their roots queued.
+/// `reclaim` bounds inspections, but destroying one model can still take time
+/// proportional to its contents. Independent IR/metadata copies have their own
+/// lifetimes. Dropping this queue performs ordinary teardown, not deferred GC.
+pub struct SnapshotRetirement {
+    roots: VecDeque<Arc<ExecutionSnapshot>>,
+    limit: usize,
+}
+
+impl SnapshotRetirement {
+    /// Reserve all queue slots. Zero capacity refuses retained publications.
+    /// Allocation/size overflow is reported without constructing a queue.
+    pub fn with_capacity(limit: usize) -> Result<Self, std::collections::TryReserveError> {
+        let mut roots = VecDeque::new();
+        roots.try_reserve_exact(limit)?;
+        Ok(Self { roots, limit })
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.roots.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.roots.is_empty()
+    }
+
+    /// Configured root limit, independent of allocator rounding.
+    #[must_use]
+    pub fn capacity(&self) -> usize {
+        self.limit
+    }
+
+    /// Inspect at most `max_checks` queued roots, returning the number reclaimed.
+    /// Run this on the thread where model destruction is acceptable. Blocked
+    /// roots rotate to the back, so a live reader cannot starve later roots.
+    pub fn reclaim(&mut self, max_checks: usize) -> usize {
+        let checks = max_checks.min(self.roots.len());
+        let mut reclaimed = 0;
+        for _ in 0..checks {
+            let root = self
+                .roots
+                .pop_front()
+                .expect("bounded by initial queue length");
+            match Arc::try_unwrap(root) {
+                Ok(snapshot) => {
+                    drop(snapshot);
+                    reclaimed += 1;
+                }
+                Err(root) => self.roots.push_back(root),
+            }
+        }
+        reclaimed
+    }
+}
+
+/// A retained publication did not consume its candidate. The caller may retry
+/// a full queue or send the recovered candidate to a worker for destruction.
+pub enum RetainedPublicationError {
+    RetirementFull(PreparedCompilation),
+    Rejected {
+        error: PublicationError,
+        candidate: PreparedCompilation,
+    },
+}
+
+impl RetainedPublicationError {
+    #[must_use]
+    pub fn into_candidate(self) -> PreparedCompilation {
+        match self {
+            Self::RetirementFull(candidate) | Self::Rejected { candidate, .. } => candidate,
+        }
+    }
+}
+
+impl fmt::Debug for RetainedPublicationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::RetirementFull(_) => f.write_str("RetirementFull"),
+            Self::Rejected { error, .. } => f.debug_tuple("Rejected").field(error).finish(),
+        }
+    }
+}
+
+impl fmt::Display for RetainedPublicationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::RetirementFull(_) => f.write_str("snapshot retirement queue is full"),
+            Self::Rejected { error, .. } => error.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for RetainedPublicationError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::RetirementFull(_) => None,
+            Self::Rejected { error, .. } => Some(error),
+        }
+    }
+}
 
 /// Failure to acquire the base or compile a candidate. Nothing was published.
 #[derive(Debug)]
@@ -281,31 +486,78 @@ impl ExecutionState {
         &self,
         prepared: PreparedCompilation,
     ) -> Result<Arc<ExecutionSnapshot>, PublicationError> {
-        if !Arc::ptr_eq(&self.owner, &prepared.owner) {
-            return Err(PublicationError::ForeignState);
+        self.publish(prepared, drop).map_err(|(error, _)| error)
+    }
+
+    /// Publish while retaining the replaced root for explicit worker reclamation.
+    ///
+    /// Queue capacity is checked first. Full or rejected attempts return their
+    /// candidate and do not change the current snapshot or retirement queue.
+    /// The queue never grows during publication; call `reclaim` separately.
+    #[allow(
+        clippy::result_large_err,
+        reason = "returning the owned candidate inline avoids an allocation on backpressure"
+    )]
+    pub fn commit_retaining(
+        &self,
+        prepared: PreparedCompilation,
+        retirement: &mut SnapshotRetirement,
+    ) -> Result<Arc<ExecutionSnapshot>, RetainedPublicationError> {
+        if retirement.roots.len() == retirement.limit {
+            return Err(RetainedPublicationError::RetirementFull(prepared));
         }
-        let mut current = self
+        self.publish(prepared, |previous| retirement.roots.push_back(previous))
+            .map_err(|(error, candidate)| RetainedPublicationError::Rejected { error, candidate })
+    }
+
+    #[allow(
+        clippy::result_large_err,
+        reason = "candidate recovery must not add an error-path allocation"
+    )]
+    fn publish(
+        &self,
+        prepared: PreparedCompilation,
+        replaced: impl FnOnce(Arc<ExecutionSnapshot>),
+    ) -> Result<Arc<ExecutionSnapshot>, (PublicationError, PreparedCompilation)> {
+        if !Arc::ptr_eq(&self.owner, &prepared.owner) {
+            return Err((PublicationError::ForeignState, prepared));
+        }
+        let PreparedCompilation { owner, base, model } = prepared;
+        let revision = base.revision.checked_add(1);
+        // Allocation is outside the publication lock. The placeholder revision
+        // cannot be published if checked_add failed; rejection order stays intact.
+        let next = Arc::new(ExecutionSnapshot {
+            revision: revision.unwrap_or(base.revision),
+            model,
+        });
+        let result = self
             .current
             .write()
-            .map_err(|_| PublicationError::Poisoned)?;
-        if !Arc::ptr_eq(&current, &prepared.base) {
-            return Err(PublicationError::StaleBase {
-                expected: prepared.base.revision,
-                actual: current.revision,
+            .map_err(|_| PublicationError::Poisoned)
+            .and_then(|mut current| {
+                if !Arc::ptr_eq(&current, &base) {
+                    return Err(PublicationError::StaleBase {
+                        expected: base.revision,
+                        actual: current.revision,
+                    });
+                }
+                revision.ok_or(PublicationError::RevisionExhausted)?;
+                Ok(std::mem::replace(&mut *current, Arc::clone(&next)))
             });
+        // Every write guard is gone before replacement handling or recovery.
+        match result {
+            Ok(previous) => {
+                replaced(previous);
+                Ok(next)
+            }
+            Err(error) => {
+                let model = Arc::try_unwrap(next)
+                    .ok()
+                    .expect("a rejected candidate was never shared")
+                    .model;
+                Err((error, PreparedCompilation { owner, base, model }))
+            }
         }
-        let revision = current
-            .revision
-            .checked_add(1)
-            .ok_or(PublicationError::RevisionExhausted)?;
-        let next = Arc::new(ExecutionSnapshot {
-            revision,
-            model: prepared.model,
-        });
-        let previous = std::mem::replace(&mut *current, Arc::clone(&next));
-        drop(current);
-        drop(previous);
-        Ok(next)
     }
 }
 
@@ -389,7 +641,7 @@ mod snapshot_tests {
             })
         );
         assert_eq!(
-            old.model().program().ir.decl_node(id).unwrap().anno.value,
+            old.model().program().ir.decl_annotation(id).unwrap().value,
             Some(ValueR::Num(1.))
         );
         assert_eq!(
@@ -399,9 +651,8 @@ mod snapshot_tests {
                 .model()
                 .program()
                 .ir
-                .decl_node(id)
+                .decl_annotation(id)
                 .unwrap()
-                .anno
                 .value,
             Some(ValueR::Num(3.))
         );

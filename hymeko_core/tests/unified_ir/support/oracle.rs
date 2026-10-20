@@ -67,10 +67,10 @@ fn kind_str(k: DeclKind) -> &'static str {
 }
 
 fn sign_str(r: &SignedRefR) -> &'static str {
-    match r {
-        SignedRefR::Plus(_) => "+",
-        SignedRefR::Minus(_) => "-",
-        SignedRefR::Neutral(_) => "0",
+    match r.sign() {
+        1 => "+",
+        -1 => "-",
+        _ => "0",
     }
 }
 
@@ -90,7 +90,7 @@ fn value_str(v: &ValueR, t: &TestIr) -> String {
 }
 
 fn anno_str(d: DeclId, t: &TestIr) -> String {
-    let a = &t.ir.decl_nodes[d.raw()].anno;
+    let a = t.ir.decl_annotation(d).unwrap();
     // Tags are sorted: a declaration's tag set is a set, not a sequence.
     let mut tags: Vec<&str> = a.tags.iter().map(|&s| t.it.resolve(s)).collect();
     tags.sort_unstable();
@@ -103,7 +103,7 @@ fn anno_str(d: DeclId, t: &TestIr) -> String {
 }
 
 fn ref_str(r: &SignedRefR, t: &TestIr) -> String {
-    let atom = r.atom();
+    let atom = t.ir.reference_atom(r).unwrap();
     let w = atom
         .weights
         .as_ref()
@@ -120,9 +120,9 @@ fn ref_str(r: &SignedRefR, t: &TestIr) -> String {
 fn bases_str(d: DeclId, t: &TestIr) -> String {
     let ir: &Ir = &t.ir;
     let bases = if let Some(nid) = ir.as_node(d) {
-        &ir.nodes[nid.raw()].bases
+        &ir[ir.nodes[nid.raw()].bases]
     } else if let Some(eid) = ir.as_edge(d) {
-        &ir.edges[eid.raw()].bases
+        &ir[ir.edges[eid.raw()].bases]
     } else {
         return String::from("-");
     };

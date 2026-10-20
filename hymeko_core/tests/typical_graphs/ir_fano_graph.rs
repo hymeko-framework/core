@@ -4,7 +4,7 @@ mod ir_fano_graph {
     use crate::typical_graphs::fano::constants::*;
     use hymeko::common::ids::{DeclId, SymId};
     use hymeko::common::pathkey::PathKey;
-    use hymeko::ir::lower::lower_to_ir;
+    use hymeko::ir::lower::{IrBuilder, IrLowering};
     use hymeko::resolution::intern_pass::Interned;
     use hymeko::resolution::interner::Interner;
     use hymeko::resolution::{intern_pass, resolve};
@@ -59,7 +59,7 @@ mod ir_fano_graph {
         let idx = resolve::build_index_sym(&ast, &interner).unwrap();
 
         // 4) lower -> IR
-        let ir = lower_to_ir(&ast, &idx, &mut interner).unwrap();
+        let ir = IrLowering::new(&ast, &idx, &mut interner).build().unwrap();
 
         // invert index: DeclId -> "fano.n0"
         let inv = invert_index(&idx, &interner);
