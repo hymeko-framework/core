@@ -606,6 +606,22 @@ crates:
           - no dependency and no manifest change; std only
           - no commit or push beyond the feature branch the user merges
 
+      # APPROVED-CORE-EDIT: pyramid-generator (2026-10-15, user chat)
+      - slug: pyramid-generator
+        date: 2026-10-15
+        scope: >
+          User, 2026-10-15 00:4x: "mehet a core változás új branchként". Planned in nagare
+          docs/plans/2026-10-15-pyramid-hypergraphs/ (phase P0a). hymeko_core/src/generators.rs
+          declares the submodule generators/pyramid.rs and re-exports LatticePyramid,
+          PyramidCover and PyramidLevel; GeneratorError gains InvalidPyramid and
+          InvalidPyramidLevel with their Display arms; one module-doc line. The submodule holds
+          the lattice pyramid (level covers by stencil, stride and anchor) and its unit tests.
+        constraints:
+          - additive only: no existing signature, struct or variant changes; GeneratorError gains two variants, and no downstream exhaustive match exists in nagare or graph
+          - HypergraphGenerator is not extended
+          - no dependency and no manifest change; std only
+          - no commit or push beyond the feature branch feat/pyramid-generator the user merges
+
       # APPROVED-CORE-EDIT: merkle-hash-removal (2026-09-30, user chat)
       - slug: merkle-hash-removal
         date: 2026-09-30
