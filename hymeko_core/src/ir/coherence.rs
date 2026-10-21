@@ -19,7 +19,7 @@
 //! Returns `Ok(())` when no check fires, otherwise `Err(CoherenceReport)` whose
 //! `findings` are ordered deterministically and capped.
 
-use crate::common::ids::DeclId;
+use crate::common::ids::{DeclId, SymId};
 use crate::ir::ir::{DeclKind, Ir, dispatch};
 use crate::ir::ir::{ModelFacet, PortDirection, TensorRole};
 use crate::resolution::interner::Interner;
@@ -49,6 +49,9 @@ impl Default for CoherenceLimits {
 /// large payload back.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Finding {
+    /// A compact payload handle is invalid, or an editable annotation slot is
+    /// shared by another declaration, arc or reference.
+    InvalidPayload { field: &'static str, id: usize },
     /// Optional source-file metadata must cover declarations with valid file IDs.
     InvalidSourceProvenance,
     /// The `Index` maps a path to a `DeclId` outside `decl_nodes`.
@@ -116,7 +119,135 @@ struct Collector {
     total: usize,
 }
 
+#[derive(Clone, Copy)]
+enum ParentChain {
+    Unseen,
+    Active,
+    Rooted(usize),
+    Invalid(usize),
+    Cyclic,
+}
+
+/// Classify the parent functional graph once, then report in declaration order.
+/// Distances include the classified vertex; diagnostics start at its parent.
+/// Each vertex enters/exits the explicit stack at most once, including cycles.
+fn validate_parent_chains(ir: &Ir, collector: &mut Collector) {
+    let n = ir.decl_nodes.len();
+    let mut chains = vec![ParentChain::Unseen; n];
+    let mut path = Vec::with_capacity(n);
+    for start in 0..n {
+        if !matches!(chains[start], ParentChain::Unseen) {
+            continue;
+        }
+        let mut current = DeclId::new(start);
+        let mut outcome = loop {
+            if current.is_none() {
+                break ParentChain::Rooted(0);
+            }
+            if current.raw() >= n {
+                break ParentChain::Invalid(0);
+            }
+            let vertex = current.raw();
+            match chains[vertex] {
+                ParentChain::Unseen => {
+                    chains[vertex] = ParentChain::Active;
+                    path.push(vertex);
+                    current = ir.decl_nodes[vertex].parent;
+                }
+                ParentChain::Active => break ParentChain::Cyclic,
+                completed => break completed,
+            }
+        };
+        while let Some(vertex) = path.pop() {
+            outcome = match outcome {
+                ParentChain::Rooted(distance) => ParentChain::Rooted(distance + 1),
+                ParentChain::Invalid(distance) => ParentChain::Invalid(distance + 1),
+                ParentChain::Cyclic => ParentChain::Cyclic,
+                _ => unreachable!("parent walk must have a completed outcome"),
+            };
+            chains[vertex] = outcome;
+        }
+    }
+    // Preserve the existing finite-limit diagnostics without performing those
+    // repeated walks. Saturation also makes a cyclic MAX-limit input terminate.
+    let stopped = collector.limits.max_walk.saturating_add(1);
+    for (declaration, chain) in chains.into_iter().enumerate() {
+        let walked = match chain {
+            ParentChain::Rooted(distance) => (distance - 1 > stopped).then_some(stopped),
+            ParentChain::Invalid(distance) => Some((distance - 1).min(stopped)),
+            ParentChain::Cyclic => Some(stopped),
+            _ => unreachable!("every parent chain must have been classified"),
+        };
+        if let Some(walked) = walked {
+            collector.push(Finding::ParentCycle {
+                decl: DeclId::new(declaration),
+                walked,
+            });
+        }
+    }
+}
+
 impl Collector {
+    fn payloads(&mut self, ir: &Ir) {
+        let mut owned = rustc_hash::FxHashSet::default();
+        for id in ir
+            .decl_nodes
+            .iter()
+            .map(|d| d.anno)
+            .chain(ir.arcs.iter().map(|a| a.anno))
+        {
+            if id.is_some() && (ir.annotation(id).is_none() || !owned.insert(id)) {
+                self.push(Finding::InvalidPayload {
+                    field: "exclusive annotation",
+                    id: id.raw(),
+                });
+            }
+        }
+        for id in ir
+            .nodes
+            .iter()
+            .map(|n| n.bases)
+            .chain(ir.edges.iter().map(|e| e.bases))
+        {
+            match ir.bases(id) {
+                Some(refs) => self.reference_payloads(ir, refs, &owned),
+                None => self.push(Finding::InvalidPayload {
+                    field: "base list",
+                    id: id.raw(),
+                }),
+            }
+        }
+        for arc in &ir.arcs {
+            self.reference_payloads(ir, &arc.refs, &owned);
+        }
+    }
+
+    fn reference_payloads(
+        &mut self,
+        ir: &Ir,
+        refs: &[crate::ir::ir::SignedRefR],
+        owned: &rustc_hash::FxHashSet<crate::common::ids::AnnotationId>,
+    ) {
+        for reference in refs {
+            let id = reference.annotation_id();
+            if owned.contains(&id) {
+                self.push(Finding::InvalidPayload {
+                    field: "exclusive annotation",
+                    id: id.raw(),
+                });
+            }
+            if let Err(error) = ir.reference_atom(reference) {
+                let (field, id) = match error {
+                    crate::ir::ir::ReferenceError::Annotation(id) => {
+                        ("reference annotation", id.raw())
+                    }
+                    crate::ir::ir::ReferenceError::Weights(id) => ("reference weights", id.raw()),
+                };
+                self.push(Finding::InvalidPayload { field, id });
+            }
+        }
+    }
+
     fn push(&mut self, f: Finding) {
         self.total += 1;
         if self.findings.len() < self.limits.max_findings {
@@ -147,6 +278,7 @@ pub fn validate_hierarchy_index_coherence(
     if ir.validate_source_provenance().is_err() {
         c.push(Finding::InvalidSourceProvenance);
     }
+    c.payloads(ir);
 
     // --- parallel array lengths -------------------------------------------
     if ir.decl_to_record.len() != n {
@@ -160,12 +292,16 @@ pub fn validate_hierarchy_index_coherence(
     // --- index -> declaration ---------------------------------------------
     // Deterministic order: sort the index by (decl index, path) before use, so
     // a `HashMap` iteration order cannot reorder the report.
-    let mut indexed: Vec<(DeclId, Vec<u32>)> = index
+    // Paths stay in the existing Index. Keep full-width typed IDs: narrowing
+    // them would let distinct malformed prefixes compare equal.
+    let mut indexed: Vec<(DeclId, &[SymId])> = index
         .by_path
         .iter()
-        .map(|(pk, &d)| (d, pk.0.iter().map(|s| s.raw() as u32).collect()))
+        .map(|(pk, &d)| (d, pk.0.as_slice()))
         .collect();
-    indexed.sort_by(|a, b| a.0.0.cmp(&b.0.0).then_with(|| a.1.cmp(&b.1)));
+    // Path keys are unique, so the total ordering has no ties requiring
+    // stability; an unstable sort also avoids a second sorting buffer.
+    indexed.sort_unstable_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(b.1)));
 
     let mut path_of: Vec<Option<usize>> = vec![None; n];
     for (slot, (decl, _)) in indexed.iter().enumerate() {
@@ -185,9 +321,6 @@ pub fn validate_hierarchy_index_coherence(
 
     // Path-prefix parent: the nearest strictly-shorter prefix that is itself
     // indexed. Mirrors what `canonical_hash::SkeletonForest::new` computes.
-    let by_path_lookup: std::collections::HashMap<&[u32], DeclId> =
-        indexed.iter().map(|(d, p)| (p.as_slice(), *d)).collect();
-
     for (decl_idx, slot) in path_of.iter().enumerate() {
         let Some(slot) = *slot else {
             // Not in the index. Only a finding for kinds that carry a name;
@@ -201,10 +334,10 @@ pub fn validate_hierarchy_index_coherence(
             }
             continue;
         };
-        let path = &indexed[slot].1;
+        let path = indexed[slot].1;
         let mut by_path = DeclId::NONE;
         for cut in (0..path.len()).rev() {
-            if let Some(&p) = by_path_lookup.get(&path[..cut]) {
+            if let Some(&p) = index.by_path.get(&path[..cut]) {
                 by_path = p;
                 break;
             }
@@ -260,32 +393,42 @@ pub fn validate_hierarchy_index_coherence(
     }
 
     // --- parent acyclicity -------------------------------------------------
-    for d in 0..n {
-        let mut cur = ir.decl_nodes[d].parent;
-        let mut walked = 0usize;
-        while cur.is_some() {
-            if cur.0 >= n || walked > limits.max_walk {
-                c.push(Finding::ParentCycle {
-                    decl: DeclId::new(d),
-                    walked,
-                });
-                break;
-            }
-            cur = ir.decl_nodes[cur.0].parent;
-            walked += 1;
-        }
-    }
+    validate_parent_chains(ir, &mut c);
 
+    validate_record_bindings(ir, &mut c);
+
+    let _ = it; // reserved: name-based findings would need it; none are emitted
+
+    if c.total == 0 {
+        Ok(())
+    } else {
+        let truncated = c.total > c.findings.len();
+        Err(CoherenceReport {
+            findings: c.findings,
+            total: c.total,
+            truncated,
+        })
+    }
+}
+
+// Length mismatches are already reported by the caller. Missing slots must
+// not be indexed while collecting the remaining bounded diagnostics.
+fn validate_record_bindings(ir: &Ir, c: &mut Collector) {
     // --- kind / concrete-record agreement (compact dispatch, option D) ------
     // The single `decl_to_record` slot makes "more than one concrete record" a
     // structural impossibility. We instead validate: the slot decodes (reserved /
     // malformed tags are always an error), the slot tag agrees with `DeclKind`, the
     // record index is in range, and the record's back-pointer matches. NONE is
     // permitted (partial/malformed test states).
-    for d in 0..n {
+    for (d, &slot) in ir
+        .decl_to_record
+        .iter()
+        .take(ir.decl_nodes.len())
+        .enumerate()
+    {
         let did = DeclId::new(d);
         let kind = ir.decl_nodes[d].kind;
-        let decoded = match dispatch::decode_checked(ir.decl_to_record[d]) {
+        let decoded = match dispatch::decode_checked(slot) {
             Ok(x) => x,
             Err(_) => {
                 c.push(Finding::ReservedDispatchSlot { decl: did });
@@ -332,18 +475,143 @@ pub fn validate_hierarchy_index_coherence(
             }
         }
     }
+}
 
-    let _ = it; // reserved: name-based findings would need it; none are emitted
+#[cfg(test)]
+mod parent_chain_tests {
+    use super::*;
+    use crate::ir::ir::DeclNode;
 
-    if c.total == 0 {
-        Ok(())
-    } else {
-        let truncated = c.total > c.findings.len();
-        Err(CoherenceReport {
-            findings: c.findings,
-            total: c.total,
-            truncated,
-        })
+    #[test]
+    fn short_dispatch_table_reports_length_instead_of_panicking() {
+        let mut ir = Ir::default();
+        ir.push_decl(DeclNode::root(
+            DeclKind::Node,
+            SymId::new(0),
+            Default::default(),
+        ));
+        ir.decl_to_record.clear();
+        let report = validate_hierarchy_index_coherence(
+            &ir,
+            &Index::default(),
+            &Interner::new(),
+            CoherenceLimits::default(),
+        )
+        .unwrap_err();
+        assert!(report.findings.iter().any(|finding| matches!(
+            finding,
+            Finding::ParallelArrayLengthMismatch {
+                array: "decl_to_record",
+                len: 0,
+                expected: 1
+            }
+        )));
+    }
+
+    fn classify(parents: &[DeclId], max_walk: usize, max_findings: usize) -> Collector {
+        let ir = Ir {
+            decl_nodes: parents
+                .iter()
+                .map(|&parent| DeclNode {
+                    kind: DeclKind::Node,
+                    name: SymId::new(0),
+                    parent,
+                    first_child: DeclId::NONE,
+                    last_child: DeclId::NONE,
+                    next_sibling: DeclId::NONE,
+                    anno: crate::common::ids::AnnotationId::NONE,
+                })
+                .collect(),
+            ..Ir::default()
+        };
+        let mut collector = Collector {
+            limits: CoherenceLimits {
+                max_walk,
+                max_findings,
+            },
+            findings: Vec::new(),
+            total: 0,
+        };
+        validate_parent_chains(&ir, &mut collector);
+        collector
+    }
+
+    #[test]
+    fn memoized_parent_chains_preserve_bounded_walk_diagnostics_exhaustively() {
+        for n in 0..=4_u32 {
+            let choices = n as usize + 2;
+            for mut encoding in 0..choices.pow(n) {
+                let mut parents = Vec::new();
+                for _ in 0..n {
+                    let raw = encoding % choices;
+                    encoding /= choices;
+                    parents.push(if raw == n as usize + 1 {
+                        DeclId::NONE
+                    } else {
+                        DeclId::new(raw)
+                    });
+                }
+                for max_walk in [0, 1, n as usize, 2 * n as usize] {
+                    // Independent oracle: literally follow each parent chain,
+                    // without memoization, at deliberately small finite limits.
+                    let mut expected = Vec::new();
+                    for (declaration, &parent) in parents.iter().enumerate() {
+                        let mut current = parent;
+                        let mut walked = 0;
+                        while current.is_some() {
+                            if current.raw() >= parents.len() || walked > max_walk {
+                                expected.push(Finding::ParentCycle {
+                                    decl: DeclId::new(declaration),
+                                    walked,
+                                });
+                                break;
+                            }
+                            current = parents[current.raw()];
+                            walked += 1;
+                        }
+                    }
+                    for cap in [0, 2, 64] {
+                        let actual = classify(&parents, max_walk, cap);
+                        assert_eq!(actual.total, expected.len());
+                        assert_eq!(actual.findings, expected[..expected.len().min(cap)]);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn parent_chains_handle_max_limit_and_shared_long_tails() {
+        let parents: Vec<_> = (0..257)
+            .map(|i| {
+                if i == 0 {
+                    DeclId::NONE
+                } else {
+                    DeclId::new(i - 1)
+                }
+            })
+            .collect();
+        assert_eq!(classify(&parents, usize::MAX, 64).total, 0);
+        // MAX cannot express MAX+1; cyclic diagnostics saturate and terminate.
+        let cycle = classify(
+            &[DeclId::new(1), DeclId::new(0), DeclId::new(1)],
+            usize::MAX,
+            2,
+        );
+        assert_eq!(cycle.total, 3);
+        assert_eq!(
+            cycle.findings,
+            [
+                Finding::ParentCycle {
+                    decl: DeclId::new(0),
+                    walked: usize::MAX
+                },
+                Finding::ParentCycle {
+                    decl: DeclId::new(1),
+                    walked: usize::MAX
+                },
+            ]
+        );
     }
 }
 
@@ -507,8 +775,7 @@ pub fn validate_model_contract(ir: &Ir, it: &Interner) -> Result<(), Vec<ModelFi
         let arc_decl = arc.in_edge;
         let (mut saw_in, mut saw_out, mut declared) = (false, false, false);
         for (slot, reference) in arc.refs.iter().enumerate() {
-            let atom = reference.atom();
-            match atom.direction {
+            match reference.direction() {
                 PortDirection::Unspecified => continue,
                 PortDirection::In => {
                     declared = true;
@@ -517,12 +784,12 @@ pub fn validate_model_contract(ir: &Ir, it: &Interner) -> Result<(), Vec<ModelFi
                 PortDirection::Out => {
                     declared = true;
                     saw_out = true;
-                    if let Some(ModelFacet::Tensor(t)) = ir.model_facet(atom.target) {
+                    if let Some(ModelFacet::Tensor(t)) = ir.model_facet(reference.target()) {
                         if matches!(t.role, TensorRole::Input | TensorRole::Parameter) {
                             findings.push(ModelFinding::ProducedInputOrParameter {
                                 arc: DeclId::new(ai),
                                 slot,
-                                target: atom.target,
+                                target: reference.target(),
                                 role: t.role,
                             });
                         }

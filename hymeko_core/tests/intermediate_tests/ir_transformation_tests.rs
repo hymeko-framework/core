@@ -4,7 +4,7 @@ mod basic_transformation_tests {
     use hymeko::common::ids::{DeclId, SymId};
     use hymeko::common::pathkey::PathKey;
     use hymeko::ir::ir::DeclKind;
-    use hymeko::ir::lower::lower_to_ir;
+    use hymeko::ir::lower::{IrBuilder, IrLowering};
     use hymeko::resolution::intern_pass::{Interned, intern_ast};
     use hymeko::resolution::resolve::build_index_sym;
     use log::info;
@@ -82,7 +82,9 @@ mod basic_transformation_tests {
         let ast_str = parse_description(SIMPLE_CHAIN_SRC).expect("parse failed");
         let Interned { ast, mut interner } = intern_ast(&ast_str);
         let idx = build_index_sym(&ast, &interner).expect("index build failed");
-        let ir = lower_to_ir(&ast, &idx, &mut interner).expect("lower_to_ir failed");
+        let ir = IrLowering::new(&ast, &idx, &mut interner)
+            .build()
+            .expect("IR lowering failed");
 
         let sid_root = interner.intern(SYM_ROOT);
         let sid_a = interner.intern(SYM_A);
@@ -163,22 +165,11 @@ mod basic_transformation_tests {
         );
     }
 
-    #[test]
-    fn node_child_chain_order_is_body_order_same_names() {
-        let timer = start(
-            "node_child_chain_order_is_body_order_same_names",
-            "Ensures siblings keep order even when names repeat.",
-        );
-        let ast_str = parse_description(DUP_NAMES_SRC).expect("parse failed");
-        let Interned { ast, mut interner } = intern_ast(&ast_str);
-        let idx = build_index_sym(&ast, &interner).expect("index build failed");
-        let ir = lower_to_ir(&ast, &idx, &mut interner).expect("lower_to_ir failed");
-
-        let sid_root = interner.intern(SYM_ROOT);
-        let sid_a = interner.intern(SYM_A);
-        let sid_b = interner.intern(SYM_B);
-        let sid_c = interner.intern(SYM_C);
-
+    fn assert_duplicate_name_symbols(
+        interner: &hymeko::resolution::interner::Interner,
+        symbols: [SymId; 4],
+    ) {
+        let [sid_root, sid_a, sid_b, sid_c] = symbols;
         assert_eq!(interner.resolve(SymId::new(SID_TEST)), SYM_TEST);
         assert_eq!(interner.resolve(SymId::new(SID_D)), SYM_D);
         assert_eq!(interner.resolve(SymId::new(SID_ROOT)), SYM_ROOT);
@@ -190,6 +181,27 @@ mod basic_transformation_tests {
         assert_eq!(sid_a.raw(), SID_A);
         assert_eq!(sid_b.raw(), SID_B);
         assert_eq!(sid_c.raw(), SID_C);
+    }
+
+    #[test]
+    fn node_child_chain_order_is_body_order_same_names() {
+        let timer = start(
+            "node_child_chain_order_is_body_order_same_names",
+            "Ensures siblings keep order even when names repeat.",
+        );
+        let ast_str = parse_description(DUP_NAMES_SRC).expect("parse failed");
+        let Interned { ast, mut interner } = intern_ast(&ast_str);
+        let idx = build_index_sym(&ast, &interner).expect("index build failed");
+        let ir = IrLowering::new(&ast, &idx, &mut interner)
+            .build()
+            .expect("IR lowering failed");
+
+        let sid_root = interner.intern(SYM_ROOT);
+        let sid_a = interner.intern(SYM_A);
+        let sid_b = interner.intern(SYM_B);
+        let sid_c = interner.intern(SYM_C);
+
+        assert_duplicate_name_symbols(&interner, [sid_root, sid_a, sid_b, sid_c]);
 
         let sid_d = interner.intern(SYM_D);
         assert_eq!(sid_d.raw(), SID_D, "D SymId should match expectation");
@@ -329,7 +341,9 @@ mod basic_transformation_tests {
         let ast_str = parse_description(EDGE_WITH_ARC_SRC).expect("parse failed");
         let Interned { ast, mut interner } = intern_ast(&ast_str);
         let idx = build_index_sym(&ast, &interner).expect("index build failed");
-        let ir = lower_to_ir(&ast, &idx, &mut interner).expect("lower_to_ir failed");
+        let ir = IrLowering::new(&ast, &idx, &mut interner)
+            .build()
+            .expect("IR lowering failed");
 
         let sid_d = interner.intern(SYM_D);
         let sid_root = interner.intern(SYM_ROOT);

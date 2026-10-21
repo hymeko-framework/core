@@ -9,8 +9,9 @@
 //! coordinate arrays).
 
 use hymeko::common::ids::{DeclId, HyperArcId};
-use hymeko::ir::incidence::{IncidenceError, build_incidence_index, scalar_weight};
+use hymeko::ir::incidence::{IncidenceError, build_incidence_index};
 use hymeko::ir::ir::{Ir, PortDirection, SignedRefR};
+use hymeko::util::measurement::{MeasurementRunner, Runner};
 
 use crate::unified_ir::support::builder::{S, TestIr};
 
@@ -116,27 +117,20 @@ fn empty_is_total() {
 
 #[test]
 fn weight_policy_none_single_and_multivalued() {
-    use hymeko::ir::ir::{RefAtomR, ValueR};
-    let mk = |w: Option<Vec<ValueR>>| {
-        SignedRefR::Plus(RefAtomR {
-            target: DeclId::new(0),
-            anno: hymeko::ir::ir::AnnoR::default(),
-            weights: w,
-            direction: PortDirection::Unspecified,
-        })
-    };
-    assert_eq!(scalar_weight(&mk(None)), 1.0);
-    assert_eq!(scalar_weight(&mk(Some(vec![ValueR::Num(2.5)]))), 2.5);
-    assert_eq!(
-        scalar_weight(&mk(Some(vec![ValueR::Num(2.0), ValueR::Num(3.0)]))),
-        6.0,
-        "product policy"
-    );
-    assert_eq!(
-        scalar_weight(&mk(Some(vec![ValueR::Ref(DeclId::new(1))]))),
-        1.0,
-        "all-non-numeric -> 1.0"
-    );
+    use hymeko::ir::ir::{IncidenceSign, RefAtomR, ReferenceDraft, ValueR};
+    for (weights, expected) in [
+        (None, 1.0),
+        (Some(vec![ValueR::Num(2.5)]), 2.5),
+        (Some(vec![ValueR::Num(2.0), ValueR::Num(3.0)]), 6.0),
+        (Some(vec![ValueR::Ref(DeclId::new(1))]), 1.0),
+    ] {
+        let mut ir = Ir::default();
+        let reference = ir.store_reference(ReferenceDraft::new(
+            IncidenceSign::Plus,
+            RefAtomR::plain(DeclId::new(0)).with_weights(weights),
+        ));
+        assert_eq!(reference.scalar_weight(&ir), expected);
+    }
 }
 
 // --- sparse star operator vs an INDEPENDENT dense B matvec ------------------
@@ -148,7 +142,7 @@ fn dense_b(t: &TestIr) -> Vec<Vec<f64>> {
     let mut b = vec![vec![0.0f64; n]; t.ir.arcs.len()];
     for (ai, arc) in t.ir.arcs.iter().enumerate() {
         for sref in &arc.refs {
-            b[ai][sref.target().raw()] += f64::from(sref.sign()) * scalar_weight(sref);
+            b[ai][sref.target().raw()] += f64::from(sref.sign()) * sref.scalar_weight(&t.ir);
         }
     }
     b
@@ -229,23 +223,21 @@ fn build_synth_ir(n_nodes: usize, n_arcs: usize, arity: usize, seed: u64) -> Ir 
     use hymeko::ir::ir::{AnnoR, ArcRec, DeclKind, DeclNode, EdgeRec, NodeRec, RefAtomR};
     let mut ir = Ir::default();
     let sym = hymeko::common::ids::SymId::new(0);
-    let dn = |kind| DeclNode {
-        kind,
-        name: sym,
-        parent: DeclId::NONE,
-        first_child: DeclId::NONE,
-        last_child: DeclId::NONE,
-        next_sibling: DeclId::NONE,
-        anno: AnnoR::default(),
-    };
+    let dn = |kind| DeclNode::root(kind, sym, AnnoR::default());
     for i in 0..n_nodes {
         ir.push_decl(dn(DeclKind::Node));
-        ir.nodes.push(NodeRec::new(DeclId::new(i), Vec::new()));
+        ir.nodes.push(NodeRec::new(
+            DeclId::new(i),
+            hymeko::common::ids::BaseListId::NONE,
+        ));
         ir.bind_node_decl(DeclId::new(i), hymeko::common::ids::NodeId::new(i))
             .unwrap();
     }
     let edge_decl = ir.push_decl(dn(DeclKind::Edge));
-    ir.edges.push(EdgeRec::new(edge_decl, Vec::new()));
+    ir.edges.push(EdgeRec::new(
+        edge_decl,
+        hymeko::common::ids::BaseListId::NONE,
+    ));
     ir.bind_edge_decl(edge_decl, hymeko::common::ids::EdgeId::new(0))
         .unwrap();
     let mut s = seed | 1;
@@ -259,17 +251,15 @@ fn build_synth_ir(n_nodes: usize, n_arcs: usize, arity: usize, seed: u64) -> Ir 
         let refs: Vec<SignedRefR> = (0..arity)
             .map(|_| {
                 let t = (rng() as usize) % n_nodes;
-                SignedRefR::Plus(RefAtomR {
-                    target: DeclId::new(t),
-                    anno: AnnoR::default(),
-                    weights: None,
-                    direction: PortDirection::Unspecified,
-                })
+                hymeko::ir::ir::SignedRefR::plain(
+                    DeclId::new(t),
+                    hymeko::ir::ir::IncidenceSign::Plus,
+                )
             })
             .collect();
         let ad = ir.push_anonymous_arc();
         ir.arcs.push(ArcRec {
-            anno: AnnoR::default(),
+            anno: hymeko::common::ids::AnnotationId::NONE,
             in_edge: edge_decl,
             refs,
         });
@@ -281,22 +271,8 @@ fn build_synth_ir(n_nodes: usize, n_arcs: usize, arity: usize, seed: u64) -> Ir 
 
 /// Single typed time helper — always reports MICROSECONDS.
 #[cfg(test)]
-fn median_us<F: FnMut() -> u64>(reps: usize, mut f: F) -> f64 {
-    use std::hint::black_box;
-    for _ in 0..2 {
-        black_box(f());
-    }
-    let mut v: Vec<f64> = (0..reps)
-        .map(|_| {
-            let t = std::time::Instant::now();
-            let r = f();
-            let us = t.elapsed().as_secs_f64() * 1e6;
-            black_box(r);
-            us
-        })
-        .collect();
-    v.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    v[v.len() / 2]
+fn median_us<F: FnMut() -> u64>(reps: usize, f: F) -> f64 {
+    MeasurementRunner::new(2, reps).run(f).median
 }
 
 #[test]

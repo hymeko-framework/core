@@ -56,6 +56,225 @@ crates:
       propagates to every downstream crate and invalidates published
       benchmarks.
     approved_edits:
+      - slug: ordered-parallel-source-pagerank
+        date: 2026-10-20
+        authority: user requests fixing vertex-number dependence, then parallel execution and Hymeko-based model/execution handling
+        scope: shared Core execution-coordinate views, mapped Tensor contraction, Graph planner/parallel consumer and compiled source policies; canonical IR and numeric certification preserved
+        plan: docs/plans/2026-09-07-compiler-repeated-work/plan.pdf
+      - slug: dense-base-reuse
+        date: 2026-10-20
+        authority: user asks to fix the dense-metadata regression overnight
+        scope: canonical immutable base-list reuse before payload conversion, wire integration and correctness; user additionally approves dense profiling and five-repeat empty/dense before-after controls on 2026-10-20
+        plan: docs/plans/2026-09-07-compiler-repeated-work/plan.pdf
+      - slug: compact-storage-control
+        date: 2026-10-20
+        authority: user approves the proposed matched construction, metadata and update measurements
+        scope: existing Criterion input adapters and dispatch, archived baseline instrumentation and existing process runner; no production-library change
+        plan: docs/plans/2026-09-07-compiler-repeated-work/plan.pdf
+      - slug: compact-canonical-payloads
+        date: 2026-10-20
+        authority: user approves compact annotation and base-list storage
+        scope: canonical IR payload IDs, COW updates, logical wire preservation and Core-first consumer migration; correctness only
+        plan: docs/plans/2026-09-07-compiler-repeated-work/plan.pdf
+      - slug: construction-commit
+        date: 2026-10-19
+        authority: user requests pursuing construction-time and storage improvements
+        scope: one final declaration publication and streaming references in existing IrConstruction; public record layouts and wire preserved; no dependency changes
+        plan: docs/plans/2026-09-07-compiler-repeated-work/plan.pdf
+      - slug: structural-pagerank
+        date: 2026-10-19
+        authority: user explicitly requests structural BnB integration and profile-guided acceleration
+        scope: shared bounded planner and range operators; canonical projection; component certificates; guarded PageRank; no new dependencies
+        plan: ../core/docs/plans/2026-09-07-compiler-repeated-work/plan.pdf
+      - slug: contraction-runtime-cell-matroids
+        date: 2026-10-19
+        authority: user requests the proposed runtime measurement and matroids over cells
+        scope: Tensor chain execution on existing CSR kernel; Graph shared Levi engine over graded cells and canonical IR; correctness and explicit measurements
+        plan: ../core/docs/plans/2026-09-07-compiler-repeated-work/plan.pdf
+      - slug: virtual-operator-planning
+        date: 2026-10-19
+        authority: user explicitly requests implementing virtual operators, bounded planning and entropy-guided Berge search
+        scope: shared Tensor row contracts and planner; Core IR adapters; existing Graph PageRank and informed-search integration; correctness tests only
+        plan: ../core/docs/plans/2026-09-07-compiler-repeated-work/plan.pdf
+      - slug: implicit-incidence
+        date: 2026-10-19
+        scope: >
+          User approves shared virtual incidence rows and broader algorithm measurements.
+          Extend existing Core projection/row owners with lossless data-derived views,
+          preserve ordered arithmetic, canonical IR and arbitrary-row behavior;
+          validate and measure existing Graph consumers without parallel engines.
+        plan: docs/plans/2026-09-07-compiler-repeated-work/plan.pdf
+      - slug: pair-incidence
+        date: 2026-10-18
+        scope: >
+          User requests repairing the measured two-vertex PageRank overhead.
+          Extend the shared accumulator with a default lazy pair reduction and
+          specialize two-slot gather/scatter while preserving ordered semantics.
+        plan: docs/plans/2026-09-07-compiler-repeated-work/plan.pdf
+      - slug: exact-count-reduction
+        date: 2026-10-18
+        scope: >
+          User requests continuing the shared-IR performance optimization.
+          Add defaulted first-term initialization to the existing ordered
+          accumulator contract; preserve arithmetic order and empty input.
+        plan: docs/plans/2026-09-07-compiler-repeated-work/plan.pdf
+      - slug: shared-incidence-pagerank
+        date: 2026-10-18
+        scope: >
+          User requests PageRank integration with the existing shared virtual
+          incidence preparation. Extend the Core incidence owner with reusable
+          projections and row operations, retain signed operator semantics, and
+          correct retained reference capacity under the earlier compact-reference approval.
+        plan: docs/plans/2026-09-07-compiler-repeated-work/plan.pdf
+      - slug: unified-construction-compact-references
+        date: 2026-10-17
+        scope: >
+          Explicit user request: deferred known-size construction/allocation,
+          compact SignedRefR with a byte-sized sign, annotation IDs and vector
+          weights; finish integration through owner structs/traits and build()
+          methods. Extend IrConstruction/IrTable, migrate manual benchmark and
+          emitter construction, preserve semantic identity and wire meaning.
+        plan: docs/plans/2026-09-07-compiler-repeated-work/plan.pdf
+      - slug: construction-family-consolidation
+        date: 2026-10-14
+        scope: >
+          User requested a broader whole-family consolidation. Extend existing
+          IrConstruction, canonical record constructors and equivalent Core/Graph
+          consumers; preserve malformed fixtures and independent reference checks.
+        plan: ../graph/docs/plans/2026-10-13-typed-graph-internals/plan.pdf
+      - slug: shared-generation-and-measurement
+        date: 2026-10-14
+        scope: >
+          User requested common GraphGenerator/SyntheticGenerator contracts and
+          Core-owned typed measurement runners, clock strategy, reusable sample
+          storage, allocation instrumentation and migration of Core/Graph callers.
+          Additive APIs; no automatic measurement or installed global allocator.
+        plan: ../graph/docs/plans/2026-10-13-typed-graph-internals/plan.pdf
+      # User, 2026-10-12 evening assignment: finish the approved algorithmic work.
+      - slug: algorithmic-completion
+        date: 2026-10-12
+        scope: >
+          Complete remaining applicable catalogue work in owner order: validated
+          structure reuse, inverted symbol-use maintenance and selective remapping,
+          bounded publication/reclamation, Graph sparse visitation and existing
+          Tensor arena reclamation. Evaluate paged storage/allocator alternatives
+          against current public contracts and actual use rather than adding
+          competing unused implementations. Preserve the pending update workspace.
+        constraints:
+          - immutable model-bound evidence, never structural-hash equality as a validation proof
+          - configurable capacities, no invented platform/deadline requirement
+          - preserve hashes, wire content, old readers and checked-update error behavior
+          - no RL or unrelated renderer work; reuse the existing owners
+          - do not replace an application global allocator from a framework library
+
+      # User, 2026-10-12: continue all approved algorithms; capacities configurable, no fixed RT target.
+      - slug: reusable-value-update-workspace
+        date: 2026-10-12
+        scope: >
+          Add a caller-owned capacity-bounded ValueUpdateWorkspace and one shared
+          update implementation. Reuse target sorting, staged values, changed IDs,
+          symbol-delta and semantic-delta buffers. Replace duplicate-target hashing
+          with deterministic sorting while preserving input-order error precedence.
+        constraints:
+          - retain the existing entry point, error variants, input caps and wire/hash contracts
+          - bounded workspace never grows its configured buffers during update; capacity failure is explicit
+          - clear scratch payloads on success and ordinary error; preserve source snapshots
+          - output snapshots, nested-value walks, compaction and validators may still allocate
+          - no global allocator replacement, unsafe lifetime extension or new dependency
+
+      # User, 2026-10-12: "engedely megadva mindegyikre" (all catalogue candidates authorized).
+      - slug: incremental-model-bookkeeping
+        date: 2026-10-12
+        scope: >
+          Implement the approved algorithm/storage catalogue in the existing
+          owners, beginning with shared compiled Index/import storage and exact
+          incremental symbol-use counts for checked value edits in Core. Replace
+          repeated parent walks in coherence validation with linear memoized
+          classification, retaining ordered/capped diagnostics and walk limits.
+          Reuse the canonical typed symbol walk and full compaction oracle.
+        constraints:
+          - preserve prior pending work, canonical bytes, validation, limits and old readers
+          - no RL or unrelated renderer migration; Core precedes consumer adaptation
+          - detach shared metadata only for actual symbol-ID remapping
+          - exact counts, including repeated symbols, aliases and metadata; no historical-string retention
+          - remaining heap/pool/layout candidates require their stated applicability conditions
+          - implementation approval does not specify hard deadlines, target hardware or OS
+          - user clarification: platform-independent configurable capacities; refine limits as usage develops
+
+      # User, 2026-10-12: select and implement algorithms and data structures, down to heap storage.
+      - slug: canonical-skeleton-packed-children
+        date: 2026-10-12
+        scope: >
+          Replace SkeletonForest's per-declaration child vectors with packed
+          child IDs and row offsets, built by stable counting and prefix sums.
+          Catalogue algorithms, priority queues and allocation strategies with
+          operation bounds and existing repository ownership in a PDF report.
+        constraints:
+          - preserve canonical bytes, child order, anonymous filtering and invalid-topology behavior
+          - one existing SkeletonForest implementation; no public API or dependency change
+          - preserve pending shared Interner and IR changes; no unrelated consumer or RL edits
+          - correctness checks and analytical bounds; no unmeasured speed or hard-deadline claim
+
+      # User, 2026-10-11: shared IR implementation; Graph/Transformation migration authorized.
+      - slug: shared-ir-tables
+        date: 2026-10-11
+        scope: >
+          Give the existing canonical Ir contiguous copy-on-write record tables.
+          Make symbol marking read-only without duplicating its typed field walk.
+          Preserve old snapshots, IDs, validation and serialized content. Complete
+          Core first, then migrate Graph and Transformation; other consumers later.
+        constraints:
+          - one canonical Ir and one generic table owner; no parallel model or version aliases
+          - table-granular copying, with unchanged tables shared across snapshots
+          - public read accessors, ordering, hashes and wire schema preserved
+          - explicit Vec consumers may need source adaptation; measure compiler and read controls
+          - preserve existing shared-interner candidate and published 8a7d7f5
+
+      # User, 2026-10-11: commit/push the measured fixes, then continue optimization.
+      - slug: shared-interner-storage
+        date: 2026-10-11
+        scope: >
+          Share immutable Interner storage and live string allocations, detaching
+          on insertion. Move retained-symbol table construction into its existing
+          Interner owner and reuse it from SymbolCompaction and value updates.
+        constraints:
+          - unchanged public methods, symbol order, hashes and wire formats
+          - unreachable historical strings are released without retaining old tables
+          - independent old readers and all model validation remain valid
+          - measure compiler construction as well as checked numeric/text updates
+          - PDF evidence; prior two fixes pushed separately as 8a7d7f5
+
+      # User, 2026-10-11: proceed with the next measured optimization.
+      - slug: coherence-borrowed-index
+        date: 2026-10-11
+        scope: >
+          Borrow typed path slices in the existing hierarchy coherence validator
+          and reuse Index prefix lookup instead of cloning paths and building
+          a second hash table. Preserve deterministic ordered/capped findings.
+          Eliminate lossy u32 symbol narrowing and test wide-symbol distinctions.
+        constraints:
+          - all hierarchy and model validation remain enabled
+          - no public API, dependency, hash algorithm or wire-format change
+          - paired measurement against the preserved first optimization
+          - PDF report; notify before any push or merge
+
+      # User, 2026-10-11: proceed from the measured profile to optimization; deliver PDFs.
+      - slug: checked-value-update-symbol-work
+        date: 2026-10-11
+        scope: >
+          Remove the redundant base-interner copy for updates without new text.
+          Keep the existing SymbolCompaction walk, but avoid reconstructing path
+          and alias hash tables during its read-only marking pass. Extend the
+          existing digest benchmark to cover numeric and text updates at scale.
+          Numeric and declaration-reference scalar values contain no symbol IDs;
+          skip allocating a symbol-walk worklist for those scalar roots.
+        constraints:
+          - full coherence and model validation remain enabled
+          - identical hash bytes, symbols, errors, limits and retained-old-reader behavior
+          - no public API, dependency, wire-format or alternate-implementation change
+          - targeted correctness and paired before/after latency and memory evidence
+          - deliver reports as PDF; notify before any push or merge
+
       # Explicit user direction, 2026-10-11: remove numbered identity type names.
       - slug: canonical-identity-names
         date: 2026-10-11

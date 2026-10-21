@@ -21,7 +21,7 @@ fn imported() -> (Index, Ir, String) {
         .expect("mini_literals present");
     let (_store, compiled) = crate::test_helpers::load_and_lower(f).expect("lowers");
     let json = serde_json::to_string(&compiled.ir).expect("serializes");
-    (compiled.idx.clone(), compiled.ir.clone(), json)
+    (compiled.idx.as_ref().clone(), compiled.ir.clone(), json)
 }
 
 fn wire(json: &str) -> Value {

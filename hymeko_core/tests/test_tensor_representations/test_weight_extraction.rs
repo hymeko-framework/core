@@ -40,8 +40,8 @@ mod test_weight_extraction {
         let start = Instant::now();
 
         let none: Option<Vec<ValueR>> = None;
-        assert_eq!(extract_ref_weight_scalar::<f32>(&none), 1.0f32);
-        assert_eq!(extract_ref_weight_scalar::<f64>(&none), 1.0f64);
+        assert_eq!(extract_ref_weight_scalar::<f32>(none.as_deref()), 1.0f32);
+        assert_eq!(extract_ref_weight_scalar::<f64>(none.as_deref()), 1.0f64);
 
         log_test_footer(
             "test_none_yields_one",
@@ -59,8 +59,8 @@ mod test_weight_extraction {
         let start = Instant::now();
 
         let empty = Some(Vec::<ValueR>::new());
-        assert_eq!(extract_ref_weight_scalar::<f32>(&empty), 1.0f32);
-        assert_eq!(extract_ref_weight_scalar::<f64>(&empty), 1.0f64);
+        assert_eq!(extract_ref_weight_scalar::<f32>(empty.as_deref()), 1.0f32);
+        assert_eq!(extract_ref_weight_scalar::<f64>(empty.as_deref()), 1.0f64);
 
         // Str / Ref carry no numeric mass and must be skipped, leaving the
         // "nothing found" path -- which is 1.0, not 0.0.
@@ -68,12 +68,21 @@ mod test_weight_extraction {
             ValueR::Str(SymId::new(3)),
             ValueR::Ref(DeclId::new(7)),
         ]);
-        assert_eq!(extract_ref_weight_scalar::<f32>(&non_numeric), 1.0f32);
-        assert_eq!(extract_ref_weight_scalar::<f64>(&non_numeric), 1.0f64);
+        assert_eq!(
+            extract_ref_weight_scalar::<f32>(non_numeric.as_deref()),
+            1.0f32
+        );
+        assert_eq!(
+            extract_ref_weight_scalar::<f64>(non_numeric.as_deref()),
+            1.0f64
+        );
 
         // An empty inner list is likewise "nothing found".
         let empty_list = Some(vec![ValueR::List(Vec::new())]);
-        assert_eq!(extract_ref_weight_scalar::<f32>(&empty_list), 1.0f32);
+        assert_eq!(
+            extract_ref_weight_scalar::<f32>(empty_list.as_deref()),
+            1.0f32
+        );
 
         log_test_footer(
             "test_empty_and_non_numeric_yield_one",
@@ -93,12 +102,12 @@ mod test_weight_extraction {
         for &x in &[0.5f64, -2.25, 1e-30, 1e30, 0.0] {
             let w = nums(&[x]);
             assert_eq!(
-                extract_ref_weight_scalar::<f64>(&w).to_bits(),
+                extract_ref_weight_scalar::<f64>(w.as_deref()).to_bits(),
                 x.to_bits(),
                 "f64 single value {x} not returned verbatim"
             );
             assert_eq!(
-                extract_ref_weight_scalar::<f32>(&w).to_bits(),
+                extract_ref_weight_scalar::<f32>(w.as_deref()).to_bits(),
                 (x as f32).to_bits(),
                 "f32 single value {x} not returned verbatim"
             );
@@ -123,7 +132,7 @@ mod test_weight_extraction {
 
         // This is the assertion that distinguishes "return the single value"
         // from "fold the general case from zero". Folding would yield +0.0.
-        let got64 = extract_ref_weight_scalar::<f64>(&w);
+        let got64 = extract_ref_weight_scalar::<f64>(w.as_deref());
         assert_eq!(
             got64.to_bits(),
             (-0.0f64).to_bits(),
@@ -132,13 +141,13 @@ mod test_weight_extraction {
         );
         assert!(got64.is_sign_negative(), "sign bit was lost");
 
-        let got32 = extract_ref_weight_scalar::<f32>(&w);
+        let got32 = extract_ref_weight_scalar::<f32>(w.as_deref());
         assert_eq!(got32.to_bits(), (-0.0f32).to_bits(), "f32 -0.0 sign lost");
 
         // Sanity: the general (>=2) path *does* start from zero, so two
         // negative zeros collapse to +0.0. Pinning the asymmetry deliberately.
         let two = nums(&[-0.0f64, -0.0f64]);
-        let got_two = extract_ref_weight_scalar::<f64>(&two);
+        let got_two = extract_ref_weight_scalar::<f64>(two.as_deref());
         assert_eq!(
             got_two.to_bits(),
             (0.0f64).to_bits(),
@@ -161,15 +170,15 @@ mod test_weight_extraction {
         let start = Instant::now();
 
         let w = nums(&[1.0, 2.0, 3.5]);
-        assert_eq!(extract_ref_weight_scalar::<f64>(&w), 6.5f64);
-        assert_eq!(extract_ref_weight_scalar::<f32>(&w), 6.5f32);
+        assert_eq!(extract_ref_weight_scalar::<f64>(w.as_deref()), 6.5f64);
+        assert_eq!(extract_ref_weight_scalar::<f32>(w.as_deref()), 6.5f32);
 
         // Order matters in floating point. This sequence sums to a different
         // value if reassociated, so it pins left-to-right accumulation.
         let tricky = nums(&[1.0e16, 1.0, -1.0e16]);
         let expected = ((0.0f64 + 1.0e16) + 1.0) + -1.0e16;
         assert_eq!(
-            extract_ref_weight_scalar::<f64>(&tricky).to_bits(),
+            extract_ref_weight_scalar::<f64>(tricky.as_deref()).to_bits(),
             expected.to_bits(),
             "accumulation order changed"
         );
@@ -190,13 +199,13 @@ mod test_weight_extraction {
         let start = Instant::now();
 
         let w = Some(vec![ValueR::List(vec![ValueR::Num(1.0), ValueR::Num(2.0)])]);
-        assert_eq!(extract_ref_weight_scalar::<f64>(&w), 3.0f64);
+        assert_eq!(extract_ref_weight_scalar::<f64>(w.as_deref()), 3.0f64);
 
         // A single number reached through a List still takes the one-value
         // path, so it is returned verbatim rather than folded.
         let single_in_list = Some(vec![ValueR::List(vec![ValueR::Num(-0.0)])]);
         assert_eq!(
-            extract_ref_weight_scalar::<f64>(&single_in_list).to_bits(),
+            extract_ref_weight_scalar::<f64>(single_in_list.as_deref()).to_bits(),
             (-0.0f64).to_bits(),
             "a single value inside a List must still take the verbatim path"
         );
@@ -207,7 +216,7 @@ mod test_weight_extraction {
             ValueR::List(vec![ValueR::Num(2.0), ValueR::Str(SymId::new(1))]),
             ValueR::Num(4.0),
         ]);
-        assert_eq!(extract_ref_weight_scalar::<f64>(&mixed), 7.0f64);
+        assert_eq!(extract_ref_weight_scalar::<f64>(mixed.as_deref()), 7.0f64);
 
         log_test_footer(
             "test_list_is_flattened_one_level",
@@ -230,7 +239,7 @@ mod test_weight_extraction {
             5.0,
         )])])]);
         assert_eq!(
-            extract_ref_weight_scalar::<f64>(&doubly_nested),
+            extract_ref_weight_scalar::<f64>(doubly_nested.as_deref()),
             1.0f64,
             "a doubly-nested list must find no values and fall back to 1.0"
         );
@@ -241,7 +250,7 @@ mod test_weight_extraction {
             ValueR::Num(3.0),
             ValueR::List(vec![ValueR::List(vec![ValueR::Num(99.0)])]),
         ]);
-        assert_eq!(extract_ref_weight_scalar::<f64>(&mixed), 3.0f64);
+        assert_eq!(extract_ref_weight_scalar::<f64>(mixed.as_deref()), 3.0f64);
 
         log_test_footer(
             "test_nested_list_is_not_recursed",
@@ -264,14 +273,14 @@ mod test_weight_extraction {
         let w = nums(&[0.1, 0.2]);
         let expected32 = (0.0f32 + 0.1f64 as f32) + 0.2f64 as f32;
         assert_eq!(
-            extract_ref_weight_scalar::<f32>(&w).to_bits(),
+            extract_ref_weight_scalar::<f32>(w.as_deref()).to_bits(),
             expected32.to_bits(),
             "f32 accumulation must narrow each term before adding"
         );
 
         let expected64 = (0.0f64 + 0.1) + 0.2;
         assert_eq!(
-            extract_ref_weight_scalar::<f64>(&w).to_bits(),
+            extract_ref_weight_scalar::<f64>(w.as_deref()).to_bits(),
             expected64.to_bits(),
             "f64 accumulation mismatch"
         );

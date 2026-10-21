@@ -1,3 +1,5 @@
+/// Explicit measurement runners and opt-in allocation instrumentation.
+pub mod measurement;
 pub mod pretty_print;
 pub mod real_parser;
 

@@ -607,7 +607,7 @@ dependencies = [
 [[package]]
 name = "hymeko_tensor"
 version = "0.1.0"
-source = "git+ssh://git@192.168.1.228:2222/hymeko/tensor.git?rev=091f4f139e4759fc0c800fe98a5d15a8d5fd6e32#091f4f139e4759fc0c800fe98a5d15a8d5fd6e32"
+source = "git+ssh://git@192.168.1.228:2222/hymeko/tensor.git?rev=9317ecf773d55a0e7968273a63bc2f4e8dbcc7c7#9317ecf773d55a0e7968273a63bc2f4e8dbcc7c7"
 dependencies = [
  "rayon",
 ]

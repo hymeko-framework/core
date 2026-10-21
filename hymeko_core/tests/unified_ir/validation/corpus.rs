@@ -236,6 +236,32 @@ fn course_transitive_imports_extend_the_frozen_corpus() {
         "9fc05f39100d67ea259655b4f53630caf93d542827f27cbfc3e9e57ab114b3b6"
     );
 }
+fn assert_decl_accessors(ir: &hymeko::ir::ir::Ir, d: DeclId) {
+    let i = d.raw();
+    // direct index vs accessor
+    assert_eq!(ir.decl_node(d).map(|n| n.kind), Some(ir.decl_nodes[i].kind));
+    assert_eq!(ir.kind_of(d), Some(ir.decl_nodes[i].kind));
+    assert_eq!(ir.kind_of(d), Some(ir.kind(d)), "kind_of vs kind");
+
+    // hierarchy: old (total-valued) vs new (Option-valued)
+    let p = ir.parent(d);
+    assert_eq!(ir.parent_of(d), p.is_some().then_some(p));
+    let fc = ir.first_child(d);
+    assert_eq!(ir.first_child_of(d), fc.is_some().then_some(fc));
+    let ns = ir.next_sibling(d);
+    assert_eq!(ir.next_sibling_of(d), ns.is_some().then_some(ns));
+
+    // children: old vs new
+    let old: Vec<DeclId> = ir.decl_children(d).collect();
+    let new: Vec<DeclId> = ir.child_decls(d).collect();
+    assert_eq!(old, new);
+
+    // mapping: old id-only vs new id+record
+    assert_eq!(ir.node_for_decl(d).map(|(n, _)| n), ir.as_node(d));
+    assert_eq!(ir.edge_for_decl(d).map(|(e, _)| e), ir.as_edge(d));
+    assert_eq!(ir.arc_for_decl(d).map(|(a, _)| a), ir.as_arc(d));
+}
+
 #[test]
 fn accessors_agree_with_direct_field_access_on_the_whole_corpus() {
     // walker provided by support::corpus
@@ -265,28 +291,7 @@ fn accessors_agree_with_direct_field_access_on_the_whole_corpus() {
         for i in 0..ir.decl_nodes.len() {
             let d = DeclId::new(i);
 
-            // direct index vs accessor
-            assert_eq!(ir.decl_node(d).map(|n| n.kind), Some(ir.decl_nodes[i].kind));
-            assert_eq!(ir.kind_of(d), Some(ir.decl_nodes[i].kind));
-            assert_eq!(ir.kind_of(d), Some(ir.kind(d)), "kind_of vs kind");
-
-            // hierarchy: old (total-valued) vs new (Option-valued)
-            let p = ir.parent(d);
-            assert_eq!(ir.parent_of(d), p.is_some().then_some(p));
-            let fc = ir.first_child(d);
-            assert_eq!(ir.first_child_of(d), fc.is_some().then_some(fc));
-            let ns = ir.next_sibling(d);
-            assert_eq!(ir.next_sibling_of(d), ns.is_some().then_some(ns));
-
-            // children: old vs new
-            let old: Vec<DeclId> = ir.decl_children(d).collect();
-            let new: Vec<DeclId> = ir.child_decls(d).collect();
-            assert_eq!(old, new);
-
-            // mapping: old id-only vs new id+record
-            assert_eq!(ir.node_for_decl(d).map(|(n, _)| n), ir.as_node(d));
-            assert_eq!(ir.edge_for_decl(d).map(|(e, _)| e), ir.as_edge(d));
-            assert_eq!(ir.arc_for_decl(d).map(|(a, _)| a), ir.as_arc(d));
+            assert_decl_accessors(ir, d);
         }
 
         for (i, rec) in ir.nodes.iter().enumerate() {

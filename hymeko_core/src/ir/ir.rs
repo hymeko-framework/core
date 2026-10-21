@@ -1,5 +1,7 @@
-use crate::common::ids::{DeclId, EdgeId, HyperArcId, NodeId, SymId};
+use crate::common::ids::{AnnotationId, BaseListId, DeclId, EdgeId, HyperArcId, NodeId, SymId};
 use crate::ir::meta::Meta;
+use crate::ir::reference::wire as reference_wire;
+use crate::ir::table::IrTable;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -9,33 +11,88 @@ pub enum DeclKind {
     HyperArc,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeclNode {
+/// One declaration schema: construction/wire inputs use `DeclNode<AnnoR>`;
+/// canonical tables use the default, model-local `AnnotationId` payload.
+/// Serialize the owning `Ir` to retain logical annotations in the wire. Compact
+/// records deliberately cannot serialize their handles as annotation contents.
+/// ```compile_fail
+/// use hymeko::ir::ir::DeclNode;
+/// fn serializable<T: serde::Serialize>() {}
+/// serializable::<DeclNode>(); // serialize the owning Ir instead
+/// ```
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct DeclNode<A = AnnotationId> {
     pub kind: DeclKind,
     pub name: SymId,
     pub parent: DeclId,
     pub first_child: DeclId,
     pub last_child: DeclId,
     pub next_sibling: DeclId,
-    pub anno: AnnoR,
+    pub anno: A,
 }
 
+impl<A: AsRef<AnnoR>> Serialize for DeclNode<A> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut fields = serializer.serialize_struct("DeclNode", 7)?;
+        fields.serialize_field("kind", &self.kind)?;
+        fields.serialize_field("name", &self.name)?;
+        fields.serialize_field("parent", &self.parent)?;
+        fields.serialize_field("first_child", &self.first_child)?;
+        fields.serialize_field("last_child", &self.last_child)?;
+        fields.serialize_field("next_sibling", &self.next_sibling)?;
+        fields.serialize_field("anno", self.anno.as_ref())?;
+        fields.end()
+    }
+}
+
+impl<A> DeclNode<A> {
+    /// Construct an unlinked root declaration with the supplied metadata.
+    /// This does not allocate an ID, intern its name, or create a record binding.
+    pub fn root(kind: DeclKind, name: SymId, anno: A) -> Self {
+        Self {
+            kind,
+            name,
+            anno,
+            parent: DeclId::NONE,
+            first_child: DeclId::NONE,
+            last_child: DeclId::NONE,
+            next_sibling: DeclId::NONE,
+        }
+    }
+    pub(crate) fn map_annotation<B>(self, map: impl FnOnce(A) -> B) -> DeclNode<B> {
+        DeclNode {
+            kind: self.kind,
+            name: self.name,
+            parent: self.parent,
+            first_child: self.first_child,
+            last_child: self.last_child,
+            next_sibling: self.next_sibling,
+            anno: map(self.anno),
+        }
+    }
+}
+
+/// Canonical records. Compiled snapshots share tables; mutable access detaches
+/// the affected table so older snapshots retain their records and symbol IDs.
 #[derive(Debug, Default, Clone)]
 pub struct Ir {
     pub meta: Option<Meta>,
     // Unified Arena
-    pub decl_nodes: Vec<DeclNode>,
+    pub decl_nodes: IrTable<DeclNode>,
 
     /// Optional canonical source paths. Metadata, excluded from model hashes.
-    pub files: Vec<String>,
+    pub files: IrTable<String>,
     /// File-table indices keyed by DeclId, never NodeId. Empty means legacy IR
     /// without provenance; u32::MAX means a synthetic declaration with no source.
-    pub decl_file: Vec<u32>,
+    pub decl_file: IrTable<u32>,
 
     // “konkrét” táblák
-    pub nodes: Vec<NodeRec>, // NodeId indexel
-    pub edges: Vec<EdgeRec>, // EdgeId indexel
-    pub arcs: Vec<ArcRec>,   // ArcId indexel
+    pub nodes: IrTable<NodeRec>, // NodeId indexel
+    pub edges: IrTable<EdgeRec>, // EdgeId indexel
+    pub arcs: IrTable<ArcRec>,   // ArcId indexel
+    pub(crate) annotations: IrTable<AnnoR>,
+    pub(crate) base_lists: IrTable<Box<[SignedRefR]>>,
+    pub(crate) ref_weights: IrTable<Vec<ValueR>>,
 
     // Compact declaration dispatch (option D, 2026-08-31): one 8-byte slot per
     // decl replaces the former three `Vec<Option<Id>>` maps (48 B/decl -> 8 B/decl).
@@ -44,7 +101,7 @@ pub struct Ir {
     // through the checked typed mutators `bind_{node,edge,arc}_decl`. See the
     // `dispatch` module for the checked encoding. The legacy three-map serde wire is
     // preserved byte-for-byte by the manual `Serialize`/`Deserialize` impls below.
-    pub(crate) decl_to_record: Vec<u64>,
+    pub(crate) decl_to_record: IrTable<u64>,
 
     // Canonical namespace roots (U2.1, 2026-08-31): the import namespace prefix
     // lowering applies to each imported module's root declarations -- the one piece
@@ -55,7 +112,7 @@ pub struct Ir {
     // Invariant: sorted ascending by `DeclId`; each `DeclId` is a live link-root;
     // prefixes are non-empty (single-module roots absent -> zero cost). Storage is
     // PRIVATE; reads via `namespace_prefix`, writes via `record_namespace_root`.
-    pub(crate) namespace_roots: Vec<(DeclId, Box<[SymId]>)>,
+    pub(crate) namespace_roots: IrTable<(DeclId, Box<[SymId]>)>,
 
     // APPROVED-CORE-EDIT: executable-model-contract (2026-09-06).
     //
@@ -73,7 +130,7 @@ pub struct Ir {
     // Storage is PRIVATE: reads via `model_facet`, writes via `set_model_facet`. The wire is
     // additive and conditional (see `Serialize`), so a document without facets serializes
     // byte-identically to the pre-facet form.
-    pub(crate) decl_model: Vec<Option<ModelFacet>>,
+    pub(crate) decl_model: IrTable<Option<ModelFacet>>,
 }
 
 /// What role a tensor plays in an executable model.
@@ -404,11 +461,21 @@ pub mod dispatch {
 macro_rules! ir_tables {
     ($apply:ident!($($arg:tt)*)) => {
         $apply!($($arg)*; decl_nodes, files, decl_file, nodes, edges, arcs,
-            decl_to_record, namespace_roots, decl_model)
+            decl_to_record, namespace_roots, decl_model, annotations, base_lists, ref_weights)
     };
 }
 
 impl Ir {
+    /// Publish completed tables without copying records. Owned construction and
+    /// edits stay cheap; all subsequent snapshot clones share these allocations.
+    pub(crate) fn into_shared(mut self) -> Self {
+        macro_rules! share {
+            ($ir:expr; $($table:ident),*) => { $( $ir.$table.share(); )* };
+        }
+        ir_tables!(share!(self));
+        self
+    }
+
     pub(crate) fn validate_source_provenance(&self) -> Result<(), IrDecodeError> {
         if self.files.is_empty() && self.decl_file.is_empty() {
             return Ok(());
@@ -480,7 +547,7 @@ impl Ir {
     // those index directly afterward and would panic.
     #[inline]
     pub fn decl_node(&self, id: DeclId) -> Option<&DeclNode> {
-        self.decl_nodes.get(id.raw())
+        self.decl_nodes.get_record(id.raw())
     }
 
     #[inline]
@@ -551,13 +618,21 @@ impl Ir {
     /// `DeclId`. The construction seam for callers that build an `Ir` by hand (the
     /// dispatch storage is private); pair with `bind_*_decl` to bind the record.
     #[inline]
-    pub fn push_decl(&mut self, node: DeclNode) -> DeclId {
+    pub fn push_decl(&mut self, node: DeclNode<AnnoR>) -> DeclId {
+        let node = node.map_annotation(|anno| self.store_annotation(anno));
+        self.push_decl_slot(node, dispatch::NONE)
+    }
+
+    /// Shared append primitive. Construction supplies an already checked slot;
+    /// raw declaration append deliberately keeps the unbound NONE value.
+    #[inline]
+    fn push_decl_slot(&mut self, node: DeclNode, slot: u64) -> DeclId {
         let id = DeclId::new(self.decl_nodes.len());
         if !self.files.is_empty() || !self.decl_file.is_empty() {
             self.decl_file.push(u32::MAX);
         }
         self.decl_nodes.push(node);
-        self.decl_to_record.push(dispatch::NONE);
+        self.decl_to_record.push(slot);
         // The facet table is grown lazily: it stays EMPTY for a document with no model facet, so a
         // non-model program pays nothing and serializes byte-identically to the pre-facet form.
         if !self.decl_model.is_empty() {
@@ -682,22 +757,38 @@ impl Ir {
     }
 
     /// Checked batch commit: the hierarchy and bindings stay unchanged and no
-    /// edit occurs unless every target is a bound leaf node. Value-domain checks
+    /// edit occurs unless every target, including a retained value, is a bound
+    /// leaf node. Kept records never request mutable table access. Value-domain checks
     /// (including symbol ownership) belong to the compiled model's interner.
     pub(crate) fn set_leaf_values(
         &mut self,
-        values: Vec<(DeclId, Option<ValueR>)>,
+        values: &mut Vec<LeafValueEdit>,
     ) -> Result<(), dispatch::DispatchError> {
-        for (id, _) in &values {
+        for edit in values.iter() {
+            let id = edit.declaration();
             let node = self
-                .decl_node(*id)
-                .ok_or(dispatch::DispatchError::InvalidDeclaration { decl: *id })?;
-            if self.node_for_decl(*id).is_none() || node.first_child.is_some() {
-                return Err(dispatch::DispatchError::InvalidHierarchy { decl: *id });
+                .decl_node(id)
+                .ok_or(dispatch::DispatchError::InvalidDeclaration { decl: id })?;
+            if self.node_for_decl(id).is_none()
+                || node.first_child.is_some()
+                || self.annotation(node.anno).is_none()
+            {
+                return Err(dispatch::DispatchError::InvalidHierarchy { decl: id });
             }
         }
-        for (id, value) in values {
-            self.decl_nodes[id.raw()].anno.value = value;
+        for edit in values.drain(..) {
+            if let LeafValueEdit::Replace { declaration, value } = edit {
+                let id = self.decl_nodes[declaration.raw()].anno;
+                if id.is_some() {
+                    self.annotations[id.raw()].value = value;
+                } else if value.is_some() {
+                    let id = self.store_annotation(AnnoR {
+                        tags: Vec::new(),
+                        value,
+                    });
+                    self.decl_nodes[declaration.raw()].anno = id;
+                }
+            }
         }
         Ok(())
     }
@@ -725,15 +816,7 @@ impl Ir {
         if !self.files.is_empty() || !self.decl_file.is_empty() {
             self.decl_file.resize(total_named_decls, u32::MAX);
         }
-        let default_node = DeclNode {
-            kind: DeclKind::Node,
-            name: SymId::new(0),
-            parent: DeclId::NONE,
-            first_child: DeclId::NONE,
-            last_child: DeclId::NONE,
-            next_sibling: DeclId::NONE,
-            anno: AnnoR::default(),
-        };
+        let default_node = DeclNode::root(DeclKind::Node, SymId::new(0), AnnotationId::NONE);
         // Allocate exact capacity for Nodes and Edges
         self.decl_nodes.resize(total_named_decls, default_node);
         self.decl_to_record
@@ -744,81 +827,305 @@ impl Ir {
     }
 
     pub fn push_anonymous_arc(&mut self) -> DeclId {
-        let id = DeclId::new(self.decl_nodes.len());
-        if !self.files.is_empty() || !self.decl_file.is_empty() {
-            self.decl_file.push(u32::MAX);
+        self.push_decl(DeclNode::root(
+            DeclKind::HyperArc,
+            SymId::new(0),
+            AnnoR::default(),
+        ))
+    }
+}
+
+/// Expected record counts. Hints allocate neither live entities nor payloads.
+/// Underestimates retain ordinary Vec growth; these are capacities, not quotas.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct IrCapacities {
+    pub declarations: usize,
+    pub nodes: usize,
+    pub edges: usize,
+    pub arcs: usize,
+}
+
+/// An arc's owning hyperedge and its independent declaration containment.
+/// Flat editor inputs may use NONE as parent while retaining a real owner.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ArcPlacement {
+    pub owner: DeclId,
+    pub parent: DeclId,
+}
+
+impl ArcPlacement {
+    /// The source language places each arc declaration under its owning edge.
+    pub fn under_owner(owner: DeclId) -> Self {
+        Self {
+            owner,
+            parent: owner,
         }
-        self.decl_nodes.push(DeclNode {
-            kind: DeclKind::HyperArc,
-            name: SymId::new(0),
-            parent: DeclId::NONE,
-            first_child: DeclId::NONE,
-            last_child: DeclId::NONE,
-            next_sibling: DeclId::NONE,
-            anno: AnnoR::default(),
-        });
-        self.decl_to_record.push(dispatch::NONE);
-        if !self.decl_model.is_empty() {
-            self.decl_model.push(None);
+    }
+}
+
+/// Input adapter for the single checked IR construction owner.
+/// Adapters supply data through `populate`; allocation and record/link mutation
+/// belong to `IrConstruction`. `finish` packages the IR with input-owned metadata.
+pub trait IrBuilder: Sized {
+    type Output;
+    type Error;
+    fn capacities(&self) -> IrCapacities;
+    fn populate(&mut self, construction: &mut IrConstruction<'_>) -> Result<(), Self::Error>;
+    fn finish(self, ir: Ir) -> Self::Output;
+
+    /// Retain input without constructing any IR tables. The first explicit load
+    /// uses this same builder; subsequent loads reuse its result, including errors.
+    fn defer(self) -> LazyIr<Self> {
+        LazyIr {
+            capacities: self.capacities(),
+            pending: Some(self),
+            result: None,
         }
-        id
+    }
+
+    /// Build a fresh canonical IR through the shared construction capability.
+    /// Failure drops only this candidate; no partial IR is returned.
+    fn build(mut self) -> Result<Self::Output, Self::Error> {
+        let mut ir = Ir::default();
+        self.populate(&mut IrConstruction::with_capacities(
+            &mut ir,
+            self.capacities(),
+        ))?;
+        Ok(self.finish(ir))
+    }
+}
+
+/// Demand construction of one whole input through the canonical builder.
+/// This retains the input adapter, not a second graph representation. It is not
+/// a disk pager: the first load constructs the whole model. Dropping an unloaded
+/// holder drops its input without allocating canonical record tables.
+pub struct LazyIr<B: IrBuilder> {
+    capacities: IrCapacities,
+    pending: Option<B>,
+    result: Option<Result<B::Output, B::Error>>,
+}
+
+impl<B: IrBuilder> LazyIr<B> {
+    pub fn capacities(&self) -> IrCapacities {
+        self.capacities
+    }
+
+    pub fn is_loaded(&self) -> bool {
+        self.result.is_some()
+    }
+
+    /// Construct at most once, retaining the typed error on failure as well.
+    /// A panic from an input adapter poisons the holder; unwinding is not a retry.
+    pub fn load(&mut self) -> Result<&B::Output, &B::Error> {
+        if let Some(builder) = self.pending.take() {
+            self.result = Some(builder.build());
+        }
+        match &self.result {
+            Some(result) => result.as_ref(),
+            None => panic!("input adapter panicked during lazy IR construction"),
+        }
     }
 }
 
 /// Exclusive construction capability. No raw mutable arena escapes this type.
 /// Each operation checks everything that can fail before committing its links,
 /// record and dispatch slot.
-pub(crate) struct IrConstruction<'a> {
+pub struct IrConstruction<'a> {
     ir: &'a mut Ir,
+    parent: Option<ConstructionParent>,
+}
+
+/// Valid only for this exclusive construction borrow. No logical IR field is
+/// externally mutable while the cursor exists; link_child maintains its tail.
+#[derive(Clone, Copy)]
+struct ConstructionParent {
+    id: DeclId,
+    last: DeclId,
 }
 
 impl<'a> IrConstruction<'a> {
-    pub(crate) fn new(ir: &'a mut Ir) -> Self {
-        Self { ir }
+    /// Borrow the canonical storage exclusively. Operations check their own
+    /// construction preconditions; this does not validate the complete model.
+    pub fn new(ir: &'a mut Ir) -> Self {
+        Self { ir, parent: None }
     }
 
-    fn check_parent(&self, child: DeclId, parent: DeclId) -> Result<(), dispatch::DispatchError> {
+    /// Plan capacity without creating records. Allocation is deferred until
+    /// each table first needs mutable storage; unused tables remain empty.
+    pub fn with_capacities(ir: &'a mut Ir, capacity: IrCapacities) -> Self {
+        ir.decl_nodes.defer_capacity(capacity.declarations);
+        ir.decl_to_record.defer_capacity(capacity.declarations);
+        ir.nodes.defer_capacity(capacity.nodes);
+        ir.edges.defer_capacity(capacity.edges);
+        ir.arcs.defer_capacity(capacity.arcs);
+        Self { ir, parent: None }
+    }
+
+    /// Set construction metadata without exposing the record tables.
+    pub fn set_meta(&mut self, meta: Meta) {
+        self.ir.meta = Some(meta);
+    }
+
+    /// Materialize the stable named-ID domain needed by indexed lowering.
+    /// This is separate from a capacity hint: these slots are addressable
+    /// placeholders and will be filled by resolved declarations.
+    /// # Errors
+    /// Rejects a nonempty or inconsistent construction domain without changing it.
+    pub fn prepare_named_slots(&mut self, count: usize) -> Result<(), dispatch::DispatchError> {
+        if !self.ir.decl_nodes.is_empty()
+            || !self.ir.decl_to_record.is_empty()
+            || !self.ir.nodes.is_empty()
+            || !self.ir.edges.is_empty()
+            || !self.ir.arcs.is_empty()
+        {
+            return Err(dispatch::DispatchError::InvalidDeclaration {
+                decl: DeclId::new(self.ir.decl_count()),
+            });
+        }
+        self.ir.preallocate_from_index(count);
+        Ok(())
+    }
+
+    /// Append a root node, its record and its checked dispatch binding.
+    /// Names and bases are already-resolved caller data; no interning or lowering
+    /// is performed. Existing IDs, metadata and hierarchy links are unchanged.
+    /// # Errors
+    /// Returns a dispatch error without changing storage if parallel declaration
+    /// tables disagree or the record index cannot be represented.
+    pub fn append_node(
+        &mut self,
+        name: SymId,
+        anno: AnnoR,
+        bases: Vec<ReferenceDraft>,
+    ) -> Result<DeclId, dispatch::DispatchError> {
+        self.append_root(DeclKind::Node, name, anno, bases)
+    }
+
+    /// Append a root edge and its bound record, with the same contract as
+    /// [`Self::append_node`]. The edge initially owns no arcs.
+    pub fn append_edge(
+        &mut self,
+        name: SymId,
+        anno: AnnoR,
+        bases: Vec<ReferenceDraft>,
+    ) -> Result<DeclId, dispatch::DispatchError> {
+        self.append_root(DeclKind::Edge, name, anno, bases)
+    }
+
+    fn append_root(
+        &mut self,
+        kind: DeclKind,
+        name: SymId,
+        anno: AnnoR,
+        bases: Vec<ReferenceDraft>,
+    ) -> Result<DeclId, dispatch::DispatchError> {
+        self.append_named(DeclNode::root(kind, name, anno), bases, &[])
+    }
+
+    /// Append a named node or edge under its declared parent. Namespace prefixes
+    /// apply only to roots. Child links and the concrete binding are committed
+    /// by the same owner used by indexed lowering.
+    /// # Errors
+    /// Rejects invalid parallel storage, hierarchy, kind or dispatch capacity
+    /// before creating any declaration, concrete record or link.
+    pub fn append_named(
+        &mut self,
+        node: DeclNode<AnnoR>,
+        bases: Vec<ReferenceDraft>,
+        namespace: &[SymId],
+    ) -> Result<DeclId, dispatch::DispatchError> {
+        let id = self.check_append()?;
+        let slot = self.check_named(id, &node, namespace)?;
+        self.commit_named(id, node, bases, namespace, slot);
+        Ok(id)
+    }
+
+    fn check_append(&self) -> Result<DeclId, dispatch::DispatchError> {
+        let id = DeclId::new(self.ir.decl_count());
+        if self.ir.decl_to_record.len() != id.raw() {
+            return Err(dispatch::DispatchError::InvalidDeclaration { decl: id });
+        }
+        Ok(id)
+    }
+
+    /// Append final data once, or replace the slot reserved by indexed lowering.
+    /// Both callers validate admission before preparing records or payloads.
+    fn commit_declaration(&mut self, id: DeclId, node: DeclNode, slot: u64) {
+        let parent = node.parent;
+        if id.raw() == self.ir.decl_count() {
+            let appended = self.ir.push_decl_slot(node, slot);
+            debug_assert_eq!(appended, id);
+        } else {
+            self.ir.decl_nodes[id.raw()] = node;
+            self.ir.decl_to_record[id.raw()] = slot;
+        }
+        self.link_child(parent, id);
+    }
+
+    fn check_parent(
+        &mut self,
+        child: DeclId,
+        parent: DeclId,
+    ) -> Result<(), dispatch::DispatchError> {
         if parent.is_none() {
             return Ok(());
         }
         let invalid = dispatch::DispatchError::InvalidHierarchy { decl: parent };
+        if parent == child {
+            return Err(invalid);
+        }
+        if self.parent.is_some_and(|checked| checked.id == parent) {
+            return Ok(());
+        }
         let node = self.ir.decl_node(parent).ok_or(invalid)?;
-        if parent == child
-            || (self.ir.as_node(parent).is_none() && self.ir.as_edge(parent).is_none())
-        {
+        if self.ir.as_node(parent).is_none() && self.ir.as_edge(parent).is_none() {
             return Err(invalid);
         }
         match (node.first_child.is_none(), node.last_child.is_none()) {
-            (true, true) => Ok(()),
+            (true, true) => {}
             (false, false) => {
                 let last = self.ir.decl_node(node.last_child).ok_or(invalid)?;
                 if last.parent != parent || last.next_sibling.is_some() {
                     return Err(invalid);
                 }
-                Ok(())
             }
-            _ => Err(invalid),
+            _ => return Err(invalid),
         }
+        self.parent = Some(ConstructionParent {
+            id: parent,
+            last: node.last_child,
+        });
+        Ok(())
     }
 
     fn link_child(&mut self, parent: DeclId, child: DeclId) {
         if parent.is_none() {
             return;
         }
-        let last = self.ir.decl_nodes[parent.raw()].last_child;
+        let last = self
+            .parent
+            .filter(|checked| checked.id == parent)
+            .map_or_else(
+                || self.ir.decl_nodes[parent.raw()].last_child,
+                |checked| checked.last,
+            );
         if last.is_none() {
             self.ir.decl_nodes[parent.raw()].first_child = child;
         } else {
             self.ir.decl_nodes[last.raw()].next_sibling = child;
         }
         self.ir.decl_nodes[parent.raw()].last_child = child;
+        self.parent = Some(ConstructionParent {
+            id: parent,
+            last: child,
+        });
     }
 
     pub(crate) fn named(
         &mut self,
         id: DeclId,
-        node: DeclNode,
-        bases: Vec<SignedRefR>,
+        node: DeclNode<AnnoR>,
+        bases: Vec<ReferenceDraft>,
         namespace: &[SymId],
     ) -> Result<(), dispatch::DispatchError> {
         let current = self
@@ -832,10 +1139,21 @@ impl<'a> IrConstruction<'a> {
             || current.first_child.is_some()
             || current.last_child.is_some()
             || current.next_sibling.is_some()
-            || node.first_child.is_some()
-            || node.last_child.is_some()
-            || node.next_sibling.is_some()
         {
+            return Err(dispatch::DispatchError::InvalidHierarchy { decl: id });
+        }
+        let slot = self.check_named(id, &node, namespace)?;
+        self.commit_named(id, node, bases, namespace, slot);
+        Ok(())
+    }
+
+    fn check_named(
+        &mut self,
+        id: DeclId,
+        node: &DeclNode<AnnoR>,
+        namespace: &[SymId],
+    ) -> Result<u64, dispatch::DispatchError> {
+        if node.first_child.is_some() || node.last_child.is_some() || node.next_sibling.is_some() {
             return Err(dispatch::DispatchError::InvalidHierarchy { decl: id });
         }
         self.check_parent(id, node.parent)?;
@@ -859,48 +1177,82 @@ impl<'a> IrConstruction<'a> {
                 });
             }
         };
-        let slot = dispatch::encode(node.kind, index)?;
+        dispatch::encode(node.kind, index)
+    }
+
+    fn commit_named(
+        &mut self,
+        id: DeclId,
+        node: DeclNode<AnnoR>,
+        bases: Vec<ReferenceDraft>,
+        namespace: &[SymId],
+        slot: u64,
+    ) {
+        let bases = if bases.is_empty() {
+            drop(bases); // Preserve the established empty-draft fast path.
+            BaseListId::NONE
+        } else {
+            self.ir.store_base_drafts(bases)
+        };
+        let node = node.map_annotation(|anno| self.ir.store_annotation(anno));
         match node.kind {
             DeclKind::Node => self.ir.nodes.push(NodeRec::new(id, bases)),
             DeclKind::Edge => self.ir.edges.push(EdgeRec::new(id, bases)),
             DeclKind::HyperArc => unreachable!("kind checked before commit"),
         }
-        self.link_child(node.parent, id);
-        self.ir.decl_nodes[id.raw()] = node;
-        self.ir.decl_to_record[id.raw()] = slot;
+        self.commit_declaration(id, node, slot);
         self.ir.record_namespace_root(id, namespace);
-        Ok(())
     }
 
-    pub(crate) fn arc(
+    /// Append an anonymous hyperarc owned by a bound edge. Its declaration,
+    /// owner list, hierarchy link and dispatch entry are committed together.
+    /// # Errors
+    /// Rejects an invalid owner, hierarchy or record index before mutation.
+    pub fn append_arc(
         &mut self,
-        parent: DeclId,
+        placement: ArcPlacement,
         anno: AnnoR,
-        refs: Vec<SignedRefR>,
-    ) -> Result<(), dispatch::DispatchError> {
-        let (edge, _) =
-            self.ir
-                .edge_for_decl(parent)
-                .ok_or(dispatch::DispatchError::KindMismatch {
-                    decl: parent,
-                    expected: DeclKind::Edge,
-                })?;
-        let id = DeclId::new(self.ir.decl_count());
-        self.check_parent(id, parent)?;
+        refs: Vec<ReferenceDraft>,
+    ) -> Result<DeclId, dispatch::DispatchError> {
+        self.append_arc_iter(placement, anno, refs)
+    }
+
+    /// Stream already-resolved references into the canonical compact storage.
+    /// This is the implementation also used by the Vec input adapter. No draft
+    /// vector is required, and no second construction pipeline is introduced.
+    /// # Errors
+    /// Checks owner, parallel dispatch, hierarchy and ID capacity before consuming
+    /// the iterator or changing records. A caller-supplied iterator panic is not
+    /// a checked error and may leave unused entries in the private payload tables.
+    pub fn append_arc_iter(
+        &mut self,
+        placement: ArcPlacement,
+        anno: AnnoR,
+        refs: impl IntoIterator<Item = ReferenceDraft>,
+    ) -> Result<DeclId, dispatch::DispatchError> {
+        let id = self.check_append()?;
+        let (edge, _) = self.ir.edge_for_decl(placement.owner).ok_or(
+            dispatch::DispatchError::KindMismatch {
+                decl: placement.owner,
+                expected: DeclKind::Edge,
+            },
+        )?;
+        self.check_parent(id, placement.parent)?;
         let aid = HyperArcId::new(self.ir.arcs.len());
         let slot = dispatch::encode(DeclKind::HyperArc, aid.raw())?;
-        let id = self.ir.push_anonymous_arc();
-        self.ir.decl_nodes[id.raw()].parent = parent;
-        self.ir.decl_nodes[id.raw()].anno = anno.clone();
+        let refs = self.ir.store_references(refs);
+        let declaration_anno = self.ir.store_annotation(anno.clone());
+        let anno = self.ir.store_annotation(anno);
+        let mut node = DeclNode::root(DeclKind::HyperArc, SymId::new(0), declaration_anno);
+        node.parent = placement.parent;
         self.ir.arcs.push(ArcRec {
             anno,
-            in_edge: parent,
+            in_edge: placement.owner,
             refs,
         });
-        self.ir.decl_to_record[id.raw()] = slot;
+        self.commit_declaration(id, node, slot);
         self.ir.edges[edge.raw()].arcs.push(aid);
-        self.link_child(parent, id);
-        Ok(())
+        Ok(id)
     }
 }
 
@@ -908,25 +1260,25 @@ impl<'a> IrConstruction<'a> {
 /// All child traversal is implemented by `access::ChildDecls`.
 pub type DeclChildren<'a> = crate::ir::access::ChildDecls<'a>;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct NodeRec {
     pub decl: DeclId,
-    pub bases: Vec<SignedRefR>,
+    pub bases: BaseListId,
 }
 impl NodeRec {
-    pub fn new(decl: DeclId, bases: Vec<SignedRefR>) -> Self {
+    pub fn new(decl: DeclId, bases: BaseListId) -> Self {
         Self { decl, bases }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct EdgeRec {
     pub decl: DeclId,
-    pub bases: Vec<SignedRefR>,
+    pub bases: BaseListId,
     pub arcs: Vec<HyperArcId>,
 }
 impl EdgeRec {
-    pub fn new(decl: DeclId, bases: Vec<SignedRefR>) -> Self {
+    pub fn new(decl: DeclId, bases: BaseListId) -> Self {
         Self {
             decl,
             bases,
@@ -935,108 +1287,31 @@ impl EdgeRec {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ArcRec {
-    pub anno: AnnoR,
+    pub anno: AnnotationId,
     pub in_edge: DeclId, // melyik edge scope-jában volt (általában EdgeDecl)
     pub refs: Vec<SignedRefR>, // DeclId-kra mutat (determinista)
                          // később: attribútumok/value külön, lásd lent
 }
 
-/// Which way data flows across a port, as an axis **independent of the algebraic sign**.
-///
-/// APPROVED-CORE-EDIT: executable-model-contract (2026-09-06).
-///
-/// `SignedRefR::{Plus, Minus, Neutral}` is the signed-hypergraph *algebra*: it says how an incidence
-/// enters a balance or a cycle product. It is **not** direction, and direction is never derived from
-/// it. A production incidence may legitimately be `Minus` and `In`, `Minus` and `Out`, `Plus` and
-/// `In`, or `Plus` and `Out`; conflating the two axes is the error this type exists to make
-/// impossible.
-///
-/// `Unspecified` is the only value a legacy incidence receives. Nothing invents a direction for an
-/// edge that never declared one.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
-pub enum PortDirection {
-    /// No direction was declared. Every pre-2026-09-06 incidence is this.
-    #[default]
-    Unspecified,
-    /// The referenced declaration is consumed by the operator.
-    In,
-    /// The referenced declaration is produced by the operator.
-    Out,
-}
-
-impl PortDirection {
-    /// Whether no direction was declared. Used by the serde skip so the legacy wire is unchanged.
-    #[must_use]
-    pub const fn is_unspecified(&self) -> bool {
-        matches!(self, Self::Unspecified)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct RefAtomR {
-    pub target: DeclId,
-    pub anno: AnnoR,
-    pub weights: Option<Vec<ValueR>>,
-    /// Data-flow direction, orthogonal to the sign.
-    ///
-    /// `Unspecified` is both the default and *skipped on the wire*, so a document that declares no
-    /// direction — every pre-2026-09-06 document — serializes byte-identically to the pre-field
-    /// form. A caught regression, not a design guess: emitting it unconditionally grew the wire for
-    /// legacy payloads, which `a_pre_direction_payload_decodes_as_unspecified` detected.
-    #[serde(default, skip_serializing_if = "PortDirection::is_unspecified")]
-    pub direction: PortDirection,
-}
-
-impl RefAtomR {
-    /// A reference with no annotation, no weights and no declared direction.
-    ///
-    /// The shape every pre-2026-09-06 construction site had; provided so those sites read as what
-    /// they are rather than repeating three defaults.
-    #[must_use]
-    pub fn plain(target: DeclId) -> Self {
+impl ArcRec {
+    /// Construct a raw, unowned hyperarc record with default annotation.
+    /// No declaration, owner edge or dispatch binding is created. This preserves
+    /// the representation used by direct-incidence construction and test inputs.
+    pub fn unowned(refs: Vec<SignedRefR>) -> Self {
         Self {
-            target,
-            anno: AnnoR::default(),
-            weights: None,
-            direction: PortDirection::Unspecified,
+            anno: AnnotationId::NONE,
+            in_edge: DeclId::NONE,
+            refs,
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum SignedRefR {
-    Plus(RefAtomR),
-    Minus(RefAtomR),
-    Neutral(RefAtomR),
-}
-
-impl SignedRefR {
-    // Extract inner atom (RefAtomR) regardless of sign
-    #[inline]
-    pub fn atom(&self) -> &RefAtomR {
-        match self {
-            Self::Plus(r) | Self::Minus(r) | Self::Neutral(r) => r,
-        }
-    }
-
-    // Target 'DeclId' of this reference
-    #[inline]
-    pub fn target(&self) -> DeclId {
-        self.atom().target
-    }
-
-    // Sign as i8
-    #[inline]
-    pub fn sign(&self) -> i8 {
-        match self {
-            Self::Plus(_) => 1,
-            Self::Minus(_) => -1,
-            Self::Neutral(_) => 0,
-        }
-    }
-}
+pub use super::reference::{
+    IncidenceSign, PortDirection, RefAtomR, ReferenceDraft, ReferenceError, ReferenceView,
+    SignedRefR,
+};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ValueR {
@@ -1046,10 +1321,82 @@ pub enum ValueR {
     Ref(DeclId), // AST Ref(path) -> IR Ref(DeclId)
 }
 
+impl ValueR {
+    /// Exact representation equality within one symbol/declaration ID domain.
+    /// This does not validate IDs or finite numbers. In particular, signed zero
+    /// and NaN payloads compare by bits, independently of ordinary PartialEq.
+    pub(crate) fn bitwise_eq(&self, other: &Self) -> bool {
+        let (Self::List(left), Self::List(right)) = (self, other) else {
+            return self.scalar_bits_eq(other);
+        };
+        if left.len() != right.len() {
+            return false;
+        }
+        let mut parents = Vec::new();
+        let mut current = left.iter().zip(right.iter());
+        loop {
+            match current.next() {
+                Some((Self::List(left), Self::List(right))) => {
+                    if left.len() != right.len() {
+                        return false;
+                    }
+                    if !left.is_empty() {
+                        parents.push(current);
+                        current = left.iter().zip(right.iter());
+                    }
+                }
+                Some((left, right)) => {
+                    if !left.scalar_bits_eq(right) {
+                        return false;
+                    }
+                }
+                None => match parents.pop() {
+                    Some(parent) => current = parent,
+                    None => return true,
+                },
+            }
+        }
+    }
+
+    fn scalar_bits_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Num(left), Self::Num(right)) => left.to_bits() == right.to_bits(),
+            (Self::Str(left), Self::Str(right)) => left == right,
+            (Self::Ref(left), Self::Ref(right)) => left == right,
+            _ => false,
+        }
+    }
+}
+
+/// Resolved private batch intent. Keep retains validation while avoiding both
+/// payload cloning during staging and copy-on-write detachment during commit.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum LeafValueEdit {
+    Keep(DeclId),
+    Replace {
+        declaration: DeclId,
+        value: Option<ValueR>,
+    },
+}
+
+impl LeafValueEdit {
+    pub(crate) fn declaration(&self) -> DeclId {
+        match self {
+            Self::Keep(declaration) | Self::Replace { declaration, .. } => *declaration,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct AnnoR {
     pub tags: Vec<SymId>,
     pub value: Option<ValueR>,
+}
+
+impl AsRef<AnnoR> for AnnoR {
+    fn as_ref(&self) -> &AnnoR {
+        self
+    }
 }
 
 // ============================================================================
@@ -1199,10 +1546,34 @@ impl Serialize for Ir {
             8 + usize::from(has_ns) + usize::from(has_model) + 2 * usize::from(has_sources);
         let mut st = s.serialize_struct("Ir", fields)?;
         st.serialize_field("meta", &self.meta)?;
-        st.serialize_field("decl_nodes", &self.decl_nodes)?;
-        st.serialize_field("nodes", &self.nodes)?;
-        st.serialize_field("edges", &self.edges)?;
-        st.serialize_field("arcs", &self.arcs)?;
+        st.serialize_field(
+            "decl_nodes",
+            &reference_wire::Records {
+                ir: self,
+                values: &self.decl_nodes,
+            },
+        )?;
+        st.serialize_field(
+            "nodes",
+            &reference_wire::Records {
+                ir: self,
+                values: &self.nodes,
+            },
+        )?;
+        st.serialize_field(
+            "edges",
+            &reference_wire::Records {
+                ir: self,
+                values: &self.edges,
+            },
+        )?;
+        st.serialize_field(
+            "arcs",
+            &reference_wire::Records {
+                ir: self,
+                values: &self.arcs,
+            },
+        )?;
         st.serialize_field("decl_to_node", &d2n)?;
         st.serialize_field("decl_to_edge", &d2e)?;
         st.serialize_field("decl_to_arc", &d2a)?;
@@ -1241,10 +1612,10 @@ struct IrWire {
     #[serde(default)]
     decl_file: Option<Vec<u32>>,
     meta: Option<Meta>,
-    decl_nodes: Vec<DeclNode>,
-    nodes: Vec<NodeRec>,
-    edges: Vec<EdgeRec>,
-    arcs: Vec<ArcRec>,
+    decl_nodes: Vec<DeclNode<AnnoR>>,
+    nodes: Vec<reference_wire::NodeInput>,
+    edges: Vec<reference_wire::EdgeInput>,
+    arcs: Vec<reference_wire::ArcInput>,
     decl_to_node: Vec<Option<NodeId>>,
     decl_to_edge: Vec<Option<EdgeId>>,
     decl_to_arc: Vec<Option<HyperArcId>>,
@@ -1354,16 +1725,19 @@ impl Ir {
                 out
             }
         };
-        Ok(Ir {
-            files,
-            decl_file,
+        let mut ir = Ir {
+            files: files.into(),
+            decl_file: decl_file.into(),
             meta: w.meta,
-            decl_nodes: w.decl_nodes,
-            nodes: w.nodes,
-            edges: w.edges,
-            arcs: w.arcs,
-            decl_to_record,
-            namespace_roots,
+            decl_nodes: IrTable::default(),
+            nodes: IrTable::default(),
+            edges: IrTable::default(),
+            arcs: IrTable::default(),
+            annotations: IrTable::default(),
+            base_lists: IrTable::default(),
+            ref_weights: IrTable::default(),
+            decl_to_record: decl_to_record.into(),
+            namespace_roots: namespace_roots.into(),
             // Fail-closed: a facet table that disagrees with the declaration count is a malformed
             // payload, not something to pad silently. An ABSENT table (the pre-facet wire) is the
             // legitimate empty case and stays empty.
@@ -1377,9 +1751,28 @@ impl Ir {
                         arc: m.len(),
                     });
                 }
-                m
+                m.into()
             },
-        })
+        };
+        for node in w.decl_nodes {
+            let node = node.map_annotation(|anno| ir.store_annotation(anno));
+            ir.decl_nodes.push(node);
+        }
+        let nodes: Vec<_> = w
+            .nodes
+            .into_iter()
+            .map(|node| node.store(&mut ir))
+            .collect();
+        ir.nodes = nodes.into();
+        let edges: Vec<_> = w
+            .edges
+            .into_iter()
+            .map(|edge| edge.store(&mut ir))
+            .collect();
+        ir.edges = edges.into();
+        let arcs: Vec<_> = w.arcs.into_iter().map(|arc| arc.store(&mut ir)).collect();
+        ir.arcs = arcs.into();
+        Ok(ir)
     }
 }
 
@@ -1395,18 +1788,549 @@ mod compaction_coverage {
     use super::*;
     use crate::common::ids::{DeclId, NodeId, SymId};
 
+    struct PublicationCase {
+        indexed: bool,
+        streamed: bool,
+    }
+    impl PublicationCase {
+        fn build(&self) -> Ir {
+            let mut ir = Ir::default();
+            ir.files.push("construction.hymeko".into());
+            let anno = AnnoR {
+                tags: vec![SymId::new(7)],
+                value: Some(ValueR::Num(3.5)),
+            };
+            let mut construction = IrConstruction::with_capacities(
+                &mut ir,
+                IrCapacities {
+                    declarations: 3,
+                    nodes: 1,
+                    edges: 1,
+                    arcs: 1,
+                },
+            );
+            if self.indexed {
+                construction.prepare_named_slots(2).unwrap();
+            }
+            for (raw, kind) in [DeclKind::Node, DeclKind::Edge].into_iter().enumerate() {
+                let mut node = DeclNode::root(kind, SymId::new(raw), anno.clone());
+                if raw == 1 {
+                    node.parent = DeclId::new(0);
+                }
+                let namespace = if raw == 0 {
+                    &[SymId::new(9)][..]
+                } else {
+                    &[][..]
+                };
+                if self.indexed {
+                    construction
+                        .named(DeclId::new(raw), node, vec![], namespace)
+                        .unwrap();
+                } else {
+                    assert_eq!(
+                        construction
+                            .append_named(node, vec![], namespace)
+                            .unwrap()
+                            .raw(),
+                        raw
+                    );
+                }
+                if raw == 0 {
+                    let declarations = construction.ir.decl_count();
+                    construction.ir.decl_model.resize(declarations, None);
+                }
+            }
+            let refs: Vec<_> = [
+                None,
+                Some(vec![]),
+                Some(vec![ValueR::Num(-0.0), ValueR::Num(2.0)]),
+            ]
+            .into_iter()
+            .map(|weights| {
+                let mut atom = RefAtomR::plain(DeclId::new(0)).with_weights(weights);
+                atom.anno = anno.clone();
+                atom.direction = PortDirection::In;
+                ReferenceDraft::new(IncidenceSign::Minus, atom)
+            })
+            .collect();
+            let placement = ArcPlacement::under_owner(DeclId::new(1));
+            if self.streamed {
+                let mut refs = refs.into_iter();
+                construction
+                    .append_arc_iter(placement, anno, std::iter::from_fn(|| refs.next()))
+                    .unwrap();
+            } else {
+                construction.append_arc(placement, anno, refs).unwrap();
+            }
+            ir
+        }
+    }
+
+    #[test]
+    fn final_publication_matches_indexed_slots_and_streamed_wire_payloads() {
+        let expected = PublicationCase {
+            indexed: true,
+            streamed: false,
+        }
+        .build();
+        let wire = serde_json::to_vec(&expected).unwrap();
+        for indexed in [false, true] {
+            for streamed in [false, true] {
+                let ir = PublicationCase { indexed, streamed }.build();
+                assert_eq!(serde_json::to_vec(&ir).unwrap(), wire);
+                assert_eq!(ir.decl_file.len(), 3);
+                assert_eq!(ir.decl_model.len(), 3);
+                assert_eq!(ir.arcs[0].refs.len(), 3);
+                assert_eq!(ir.arcs[0].refs.capacity(), 3);
+                assert_eq!(
+                    ir.child_decls(DeclId::new(0)).collect::<Vec<_>>(),
+                    vec![DeclId::new(1)]
+                );
+                assert_eq!(
+                    ir.child_decls(DeclId::new(1)).collect::<Vec<_>>(),
+                    vec![DeclId::new(2)]
+                );
+                let published = ir.into_shared();
+                let before = serde_json::to_vec(&published).unwrap();
+                let mut next = published.clone();
+                let mut child = DeclNode::root(DeclKind::Node, SymId::new(10), AnnoR::default());
+                child.parent = DeclId::new(0);
+                IrConstruction::new(&mut next)
+                    .append_named(child, Vec::with_capacity(8), &[])
+                    .unwrap();
+                assert!(next.nodes.last().unwrap().bases.is_none());
+                assert_eq!(serde_json::to_vec(&published).unwrap(), before);
+                assert_eq!(next.decl_count(), 4);
+            }
+        }
+    }
+
+    #[test]
+    fn arc_admission_rejects_faults_before_consuming_stream_or_mutating_ir() {
+        use std::cell::Cell;
+        for fault in 0..3 {
+            let mut ir = PublicationCase {
+                indexed: false,
+                streamed: true,
+            }
+            .build();
+            let mut placement = ArcPlacement::under_owner(DeclId::new(1));
+            match fault {
+                0 => placement.owner = DeclId::NONE,
+                1 => placement.parent = DeclId::new(999),
+                _ => ir.decl_to_record.push(dispatch::NONE),
+            }
+            let before = format!("{ir:?}");
+            let consumed = Cell::new(0);
+            let refs = std::iter::once_with(|| {
+                consumed.set(consumed.get() + 1);
+                ReferenceDraft::plain(DeclId::new(0), IncidenceSign::Plus)
+            });
+            assert!(
+                IrConstruction::new(&mut ir)
+                    .append_arc_iter(placement, AnnoR::default(), refs)
+                    .is_err()
+            );
+            assert_eq!(consumed.get(), 0);
+            assert_eq!(format!("{ir:?}"), before);
+            assert!(
+                IrConstruction::new(&mut ir)
+                    .append_arc(placement, AnnoR::default(), vec![])
+                    .is_err()
+            );
+            assert_eq!(format!("{ir:?}"), before);
+        }
+    }
+
+    #[test]
+    fn validated_parent_cursor_preserves_mixed_order_and_rechecks_new_scopes() {
+        let mut ir = Ir::default();
+        let mut expected = [Vec::new(), Vec::new(), Vec::new()];
+        {
+            let mut build = IrConstruction::new(&mut ir);
+            let a = build
+                .append_node(SymId::new(0), AnnoR::default(), vec![])
+                .unwrap();
+            let b = build
+                .append_node(SymId::new(1), AnnoR::default(), vec![])
+                .unwrap();
+            let mut edge = DeclNode::root(DeclKind::Edge, SymId::new(2), AnnoR::default());
+            edge.parent = a;
+            let owner = build.append_named(edge, vec![], &[]).unwrap();
+            expected[0].push(owner);
+            for (step, parent) in [a, a, b, a, owner, owner, b, a].into_iter().enumerate() {
+                let mut node =
+                    DeclNode::root(DeclKind::Node, SymId::new(step + 3), AnnoR::default());
+                node.parent = parent;
+                let child = build.append_named(node, vec![], &[]).unwrap();
+                expected[parent.raw()].push(child);
+                assert_eq!(build.parent.map(|p| (p.id, p.last)), Some((parent, child)));
+                let before = format!("{:?}", build.ir);
+                let mut bad = DeclNode::root(DeclKind::HyperArc, SymId::new(99), AnnoR::default());
+                bad.parent = parent;
+                assert!(build.append_named(bad, vec![], &[]).is_err());
+                assert_eq!(format!("{:?}", build.ir), before);
+            }
+            let arc = build
+                .append_arc_iter(
+                    ArcPlacement::under_owner(owner),
+                    AnnoR::default(),
+                    std::iter::empty(),
+                )
+                .unwrap();
+            expected[owner.raw()].push(arc);
+        }
+        for (parent, children) in expected.iter().enumerate() {
+            assert_eq!(
+                ir.child_decls(DeclId::new(parent)).collect::<Vec<_>>(),
+                *children
+            );
+        }
+        let last = ir.decl_nodes[0].last_child;
+        ir.decl_nodes[last.raw()].next_sibling = DeclId::new(0);
+        let before = format!("{ir:?}");
+        let mut node = DeclNode::root(DeclKind::Node, SymId::new(100), AnnoR::default());
+        node.parent = DeclId::new(0);
+        assert!(
+            IrConstruction::new(&mut ir)
+                .append_named(node, vec![], &[])
+                .is_err()
+        );
+        assert_eq!(format!("{ir:?}"), before);
+    }
+
+    struct ConstructionCase;
+    impl IrBuilder for ConstructionCase {
+        type Output = Ir;
+        type Error = dispatch::DispatchError;
+        fn capacities(&self) -> IrCapacities {
+            IrCapacities {
+                declarations: 64,
+                nodes: 32,
+                edges: 8,
+                arcs: 8,
+            }
+        }
+        fn populate(&mut self, construction: &mut IrConstruction<'_>) -> Result<(), Self::Error> {
+            assert_eq!(construction.ir.decl_nodes.capacity(), 0);
+            let root = construction.append_node(SymId::new(0), AnnoR::default(), vec![])?;
+            let mut node = DeclNode::root(DeclKind::Node, SymId::new(1), AnnoR::default());
+            node.parent = root;
+            let child = construction.append_named(node, vec![], &[])?;
+            let mut edge = DeclNode::root(DeclKind::Edge, SymId::new(2), AnnoR::default());
+            edge.parent = root;
+            let edge = construction.append_named(edge, vec![], &[])?;
+            construction.append_arc(
+                ArcPlacement::under_owner(edge),
+                AnnoR::default(),
+                vec![ReferenceDraft::plain(child, IncidenceSign::Plus)],
+            )?;
+            Ok(())
+        }
+        fn finish(self, ir: Ir) -> Ir {
+            ir
+        }
+    }
+
+    #[test]
+    fn builder_owns_population_capacity_hierarchy_and_bindings() {
+        let ir = ConstructionCase.build().unwrap();
+        assert_eq!(
+            (
+                ir.decl_count(),
+                ir.nodes.len(),
+                ir.edges.len(),
+                ir.arcs.len()
+            ),
+            (4, 2, 1, 1)
+        );
+        assert!(ir.decl_nodes.capacity() >= 64);
+        assert!(ir.nodes.capacity() >= 32);
+        assert!(ir.edges.capacity() >= 8);
+        assert!(ir.arcs.capacity() >= 8);
+        assert_eq!(
+            ir.decl_children(DeclId::new(0)).collect::<Vec<_>>(),
+            vec![DeclId::new(1), DeclId::new(2)]
+        );
+        assert_eq!(
+            ir.decl_children(DeclId::new(2)).collect::<Vec<_>>(),
+            vec![DeclId::new(3)]
+        );
+        assert_eq!(ir.node_for_decl(DeclId::new(1)).unwrap().0, NodeId::new(1));
+        assert_eq!(ir.arcs[0].refs[0].target(), DeclId::new(1));
+    }
+
+    struct CountedInput<'a> {
+        calls: &'a std::cell::Cell<usize>,
+        fail: bool,
+    }
+    impl IrBuilder for CountedInput<'_> {
+        type Output = Ir;
+        type Error = &'static str;
+        fn capacities(&self) -> IrCapacities {
+            ConstructionCase.capacities()
+        }
+        fn populate(&mut self, construction: &mut IrConstruction<'_>) -> Result<(), Self::Error> {
+            self.calls.set(self.calls.get() + 1);
+            ConstructionCase
+                .populate(construction)
+                .map_err(|_| "construction")?;
+            if self.fail {
+                Err("input failure")
+            } else {
+                Ok(())
+            }
+        }
+        fn finish(self, ir: Ir) -> Ir {
+            ir
+        }
+    }
+
+    #[test]
+    fn lazy_input_loads_once_and_caches_success_or_failure() {
+        for fail in [false, true] {
+            let calls = std::cell::Cell::new(0);
+            {
+                let unloaded = CountedInput {
+                    calls: &calls,
+                    fail,
+                }
+                .defer();
+                assert!(!unloaded.is_loaded());
+                assert_eq!(unloaded.capacities().declarations, 64);
+            }
+            assert_eq!(
+                calls.get(),
+                0,
+                "dropping an unloaded input must not populate"
+            );
+            let mut lazy = CountedInput {
+                calls: &calls,
+                fail,
+            }
+            .defer();
+            assert_eq!(calls.get(), 0, "capacity planning must not populate");
+            for _ in 0..3 {
+                match lazy.load() {
+                    Ok(ir) => {
+                        assert!(!fail);
+                        assert_eq!(
+                            serde_json::to_value(ir).unwrap(),
+                            serde_json::to_value(ConstructionCase.build().unwrap()).unwrap()
+                        );
+                    }
+                    Err(error) => {
+                        assert!(fail);
+                        assert_eq!(*error, "input failure");
+                    }
+                }
+                assert!(lazy.is_loaded());
+                assert_eq!(calls.get(), 1, "a retained outcome must never repopulate");
+            }
+        }
+    }
+
+    #[test]
+    fn append_named_rejects_invalid_input_before_allocating_or_writing() {
+        let mut ir = Ir::default();
+        let mut construction = IrConstruction::with_capacities(
+            &mut ir,
+            IrCapacities {
+                declarations: 64,
+                ..Default::default()
+            },
+        );
+        let mut invalid = DeclNode::root(DeclKind::Node, SymId::new(0), AnnoR::default());
+        invalid.parent = DeclId::new(17);
+        assert!(construction.append_named(invalid, vec![], &[]).is_err());
+        assert_eq!(ir.decl_nodes.capacity(), 0);
+        assert_eq!(ir.decl_to_record.capacity(), 0);
+        assert_eq!(ir.decl_count(), 0);
+        let mut ir = ConstructionCase.build().unwrap();
+        let before = serde_json::to_vec(&ir).unwrap();
+        assert!(IrConstruction::new(&mut ir).prepare_named_slots(1).is_err());
+        assert_eq!(serde_json::to_vec(&ir).unwrap(), before);
+    }
+
+    #[test]
+    fn canonical_reference_layout_is_compact() {
+        assert!(
+            std::mem::size_of::<SignedRefR>() <= 32,
+            "canonical SignedRefR occupies {} bytes; payloads must live in IR-owned tables",
+            std::mem::size_of::<SignedRefR>()
+        );
+    }
+
+    #[test]
+    fn value_bitwise_equality_distinguishes_all_representations_iteratively() {
+        let values = [
+            ValueR::Num(0.0),
+            ValueR::Num(-0.0),
+            ValueR::Num(1.0),
+            ValueR::Num(f64::from_bits(0x7ff8_0000_0000_0001)),
+            ValueR::Num(f64::from_bits(0x7ff8_0000_0000_0002)),
+            ValueR::Str(SymId::new(0)),
+            ValueR::Str(SymId::new(1)),
+            ValueR::Ref(DeclId::new(0)),
+            ValueR::Ref(DeclId::new(1)),
+            ValueR::List(vec![]),
+            ValueR::List(vec![ValueR::Num(0.0)]),
+            ValueR::List(vec![ValueR::Num(-0.0)]),
+            ValueR::List(vec![ValueR::List(vec![])]),
+            ValueR::List(vec![ValueR::List(vec![ValueR::Num(1.0)])]),
+            ValueR::List(vec![ValueR::List(vec![ValueR::Num(1.0)]), ValueR::Num(2.0)]),
+            ValueR::List(vec![ValueR::List(vec![ValueR::Num(1.0)]), ValueR::Num(3.0)]),
+        ];
+        for (i, left) in values.iter().enumerate() {
+            for (j, right) in values.iter().enumerate() {
+                assert_eq!(left.bitwise_eq(right), i == j, "representations {i}, {j}");
+            }
+        }
+        let mut deep = [ValueR::Num(0.0), ValueR::Num(0.0), ValueR::Num(-0.0)];
+        for value in &mut deep {
+            for _ in 0..1024 {
+                *value = ValueR::List(vec![std::mem::replace(value, ValueR::Num(0.0))]);
+            }
+        }
+        assert!(deep[0].bitwise_eq(&deep[1]));
+        assert!(!deep[0].bitwise_eq(&deep[2]));
+        // Tear down iteratively too: this exercises comparison, not recursive Drop.
+        for mut value in deep {
+            while let ValueR::List(mut children) = value {
+                value = children.pop().unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn record_constructors_preserve_the_explicit_wire_shape() {
+        let anno = AnnoR {
+            tags: vec![SymId::new(7)],
+            value: Some(ValueR::Num(-0.0)),
+        };
+        for kind in [DeclKind::Node, DeclKind::Edge, DeclKind::HyperArc] {
+            // Independent explicit record: keep this literal as the constructor oracle.
+            let expected = DeclNode {
+                kind,
+                name: SymId::new(3),
+                parent: DeclId::NONE,
+                first_child: DeclId::NONE,
+                last_child: DeclId::NONE,
+                next_sibling: DeclId::NONE,
+                anno: anno.clone(),
+            };
+            let actual = DeclNode::root(kind, SymId::new(3), anno.clone());
+            assert_eq!(
+                serde_json::to_value(expected).unwrap(),
+                serde_json::to_value(actual).unwrap()
+            );
+        }
+        let atom = RefAtomR {
+            target: DeclId::new(19),
+            anno,
+            weights: None,
+            direction: PortDirection::In,
+        };
+        let weighted = atom.clone().with_weights(Some(vec![]));
+        assert_eq!(weighted.target, atom.target);
+        assert_eq!(weighted.anno, atom.anno);
+        assert_eq!(weighted.direction, PortDirection::In);
+        assert_eq!(weighted.weights, Some(vec![]));
+        assert_eq!(weighted.with_weights(None), atom);
+        let mut owner = Ir::default();
+        let refs = vec![owner.store_reference(ReferenceDraft::new(IncidenceSign::Minus, atom))];
+        let expected = ArcRec {
+            in_edge: DeclId::NONE,
+            anno: crate::common::ids::AnnotationId::NONE,
+            refs: refs.clone(),
+        };
+        assert_eq!(
+            serde_json::to_value(reference_wire::Record {
+                ir: &owner,
+                value: &ArcRec::unowned(refs)
+            })
+            .unwrap(),
+            serde_json::to_value(reference_wire::Record {
+                ir: &owner,
+                value: &expected
+            })
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn root_construction_preserves_dispatch_domains_and_side_tables() {
+        let mut ir = Ir::default();
+        ir.files.push("source.hymeko".to_owned());
+        let base = IrConstruction::new(&mut ir)
+            .append_node(SymId::new(0), AnnoR::default(), vec![])
+            .unwrap();
+        ir.decl_model.resize(1, None);
+        let bases = vec![ReferenceDraft::plain(base, IncidenceSign::Plus)];
+        let anno = AnnoR {
+            tags: vec![SymId::new(8)],
+            value: Some(ValueR::Num(3.0)),
+        };
+        let edge = IrConstruction::new(&mut ir)
+            .append_edge(SymId::new(2), anno.clone(), bases.clone())
+            .unwrap();
+        let node = IrConstruction::new(&mut ir)
+            .append_node(SymId::new(4), anno.clone(), bases.clone())
+            .unwrap();
+        assert_eq!((base.raw(), edge.raw(), node.raw()), (0, 1, 2));
+        assert_eq!(ir.as_node(node), Some(NodeId::new(1)));
+        assert_eq!(ir.as_edge(edge), Some(EdgeId::new(0)));
+        let expected = vec![SignedRefR::plain(base, IncidenceSign::Plus)];
+        assert_eq!(&ir[ir.nodes[1].bases], expected);
+        assert_eq!(&ir[ir.edges[0].bases], expected);
+        assert_eq!(ir[ir.decl_nodes[node.raw()].anno], anno);
+        assert_eq!(&*ir.decl_file, &[u32::MAX; 3]);
+        assert_eq!(ir.decl_model.len(), 3);
+        assert!(ir.decl_nodes.iter().all(|n| n.parent.is_none()
+            && n.first_child.is_none()
+            && n.last_child.is_none()
+            && n.next_sibling.is_none()));
+        let declarations = ir.decl_count();
+        ir.arcs.push(ArcRec::unowned(vec![]));
+        assert_eq!(
+            ir.decl_count(),
+            declarations,
+            "unowned arc has no invented declaration"
+        );
+        let anonymous = ir.push_anonymous_arc();
+        assert_eq!(anonymous.raw(), declarations);
+        assert_eq!(ir.decl_nodes[anonymous.raw()].kind, DeclKind::HyperArc);
+        assert!(ir.as_arc(anonymous).is_none());
+        assert_eq!(ir.decl_model.len(), declarations + 1);
+        assert_eq!(ir.decl_file.len(), declarations + 1);
+    }
+
+    #[test]
+    fn root_construction_rejects_broken_parallel_storage_without_mutation() {
+        let mut ir = one_node_ir();
+        ir.decl_to_record.clear();
+        let before = format!("{ir:?}");
+        let error = IrConstruction::new(&mut ir)
+            .append_node(SymId::new(1), AnnoR::default(), vec![])
+            .unwrap_err();
+        assert_eq!(
+            error,
+            dispatch::DispatchError::InvalidDeclaration {
+                decl: DeclId::new(1)
+            }
+        );
+        assert_eq!(format!("{ir:?}"), before);
+    }
+
     fn one_node_ir() -> Ir {
         let mut ir = Ir::default();
-        let d = ir.push_decl(DeclNode {
-            kind: DeclKind::Node,
-            name: SymId::new(0),
-            parent: DeclId::NONE,
-            first_child: DeclId::NONE,
-            last_child: DeclId::NONE,
-            next_sibling: DeclId::NONE,
-            anno: AnnoR::default(),
-        });
-        ir.nodes.push(NodeRec::new(d, Vec::new()));
+        let d = ir.push_decl(DeclNode::root(
+            DeclKind::Node,
+            SymId::new(0),
+            AnnoR::default(),
+        ));
+        ir.nodes
+            .push(NodeRec::new(d, crate::common::ids::BaseListId::NONE));
         ir.bind_node_decl(d, NodeId::new(0)).unwrap();
         ir
     }
@@ -1415,7 +2339,8 @@ mod compaction_coverage {
     fn checked_binding_rejects_faults_without_changing_state() {
         let mut ir = one_node_ir();
         let d = DeclId::new(0);
-        ir.nodes.push(NodeRec::new(d, vec![]));
+        ir.nodes
+            .push(NodeRec::new(d, crate::common::ids::BaseListId::NONE));
         let before = serde_json::to_vec(&ir).unwrap();
         for error in [
             ir.bind_node_decl(DeclId::NONE, NodeId::new(0)),
@@ -1440,7 +2365,7 @@ mod compaction_coverage {
         ir.preallocate_from_index(2);
         let root = DeclId::new(0);
         let edge = DeclId::new(1);
-        let mut node = ir.decl_nodes[0].clone();
+        let mut node = ir.decl_nodes[0].map_annotation(|id| ir[id].clone());
         node.name = SymId::new(1);
         let mut construction = IrConstruction::new(&mut ir);
         construction
@@ -1455,10 +2380,10 @@ mod compaction_coverage {
             value: Some(ValueR::Num(4.0)),
         };
         construction
-            .arc(
-                edge,
+            .append_arc(
+                ArcPlacement::under_owner(edge),
                 anno.clone(),
-                vec![SignedRefR::Plus(RefAtomR::plain(root))],
+                vec![ReferenceDraft::plain(root, IncidenceSign::Plus)],
             )
             .unwrap();
         assert_eq!(ir.child_decls(root).collect::<Vec<_>>(), vec![edge]);
@@ -1466,7 +2391,7 @@ mod compaction_coverage {
         let (aid, record) = ir.arc_for_decl(arc).unwrap();
         assert_eq!(record.in_edge, edge);
         assert_eq!(ir.edges[0].arcs, vec![aid]);
-        assert_eq!(record.anno, ir.decl_node(arc).unwrap().anno);
+        assert_eq!(ir[record.anno], *ir.decl_annotation(arc).unwrap());
         assert_eq!(ir.namespace_prefix(root), Some([SymId::new(0)].as_slice()));
     }
 
@@ -1474,7 +2399,7 @@ mod compaction_coverage {
     fn rejected_construction_and_leaf_updates_do_not_damage_existing_ir() {
         let mut ir = one_node_ir();
         ir.preallocate_from_index(2);
-        let mut node = ir.decl_nodes[1].clone();
+        let mut node = ir.decl_nodes[1].map_annotation(|id| ir[id].clone());
         node.parent = DeclId::new(99);
         let before = serde_json::to_vec(&ir).unwrap();
         let mut construction = IrConstruction::new(&mut ir);
@@ -1491,21 +2416,36 @@ mod compaction_coverage {
         );
         assert!(
             construction
-                .arc(DeclId::new(0), AnnoR::default(), vec![])
+                .append_arc(
+                    ArcPlacement::under_owner(DeclId::new(0)),
+                    AnnoR::default(),
+                    vec![]
+                )
                 .is_err()
         );
         assert_eq!(serde_json::to_vec(&ir).unwrap(), before);
-        assert!(
-            ir.set_leaf_values(vec![
-                (DeclId::new(0), Some(ValueR::Num(2.0))),
-                (DeclId::new(1), None)
-            ])
-            .is_err()
-        );
+        let mut values = vec![
+            LeafValueEdit::Replace {
+                declaration: DeclId::new(0),
+                value: Some(ValueR::Num(2.0)),
+            },
+            LeafValueEdit::Keep(DeclId::new(1)),
+        ];
+        let (allocation, capacity) = (values.as_ptr(), values.capacity());
+        let payload = values.clone();
+        assert!(ir.set_leaf_values(&mut values).is_err());
+        assert_eq!(values, payload);
         assert_eq!(serde_json::to_vec(&ir).unwrap(), before);
-        ir.set_leaf_values(vec![(DeclId::new(0), Some(ValueR::Num(2.0)))])
-            .unwrap();
-        assert_eq!(ir.decl_nodes[0].anno.value, Some(ValueR::Num(2.0)));
+        values.pop();
+        ir.set_leaf_values(&mut values).unwrap();
+        assert!(values.is_empty());
+        assert_eq!((values.as_ptr(), values.capacity()), (allocation, capacity));
+        assert_eq!(
+            ir.decl_annotation(crate::common::ids::DeclId::new(0))
+                .unwrap()
+                .value,
+            Some(ValueR::Num(2.0))
+        );
     }
 
     #[test]

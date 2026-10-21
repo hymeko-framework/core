@@ -15,16 +15,9 @@ fn fixture() -> (Ir, Index, Interner) {
     let charge = interner.intern("charge");
 
     let mut ir = Ir::default();
-    let decl = ir.push_decl(DeclNode {
-        kind: DeclKind::Node,
-        name: charge,
-        parent: DeclId::NONE,
-        first_child: DeclId::NONE,
-        last_child: DeclId::NONE,
-        next_sibling: DeclId::NONE,
-        anno: AnnoR::default(),
-    });
-    ir.nodes.push(NodeRec::new(decl, Vec::new()));
+    let decl = ir.push_decl(DeclNode::root(DeclKind::Node, charge, AnnoR::default()));
+    ir.nodes
+        .push(NodeRec::new(decl, crate::common::ids::BaseListId::NONE));
     ir.bind_node_decl(decl, NodeId::new(0)).unwrap();
 
     let mut index = Index::new();
@@ -103,12 +96,13 @@ fn compiled_program_facade_makes_paths_workspace_relative() {
     let canon = CanonicalIdentity::of(&Canon::new(&ir, &interner), CanonHashCfg::default());
     let program = CompiledProgram {
         root: ModuleKey(workspace.join("models/charge.hymeko")),
-        idx: index,
+        idx: index.into(),
         ir,
         imports: vec![(
             SymId::new(0),
             ModuleKey(workspace.join("library/electrical.hymeko")),
-        )],
+        )]
+        .into(),
         canon,
     };
 
@@ -240,7 +234,7 @@ fn codec_rejects_positions_that_do_not_fit_canonical_hash_v1() {
     let mut payload: CborPayload = ciborium::de::from_reader(bytes.as_slice()).unwrap();
     payload.ir.edges.push(crate::ir::ir::EdgeRec {
         decl: DeclId::new(0),
-        bases: Vec::new(),
+        bases: crate::common::ids::BaseListId::NONE,
         arcs: vec![HyperArcId::new(0); usize::from(u16::MAX) + 2],
     });
 
@@ -253,9 +247,10 @@ fn codec_rejects_positions_that_do_not_fit_canonical_hash_v1() {
     ));
 
     let mut payload: CborPayload = ciborium::de::from_reader(bytes.as_slice()).unwrap();
-    let reference = SignedRefR::Neutral(RefAtomR::plain(DeclId::new(0)));
+    let reference =
+        crate::ir::ir::SignedRefR::plain(DeclId::new(0), crate::ir::ir::IncidenceSign::Neutral);
     payload.ir.arcs.push(ArcRec {
-        anno: AnnoR::default(),
+        anno: crate::common::ids::AnnotationId::NONE,
         in_edge: DeclId::new(0),
         refs: vec![reference; usize::from(u16::MAX) + 2],
     });

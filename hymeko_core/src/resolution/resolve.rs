@@ -1,7 +1,9 @@
 // src/resolve.rs
 use crate::common::ids::{DeclId, SymId};
 use crate::common::pathkey::PathKey;
-use crate::ir::ir::{AnnoR, DeclKind, DeclNode, PortDirection, RefAtomR, SignedRefR, ValueR};
+use crate::ir::ir::{
+    AnnoR, DeclKind, DeclNode, IncidenceSign, PortDirection, RefAtomR, ReferenceDraft, ValueR,
+};
 use crate::resolution::interner::Interner;
 use crate::sym_ast::AstSym;
 use parser::ast::{
@@ -321,7 +323,7 @@ pub fn resolve_signed_refs<'a>(
     scope: &[SymId],
     refs: &[SignedRef<'a, SymId>],
     it: &mut Interner,
-) -> Result<Vec<SignedRefR>, ResolveError> {
+) -> Result<Vec<ReferenceDraft>, ResolveError> {
     let mut out = Vec::with_capacity(refs.len());
 
     for sref in refs {
@@ -351,9 +353,9 @@ pub fn resolve_signed_refs<'a>(
         };
 
         let sref_r = match sref {
-            SignedRef::Plus(_) => SignedRefR::Plus(atom_r),
-            SignedRef::Minus(_) => SignedRefR::Minus(atom_r),
-            SignedRef::Neutral(_) => SignedRefR::Neutral(atom_r),
+            SignedRef::Plus(_) => ReferenceDraft::new(IncidenceSign::Plus, atom_r),
+            SignedRef::Minus(_) => ReferenceDraft::new(IncidenceSign::Minus, atom_r),
+            SignedRef::Neutral(_) => ReferenceDraft::new(IncidenceSign::Neutral, atom_r),
         };
 
         out.push(sref_r);
@@ -367,7 +369,7 @@ pub fn resolve_arc_refs<'a>(
     scope: &[SymId],
     arc: &HyperArc<'a, SymId>,
     it: &mut Interner,
-) -> Result<Vec<SignedRefR>, ResolveError> {
+) -> Result<Vec<ReferenceDraft>, ResolveError> {
     resolve_signed_refs(idx, scope, &arc.inner.refs, it)
 }
 
@@ -394,15 +396,15 @@ pub(crate) trait ResolvedDeclarations {
     fn named(
         &mut self,
         id: DeclId,
-        node: DeclNode,
-        bases: Vec<SignedRefR>,
+        node: DeclNode<AnnoR>,
+        bases: Vec<ReferenceDraft>,
         namespace: &[SymId],
     ) -> Result<(), ResolveError>;
     fn arc(
         &mut self,
         parent: DeclId,
         anno: AnnoR,
-        refs: Vec<SignedRefR>,
+        refs: Vec<ReferenceDraft>,
     ) -> Result<(), ResolveError>;
 }
 
@@ -410,13 +412,13 @@ impl ResolvedDeclarations for () {
     fn named(
         &mut self,
         _: DeclId,
-        _: DeclNode,
-        _: Vec<SignedRefR>,
+        _: DeclNode<AnnoR>,
+        _: Vec<ReferenceDraft>,
         _: &[SymId],
     ) -> Result<(), ResolveError> {
         Ok(())
     }
-    fn arc(&mut self, _: DeclId, _: AnnoR, _: Vec<SignedRefR>) -> Result<(), ResolveError> {
+    fn arc(&mut self, _: DeclId, _: AnnoR, _: Vec<ReferenceDraft>) -> Result<(), ResolveError> {
         Ok(())
     }
 }
@@ -571,7 +573,7 @@ fn fmt_path(p: &PathKey, it: &Interner) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::lower::lower_to_ir;
+    use crate::ir::lower::{IrBuilder, IrLowering};
     use crate::resolution::{const_resolve::resolve_consts, intern_pass::intern_ast};
 
     #[test]
@@ -592,7 +594,7 @@ mod tests {
             resolve_consts(&mut interned.ast, &interned.interner).unwrap();
             let idx = build_index_sym(&interned.ast, &interned.interner).unwrap();
             let validation = validate_all_refs_sym(&interned.ast, &idx, &mut interned.interner);
-            let lowering = lower_to_ir(&interned.ast, &idx, &mut interned.interner);
+            let lowering = IrLowering::new(&interned.ast, &idx, &mut interned.interner).build();
             assert_eq!(
                 format!("{:?}", validation.err()),
                 format!("{:?}", lowering.err()),
@@ -612,12 +614,22 @@ mod tests {
             Err(ResolveError::UnevaluatedConst { .. })
         ));
         assert!(matches!(
-            lower_to_ir(&interned.ast, &idx, &mut interned.interner),
+            IrLowering::new(&interned.ast, &idx, &mut interned.interner).build(),
             Err(ResolveError::UnevaluatedConst { .. })
         ));
         resolve_consts(&mut interned.ast, &interned.interner).unwrap();
         validate_all_refs_sym(&interned.ast, &idx, &mut interned.interner).unwrap();
-        let ir = lower_to_ir(&interned.ast, &idx, &mut interned.interner).unwrap();
-        assert_eq!(ir.decl_nodes[0].anno.value, Some(ValueR::Num(3.0)));
+        let ir = IrLowering::new(&interned.ast, &idx, &mut interned.interner)
+            .with_meta(crate::ir::meta::Meta::new(1234, [7; 16]))
+            .build()
+            .unwrap();
+        assert_eq!(
+            ir.decl_annotation(crate::common::ids::DeclId::new(0))
+                .unwrap()
+                .value,
+            Some(ValueR::Num(3.0))
+        );
+        assert_eq!(ir.meta.as_ref().unwrap().created_at_unix_ns, 1234);
+        assert_eq!(ir.meta.as_ref().unwrap().build_id, [7; 16]);
     }
 }

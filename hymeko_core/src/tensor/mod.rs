@@ -7,6 +7,10 @@ use std::marker::PhantomData;
 
 pub mod tensor_val;
 
+// Numeric ownership remains in Tensor; IR consumers share the same contracts.
+pub use hymeko_tensor::renyi::ShannonEntropy;
+pub use hymeko_tensor::{contraction, operator};
+
 #[derive(Clone, Copy, Debug)]
 pub struct TensorInc<F: Real, V: IncVal<F>> {
     pub e: EdgeId,

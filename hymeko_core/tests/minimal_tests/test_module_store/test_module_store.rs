@@ -49,7 +49,7 @@ mod mod_test_module_store {
             .find(|(_, node)| store.it.resolve(node.name) == "header")
             .unwrap()
             .1;
-        let Some(hymeko::ir::ir::ValueR::Ref(target)) = header.anno.value else {
+        let Some(hymeko::ir::ir::ValueR::Ref(target)) = compiled.ir[header.anno].value else {
             panic!("header reference")
         };
         assert_eq!(
@@ -64,7 +64,10 @@ mod mod_test_module_store {
             .find(|(_, node)| store.it.resolve(node.name) == "n")
             .unwrap()
             .1;
-        assert_eq!(n.anno.value, Some(hymeko::ir::ir::ValueR::Num(6.0)));
+        assert_eq!(
+            compiled.ir[n.anno].value,
+            Some(hymeko::ir::ir::ValueR::Num(6.0))
+        );
     }
 
     #[test]
@@ -209,7 +212,7 @@ mod mod_test_module_store {
         .unwrap_err();
         assert!(report.findings.contains(&Finding::InvalidSourceProvenance));
         let mut ir = compiled.ir.clone();
-        let appended = ir.push_decl(ir.decl_nodes[0].clone());
+        let appended = ir.push_decl(ir.decl_draft(hymeko::common::ids::DeclId::new(0)).unwrap());
         assert_eq!(ir.decl_file[appended.raw()], u32::MAX);
         let arc = ir.push_anonymous_arc();
         assert_eq!(ir.decl_file[arc.raw()], u32::MAX);

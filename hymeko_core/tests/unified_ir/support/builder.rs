@@ -16,8 +16,8 @@
 use hymeko::common::ids::{DeclId, EdgeId, HyperArcId, NodeId, SymId};
 use hymeko::common::pathkey::PathKey;
 use hymeko::ir::ir::{
-    AnnoR, ArcRec, DeclKind, DeclNode, EdgeRec, Ir, NodeRec, PortDirection, RefAtomR, SignedRefR,
-    ValueR,
+    AnnoR, ArcRec, DeclKind, DeclNode, EdgeRec, IncidenceSign, Ir, NodeRec, PortDirection,
+    RefAtomR, ReferenceDraft, SignedRefR, ValueR,
 };
 use hymeko::resolution::interner::Interner;
 use hymeko::resolution::resolve::Index;
@@ -31,12 +31,15 @@ pub enum S {
 }
 
 impl S {
-    fn wrap(self, atom: RefAtomR) -> SignedRefR {
+    pub fn kind(self) -> IncidenceSign {
         match self {
-            Self::Plus => SignedRefR::Plus(atom),
-            Self::Minus => SignedRefR::Minus(atom),
-            Self::Neutral => SignedRefR::Neutral(atom),
+            Self::Plus => IncidenceSign::Plus,
+            Self::Minus => IncidenceSign::Minus,
+            Self::Neutral => IncidenceSign::Neutral,
         }
+    }
+    fn wrap(self, atom: RefAtomR) -> ReferenceDraft {
+        ReferenceDraft::new(self.kind(), atom)
     }
 }
 
@@ -85,7 +88,9 @@ impl TestIr {
     pub fn node(&mut self, path: &[&str], parent_hint: DeclId) -> DeclId {
         let d = self.decl(path, DeclKind::Node, parent_hint);
         let nid = NodeId::new(self.ir.nodes.len());
-        self.ir.nodes.push(NodeRec::new(d, Vec::new()));
+        self.ir
+            .nodes
+            .push(NodeRec::new(d, hymeko::common::ids::BaseListId::NONE));
         self.ir.bind_node_decl(d, nid).unwrap();
         d
     }
@@ -93,7 +98,9 @@ impl TestIr {
     pub fn edge(&mut self, path: &[&str], parent_hint: DeclId) -> DeclId {
         let d = self.decl(path, DeclKind::Edge, parent_hint);
         let eid = EdgeId::new(self.ir.edges.len());
-        self.ir.edges.push(EdgeRec::new(d, Vec::new()));
+        self.ir
+            .edges
+            .push(EdgeRec::new(d, hymeko::common::ids::BaseListId::NONE));
         self.ir.bind_edge_decl(d, eid).unwrap();
         d
     }
@@ -119,16 +126,13 @@ impl TestIr {
         let built: Vec<SignedRefR> = refs
             .iter()
             .map(|(target, sign, weights)| {
-                sign.wrap(RefAtomR {
-                    target: *target,
-                    anno: AnnoR::default(),
-                    weights: weights.clone(),
-                    direction: PortDirection::Unspecified,
-                })
+                self.ir.store_reference(
+                    sign.wrap(RefAtomR::plain(*target).with_weights(weights.clone())),
+                )
             })
             .collect();
         self.ir.arcs.push(ArcRec {
-            anno: AnnoR::default(),
+            anno: hymeko::common::ids::AnnotationId::NONE,
             in_edge: edge_decl,
             refs: built,
         });
@@ -139,22 +143,16 @@ impl TestIr {
     /// Attach annotation tags to a declaration.
     pub fn tag(&mut self, d: DeclId, tags: &[&str]) {
         let syms: Vec<SymId> = tags.iter().map(|t| self.it.intern(t)).collect();
-        self.ir.decl_nodes[d.raw()].anno.tags = syms;
+        self.ir.decl_annotation_mut(d).unwrap().tags = syms;
     }
 
     /// Attach inheritance bases to a node or edge.
     pub fn bases(&mut self, d: DeclId, bases: &[(DeclId, S)]) {
         let built: Vec<SignedRefR> = bases
             .iter()
-            .map(|(t, s)| {
-                s.wrap(RefAtomR {
-                    target: *t,
-                    anno: AnnoR::default(),
-                    weights: None,
-                    direction: PortDirection::Unspecified,
-                })
-            })
+            .map(|(t, s)| self.ir.store_reference(s.wrap(RefAtomR::plain(*t))))
             .collect();
+        let built = self.ir.store_bases(built);
         if let Some(nid) = self.ir.as_node(d) {
             self.ir.nodes[nid.raw()].bases = built;
         } else if let Some(eid) = self.ir.as_edge(d) {
@@ -177,6 +175,18 @@ impl TestIr {
             }
         }
         format!("<unindexed DeclId({})>", d.raw())
+    }
+
+    /// Deliberate payload mutation for hash counterexamples, through the IR owner.
+    pub fn edit_reference(&mut self, arc: usize, slot: usize, mutate: impl FnOnce(&mut RefAtomR)) {
+        let reference = self.ir.arcs[arc].refs[slot];
+        let mut draft = self
+            .ir
+            .reference_draft(&reference)
+            .expect("fixture payload");
+        mutate(&mut draft.atom);
+        let updated = self.ir.store_reference(draft);
+        self.ir.arcs[arc].refs[slot] = updated;
     }
 }
 

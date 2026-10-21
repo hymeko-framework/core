@@ -289,9 +289,10 @@ fn a_symbolic_extent_is_interner_order_independent() {
 fn meaningless_tags_do_not_invalidate_a_typed_model() {
     let (mut t, _) = model();
     let junk = t.it.intern("qqq");
-    for d in t.ir.decl_nodes.iter_mut() {
-        if !d.anno.tags.is_empty() {
-            d.anno.tags = vec![junk];
+    for raw in 0..t.ir.decl_count() {
+        let id = hymeko::common::ids::DeclId::new(raw);
+        if !t.ir.decl_annotation(id).unwrap().tags.is_empty() {
+            t.ir.decl_annotation_mut(id).unwrap().tags = vec![junk];
         }
     }
     assert_eq!(
@@ -403,24 +404,22 @@ fn structural_hash_is_blind_to_the_model_facet() {
 // =================================================================================================
 
 use hymeko::ir::coherence::ModelFinding as MF;
-use hymeko::ir::ir::{PortDirection, SignedRefR};
+use hymeko::ir::ir::{IncidenceSign, PortDirection};
 
 /// Set the direction of arc 0's slot `slot`.
 fn set_dir(t: &mut TestIr, slot: usize, dir: PortDirection) {
-    let atom = match &mut t.ir.arcs[0].refs[slot] {
-        SignedRefR::Plus(a) | SignedRefR::Minus(a) | SignedRefR::Neutral(a) => a,
-    };
-    atom.direction = dir;
+    t.ir.arcs[0].refs[slot] = t.ir.arcs[0].refs[slot].with_direction(dir);
 }
 
 /// Flip the sign of arc 0's slot `slot`, leaving the atom (and its direction) intact.
 fn flip_sign(t: &mut TestIr, slot: usize) {
-    let r = t.ir.arcs[0].refs[slot].clone();
-    t.ir.arcs[0].refs[slot] = match r {
-        SignedRefR::Plus(a) => SignedRefR::Minus(a),
-        SignedRefR::Minus(a) => SignedRefR::Plus(a),
-        SignedRefR::Neutral(a) => SignedRefR::Plus(a),
+    let reference = t.ir.arcs[0].refs[slot];
+    let sign = if reference.sign() == 1 {
+        IncidenceSign::Minus
+    } else {
+        IncidenceSign::Plus
     };
+    t.ir.arcs[0].refs[slot] = reference.with_sign(sign);
 }
 
 /// The model with directions declared: slot 0 (`y`) out, slots 1--2 (`x`, `W`) in.
@@ -438,7 +437,7 @@ fn a_legacy_incidence_has_no_direction() {
     let (t, _) = plain();
     for arc in &t.ir.arcs {
         for reference in &arc.refs {
-            assert_eq!(reference.atom().direction, PortDirection::Unspecified);
+            assert_eq!(reference.direction(), PortDirection::Unspecified);
         }
     }
     assert_eq!(validate_model_contract(&t.ir, &t.it), Ok(()));
@@ -457,17 +456,16 @@ fn direction_moves_the_digest_at_a_fixed_sign() {
     let (mut right, _) = directed();
     set_dir(&mut right, 1, PortDirection::Out);
     assert_eq!(
-        left.ir.arcs[0].refs[1].atom().target,
-        right.ir.arcs[0].refs[1].atom().target,
+        left.ir.arcs[0].refs[1].target(),
+        right.ir.arcs[0].refs[1].target(),
         "observation floor: only the direction may differ"
     );
     assert_ne!(
-        left.ir.arcs[0].refs[1].atom().direction,
-        right.ir.arcs[0].refs[1].atom().direction
+        left.ir.arcs[0].refs[1].direction(),
+        right.ir.arcs[0].refs[1].direction()
     );
     assert!(
-        matches!(left.ir.arcs[0].refs[1], SignedRefR::Minus(_))
-            && matches!(right.ir.arcs[0].refs[1], SignedRefR::Minus(_)),
+        left.ir.arcs[0].refs[1].sign() == -1 && right.ir.arcs[0].refs[1].sign() == -1,
         "the sign is held fixed"
     );
     assert_ne!(digest(&left), digest(&right));
@@ -481,13 +479,12 @@ fn sign_moves_the_digest_at_a_fixed_direction() {
     let (mut right, _) = directed();
     flip_sign(&mut right, 1);
     assert_eq!(
-        left.ir.arcs[0].refs[1].atom().direction,
-        right.ir.arcs[0].refs[1].atom().direction,
+        left.ir.arcs[0].refs[1].direction(),
+        right.ir.arcs[0].refs[1].direction(),
         "the direction is held fixed"
     );
     assert!(
-        matches!(left.ir.arcs[0].refs[1], SignedRefR::Minus(_))
-            && matches!(right.ir.arcs[0].refs[1], SignedRefR::Plus(_)),
+        left.ir.arcs[0].refs[1].sign() == -1 && right.ir.arcs[0].refs[1].sign() == 1,
         "observation floor: the sign really changed"
     );
     assert_ne!(digest(&left), digest(&right));
@@ -576,15 +573,11 @@ fn the_round_trip_preserves_both_axes() {
         .enumerate()
     {
         assert_eq!(
-            before.atom().direction,
-            after.atom().direction,
+            before.direction(),
+            after.direction(),
             "direction at slot {slot}"
         );
-        assert_eq!(
-            std::mem::discriminant(before),
-            std::mem::discriminant(after),
-            "sign at slot {slot}"
-        );
+        assert_eq!(before.sign(), after.sign(), "sign at slot {slot}");
     }
     assert_eq!(Canon::new(&back, &t.it).hash().0.0, digest(&t));
 }
@@ -601,7 +594,7 @@ fn a_pre_direction_payload_decodes_as_unspecified() {
     let back: hymeko::ir::ir::Ir = serde_json::from_str(&json).expect("decode");
     for arc in &back.arcs {
         for reference in &arc.refs {
-            assert_eq!(reference.atom().direction, PortDirection::Unspecified);
+            assert_eq!(reference.direction(), PortDirection::Unspecified);
         }
     }
 }

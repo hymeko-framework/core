@@ -13,7 +13,7 @@ Extracted by grammar -- tree-sitter for Rust and C++, `ast` for Python -- so tha
 `pub(crate)`, a `pub fn` inside a private `mod`, and a `def` written inside a
 docstring are all excluded for a stated reason rather than by luck.
 
-**3 package(s), 668 public symbol(s).**
+**3 package(s), 794 public symbol(s).**
 
 ## docs (rust)
 
@@ -31,16 +31,25 @@ _No public symbols._
 
 ### traits
 
+- `Clock` — `hymeko_core/src/util/measurement.rs`
+- `GraphGenerator` — `hymeko_core/src/generators.rs`
 - `HymekoParser` — `hymeko_core/src/module_store/module_store.rs`
+- `IrBuilder` — `hymeko_core/src/ir/ir.rs`
 - `RefValueExtractor` — `hymeko_core/src/tensor/tensor_val.rs`
 - `ResolvableDesign` — `hymeko_core/src/generators.rs`
+- `Runner` — `hymeko_core/src/util/measurement.rs`
 - `SourceProvider` — `hymeko_core/src/module_store/source_provider.rs`
+- `SyntheticGenerator` — `hymeko_core/src/generators.rs`
 
 ### structs
 
+- `AllocationSnapshot` — `hymeko_core/src/util/measurement.rs`
 - `AnnoR` — `hymeko_core/src/ir/ir.rs`
+- `AnnotationTag` — `hymeko_core/src/common/ids.rs`
+- `ArcPlacement` — `hymeko_core/src/ir/ir.rs`
 - `ArcRec` — `hymeko_core/src/ir/ir.rs`
 - `AssemblerLimits` — `hymeko_core/src/ir_stream/assembler.rs`
+- `BaseListTag` — `hymeko_core/src/common/ids.rs`
 - `Canon` — `hymeko_core/src/ir/canonical_hash.rs`
 - `CanonHashCfg` — `hymeko_core/src/ir/canonical_hash.rs`
 - `CanonicalIdentity` — `hymeko_core/src/ir/canonical_hash.rs`
@@ -53,11 +62,13 @@ _No public symbols._
 - `CommittedTransaction` — `hymeko_core/src/ir_stream/assembler.rs`
 - `CompiledModel` — `hymeko_core/src/module_store/execution.rs`
 - `CompiledProgram` — `hymeko_core/src/module_store/module_store.rs`
+- `CountingAllocator` — `hymeko_core/src/util/measurement.rs`
 - `DeclNode` — `hymeko_core/src/ir/ir.rs`
 - `DeclTag` — `hymeko_core/src/common/ids.rs`
 - `DecodeLimits` — `hymeko_core/src/ir_stream/limits.rs`
 - `DecodedCborPayload` — `hymeko_core/src/writers/cbor_writer.rs`
 - `DerivedPathIndex` — `hymeko_core/src/ir/canonical_hash.rs`
+- `Distribution` — `hymeko_core/src/util/measurement.rs`
 - `EdgeRec` — `hymeko_core/src/ir/ir.rs`
 - `EdgeTag` — `hymeko_core/src/common/ids.rs`
 - `EnvelopeDraft` — `hymeko_core/src/ir_stream/envelope.rs`
@@ -68,18 +79,30 @@ _No public symbols._
 - `HyperArcTag` — `hymeko_core/src/common/ids.rs`
 - `HypergraphDesign` — `hymeko_core/src/generators.rs`
 - `Id` — `hymeko_core/src/common/ids.rs`
+- `IncidenceContraction` — `hymeko_core/src/ir/incidence/contraction.rs`
 - `IncidenceIndex` — `hymeko_core/src/ir/incidence.rs`
 - `IncidenceIndexData` — `hymeko_core/src/ir/incidence.rs`
+- `IncidenceLayout` — `hymeko_core/src/ir/incidence/projection/layout.rs`
 - `IncidenceOperatorPlan` — `hymeko_core/src/ir/incidence.rs`
+- `IncidenceProjection` — `hymeko_core/src/ir/incidence/projection.rs`
 - `IncidenceRef` — `hymeko_core/src/ir/incidence.rs`
+- `IncidenceRow` — `hymeko_core/src/ir/incidence/projection.rs`
 - `IncidenceView` — `hymeko_core/src/ir/incidence.rs`
 - `Index` — `hymeko_core/src/resolution/resolve.rs`
 - `Interned` — `hymeko_core/src/resolution/intern_pass.rs`
 - `Interner` — `hymeko_core/src/resolution/interner.rs`
 - `IoDiag` — `hymeko_core/src/module_store/module_store.rs`
 - `Ir` — `hymeko_core/src/ir/ir.rs`
+- `IrCapacities` — `hymeko_core/src/ir/ir.rs`
+- `IrConstruction` — `hymeko_core/src/ir/ir.rs`
+- `IrLowering` — `hymeko_core/src/ir/lower.rs`
+- `IrPageSizeError` — `hymeko_core/src/ir/table.rs`
+- `IrTable` — `hymeko_core/src/ir/table.rs`
+- `IrTableIter` — `hymeko_core/src/ir/table.rs`
 - `IrWriter` — `hymeko_core/src/writers/ir_writer.rs`
 - `LatticePyramid` — `hymeko_core/src/generators/pyramid.rs`
+- `LazyIr` — `hymeko_core/src/ir/ir.rs`
+- `MeasurementRunner` — `hymeko_core/src/util/measurement.rs`
 - `MemProvider` — `hymeko_core/src/module_store/source_provider.rs`
 - `MessageIdentity` — `hymeko_core/src/ir_stream/assembler.rs`
 - `Meta` — `hymeko_core/src/ir/meta.rs`
@@ -96,11 +119,15 @@ _No public symbols._
 - `PyramidCover` — `hymeko_core/src/generators/pyramid.rs`
 - `PyramidLevel` — `hymeko_core/src/generators/pyramid.rs`
 - `RealParser` — `hymeko_core/src/util/real_parser.rs`
-- `RefAtomR` — `hymeko_core/src/ir/ir.rs`
+- `RefAtomR` — `hymeko_core/src/ir/reference.rs`
+- `ReferenceDraft` — `hymeko_core/src/ir/reference.rs`
+- `ReferenceView` — `hymeko_core/src/ir/reference.rs`
 - `ScalarWeightExtractor` — `hymeko_core/src/tensor/tensor_val.rs`
 - `SectionEntry` — `hymeko_core/src/ir_stream/section.rs`
 - `SemanticModelDigest` — `hymeko_core/src/ir/semantic_digest.rs`
+- `SignedRefR` — `hymeko_core/src/ir/reference.rs`
 - `SnapshotMessageDraft` — `hymeko_core/src/writers/cbor_writer/stream.rs`
+- `SnapshotRetirement` — `hymeko_core/src/module_store/execution.rs`
 - `SnapshotVersion` — `hymeko_core/src/ir_stream/version.rs`
 - `StagedSection` — `hymeko_core/src/ir_stream/assembler.rs`
 - `StarOperator` — `hymeko_core/src/ir/incidence.rs`
@@ -113,6 +140,9 @@ _No public symbols._
 - `ValidatedEnvelope` — `hymeko_core/src/ir_stream/envelope.rs`
 - `ValidatedMessage` — `hymeko_core/src/ir_stream/codec.rs`
 - `ValidatedSection` — `hymeko_core/src/ir_stream/section.rs`
+- `ValueUpdateWorkspace` — `hymeko_core/src/module_store/execution/value_updates.rs`
+- `WallClock` — `hymeko_core/src/util/measurement.rs`
+- `WeightVectorTag` — `hymeko_core/src/common/ids.rs`
 
 ### enums
 
@@ -130,7 +160,11 @@ _No public symbols._
 - `Finding` — `hymeko_core/src/ir/coherence.rs`
 - `GeneratorError` — `hymeko_core/src/generators.rs`
 - `HypergraphGenerator` — `hymeko_core/src/generators.rs`
+- `IncidenceDomain` — `hymeko_core/src/ir/incidence/projection.rs`
 - `IncidenceError` — `hymeko_core/src/ir/incidence.rs`
+- `IncidenceOrder` — `hymeko_core/src/ir/incidence/projection/layout.rs`
+- `IncidenceProjectionError` — `hymeko_core/src/ir/incidence/projection.rs`
+- `IncidenceSign` — `hymeko_core/src/ir/reference.rs`
 - `IrDecodeError` — `hymeko_core/src/ir/ir.rs`
 - `MessageType` — `hymeko_core/src/ir_stream/envelope.rs`
 - `ModelFacet` — `hymeko_core/src/ir/ir.rs`
@@ -139,13 +173,15 @@ _No public symbols._
 - `NamespaceError` — `hymeko_core/src/ir/canonical_hash.rs`
 - `OperatorPlanError` — `hymeko_core/src/ir/incidence.rs`
 - `PathIndexError` — `hymeko_core/src/ir/canonical_hash.rs`
-- `PortDirection` — `hymeko_core/src/ir/ir.rs`
+- `PortDirection` — `hymeko_core/src/ir/reference.rs`
 - `PrepareError` — `hymeko_core/src/module_store/execution.rs`
 - `PublicationError` — `hymeko_core/src/module_store/execution.rs`
+- `ReferenceError` — `hymeko_core/src/ir/reference.rs`
 - `ResolveError` — `hymeko_core/src/resolution/resolve.rs`
 - `ResyncReason` — `hymeko_core/src/ir_stream/assembler.rs`
+- `RetainedPublicationError` — `hymeko_core/src/module_store/execution.rs`
+- `RowAlignmentError` — `hymeko_core/src/ir/incidence/contraction.rs`
 - `SectionKind` — `hymeko_core/src/ir_stream/section.rs`
-- `SignedRefR` — `hymeko_core/src/ir/ir.rs`
 - `TensorRole` — `hymeko_core/src/ir/ir.rs`
 - `TransactionKind` — `hymeko_core/src/ir_stream/assembler.rs`
 - `ValueR` — `hymeko_core/src/ir/ir.rs`
@@ -155,24 +191,38 @@ _No public symbols._
 
 ### functions
 
+- `additional_bytes` — `hymeko_core/src/ir/incidence/projection/layout.rs`
+- `annotation` — `hymeko_core/src/ir/reference.rs`
+- `annotation_id` — `hymeko_core/src/ir/reference.rs`
+- `append_arc` — `hymeko_core/src/ir/ir.rs`
+- `append_arc_iter` — `hymeko_core/src/ir/ir.rs`
+- `append_edge` — `hymeko_core/src/ir/ir.rs`
+- `append_named` — `hymeko_core/src/ir/ir.rs`
+- `append_node` — `hymeko_core/src/ir/ir.rs`
 - `apply` — `hymeko_core/src/ir/incidence.rs`
+- `apply` — `hymeko_core/src/ir/incidence/contraction.rs`
 - `apply` — `hymeko_core/src/ir_stream/assembler.rs`
 - `arc` — `hymeko_core/src/ir/access.rs`
+- `arc_count` — `hymeko_core/src/ir/incidence/projection.rs`
 - `arc_for_decl` — `hymeko_core/src/ir/access.rs`
 - `arc_to_node` — `hymeko_core/src/ir/incidence.rs`
 - `as_arc` — `hymeko_core/src/ir/ir.rs`
 - `as_edge` — `hymeko_core/src/ir/ir.rs`
 - `as_node` — `hymeko_core/src/ir/ir.rs`
 - `as_node` — `hymeko_core/src/lib.rs`
-- `atom` — `hymeko_core/src/ir/ir.rs`
+- `as_slice` — `hymeko_core/src/ir/table.rs`
+- `atom` — `hymeko_core/src/ir/reference.rs`
 - `base_version` — `hymeko_core/src/ir_stream/assembler.rs`
 - `base_version` — `hymeko_core/src/ir_stream/envelope.rs`
+- `bases` — `hymeko_core/src/ir/reference.rs`
 - `bind_arc_decl` — `hymeko_core/src/ir/ir.rs`
 - `bind_edge_decl` — `hymeko_core/src/ir/ir.rs`
 - `bind_node_decl` — `hymeko_core/src/ir/ir.rs`
 - `binom` — `hymeko_core/src/generators.rs`
 - `body` — `hymeko_core/src/lib.rs`
 - `build` — `hymeko_core/src/ir/incidence.rs`
+- `build` — `hymeko_core/src/ir/incidence/contraction.rs`
+- `build` — `hymeko_core/src/ir/incidence/projection.rs`
 - `build_incidence_index` — `hymeko_core/src/ir/incidence.rs`
 - `build_index_sym` — `hymeko_core/src/resolution/resolve.rs`
 - `build_index_sym_with_prefix` — `hymeko_core/src/resolution/resolve.rs`
@@ -181,22 +231,33 @@ _No public symbols._
 - `bytes` — `hymeko_core/src/ir_stream/assembler.rs`
 - `bytes` — `hymeko_core/src/ir_stream/section.rs`
 - `canonical_hash` — `hymeko_core/src/writers/cbor_writer.rs`
+- `canonical_index` — `hymeko_core/src/ir/incidence/projection/layout.rs`
+- `canonical_indices` — `hymeko_core/src/ir/incidence/projection/layout.rs`
 - `canonicalize_path` — `hymeko_core/src/module_store/module_store.rs`
+- `capacities` — `hymeko_core/src/ir/ir.rs`
+- `capacity` — `hymeko_core/src/module_store/execution.rs`
 - `carries_sections` — `hymeko_core/src/ir_stream/envelope.rs`
 - `changes_topology` — `hymeko_core/src/ir_stream/assembler.rs`
 - `child_decls` — `hymeko_core/src/ir/access.rs`
 - `children` — `hymeko_core/src/ir/ir.rs`
 - `combinations` — `hymeko_core/src/generators.rs`
 - `commit` — `hymeko_core/src/module_store/execution.rs`
+- `commit_retaining` — `hymeko_core/src/module_store/execution.rs`
+- `compare` — `hymeko_core/src/util/measurement.rs`
+- `comparison_samples` — `hymeko_core/src/util/measurement.rs`
 - `compile` — `hymeko_core/src/module_store/execution.rs`
 - `compile` — `hymeko_core/src/module_store/module_store.rs`
 - `complete_uniform_design` — `hymeko_core/src/generators.rs`
 - `cover` — `hymeko_core/src/generators/pyramid.rs`
 - `current_commit_digest` — `hymeko_core/src/ir_stream/assembler.rs`
+- `current_thread` — `hymeko_core/src/util/measurement.rs`
 - `current_version` — `hymeko_core/src/ir_stream/assembler.rs`
 - `cwd` — `hymeko_core/src/module_store/source_provider.rs`
 - `data` — `hymeko_core/src/ir/incidence.rs`
+- `decl_annotation` — `hymeko_core/src/ir/reference.rs`
+- `decl_annotation_mut` — `hymeko_core/src/ir/reference.rs`
 - `decl_children` — `hymeko_core/src/ir/ir.rs`
+- `decl_draft` — `hymeko_core/src/ir/reference.rs`
 - `decl_kind` — `hymeko_core/src/ir/ir.rs`
 - `decl_node` — `hymeko_core/src/ir/ir.rs`
 - `decl_node_unchecked` — `hymeko_core/src/ir/ir.rs`
@@ -206,12 +267,16 @@ _No public symbols._
 - `decode` — `hymeko_core/src/ir_stream/envelope.rs`
 - `decode` — `hymeko_core/src/writers/cbor_writer.rs`
 - `decode_snapshot` — `hymeko_core/src/writers/cbor_writer/stream.rs`
+- `defer_capacity` — `hymeko_core/src/ir/table.rs`
 - `degree` — `hymeko_core/src/ir/incidence.rs`
 - `depth` — `hymeko_core/src/generators/pyramid.rs`
 - `design` — `hymeko_core/src/generators.rs`
 - `did_to_path` — `hymeko_core/src/ir/canonical_hash.rs`
 - `digest` — `hymeko_core/src/ir_stream/assembler.rs`
 - `dim` — `hymeko_core/src/generators/pyramid.rs`
+- `direction` — `hymeko_core/src/ir/reference.rs`
+- `domain` — `hymeko_core/src/ir/incidence/projection.rs`
+- `domain_len` — `hymeko_core/src/ir/incidence/projection.rs`
 - `dominates` — `hymeko_core/src/ir_stream/version.rs`
 - `edge` — `hymeko_core/src/ir/access.rs`
 - `edge_for_decl` — `hymeko_core/src/ir/access.rs`
@@ -233,10 +298,14 @@ _No public symbols._
 - `first_child` — `hymeko_core/src/ir/ir.rs`
 - `first_child_of` — `hymeko_core/src/ir/access.rs`
 - `flags` — `hymeko_core/src/ir_stream/envelope.rs`
+- `for_each_row` — `hymeko_core/src/ir/incidence/projection.rs`
+- `for_each_row` — `hymeko_core/src/ir/incidence/projection/layout.rs`
+- `for_each_row_range` — `hymeko_core/src/ir/incidence/projection.rs`
 - `from_decoded_cbor` — `hymeko_core/src/module_store/execution.rs`
 - `from_interner` — `hymeko_core/src/resolution/string_table.rs`
 - `from_le_bytes` — `hymeko_core/src/ir_stream/version.rs`
 - `from_vec` — `hymeko_core/src/resolution/string_table.rs`
+- `gather` — `hymeko_core/src/ir/incidence/projection.rs`
 - `get` — `hymeko_core/src/module_store/module_store.rs`
 - `get_id` — `hymeko_core/src/resolution/interner.rs`
 - `has_open_transaction` — `hymeko_core/src/ir_stream/assembler.rs`
@@ -245,6 +314,7 @@ _No public symbols._
 - `header_bytes` — `hymeko_core/src/ir_stream/envelope.rs`
 - `hypercube` — `hymeko_core/src/generators.rs`
 - `incidence_count` — `hymeko_core/src/ir/incidence.rs`
+- `incidence_count` — `hymeko_core/src/ir/incidence/projection.rs`
 - `incidences` — `hymeko_core/src/ir/incidence.rs`
 - `incidences` — `hymeko_core/src/module_store/execution.rs`
 - `incident_arcs` — `hymeko_core/src/ir/incidence.rs`
@@ -258,37 +328,47 @@ _No public symbols._
 - `interner` — `hymeko_core/src/ir/canonical_hash.rs`
 - `interner` — `hymeko_core/src/module_store/execution.rs`
 - `interner` — `hymeko_core/src/writers/cbor_writer.rs`
+- `into_candidate` — `hymeko_core/src/module_store/execution.rs`
 - `into_ir` — `hymeko_core/src/ir/incidence.rs`
 - `into_parts` — `hymeko_core/src/writers/cbor_writer.rs`
 - `ir` — `hymeko_core/src/ir/canonical_hash.rs`
 - `ir` — `hymeko_core/src/ir/incidence.rs`
+- `ir` — `hymeko_core/src/ir/incidence/projection.rs`
 - `ir` — `hymeko_core/src/writers/cbor_writer.rs`
 - `is_comparable_to` — `hymeko_core/src/ir_stream/version.rs`
 - `is_empty` — `hymeko_core/src/ir/canonical_hash.rs`
 - `is_empty` — `hymeko_core/src/ir/coherence.rs`
+- `is_empty` — `hymeko_core/src/ir/incidence/projection.rs`
+- `is_empty` — `hymeko_core/src/ir/table.rs`
+- `is_empty` — `hymeko_core/src/module_store/execution.rs`
 - `is_last_chunk` — `hymeko_core/src/ir_stream/envelope.rs`
+- `is_loaded` — `hymeko_core/src/ir/ir.rs`
 - `is_none` — `hymeko_core/src/common/ids.rs`
 - `is_singleton` — `hymeko_core/src/ir_stream/section.rs`
 - `is_skippable` — `hymeko_core/src/ir_stream/section.rs`
 - `is_some` — `hymeko_core/src/common/ids.rs`
-- `is_unspecified` — `hymeko_core/src/ir/ir.rs`
+- `is_unspecified` — `hymeko_core/src/ir/reference.rs`
 - `iter` — `hymeko_core/src/common/pathkey.rs`
 - `iter` — `hymeko_core/src/ir/canonical_hash.rs`
+- `iter` — `hymeko_core/src/ir/table.rs`
 - `iter` — `hymeko_core/src/resolution/interner.rs`
 - `iter` — `hymeko_core/src/resolution/resolve.rs`
+- `iter_mut` — `hymeko_core/src/ir/table.rs`
+- `iter_targets` — `hymeko_core/src/ir/incidence/projection.rs`
 - `kind` — `hymeko_core/src/ir/ir.rs`
 - `kind` — `hymeko_core/src/ir_stream/assembler.rs`
 - `kind` — `hymeko_core/src/ir_stream/section.rs`
 - `kind_of` — `hymeko_core/src/ir/access.rs`
 - `last_child_of` — `hymeko_core/src/ir/access.rs`
 - `last_seq` — `hymeko_core/src/ir_stream/assembler.rs`
+- `layout` — `hymeko_core/src/ir/incidence/projection.rs`
 - `len` — `hymeko_core/src/ir/canonical_hash.rs`
+- `len` — `hymeko_core/src/ir/incidence/projection.rs`
+- `len` — `hymeko_core/src/ir/table.rs`
+- `len` — `hymeko_core/src/module_store/execution.rs`
 - `level` — `hymeko_core/src/generators/pyramid.rs`
+- `load` — `hymeko_core/src/ir/ir.rs`
 - `load_recursive` — `hymeko_core/src/module_store/module_store.rs`
-- `lower_program_to_ir` — `hymeko_core/src/ir/lower.rs`
-- `lower_program_to_ir_with_meta` — `hymeko_core/src/ir/lower.rs`
-- `lower_to_ir` — `hymeko_core/src/ir/lower.rs`
-- `lower_to_ir_with_meta` — `hymeko_core/src/ir/lower.rs`
 - `model` — `hymeko_core/src/module_store/execution.rs`
 - `model_facet` — `hymeko_core/src/ir/ir.rs`
 - `model_facet_table_len` — `hymeko_core/src/ir/ir.rs`
@@ -302,7 +382,9 @@ _No public symbols._
 - `new` — `hymeko_core/src/ir/canonical_hash.rs`
 - `new` — `hymeko_core/src/ir/incidence.rs`
 - `new` — `hymeko_core/src/ir/ir.rs`
+- `new` — `hymeko_core/src/ir/lower.rs`
 - `new` — `hymeko_core/src/ir/meta.rs`
+- `new` — `hymeko_core/src/ir/reference.rs`
 - `new` — `hymeko_core/src/ir_stream/assembler.rs`
 - `new` — `hymeko_core/src/ir_stream/envelope.rs`
 - `new` — `hymeko_core/src/ir_stream/version.rs`
@@ -312,6 +394,7 @@ _No public symbols._
 - `new` — `hymeko_core/src/resolution/interner.rs`
 - `new` — `hymeko_core/src/resolution/resolve.rs`
 - `new` — `hymeko_core/src/tensor/mod.rs`
+- `new` — `hymeko_core/src/util/measurement.rs`
 - `new` — `hymeko_core/src/writers/ir_writer.rs`
 - `next_sibling` — `hymeko_core/src/ir/ir.rs`
 - `next_sibling_of` — `hymeko_core/src/ir/access.rs`
@@ -324,6 +407,8 @@ _No public symbols._
 - `now_ns_u128` — `hymeko_core/src/ir/time.rs`
 - `of` — `hymeko_core/src/ir/canonical_hash.rs`
 - `of` — `hymeko_core/src/ir_stream/assembler.rs`
+- `offset` — `hymeko_core/src/ir/incidence/projection.rs`
+- `order` — `hymeko_core/src/ir/incidence/projection/layout.rs`
 - `par_arc_to_node` — `hymeko_core/src/ir/incidence.rs`
 - `parent` — `hymeko_core/src/ir/ir.rs`
 - `parent_of` — `hymeko_core/src/ir/access.rs`
@@ -333,19 +418,26 @@ _No public symbols._
 - `payload_digest` — `hymeko_core/src/ir_stream/assembler.rs`
 - `payload_hash` — `hymeko_core/src/ir_stream/envelope.rs`
 - `payload_len` — `hymeko_core/src/ir_stream/envelope.rs`
-- `plain` — `hymeko_core/src/ir/ir.rs`
+- `plain` — `hymeko_core/src/ir/reference.rs`
 - `positions` — `hymeko_core/src/generators/pyramid.rs`
 - `preallocate_from_index` — `hymeko_core/src/ir/ir.rs`
 - `prepare` — `hymeko_core/src/module_store/execution.rs`
 - `prepare_model_at` — `hymeko_core/src/module_store/execution/value_updates.rs`
+- `prepare_named_slots` — `hymeko_core/src/ir/ir.rs`
 - `pretty_print_compiled` — `hymeko_core/src/util/pretty_print.rs`
 - `program` — `hymeko_core/src/module_store/execution.rs`
+- `projection` — `hymeko_core/src/ir/incidence/projection/layout.rs`
 - `provider_mut` — `hymeko_core/src/module_store/module_store.rs`
 - `push_anonymous_arc` — `hymeko_core/src/ir/ir.rs`
 - `push_decl` — `hymeko_core/src/ir/ir.rs`
 - `radices` — `hymeko_core/src/generators.rs`
+- `range_count` — `hymeko_core/src/ir/incidence/projection.rs`
+- `range_count` — `hymeko_core/src/ir/incidence/projection/layout.rs`
 - `raw` — `hymeko_core/src/common/ids.rs`
 - `read_count` — `hymeko_core/src/module_store/source_provider.rs`
+- `reclaim` — `hymeko_core/src/module_store/execution.rs`
+- `reference_atom` — `hymeko_core/src/ir/reference.rs`
+- `reference_draft` — `hymeko_core/src/ir/reference.rs`
 - `replay_memory_bytes` — `hymeko_core/src/ir_stream/assembler.rs`
 - `reset_for_resync` — `hymeko_core/src/ir_stream/assembler.rs`
 - `resolve` — `hymeko_core/src/ir/incidence.rs`
@@ -358,8 +450,15 @@ _No public symbols._
 - `resolve_signed_refs` — `hymeko_core/src/resolution/resolve.rs`
 - `resuming_at` — `hymeko_core/src/ir_stream/assembler.rs`
 - `retained_bytes` — `hymeko_core/src/ir/incidence.rs`
+- `retained_bytes` — `hymeko_core/src/ir/incidence/projection.rs`
 - `revision` — `hymeko_core/src/module_store/execution.rs`
+- `root` — `hymeko_core/src/ir/ir.rs`
+- `row` — `hymeko_core/src/ir/incidence/projection.rs`
+- `rows` — `hymeko_core/src/ir/incidence/projection.rs`
+- `rows` — `hymeko_core/src/ir/incidence/projection/layout.rs`
+- `samples` — `hymeko_core/src/util/measurement.rs`
 - `scalar_weight` — `hymeko_core/src/ir/incidence.rs`
+- `scatter` — `hymeko_core/src/ir/incidence/projection.rs`
 - `schema_version` — `hymeko_core/src/ir_stream/envelope.rs`
 - `section` — `hymeko_core/src/ir_stream/assembler.rs`
 - `section` — `hymeko_core/src/ir_stream/codec.rs`
@@ -368,9 +467,14 @@ _No public symbols._
 - `semantic_digest` — `hymeko_core/src/module_store/execution.rs`
 - `seq` — `hymeko_core/src/ir_stream/assembler.rs`
 - `seq` — `hymeko_core/src/ir_stream/envelope.rs`
+- `set_decl_annotation` — `hymeko_core/src/ir/reference.rs`
+- `set_meta` — `hymeko_core/src/ir/ir.rs`
 - `set_model_facet` — `hymeko_core/src/ir/ir.rs`
 - `shrink_to_fit` — `hymeko_core/src/ir/ir.rs`
-- `sign` — `hymeko_core/src/ir/ir.rs`
+- `shrink_to_fit` — `hymeko_core/src/ir/table.rs`
+- `sign` — `hymeko_core/src/ir/reference.rs`
+- `sign_kind` — `hymeko_core/src/ir/reference.rs`
+- `since` — `hymeko_core/src/util/measurement.rs`
 - `size` — `hymeko_core/src/ir_stream/section.rs`
 - `size_usize` — `hymeko_core/src/ir_stream/section.rs`
 - `snapshot` — `hymeko_core/src/module_store/execution.rs`
@@ -380,21 +484,28 @@ _No public symbols._
 - `state` — `hymeko_core/src/ir_stream/assembler.rs`
 - `steiner_design` — `hymeko_core/src/generators.rs`
 - `steiner_triples` — `hymeko_core/src/generators.rs`
+- `store` — `hymeko_core/src/ir/reference/wire.rs`
+- `store_annotation` — `hymeko_core/src/ir/reference.rs`
+- `store_bases` — `hymeko_core/src/ir/reference.rs`
+- `store_reference` — `hymeko_core/src/ir/reference.rs`
 - `stream_id` — `hymeko_core/src/ir_stream/assembler.rs`
 - `stream_id` — `hymeko_core/src/ir_stream/envelope.rs`
 - `strict` — `hymeko_core/src/ir_stream/assembler.rs`
 - `strict` — `hymeko_core/src/ir_stream/limits.rs`
 - `structure` — `hymeko_core/src/ir/canonical_hash.rs`
+- `summarize` — `hymeko_core/src/util/measurement.rs`
 - `sunflower_design` — `hymeko_core/src/generators.rs`
 - `take_last_ir` — `hymeko_core/src/module_store/module_store.rs`
-- `target` — `hymeko_core/src/ir/ir.rs`
+- `target` — `hymeko_core/src/ir/reference.rs`
 - `target_version` — `hymeko_core/src/ir_stream/assembler.rs`
 - `target_version` — `hymeko_core/src/ir_stream/envelope.rs`
+- `targets` — `hymeko_core/src/ir/incidence/projection.rs`
 - `to_bytes` — `hymeko_core/src/ir_stream/envelope.rs`
 - `to_bytes` — `hymeko_core/src/ir_stream/section.rs`
 - `to_f32_vec` — `hymeko_core/src/ir_stream/section.rs`
 - `to_le_bytes` — `hymeko_core/src/ir_stream/version.rs`
 - `to_u32_vec` — `hymeko_core/src/ir_stream/section.rs`
+- `to_vec` — `hymeko_core/src/ir/table.rs`
 - `to_vec` — `hymeko_core/src/resolution/string_table.rs`
 - `to_wire` — `hymeko_core/src/ir_stream/envelope.rs`
 - `to_wire` — `hymeko_core/src/ir_stream/section.rs`
@@ -402,7 +513,9 @@ _No public symbols._
 - `try_from_wire` — `hymeko_core/src/ir_stream/section.rs`
 - `txn_id` — `hymeko_core/src/ir_stream/assembler.rs`
 - `txn_id` — `hymeko_core/src/ir_stream/envelope.rs`
+- `under_owner` — `hymeko_core/src/ir/ir.rs`
 - `unique_paths` — `hymeko_core/src/ir/canonical_hash.rs`
+- `unowned` — `hymeko_core/src/ir/ir.rs`
 - `validate` — `hymeko_core/src/ir/incidence.rs`
 - `validate_all_refs_sym` — `hymeko_core/src/resolution/resolve.rs`
 - `validate_all_refs_sym_with_prefix` — `hymeko_core/src/resolution/resolve.rs`
@@ -411,8 +524,21 @@ _No public symbols._
 - `validate_model_contract` — `hymeko_core/src/ir/coherence.rs`
 - `validate_namespace_roots` — `hymeko_core/src/ir/canonical_hash.rs`
 - `view` — `hymeko_core/src/ir/incidence.rs`
+- `weight_vector_id` — `hymeko_core/src/ir/reference.rs`
+- `with_capacities` — `hymeko_core/src/ir/ir.rs`
+- `with_capacity` — `hymeko_core/src/module_store/execution.rs`
+- `with_capacity` — `hymeko_core/src/module_store/execution/value_updates.rs`
+- `with_clock` — `hymeko_core/src/util/measurement.rs`
+- `with_declaration_pages` — `hymeko_core/src/module_store/execution.rs`
+- `with_direction` — `hymeko_core/src/ir/reference.rs`
 - `with_file` — `hymeko_core/src/module_store/source_provider.rs`
+- `with_imports` — `hymeko_core/src/ir/lower.rs`
+- `with_meta` — `hymeko_core/src/ir/lower.rs`
+- `with_sign` — `hymeko_core/src/ir/reference.rs`
+- `with_target` — `hymeko_core/src/ir/reference.rs`
 - `with_value_updates` — `hymeko_core/src/module_store/execution/value_updates.rs`
+- `with_value_updates_in` — `hymeko_core/src/module_store/execution/value_updates.rs`
+- `with_weights` — `hymeko_core/src/ir/reference.rs`
 - `write_all` — `hymeko_core/src/writers/ir_writer.rs`
 
 ## hymeko_wgpu (rust)

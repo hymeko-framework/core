@@ -4,7 +4,7 @@ mod test_import_graphs {
     use crate::test_helpers::{log_test_footer, log_test_header};
     use hymeko::common::pathkey::PathKey;
     use hymeko::ir::ir::{DeclKind, SignedRefR};
-    use hymeko::ir::lower::lower_to_ir;
+    use hymeko::ir::lower::{IrBuilder, IrLowering};
     use hymeko::module_store::module_store::ModuleStore;
     use hymeko::module_store::source_provider::StdFsProvider;
     use hymeko::resolution::intern_pass::{Interned, intern_ast};
@@ -28,7 +28,9 @@ mod test_import_graphs {
         assert_eq!(desc.name, "basic_library");
         let Interned { ast, mut interner } = intern_ast(&desc);
         let idx = build_index_sym(&ast, &mut interner).expect("index build failed");
-        let ir = lower_to_ir(&ast, &idx, &mut interner).expect("lower failed");
+        let ir = IrLowering::new(&ast, &idx, &mut interner)
+            .build()
+            .expect("lower failed");
 
         let sid_elements = interner.intern("elements");
         let sid_operand = interner.intern("operand");
@@ -72,8 +74,10 @@ mod test_import_graphs {
         let arc = &ir.arcs[arc_id.raw()];
         assert_eq!(arc.refs.len(), 2, "operator arc should connect two refs");
 
-        match (&arc.refs[0], &arc.refs[1]) {
-            (SignedRefR::Plus(lhs), SignedRefR::Minus(rhs)) => {
+        let lhs = ir.reference_atom(&arc.refs[0]).unwrap();
+        let rhs = ir.reference_atom(&arc.refs[1]).unwrap();
+        match (arc.refs[0].sign(), arc.refs[1].sign()) {
+            (1, -1) => {
                 assert_eq!(
                     lhs.target, did_operand,
                     "+ operand should target operand node"
@@ -128,9 +132,7 @@ mod test_import_graphs {
         let mut referenced = false;
         for arc in &compiled.ir.arcs {
             for r in &arc.refs {
-                let tgt = match r {
-                    SignedRefR::Plus(a) | SignedRefR::Minus(a) | SignedRefR::Neutral(a) => a.target,
-                };
+                let tgt = r.target();
                 if tgt == did {
                     referenced = true;
                 }
@@ -192,9 +194,7 @@ mod test_import_graphs {
         let mut referenced = false;
         for arc in &compiled.ir.arcs {
             for r in &arc.refs {
-                let tgt = match r {
-                    SignedRefR::Plus(a) | SignedRefR::Minus(a) | SignedRefR::Neutral(a) => a.target,
-                };
+                let tgt = r.target();
                 if tgt == did {
                     referenced = true;
                     break;

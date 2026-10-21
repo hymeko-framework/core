@@ -1,5 +1,5 @@
 //! Conversion of canonical IR reference weights to numerical values.
-use crate::ir::ir::{SignedRefR, ValueR};
+use crate::ir::ir::{Ir, SignedRefR, ValueR};
 use hymeko_tensor::{common::Real, tensor_val::IncVal};
 
 // APPROVED-CORE-EDIT: extract-ref-weight-noalloc (2026-08-24, user chat).
@@ -35,7 +35,7 @@ use hymeko_tensor::{common::Real, tensor_val::IncVal};
 /// `tests/test_tensor_representations/test_weight_extraction.rs`, which was
 /// written against the previous implementation and passes unchanged.
 #[inline(always)]
-pub fn extract_ref_weight_scalar<F: Real>(weights: &Option<Vec<ValueR>>) -> F {
+pub fn extract_ref_weight_scalar<F: Real>(weights: Option<&[ValueR]>) -> F {
     let Some(ws) = weights else {
         return F::one();
     };
@@ -79,7 +79,7 @@ pub fn extract_ref_weight_scalar<F: Real>(weights: &Option<Vec<ValueR>>) -> F {
 }
 
 pub trait RefValueExtractor<F: Real, V: IncVal<F>> {
-    fn value_of(&self, r: &SignedRefR) -> V;
+    fn value_of(&self, ir: &Ir, r: &SignedRefR) -> V;
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -87,11 +87,10 @@ pub struct ScalarWeightExtractor;
 
 impl<F: Real> RefValueExtractor<F, F> for ScalarWeightExtractor {
     #[inline(always)]
-    fn value_of(&self, r: &SignedRefR) -> F {
-        match r {
-            SignedRefR::Plus(a) | SignedRefR::Minus(a) | SignedRefR::Neutral(a) => {
-                extract_ref_weight_scalar(&a.weights)
-            }
-        }
+    fn value_of(&self, ir: &Ir, r: &SignedRefR) -> F {
+        let atom = ir
+            .reference_atom(r)
+            .expect("weight extraction requires model-local reference payloads");
+        extract_ref_weight_scalar(atom.weights)
     }
 }

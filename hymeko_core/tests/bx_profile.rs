@@ -4,8 +4,6 @@
 //! removes only the `sign()`/`scalar_weight` recompute (it still reads `target` from the ref, i.e. no
 //! topology copy). Wired into `tests/mod.rs` (autotests=false).
 
-use hymeko::ir::incidence::scalar_weight;
-
 use super::incidence_support::{median_ms, windowed};
 
 #[test]
@@ -25,7 +23,7 @@ fn profile_bx_decomposition() {
     let mut coeff_am: Vec<f64> = Vec::with_capacity(nnz);
     for a in &ir.arcs {
         for sref in &a.refs {
-            coeff_am.push(f64::from(sref.sign()) * scalar_weight(sref));
+            coeff_am.push(f64::from(sref.sign()) * sref.scalar_weight(&ir));
         }
     }
     // (A) current Bx

@@ -36,6 +36,182 @@ fn names(snapshot: &ExecutionSnapshot) -> Vec<&str> {
 }
 
 #[test]
+fn retained_publication_reports_capacity_and_returns_the_candidate() {
+    assert!(SnapshotRetirement::with_capacity(usize::MAX).is_err());
+    let state = ExecutionState::new(model("old"));
+    let original = state.snapshot().unwrap();
+    let mut none = SnapshotRetirement::with_capacity(0).unwrap();
+    assert_eq!(none.capacity(), 0);
+    assert!(none.is_empty());
+    let candidate = prepare(&state, "next");
+    let candidate_program = Arc::downgrade(&candidate.model.program);
+    let error = state.commit_retaining(candidate, &mut none).err().unwrap();
+    assert!(matches!(
+        &error,
+        RetainedPublicationError::RetirementFull(_)
+    ));
+    assert!(error.to_string().contains("full"));
+    assert!(std::error::Error::source(&error).is_none());
+    assert!(format!("{error:?}").contains("Full"));
+    assert!(candidate_program.upgrade().is_some());
+    assert!(Arc::ptr_eq(&original, &state.snapshot().unwrap()));
+    let mut retirement = SnapshotRetirement::with_capacity(1).unwrap();
+    let next = state
+        .commit_retaining(error.into_candidate(), &mut retirement)
+        .unwrap();
+    assert_eq!(next.revision(), 1);
+    assert_eq!(retirement.len(), 1);
+    assert_eq!(retirement.reclaim(0), 0);
+    assert_eq!(
+        retirement.reclaim(1),
+        0,
+        "the old reader still owns its root"
+    );
+    let blocked = state
+        .commit_retaining(prepare(&state, "third"), &mut retirement)
+        .err()
+        .unwrap();
+    assert!(matches!(
+        blocked,
+        RetainedPublicationError::RetirementFull(_)
+    ));
+    assert_eq!(state.snapshot().unwrap().revision(), 1);
+    drop(original);
+    assert_eq!(retirement.reclaim(1), 1);
+    assert!(retirement.is_empty());
+    assert_eq!(
+        state
+            .commit_retaining(blocked.into_candidate(), &mut retirement)
+            .unwrap()
+            .revision(),
+        2
+    );
+}
+
+#[test]
+fn retirement_rotates_live_readers_and_destroys_unique_roots_on_the_worker() {
+    let state = ExecutionState::new(model("a"));
+    let a = state.snapshot().unwrap();
+    let a_weak = Arc::downgrade(&a);
+    let mut retirement = SnapshotRetirement::with_capacity(2).unwrap();
+    state
+        .commit_retaining(prepare(&state, "b"), &mut retirement)
+        .unwrap();
+    let b = state.snapshot().unwrap();
+    let b_program = Arc::downgrade(&b.model.program);
+    drop(b);
+    state
+        .commit_retaining(prepare(&state, "c"), &mut retirement)
+        .unwrap();
+    assert_eq!(retirement.reclaim(1), 0);
+    assert_eq!(retirement.reclaim(1), 1, "blocked a must not starve b");
+    assert!(b_program.upgrade().is_none());
+    let upgraded_reader = a_weak.upgrade().unwrap();
+    drop(a);
+    assert_eq!(retirement.reclaim(1), 0, "a weak upgrade is a real reader");
+    drop(upgraded_reader);
+    let count = thread::spawn(move || retirement.reclaim(1)).join().unwrap();
+    assert_eq!(count, 1);
+    assert!(a_weak.upgrade().is_none());
+}
+
+#[test]
+fn retained_rejections_preserve_queue_and_candidate_ownership() {
+    let state = ExecutionState::new(model("a"));
+    let other = ExecutionState::new(model("other"));
+    let mut retirement = SnapshotRetirement::with_capacity(2).unwrap();
+    let candidate = prepare(&state, "b");
+    let error = other
+        .commit_retaining(candidate, &mut retirement)
+        .err()
+        .unwrap();
+    assert!(matches!(
+        &error,
+        RetainedPublicationError::Rejected {
+            error: PublicationError::ForeignState,
+            ..
+        }
+    ));
+    assert!(error.to_string().contains("ForeignState"));
+    assert!(std::error::Error::source(&error).is_some());
+    assert!(format!("{error:?}").contains("ForeignState"));
+    assert!(retirement.is_empty());
+    let stale = prepare(&state, "stale");
+    state
+        .commit_retaining(error.into_candidate(), &mut retirement)
+        .unwrap();
+    let size = retirement.len();
+    let error = state
+        .commit_retaining(stale, &mut retirement)
+        .err()
+        .unwrap();
+    assert!(matches!(
+        &error,
+        RetainedPublicationError::Rejected {
+            error: PublicationError::StaleBase { .. },
+            ..
+        }
+    ));
+    assert_eq!(retirement.len(), size);
+    let recovered = error.into_candidate();
+    assert_eq!(recovered.base.revision(), 0);
+    assert!(names(&state.snapshot().unwrap()).contains(&"b"));
+}
+
+#[test]
+fn retained_poison_and_exhaustion_return_the_original_model() {
+    for poison in [false, true] {
+        let state = ExecutionState::new(model("old"));
+        if !poison {
+            let mut current = state.current.write().unwrap();
+            Arc::get_mut(&mut current).unwrap().revision = u64::MAX;
+        }
+        let candidate = prepare(&state, "candidate");
+        let original_model = Arc::downgrade(&candidate.model.program);
+        if poison {
+            let _ = catch_unwind(AssertUnwindSafe(|| {
+                let _guard = state.current.write().unwrap();
+                panic!("deliberate publication poison");
+            }));
+        }
+        let mut retirement = SnapshotRetirement::with_capacity(1).unwrap();
+        let error = state
+            .commit_retaining(candidate, &mut retirement)
+            .err()
+            .unwrap();
+        let RetainedPublicationError::Rejected { error, candidate } = error else {
+            panic!("publication error");
+        };
+        assert_eq!(
+            error,
+            if poison {
+                PublicationError::Poisoned
+            } else {
+                PublicationError::RevisionExhausted
+            }
+        );
+        assert!(Arc::ptr_eq(
+            &candidate.model.program,
+            &original_model.upgrade().unwrap()
+        ));
+        assert!(retirement.is_empty());
+    }
+}
+
+#[test]
+fn replacement_handling_is_outside_the_publication_lock() {
+    let state = ExecutionState::new(model("old"));
+    let mut observed = false;
+    let result = state.publish(prepare(&state, "new"), |previous| {
+        assert!(state.current.try_write().is_ok());
+        assert_eq!(previous.revision(), 0);
+        observed = true;
+    });
+    assert!(result.is_ok());
+    assert!(observed);
+}
+
+#[test]
 fn isolated_compilation_matches_the_canonical_pipeline() {
     let input = MemProvider::default().with_file(
         "model.hymeko",

@@ -4,7 +4,7 @@
 use hymeko::common::ids::DeclId;
 use hymeko::ir::canonical_hash::{Canon, CanonHashCfg};
 use hymeko::ir::hash::HashId;
-use hymeko::ir::ir::{AnnoR, SignedRefR, ValueR};
+use hymeko::ir::ir::{AnnoR, IncidenceSign, ValueR};
 
 use crate::unified_ir::support::builder::{S, TestIr};
 use crate::unified_ir::support::oracle::{Ordering, semantic_form};
@@ -155,7 +155,7 @@ fn hash_coverage_matrix() {
             .iter()
             .find_map(|(pk, d)| (pk.0.len() == 2 && b.it.resolve(pk.0[1]) == "x").then_some(d))
             .expect("x present");
-        b.ir.decl_nodes[x.raw()].anno.value = Some(ValueR::Num(1.5));
+        b.ir.decl_annotation_mut(x).unwrap().value = Some(ValueR::Num(1.5));
         let pb = probe(&b);
         row("anno.value", &pa, &pb);
     }
@@ -187,9 +187,8 @@ fn hash_coverage_matrix() {
         let a = base_linked();
         let pa = probe(&a);
         let mut b = base_linked();
-        if let SignedRefR::Minus(atom) = b.ir.arcs[0].refs[1].clone() {
-            b.ir.arcs[0].refs[1] = SignedRefR::Plus(atom);
-        }
+        assert_eq!(b.ir.arcs[0].refs[1].sign(), -1);
+        b.ir.arcs[0].refs[1] = b.ir.arcs[0].refs[1].with_sign(IncidenceSign::Plus);
         let pb = probe(&b);
         let (v1, mk, _) = row("incidence.sign", &pa, &pb);
         assert!(v1, "v1 must cover incidence sign");
@@ -208,10 +207,7 @@ fn hash_coverage_matrix() {
             .find_map(|(pk, d)| (pk.0.len() == 2 && b.it.resolve(pk.0[1]) == "x").then_some(d))
             .expect("x present");
         // point the second reference at x as well (duplicate target)
-        let atom = b.ir.arcs[0].refs[1].atom().clone();
-        let mut atom2 = atom;
-        atom2.target = x;
-        b.ir.arcs[0].refs[1] = SignedRefR::Minus(atom2);
+        b.ir.arcs[0].refs[1] = b.ir.arcs[0].refs[1].with_target(x);
         let pb = probe(&b);
         let (v1, _, _) = row("incidence.target", &pa, &pb);
         assert!(v1, "v1 must cover incidence target");
@@ -236,10 +232,7 @@ fn hash_coverage_matrix() {
         let a = base_linked();
         let pa = probe(&a);
         let mut b = base_linked();
-        let atom = b.ir.arcs[0].refs[0].atom().clone();
-        let mut atom2 = atom;
-        atom2.weights = Some(vec![ValueR::Num(2.0)]);
-        b.ir.arcs[0].refs[0] = SignedRefR::Plus(atom2);
+        b.edit_reference(0, 0, |atom| atom.weights = Some(vec![ValueR::Num(2.0)]));
         let pb = probe(&b);
         row("incidence.weights", &pa, &pb);
     }
@@ -249,13 +242,13 @@ fn hash_coverage_matrix() {
         let a = base_linked();
         let pa = probe(&a);
         let mut b = base_linked();
-        let atom = b.ir.arcs[0].refs[0].atom().clone();
-        let mut atom2 = atom;
-        atom2.anno = AnnoR {
-            tags: vec![b.it.intern("marked")],
-            value: None,
-        };
-        b.ir.arcs[0].refs[0] = SignedRefR::Plus(atom2);
+        let marked = b.it.intern("marked");
+        b.edit_reference(0, 0, |atom| {
+            atom.anno = AnnoR {
+                tags: vec![marked],
+                value: None,
+            }
+        });
         let pb = probe(&b);
         row("incidence.anno", &pa, &pb);
     }
@@ -321,7 +314,7 @@ fn with_value(v: ValueR) -> TestIr {
     let mut t = TestIr::new();
     let root = t.node(&["m"], DeclId::NONE);
     let x = t.node(&["m", "x"], root);
-    t.ir.decl_nodes[x.raw()].anno.value = Some(v);
+    t.ir.decl_annotation_mut(x).unwrap().value = Some(v);
     let e = t.edge(&["m", "e"], root);
     t.arc(e, &[(x, S::Plus)]);
     t.attach_arc_decls();

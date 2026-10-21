@@ -3,7 +3,7 @@ mod resolve_fano_graph {
     use crate::test_helpers::{log_test_footer, log_test_header};
     use crate::typical_graphs::fano::constants::*;
     use hymeko::common::ids::{DeclId, SymId};
-    use hymeko::ir::ir::SignedRefR;
+    use hymeko::ir::ir::ReferenceDraft;
     use hymeko::resolution::intern_pass::Interned;
     use hymeko::resolution::interner::Interner;
     use hymeko::resolution::{intern_pass, resolve};
@@ -243,16 +243,12 @@ mod resolve_fano_graph {
 
     // kinyeri a "fano.n0" típusú resolved célneveket az arc refs-ből
     fn resolved_targets_as_strings(
-        refs: &[SignedRefR],
+        refs: &[ReferenceDraft],
         inv: &std::collections::HashMap<DeclId, String>,
     ) -> Vec<String> {
         refs.iter()
             .map(|r| {
-                let did = match r {
-                    SignedRefR::Plus(a) => a.target,
-                    SignedRefR::Minus(a) => a.target,
-                    SignedRefR::Neutral(a) => a.target,
-                };
+                let did = r.target();
                 inv.get(&did)
                     .cloned()
                     .unwrap_or_else(|| format!("<unknown {did:?}>"))
