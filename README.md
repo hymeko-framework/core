@@ -1,5 +1,36 @@
 # hymeko_core
 
+## Canonical construction and recorded evidence
+
+Core owns the single compiler IR and `IrConstruction` path used by compiled
+models, programmatic generators and downstream adapters. Compact model-local
+annotation/base IDs, shared snapshots and borrowed incidence views preserve the
+logical model while separating cold metadata from numerical traversal storage.
+
+In the retained Linux campaign on an AMD Ryzen Threadripper 7980X, a deterministic
+hub with **65,536 vertices, 31,250 hyperarcs and 1,000,000 incidences** took
+**19.988 ms** to generate and construct as canonical IR; a separate reverse-index
+build took **4.091 ms**. These are medians of five process medians, one thread
+pinned to CPU 2, nine samples per process. Construction excludes destruction of
+the returned IR; source parsing, file loading and string interning are excluded.
+The graph algorithms consume this Core-built IR.
+
+[Graph's public evidence](https://github.com/hymeko-framework/graph/tree/main/docs/evidence/graph-algorithms)
+contains the full graph dimensions, raw samples, numerical tables and PDF.
+These historical measurements are scoped to their recorded inputs and binaries;
+the public dependency/README packaging was not remeasured.
+
+Focused correctness checks for the published construction, wire and view contracts:
+
+```sh
+cargo test --locked -p hymeko_core --lib
+cargo test --locked -p hymeko_core --test mod prepared_ir_backbone
+cargo test --locked -p hymeko_core --test mod unified_ir
+```
+
+Measurement tests remain ignored unless explicitly selected. Runtime Git
+dependencies resolve through public GitHub URLs pinned in the manifests.
+
 The HyMeKo semantic core — a standalone cargo workspace.
 
 Checked value updates retain only the current graph's referenced symbols.
@@ -57,7 +88,7 @@ bounds roots, not bytes; a root's destructor can still do substantial work.
 - **`hymeko_core/`** — the **IR** (`ir/`), **encoding**/serialization (`writers/` — CBOR + IR writers), and canonical IR-to-tensor adapters (`tensor/`: reference-weight extraction and `TensorInc`).
 - **`hymeko_wgpu/`**: WGPU compute backend, consuming `hymeko_tensor` directly.
 
-The `hymeko_hnn` implementation lives in `hymeko_nagare::hnn` (the Nagare repository). It owns the **hypergraph representation** (`traversal/`: `HyperGraphView`, incidence views) and the **tensor-transformation** operators (`tensor/`: HGNN / signed-HGNN / message-passing).
+Graph owns hypergraph algorithms over Core incidence views. Numerical kernels are Tensor-owned; HNN model/training functionality belongs to Nagare. Core remains the canonical IR owner.
 
 `parser` is an external repository (`hymeko/parser`), pulled as a `git` dependency.
 
@@ -132,8 +163,8 @@ thread, including failed requests; it does not report retained memory, worker-th
 totals or RSS. The library never sets a global allocator for its consumers.
 
 ```sh
-cargo build --workspace
-cargo test  --workspace
+cargo build --locked -p hymeko_core
+cargo test --locked -p hymeko_core --lib
 ```
 
 Generic numeric contracts, COO/CSR kernels and initialization now belong to

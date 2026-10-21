@@ -11,7 +11,7 @@ serde = "1.0.228"
 blake3 = "1.8.3"
 rayon = "1.11.0"
 log = "0.4.22"
-parser = { git = "ssh://git@192.168.1.228:2222/hymeko/parser.git", rev = "f11628591a8183586492807ecdf43c64e6d31c5f" }
-# Virtual-operator provider, published on tensor feat/virtual-operators; ledger in
+parser = { git = "https://github.com/hymeko-framework/parser.git", rev = "f11628591a8183586492807ecdf43c64e6d31c5f" }
+# Public Tensor provider, pinned to the validated release snapshot; ledger in
 # docs/hymeko-kernel-ownership.md (tensor extraction, 2026-09-23).
-hymeko_tensor = { git = "ssh://git@192.168.1.228:2222/hymeko/tensor.git", rev = "9317ecf773d55a0e7968273a63bc2f4e8dbcc7c7" }
+hymeko_tensor = { git = "https://github.com/hymeko-framework/tensor.git", rev = "2d5c64347c4e75c6a520a1d1ee26e0895e127680" }
