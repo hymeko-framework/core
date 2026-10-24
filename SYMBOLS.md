@@ -13,7 +13,7 @@ Extracted by grammar -- tree-sitter for Rust and C++, `ast` for Python -- so tha
 `pub(crate)`, a `pub fn` inside a private `mod`, and a `def` written inside a
 docstring are all excluded for a stated reason rather than by luck.
 
-**3 package(s), 794 public symbol(s).**
+**3 package(s), 796 public symbol(s).**
 
 ## docs (rust)
 
@@ -301,6 +301,7 @@ _No public symbols._
 - `for_each_row` — `hymeko_core/src/ir/incidence/projection.rs`
 - `for_each_row` — `hymeko_core/src/ir/incidence/projection/layout.rs`
 - `for_each_row_range` — `hymeko_core/src/ir/incidence/projection.rs`
+- `fork` — `hymeko_core/src/resolution/interner.rs`
 - `from_decoded_cbor` — `hymeko_core/src/module_store/execution.rs`
 - `from_interner` — `hymeko_core/src/resolution/string_table.rs`
 - `from_le_bytes` — `hymeko_core/src/ir_stream/version.rs`
@@ -331,6 +332,7 @@ _No public symbols._
 - `into_candidate` — `hymeko_core/src/module_store/execution.rs`
 - `into_ir` — `hymeko_core/src/ir/incidence.rs`
 - `into_parts` — `hymeko_core/src/writers/cbor_writer.rs`
+- `into_shared` — `hymeko_core/src/ir/ir.rs`
 - `ir` — `hymeko_core/src/ir/canonical_hash.rs`
 - `ir` — `hymeko_core/src/ir/incidence.rs`
 - `ir` — `hymeko_core/src/ir/incidence/projection.rs`
