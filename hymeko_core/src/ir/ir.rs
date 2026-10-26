@@ -468,7 +468,13 @@ macro_rules! ir_tables {
 impl Ir {
     /// Publish completed tables without copying records. Owned construction and
     /// edits stay cheap; all subsequent snapshot clones share these allocations.
-    pub(crate) fn into_shared(mut self) -> Self {
+    /// ```
+    /// use hymeko::ir::ir::Ir;
+    /// let live = Ir::default().into_shared();
+    /// let snapshot = live.clone();
+    /// assert_eq!(live.decl_count(), snapshot.decl_count());
+    /// ```
+    pub fn into_shared(mut self) -> Self {
         macro_rules! share {
             ($ir:expr; $($table:ident),*) => { $( $ir.$table.share(); )* };
         }
