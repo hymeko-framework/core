@@ -52,7 +52,19 @@ impl Interner {
         self.data.map.get(s).copied()
     }
 
-    pub(crate) fn fork(&self) -> Self {
+    /// Retain this symbol domain for an independent snapshot. Existing strings
+    /// and IDs are shared; inserting a new string detaches only the new writer.
+    /// No symbol is reindexed and no serialized content changes.
+    /// ```
+    /// use hymeko::resolution::interner::Interner;
+    /// let mut original = Interner::new();
+    /// let a = original.intern("a");
+    /// let mut snapshot = original.fork();
+    /// snapshot.intern("b");
+    /// assert_eq!(snapshot.resolve(a), "a");
+    /// assert!(original.get_id("b").is_none());
+    /// ```
+    pub fn fork(&self) -> Self {
         Self {
             data: Arc::clone(&self.data),
         }
