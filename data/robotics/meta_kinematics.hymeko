@@ -88,11 +88,20 @@ kinematics {
     @linear_drive {}
     @muscle_drive: + <isa> linear_drive {}
     @hydraulic_drive: + <isa> linear_drive {}
+    // An attachment declared outside its link: one + arc to the link whose first weight is the
+    // point in that link's frame, so an actuation layer attaches to a shared body unedited.
+    @mount {}
+    // A hydraulic braided (McKibben-type) muscle with a series tendon and a parallel
+    // spring-damper. Its path is ordered: the first + arc is the origin, further + arcs are via
+    // points in order, the - arc is the insertion; so one muscle may span several joints.
+    @hydraulic_muscle: + <isa> linear_drive {}
     geometry {
         box {}
         cylinder {}
         sphere {}
         capsule {}
+        // A muscle's braided sleeve: braid_length_m and turns fix how its diameter follows its length.
+        braided_sleeve {}
     }
 
     axes {
