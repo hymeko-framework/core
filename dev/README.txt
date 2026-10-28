@@ -36,3 +36,14 @@ Changing source, toolchain, profile, features or dependency revisions can still
 require compilation. Unchanged inputs should be Fresh. Avoid cargo clean: the
 machine's shared build.build-dir is also used by other workspaces. Cargo JSON
 compiler-artifact records, not guessed target/deps paths, identify the outputs.
+
+CACHE IDENTITY
+The aliases place intermediates under
+  {cargo-cache-home}/hymeko-dev-build/{workspace-path-hash}
+Cargo expands these placeholders using the actual workspace manifest. Clients
+in one workspace share this cache; distinct source roots cannot reuse each
+other's local package outputs. A first build for each workspace is required.
+This prevents false Fresh results observed with an unqualified shared build-dir
+when switching between an edited checkout and a different-source verification
+export. Ordinary static/benchmark profiles are not changed by the aliases.
+The first location is Cargo's cache home, not a hard-coded machine path.
