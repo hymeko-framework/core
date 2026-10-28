@@ -13,7 +13,23 @@ Extracted by grammar -- tree-sitter for Rust and C++, `ast` for Python -- so tha
 `pub(crate)`, a `pub fn` inside a private `mod`, and a `def` written inside a
 docstring are all excluded for a stated reason rather than by luck.
 
-**3 package(s), 796 public symbol(s).**
+**5 package(s), 796 public symbol(s).**
+
+## hymeko-core-dev (rust)
+
+- **Root:** `dev`
+- **Manifest:** `dev/Cargo.toml`
+- **Charter:** Native Core development linkage -- 2026-10-28
+
+_No public symbols._
+
+## hymeko-core-dylib (rust)
+
+- **Root:** `dev/dylib`
+- **Manifest:** `dev/dylib/Cargo.toml`
+- **Charter:** Native development linkage, with no implementation or independent IR.
+
+_No public symbols._
 
 ## docs (rust)
 

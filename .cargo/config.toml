@@ -1,0 +1,3 @@
+[alias]
+dev-test = "test --locked --profile dev-dll -p hymeko-core-dev"
+dev-run = "run --locked --profile dev-dll -p hymeko-core-dev --bin hymeko-core-dev"

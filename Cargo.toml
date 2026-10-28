@@ -4,7 +4,13 @@
 # `parser` is an external repo (hymeko/parser), pulled as a git dependency.
 [workspace]
 resolver = "2"
-members = ["hymeko_core", "hymeko_wgpu"]
+members = ["hymeko_core", "hymeko_wgpu", "dev", "dev/dylib"]
+default-members = ["hymeko_core", "hymeko_wgpu"]
+
+# Opt-in native development linkage; ordinary dev/release/bench are unchanged.
+[profile.dev-dll]
+inherits = "dev"
+debug = "line-tables-only"
 
 [workspace.dependencies]
 serde = "1.0.228"

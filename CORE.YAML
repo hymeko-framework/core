@@ -56,6 +56,11 @@ crates:
       propagates to every downstream crate and invalidates published
       benchmarks.
     approved_edits:
+      - slug: native-dev-dll
+        date: 2026-10-28
+        authority: user requests shared dynamic libraries and explicitly selects Core/Graph tests and tools
+        scope: downstream development DLL re-export and original-source clients, workspace/profile/aliases, CLI-test artifact selection; no production semantics or external dependency revision changes
+        plan: dev/README.txt
       - slug: ordered-parallel-source-pagerank
         date: 2026-10-20
         authority: user requests fixing vertex-number dependence, then parallel execution and Hymeko-based model/execution handling
