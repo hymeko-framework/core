@@ -587,6 +587,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "hymeko-core-dev"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "ciborium",
+ "criterion",
+ "env_logger",
+ "hymeko-core-dylib",
+ "hymeko_tensor",
+ "log",
+ "parser",
+ "rayon",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "hymeko-core-dylib"
+version = "0.1.0"
+dependencies = [
+ "hymeko_core",
+]
+
+[[package]]
 name = "hymeko_core"
 version = "0.1.0"
 dependencies = [

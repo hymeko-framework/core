@@ -151,3 +151,7 @@ Core transport. See [the migration and local integration status](docs/hymeko-ker
 - Migrated from the `hymeko_framework_rust` monorepo: IR + hypergraph representation + tensor transformation + encoding.
 - The `hymeko_hre` runtime engine is **not** part of this repo; the ~6 integration tests that reached into it were gated out.
 - `test_load_meta_geometry` asserts a node count (57) that drifted to 58 in the monorepo's own parser; it fails identically upstream (pre-existing, unrelated to this migration).
+
+## Native development with a shared library
+
+Use `cargo dev-test --test circular_buffer`, `cargo dev-test --test mod product_cli`, or `cargo dev-run -- MODEL.hymeko` from this workspace. The original tests and compiler CLI link through the opt-in `dev-dll` build. See [the development linkage contract](dev/README.txt) for supported targets, debug information and DLL deployment requirements.
