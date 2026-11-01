@@ -1,7 +1,7 @@
 # Claude Code — Operating Contract
 
 @AGENTS.md
-@../hymeko/docs/agent-contract/global.md
+@../../hymeko/docs/agent-contract/global.md
 
 **This document is an operating contract, not a suggestion list. Treat it as binding, but apply it with task-size judgment: the goal is to prevent wasted work and broken experiments, not to create ceremonial detours.**
 
@@ -13,7 +13,7 @@
 
 You are working on a research codebase targeting public framework use cases and competitive benchmarks. The following rules are **mandatory**. If a rule cannot be satisfied, halt and ask the user. Do not improvise. Do not run experiments "to see what happens."
 
-A task is not complete until every applicable section of this document has been satisfied and, for substantive implementation or experiment work, a report has been written.
+A task is complete when its requested deliverable and applicable correctness checks are complete. The shared global/testing/reporting modules govern test selection, measurement authorization and optional report artifacts; older local snapshots do not override them.
 
 ### Claude Code loading gate
 
@@ -37,14 +37,14 @@ The loading mechanisms are not interchangeable:
 
 On a fresh checkout, after a loading/settings change, or whenever adherence is in doubt,
 run `/memory`, `/status`, and `/hooks`. The first must list this root `CLAUDE.md` and
-its `AGENTS.md` and `../hymeko/docs/agent-contract/global.md` imports; the
+its `AGENTS.md` and `../../hymeko/docs/agent-contract/global.md` imports; the
 second must show the project `.claude/settings.json` without errors; the third must show
 both Project `Stop` checks (`contract-persona` and the Aiko semantic review). If any of
 these conditions fails, the persona/rules are not demonstrably active: halt substantive
 work and correct the session setup. The exact VS Code, CLI, import, and `--add-dir`
-procedure is binding in [the contract reader guide](../hymeko/docs/agent-contract/README.md#claude-code-loading-and-activation).
+procedure is binding in [the contract reader guide](../../hymeko/docs/agent-contract/README.md#claude-code-loading-and-activation).
 
-**Task-size calibration (added 2026-07-05 after repeated wild-goose chases).** Apply the full plan/test/report/performance protocol to substantive code changes, core-adjacent work, experiments, long runs, public claims, and anything that can affect research conclusions. For a conversation, quick file inspection, typo, one-line local fix, or forensic triage, use the lightweight path: timestamp, read the relevant local context, state the smallest failing symptom or question, make the minimal safe change or finding, and report exactly what was and was not verified. Do not turn a small diagnostic step into a campaign.
+**Task-size calibration (added 2026-07-05 after repeated wild-goose chases).** Apply the shared global workflow proportionately: specification-derived correctness checks, performance measurements only for the current explicit request, and reports only when authorized. For a conversation, quick file inspection, typo, one-line local fix, or forensic triage, use the lightweight path: timestamp, read the relevant local context, state the smallest failing symptom or question, make the minimal safe change or finding, and report exactly what was and was not verified. Do not turn a small diagnostic step into a campaign.
 **Boundary rule.** The lightweight path may NOT create a new file, module,
 crate, or public symbol. Any change that does so is substantive by
 definition, regardless of its line count, and requires §6.6 ledger +
@@ -55,7 +55,7 @@ diff with a permanent architectural footprint.
 > reply — *no exceptions* — MUST begin with a real-clock timestamp line `[YYYY-MM-DD HH:MM +HH:MM]`, obtained from the
 > system clock (`Get-Date` under PowerShell here), never guessed. It is the **first text written**, before any other word.
 > A reply that does not start with the stamp is a protocol violation of the **same severity as shipping untested
-> code or skipping the report**. If you realise a previous reply omitted it, stamp the next one without preamble
+> code without the applicable correctness evidence**. If you realise a previous reply omitted it, stamp the next one without preamble
 > and do not repeat the lapse. Do not batch-guess stamps across a session — re-read the clock when time has
 > meaningfully passed (a long tool run, a new sub-task). This gate exists because the stamp was dropped for an
 > entire session on 2026-06-28 despite the policy below; treat it as load-bearing, not decorative.
@@ -120,18 +120,19 @@ rationale live in the linked file, and the linked file is binding.
 7. **Cached facts before new runs.**
 8. **Search before claiming novelty or prior art (added 2026-06-28, user policy after a novelty-assessment miss).**
 9. **The user is an experienced engineer/researcher, not a casual programmer.**
+10. **One repository, one checkout, one target.**
 
-All nine in full, with their rationale and the workflow they order:
-[../hymeko/docs/agent-contract/global.md](../hymeko/docs/agent-contract/global.md).
+All ten in full, with their rationale and the workflow they order:
+[../../hymeko/docs/agent-contract/global.md](../../hymeko/docs/agent-contract/global.md).
 
 Three gates you must not have to open a module to discover:
 
 - **A creation performed without a preceding ledger is unauthorised.** — §6.6,
-  [modules/10-discovery.md](../hymeko/docs/agent-contract/modules/10-discovery.md)
-- **Every change ships with tests, and tests are executed and pass before reporting
-  success.** — §3, [modules/20-testing.md](../hymeko/docs/agent-contract/modules/20-testing.md)
+  [modules/10-discovery.md](../../hymeko/docs/agent-contract/modules/10-discovery.md)
+- **Behavior-changing work requires proportionate, specification-derived correctness
+  evidence before claiming success.** — §3, [modules/20-testing.md](../../hymeko/docs/agent-contract/modules/20-testing.md)
 - **A long run that emits nothing until it finishes is forbidden.** — §3,
-  [modules/40-observability.md](../hymeko/docs/agent-contract/modules/40-observability.md)
+  [modules/40-observability.md](../../hymeko/docs/agent-contract/modules/40-observability.md)
 
 - **Preferred paradigm hierarchy.** When you have a choice of paradigm, prefer in this order: **(1) trait-/struct-based programming** (Rust traits + impl, Python ABCs / Protocols, C++ concepts) to make the *contract* explicit; **(2) object-oriented** composition (classes that bundle state with behaviour, small inheritance trees only where they remove duplication, never for taxonomy alone); **(3) functional** (pure functions, immutable data, iterator pipelines, `map`/`filter`/`fold`, `Result`/`Option` combinators, ADTs) — preferred over imperative loops when the data flow is one-way; **(4) clean-code mechanics** (intention-revealing names, single-responsibility functions, depth-of-nesting ≤ 3, no commented-out code, no `tmp_` / `tmp2_` / `_new` suffixes left in tree). **Flat free-function dumps are the last resort**, acceptable only for: (a) the binary entry point (`main`), (b) one-off scripts that will be deleted within the week, (c) plain numerical helpers with no state, no error path, no swappable strategy. If a free function grows a `_kind: &str` argument, that's a missed trait. If it grows past 80 LOC, that's a missed method. If two free functions share 60% of their body, that's a missed `impl` block sharing a private helper. Apply the same hierarchy across Rust, Python, C++.
 
@@ -160,9 +161,8 @@ This rule overrides convenience. A workaround in non-core code is always preferr
 Stop and ask the user before proceeding if any of the following hold:
 
 - A change requires modifying any item in `CORE.YAML`.
-- A test cannot be written for a proposed change.
+- The required behavior or its independent correctness oracle is unresolved.
 - The 16 GB memory cap will be exceeded.
-- Any of the four plan artifacts (`plan.tex`, `plan.pdf`, `plan.tikz`, `plan.mmd`) cannot be produced.
 - You are about to run an unverified experiment that **mutates persistent state** — datasets, checkpoints, trained model weights, databases, remote storage.
 - A test fails and the cause is not understood.
 - A measurement contradicts an assumption in the plan.
@@ -195,15 +195,15 @@ for old report citations. They are not the active contract. `repo/` stays Core-o
 
 | module | carries |
 |---|---|
-| [global.md](../hymeko/docs/agent-contract/global.md) | §0 workflow, the nine principles in full |
-| [10-discovery.md](../hymeko/docs/agent-contract/modules/10-discovery.md) | §0.1 ownership, §0.2 symbol index, §6.1 the search, §6.6 the ledger, §6.7 the gate |
-| [20-testing.md](../hymeko/docs/agent-contract/modules/20-testing.md) | §3 layers, coverage, determinism, benchmarks, regression, metric integrity |
-| [30-code-health.md](../hymeko/docs/agent-contract/modules/30-code-health.md) | §5 data layout, §6.2–§6.5 complexity/lint/errors/anti-patterns, §7 patterns, §8 contracts |
-| [40-observability.md](../hymeko/docs/agent-contract/modules/40-observability.md) | §3 never run blind; both performance axes |
-| [50-reporting.md](../hymeko/docs/agent-contract/modules/50-reporting.md) | §2 the plan bundle, §9 the report, graphical output |
-| [60-hpc.md](../hymeko/docs/agent-contract/modules/60-hpc.md) | §6.5 #16 cluster array sizing |
+| [global.md](../../hymeko/docs/agent-contract/global.md) | §0 workflow, the ten principles in full |
+| [10-discovery.md](../../hymeko/docs/agent-contract/modules/10-discovery.md) | §0.1 ownership, §0.2 symbol index, §6.1 the search, §6.6 the ledger, §6.7 the gate |
+| [20-testing.md](../../hymeko/docs/agent-contract/modules/20-testing.md) | §3 layers, coverage, determinism, benchmarks, regression, metric integrity |
+| [30-code-health.md](../../hymeko/docs/agent-contract/modules/30-code-health.md) | §5 data layout, §6.2–§6.5 complexity/lint/errors/anti-patterns, §7 patterns, §8 contracts |
+| [40-observability.md](../../hymeko/docs/agent-contract/modules/40-observability.md) | §3 never run blind; both performance axes |
+| [50-reporting.md](../../hymeko/docs/agent-contract/modules/50-reporting.md) | §2 proportionate planning, §9 optional reports and conditional archival |
+| [60-hpc.md](../../hymeko/docs/agent-contract/modules/60-hpc.md) | §6.5 #16 cluster array sizing |
 | [repo/](docs/agent-contract/repo/) | §4 budgets, §10 toolchain, §11 HyMeKo authoring — **this repo's own** |
-| [incidents/](../hymeko/docs/agent-contract/incidents/) | what the dated rules cost, kept out of the rules |
+| [incidents/](../../hymeko/docs/agent-contract/incidents/) | what the dated rules cost, kept out of the rules |
 
 [README.md](docs/agent-contract/README.md) explains how the tree is read, and
 `reports/2026-09-04-contract-split.md` records what moved where and what was
