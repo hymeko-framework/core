@@ -57,3 +57,248 @@ flowchart TD
     COEFF --> ROW[IncidenceIndexData: one ordered transpose row]
     ROW --> SERIAL[Shared serial traversal]
     ROW --> PAR[Rayon disjoint node outputs]
+
+    BASE[2026-10-11: merged Core b66cb4d] --> EXIST[Existing Criterion workloads]
+    EXIST --> LAT[Repeated latency samples and peak working set]
+    EXIST --> CPU[Separate symbolized Samply CPU captures]
+    LAT --> FIND[Evidence-based optimization candidates]
+    CPU --> FIND
+    FIND --> COHERENCE[Hierarchy validation: borrow existing typed paths]
+    COHERENCE --> LOOKUP[Reuse Index prefix lookup; deterministic findings]
+    LOOKUP --> VERIFY[Corruption tests and repeated update measurements]
+    VERIFY --> SHARE[Interner: share immutable table and live strings]
+    SHARE --> DETACH[Insertion detaches; compaction releases dead strings]
+    DETACH --> CONTROLS[Update gains plus compiler and memory controls]
+    CONTROLS --> OWNED[IrTable: owned Vec during construction]
+    OWNED --> PUBLISH[Compiled snapshot shares completed tables]
+    PUBLISH --> EDIT[First mutable access detaches affected table]
+    EDIT --> PUBLISH
+    PUBLISH --> MARK[Read-only symbol marking keeps tables shared]
+    MARK --> CONSUMERS[Graph deep-copy call adapted; Transformation compatibility checked]
+    FIND --> CATALOG[Algorithm and storage catalogue: costs, bounds, ownership]
+    CATALOG --> PACK[Core SkeletonForest: count children and prefix row ends]
+    PACK --> SCATTER[Stable reverse scatter into one child-ID buffer]
+    SCATTER --> FOLD[Existing subtree fold and canonical bytes unchanged]
+    CATALOG --> FUTURE[Delta bookkeeping, indexed heaps, bounded allocation and reclamation]
+    FUTURE --> INDEXARC[Compiled metadata shared across value-only snapshots]
+    INDEXARC --> DELTA[Changed old/new values: sort and combine symbol occurrences]
+    DELTA --> LIVECOUNTS[Exact usage counts: reuse live table or compact with existing walker]
+    LIVECOUNTS --> ORACLE[Full-count and compaction oracle; old-reader and wire parity]
+    ORACLE --> PARENTCHAINS[Classify parent graph once; retain ordered bounded diagnostics]
+    PARENTCHAINS --> GRAPHQUEUE[Graph owner: indexed frontier, one live entry per declaration]
+    LIVECOUNTS --> WORKSPACE[Caller-owned update workspace: reserve configurable scratch capacities]
+    WORKSPACE --> SORTTARGETS[Sort targets with input positions; preserve error precedence]
+    SORTTARGETS --> REUSEDELTA[Reuse staged values, symbol deltas and hash deltas]
+    REUSEDELTA --> CLEARWORK[Clear payloads on result; retain buffer capacity]
+    CLEARWORK --> PROOF[Validate immutable base once; inherit evidence for value-only edits]
+    PROOF --> INVERSE[Inverted symbol uses and selective record remapping]
+    INVERSE --> RETIRE[Bounded snapshot retirement outside publication lock]
+    RETIRE --> VISITED[Graph sparse visitation; no generation wrap]
+    VISITED --> POOL[Tensor existing pool: budgeted reclamation]
+
+%% Tensor existing pool: budgeted epoch checks -> fairness and consumer gates
+
+%% Validation closure: short dispatch reproducer -> extracted binding checks -> oracle gates
+
+%% Test-only closure: same assertions in named helpers; all-target complexity gate
+
+    INVERSE --> HASHCOPY[Shared paged declaration hashes]
+    HASHCOPY --> HASHDELTA[Detach only pages containing changed hashes]
+    HASHDELTA --> HASHFOLD[Unchanged sorted buffer shared; changed fold remains linear]
+
+    HASHFOLD --> MATCHED[Identical harness: before and after Core]
+    MATCHED --> REPEAT[Five AB or BA repetitions at each size]
+    REPEAT --> EVIDENCE[Raw samples, scope checks, PDF and verified archive]
+
+    HASHFOLD --> VINPUT[Virtual canonical byte ranges]
+    VINPUT --> VCACHE[Persistent BLAKE3 subtrees and dirty range]
+    VCACHE --> VFINAL[OnceLock finalization; public identity remains eager]
+
+    VFINAL --> KEEPV[Validate all inputs; stage Keep or Replace]
+    KEEPV --> TARGETS[Validate every target; write only replacements]
+    TARGETS --> USAGE[All-target symbol budgets; actual-target semantic delta]
+
+ LAZY[IrBuilder.defer: retain input] --> LOAD[First load: shared build once]
+ LOAD --> IC
+ CP[Capacity plan] --> IC[One IrConstruction owner]
+ LOWER[Lowering] --> IC
+ BENCH[Both benchmark clients] --> IC
+ EDITOR[Emitter bridge] --> IC
+ IC --> REF[Compact references and IR-owned payload IDs]
+ REF --> WIRE[Borrowed wire views preserve bytes]
+
+ subgraph native_comparison[Matched native comparison 2026-10-18]
+  same_input[Canonical membership and matched semantics] --> native_calls[Existing HyMeKo and upstream hypergraphz APIs]
+  native_calls --> parity[Full vector and component partition parity]
+  parity --> repeated[Existing sampler and five fresh processes]
+  repeated --> defaults[Audit default production ownership and PDF evidence]
+ end
+
+ subgraph shared_incidence[Shared incidence preparation]
+ ir_shared[Canonical Ir] --> projection_shared[Cached structural projection]
+ projection_shared --> row_shared[Shared gather / scatter rows]
+ row_shared --> signed_shared[Prepared signed operator]
+ row_shared --> rank_shared[PageRank routing and normalization]
+ end
+
+ subgraph exact_count_reduction[Exact unit counts and seeded fold]
+ shared_projection --> exact_counts[Exact counts from shared rows]
+ shared_projection --> seeded_fold[First-term initialization preserving fold order]
+ exact_counts --> correctness_gate[Numerical and allocation gates]
+ seeded_fold --> correctness_gate
+ correctness_gate --> selected_comparison[Existing selected native comparison]
+ end
+
+ subgraph pair_incidence[Two-slot shared incidence rows]
+ canonical_rows --> pair_gather[Policy-owned exact pair reduction]
+ canonical_rows --> pair_scatter[Sequential unrolled scatter]
+ pair_gather --> pair_validation[Same result and precision gates]
+ pair_scatter --> pair_validation
+ pair_validation --> pair_comparison[Existing native comparison]
+ end
+
+ subgraph broad_validation[Diverse graph comparison]
+ fixture_owner[Existing fixture owner] --> canonical_population[Core IrConstruction]
+ canonical_population --> correctness[Topology and native parity gates]
+ correctness --> user_signal[Wait for quiet-host signal]
+ user_signal --> existing_campaign[Existing comparison and construction runners]
+ existing_campaign --> evidence_bundle[Distributions and PDF]
+ end
+
+flowchart LR
+ existing_IR --> shared_virtual_rows --> existing_graph_algorithms --> matched_evidence
+
+%% 2026-10-19: Tensor row contracts + bounded contraction plans -> Core borrowed IR adapters -> Graph PageRank and prepared Berge search
+
+flowchart TD
+ Tensor[Tensor: row contracts and contraction planner] --> IR[Core: borrowed IR adapters]
+ IR --> PR[Graph: shared PageRank contraction]
+ IR --> Search[Graph: existing Berge A*]
+ Bounds[Certified bounds] --> Prune[Pruning]
+ Entropy[Entropy descriptor] --> Order[Ordering only]
+ Prune --> Search
+ Order --> Search
+
+ subgraph contraction_runtime_cells[Contraction runtime and cell Levi matroids]
+ prepared_chain[Existing planner and serial SpMM] --> repeated_measurement[Five processes and phase boundaries]
+ ir_source[Canonical IR] --> levi_source[Shared Levi source and session]
+ graded_cells[Existing graded cell topology] --> levi_source
+ levi_source --> shared_dsu[Existing union-find workspace]
+ repeated_measurement --> verified_report[Verified numeric evidence and PDF]
+ shared_dsu --> verified_report
+ end
+
+ subgraph fused_state[PageRank fused state]
+ accumulator[Tensor consume and reset] --> workspace[Graph existing workspace fused sweep]
+ workspace --> bitwise[Bitwise oracle and allocation gates]
+ bitwise --> control[Approved 4 cases x 3 subjects x 5 processes]
+ control --> pdf[PDF and verified archive]
+ end
+
+ subgraph structural_execution[Structural execution]
+ canonical_ir[Canonical IR ranges] --> components[Shared component analysis]
+ components --> bounded_plan[Shared bounded search]
+ bounded_plan --> ranges[Tensor range contraction]
+ ranges --> certify[Canonical numerical certification and fallback]
+ end
+
+ subgraph construction_commit[Canonical construction]
+ resolved_input[Resolved names and reference stream] --> validate_construction[Checked IrConstruction]
+ validate_construction --> final_records[Single final declaration and dispatch write]
+ final_records --> same_ir[Same canonical IR and wire]
+ end
+
+ subgraph compact_payloads[Compact canonical payloads]
+ owned_input[Owned input] --> compact_owner[IrConstruction]
+ compact_owner --> payload_ids[Small canonical records]
+ payload_ids --> ir_payloads[IR-owned COW payload tables]
+ ir_payloads --> logical_wire[Borrowed reads and existing wire]
+ end
+
+ subgraph compact_control[Compact storage control]
+ frozen_before[Archived pre-compaction source] --> same_client[Same canonical benchmark input]
+ current_after[Current canonical Core] --> same_client
+ same_client --> controls[Build drop metadata scans and checked updates]
+ native_control[Native shared topology] --> controls
+ controls --> evidence[Five processes raw samples PDF and archive]
+ end
+
+ subgraph dense_base_reuse[Dense immutable base reuse]
+ owned_bases[Owned base drafts] --> compare_bases[Compare latest canonical list bitwise]
+ compare_bases --> reuse_bases[Reuse immutable BaseListId]
+ compare_bases --> store_miss[Existing canonical storage on miss]
+ reuse_bases --> exclusive_anno[Separate editable declaration annotations]
+ end
+
+ subgraph dense_control[Approved dense reuse controls]
+ frozen_pair[Verified before and after binaries] --> density_controls[Empty and dense: five paired repetitions]
+ density_controls --> dense_profiles[Separate dense Samply profiles]
+ dense_profiles --> dense_pdf[Raw samples matched PDB PDF and archive]
+ end
+
+ subgraph bounded_finish[Bounded scalar finish]
+ bounded_scatter[Existing degree bound and scalar scatter] --> shared_finish[One typed VertexUpdate sweep]
+ compensated_scatter[Existing compensated scatter] --> shared_finish
+ shared_finish --> exact_finish[Bitwise state and convergence gates]
+ exact_finish --> bounded_control[Four workloads five paired controls PDF]
+ end
+
+ rejected_fusion[Measured fusion: no chain gain] --> shared_halving[Existing exact halving shared by source and destination normalization]
+ shared_halving --> halving_tests[IEEE parity and same matched controls]
+
+ subgraph nitech_control[NiTech native control]
+ verified_source[Verified source and pinned offline dependencies] --> linux_adapter[Same native adapter with Linux platform layer]
+ linux_adapter --> quiet_host[Private local scratch nice 10 CPU 2 and quiet gate]
+ quiet_host --> nitech_results[Small parity smoke then matched controls PDF]
+ end
+
+flowchart LR
+  IdentityAudit[Identical A/B binaries detected] --> ColdBaseline[Isolated target baseline build]
+  ColdBaseline --> DistinctGate[Fresh compilation and distinct hashes]
+  DistinctGate --> Rerun[Same approved control in new evidence directory]
+
+flowchart LR
+  CorrectedControl[Distinct binaries; 60 verified cells] --> BaselineDecision[Baseline faster in all four medians]
+  BaselineDecision --> RestoreThree[Restore three owned normalization files]
+  RestoreThree --> BaselineTests[32 correctness tests and final source audit]
+
+flowchart LR
+  SameGraph[Canonical fixture] --> Permute[Identity or seeded vertex bijection]
+  Permute --> Proof[Exact incidences and mapped rank parity]
+  Proof --> NativeControl[Same binary and both libraries; 160 guarded cells]
+  NativeControl --> LayoutEvidence[Range counts, selected plans, PDF]
+
+flowchart LR
+  CanonicalIR[Immutable Core IR] --> Layout[Canonical or first-encounter coordinate view]
+  Layout --> Kernel[Same Tensor contraction; Graph plan selection]
+  Kernel --> Proof[Canonical result and convergence certificate]
+  Proof --> Threads[Bounded parallel execution]
+  Threads --> Sources[Compiled Hymeko model and execution policy]
+
+flowchart LR
+  ProjectionRows[Shared Core row ranges] --> Gather[Tensor RowGather into arc values]
+  Gather --> Reverse[Existing Core reverse-index ordered fold]
+  Reverse --> NodeOutputs[Disjoint parallel node outputs]
+  NodeOutputs --> Finish[Shared canonical vertex update and stopping check]
+
+flowchart LR
+  Profile[Hymeko execution profile and inherited defaults] --> Query[Core compile plus Query effective fields]
+  Query --> Resource[Referenced graph resource path]
+  Resource --> Model[Separate retained Core graph model]
+  Model --> Rank[One Graph PageRank with typed ordering and worker policy]
+  Rank --> Names[Canonical node paths and numeric results]
+
+flowchart LR
+  Indexed[Tensor IndexedRow borrowed kernel] --> Core[Core indexed projection]
+  Indexed --> Test[Literal tensor fixtures]
+  Runs[Core RunRow compressed traversal] --> Range[Real interval contraction checks]
+
+flowchart LR
+  Designs[Core combinatorial designs] --> Builder[Existing Case and IrConstruction]
+  Builder --> Algs[Traversal, paths, components, Levi matroid]
+  Algs --> Checks[Independent oracles and vertex relabeling]
+
+flowchart LR
+  Inputs[Core generators plus canonical Fixture] --> Boundaries[Generation, index, prepared algorithms]
+  Boundaries --> Guard[Quiet kato21; pinned core and bounded processes]
+  Guard --> Evidence[Five processes; nine samples; validated results]

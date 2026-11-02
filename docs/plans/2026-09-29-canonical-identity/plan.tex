@@ -74,5 +74,41 @@ derivation. Nagare at CogInfoCom Alpha (seed 0, 20 passes, runner settings): com
 it included. The four listed consumers break at their next repin until migrated. A method whose
 bytes differ from the free function it replaces fails the known-answer suites.
 
+\section*{Naming correction: 2026-10-11}
+Created-at: 2026-10-11 15:49 +02:00. ETA: approximately 10 minutes,
+primarily the targeted Core build and correctness checks.
+
+\paragraph{Authority and scope.} The user's current instruction explicitly removes
+the semantic type's version suffix and requests the origin of the structural suffix.
+Core owns both identities. Only Core is changed; RL and other consumers are excluded.
+The current checkout is clean at \texttt{a02800f}, equal to freshly fetched
+\texttt{origin/main}. The follow-up instruction authorizes a Core-only commit and
+push to \texttt{fix/canonical-identity-names}; merging remains separate.
+
+\paragraph{Finding and change.} Commit \texttt{112a254} introduced differently scoped
+structural and semantic identities with numbered names; no second structural type
+was found. Commit \texttt{9106368} removed the suffixes, and merge \texttt{b1bc1eb}
+restored them. Restore \texttt{ProgramStructureHash} and \texttt{SemanticModelDigest}
+in place, keeping \texttt{Canon} and \texttt{CanonicalIdentity}. No compatibility aliases.
+Encoding schema and algorithm numbers remain data, not type-name suffixes.
+
+\paragraph{Files and verification.} Change the existing
+\path{hymeko_core/src/ir/{semantic_digest,canonical_hash}.rs},
+\path{hymeko_core/src/module_store/execution.rs},
+\path{hymeko_core/tests/unified_ir/verification/semantic_digest.rs},
+\path{hymeko_core/tests/unified_ir/verification/model_contract.rs},
+\path{CORE.YAML}, generated \path{SYMBOLS.md}, and this plan bundle.
+Remove the duplicated semantic test helper and use meaning-based helper names.
+Run the semantic digest controls, structural known-answer vectors and the retained
+model's incremental digest tests; check formatting and contract gates.
+
+\paragraph{Constraints and migration.} No hash algorithm, encoded byte, dependency,
+allocation, performance contract or CBOR change. No benchmarks are authorized or run.
+This is a Rust source API rename: consumers must update imports when adopting the
+future Core revision. Current consumer pins and files remain outside this task.
+Record this explicit user-directed correction in \path{CORE.YAML}; it supersedes
+the merge's instruction to keep numbered type names. Rollback consists only of
+reversing this task's reviewed naming diff, never resetting unrelated work.
+
 \input{plan.tikz}
 \end{document}

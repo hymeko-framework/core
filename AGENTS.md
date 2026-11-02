@@ -1,13 +1,13 @@
 # HyMeKo Core agent entry point
 
-This repository consumes the shared contract from the sibling `hymeko/hymeko`
-checkout at `../hymeko`. Core owns its semantic IR and compute vocabulary; consult
+This repository consumes the contract from the shared `hymeko/hymeko`
+checkout at `../../hymeko`. Core owns its semantic IR and compute vocabulary; consult
 `docs/hymeko-platform-strategy.md` and `docs/hymeko-kernel-ownership.md` when choosing
 a capability owner.
 
 Before acting, read `CLAUDE.md`, `CORE.YAML`, `tools.yaml`, `SYMBOLS.md`, and
-`../hymeko/docs/agent-contract/global.md` in full. Read applicable subject modules
-under `../hymeko/docs/agent-contract/modules/` before acting on their subject.
+`../../hymeko/docs/agent-contract/global.md` in full. Read applicable subject modules
+under `../../hymeko/docs/agent-contract/modules/` before acting on their subject.
 These are mandatory instructions, not optional reference links. Codex must use
 its file-reading tool; it does not expand Claude's `@path` imports.
 
@@ -18,7 +18,7 @@ suitable checkouts across agent handoffs and preserve user changes. If fetch
 fails, continue read-only work unless the user authorizes offline work.
 
 For cross-repository work, also read
-`../hymeko/docs/agent-contract/repo/repository-map.md` and query the provider's
+`../../hymeko/docs/agent-contract/repo/repository-map.md` and query the provider's
 `ecosystem.hymeko` map. Core-specific resource, toolchain and authoring rules stay
 under `docs/agent-contract/repo/`. The local copies of shared modules are historical
 snapshots, not a second current authority.
@@ -29,3 +29,9 @@ loading chain before source edits. Core's portable verification is symbols,
 duplication and preflight through `tools/hooks/`; `contract-self-check` is the
 provider's aggregate suite and is not a Core requirement. Claude-specific runtime
 commands and Stop hooks apply only in Claude Code.
+
+Before selecting or running tests, read the provider's `modules/20-testing.md`.
+The current shared global/testing/reporting rules supersede older unconditional
+report, performance and bit-exact-test requirements retained in this repository.
+For cross-repository work, use the provider's scoped `tools/handoff.py --sync-check
+--fetch --repo <name>` and inspect resolved Cargo.lock revisions as well as HEAD.

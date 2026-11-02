@@ -1,0 +1,14 @@
+[package]
+name = "hymeko-core-dylib"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Development linkage only: re-exports the canonical Core library"
+
+[lib]
+crate-type = ["dylib"]
+test = false
+doctest = false
+
+[dependencies]
+core_impl = { package = "hymeko_core", path = "../../hymeko_core" }

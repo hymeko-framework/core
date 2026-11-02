@@ -295,16 +295,9 @@ fn incidence_heavy_memory_fixture() -> (Ir, Index, Interner) {
     let mut index = Index::new();
     let mut ir = Ir::default();
     let root_name = interner.intern("memory_root");
-    let root = ir.push_decl(DeclNode {
-        kind: DeclKind::Node,
-        name: root_name,
-        parent: DeclId::NONE,
-        first_child: DeclId::NONE,
-        last_child: DeclId::NONE,
-        next_sibling: DeclId::NONE,
-        anno: AnnoR::default(),
-    });
-    ir.nodes.push(NodeRec::new(root, Vec::new()));
+    let root = ir.push_decl(DeclNode::root(DeclKind::Node, root_name, AnnoR::default()));
+    ir.nodes
+        .push(NodeRec::new(root, hymeko::common::ids::BaseListId::NONE));
     ir.bind_node_decl(root, NodeId::new(0)).unwrap();
     index.by_path.insert(PathKey(vec![root_name]), root);
 
@@ -313,7 +306,8 @@ fn incidence_heavy_memory_fixture() -> (Ir, Index, Interner) {
             let name = interner.intern(&format!("node_{number}"));
             let decl = push_child(&mut ir, root, DeclKind::Node, name);
             let node = NodeId::new(ir.nodes.len());
-            ir.nodes.push(NodeRec::new(decl, Vec::new()));
+            ir.nodes
+                .push(NodeRec::new(decl, hymeko::common::ids::BaseListId::NONE));
             ir.bind_node_decl(decl, node).unwrap();
             index.by_path.insert(PathKey(vec![root_name, name]), decl);
             decl
@@ -325,7 +319,10 @@ fn incidence_heavy_memory_fixture() -> (Ir, Index, Interner) {
         let edge_name = interner.intern(&format!("edge_{edge_number}"));
         let edge_decl = push_child(&mut ir, root, DeclKind::Edge, edge_name);
         let edge_id = EdgeId::new(ir.edges.len());
-        ir.edges.push(EdgeRec::new(edge_decl, Vec::new()));
+        ir.edges.push(EdgeRec::new(
+            edge_decl,
+            hymeko::common::ids::BaseListId::NONE,
+        ));
         ir.bind_edge_decl(edge_decl, edge_id).unwrap();
         index
             .by_path
@@ -333,14 +330,15 @@ fn incidence_heavy_memory_fixture() -> (Ir, Index, Interner) {
 
         let refs = (0..ARITY)
             .map(|slot| {
-                SignedRefR::Neutral(RefAtomR::plain(
+                hymeko::ir::ir::SignedRefR::plain(
                     nodes[(edge_number * ARITY + slot) % nodes.len()],
-                ))
+                    hymeko::ir::ir::IncidenceSign::Neutral,
+                )
             })
             .collect();
         let arc_id = HyperArcId::new(ir.arcs.len());
         ir.arcs.push(ArcRec {
-            anno: AnnoR::default(),
+            anno: hymeko::common::ids::AnnotationId::NONE,
             in_edge: edge_decl,
             refs,
         });
@@ -359,12 +357,12 @@ fn conservative_public_ir_heap_bytes(ir: &Ir) -> usize {
         + ir.arcs.capacity() * size_of::<ArcRec>()
         + ir.nodes
             .iter()
-            .map(|node| node.bases.capacity() * size_of::<SignedRefR>())
+            .map(|node| ir[node.bases].len() * size_of::<SignedRefR>())
             .sum::<usize>()
         + ir.edges
             .iter()
             .map(|edge| {
-                edge.bases.capacity() * size_of::<SignedRefR>()
+                ir[edge.bases].len() * size_of::<SignedRefR>()
                     + edge.arcs.capacity() * size_of::<HyperArcId>()
             })
             .sum::<usize>()

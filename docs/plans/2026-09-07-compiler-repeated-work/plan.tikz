@@ -1,3 +1,8 @@
+% 2026-10-11: profile merged Core with the existing Criterion workloads;
+% keep CPU sampling separate from repeated latency and peak-working-set results.
+% Second optimization: borrow Index paths, retain all hierarchy checks and report ordering.
+% Third optimization: share immutable Interner data; detach on writes and retain only live strings.
+% Shared IR: owned construction -> shared published tables -> detach on first mutation.
 \begin{tikzpicture}[node distance=5mm, every node/.style={draw,rounded corners,font=\small},>=Stealth]
 \node (s) {Source (generation excluded)};
 \node (p) [below=of s] {Parse and intern; resolve constants};
@@ -27,6 +32,42 @@
 \node (reader) [below=of clients] {LittleEndianReader::read<T>};
 \node (value) [below=of reader] {LittleEndianValue: fixed byte array and static conversion};
 \draw[->] (clients)--(reader); \draw[->] (reader)--(value);
+\end{tikzpicture}
+
+% 2026-10-12 evening: complete the remaining applicable catalogue work.
+\begin{tikzpicture}[node distance=5mm, every node/.style={draw,rounded corners,font=\small},>=Stealth]
+\node (proof) {Immutable model validation evidence};
+\node (uses) [below=of proof] {Inverted symbol uses; selective remapping};
+\node (retire) [below=of uses] {Bounded snapshot retirement};
+\node (owners) [below=of retire] {Graph sparse visitation / Tensor pool reclamation};
+\draw[->] (proof)--(uses); \draw[->] (uses)--(retire); \draw[->] (retire)--(owners);
+\end{tikzpicture}
+
+% 2026-10-12: caller-owned bounded scratch follows the committed algorithms.
+\begin{tikzpicture}[node distance=5mm, every node/.style={draw,rounded corners,font=\small},>=Stealth]
+\node (reserve) {Configure and reserve update / symbol-occurrence capacities};
+\node (order) [below=of reserve] {Sort target positions; validate in original input order};
+\node (reuse) [below=of order] {Reuse staged values, changed IDs, symbol and hash deltas};
+\node (clear) [below=of reuse] {Return snapshot or error; clear scratch contents};
+\draw[->] (reserve)--(order); \draw[->] (order)--(reuse); \draw[->] (reuse)--(clear);
+\end{tikzpicture}
+
+% 2026-10-12: all catalogue candidates approved; first dependency pair.
+\begin{tikzpicture}[node distance=5mm, every node/.style={draw,rounded corners,font=\small},>=Stealth]
+\node (values) {Changed old/new leaf values};
+\node (delta) [below=of values] {Sort/combine symbol occurrences; exact cached counts};
+\node (retain) [below=of delta] {All live: shared metadata / dead symbols: existing compaction};
+\node (check) [below=of retain] {Full coherence/model checks and incremental digest};
+\draw[->] (values)--(delta); \draw[->] (delta)--(retain); \draw[->] (retain)--(check);
+\end{tikzpicture}
+
+% 2026-10-12: private SkeletonForest child rows use stable count/prefix/scatter.
+\begin{tikzpicture}[node distance=5mm, every node/.style={draw,rounded corners,font=\small},>=Stealth]
+\node (count) {Named parents: child counts};
+\node (prefix) [below=of count] {Prefix sums: row ends};
+\node (scatter) [below=of prefix] {Reverse scatter: child IDs and row starts};
+\node (fold) [below=of scatter] {Existing bottom-up subtree fold};
+\draw[->] (count)--(prefix); \draw[->] (prefix)--(scatter); \draw[->] (scatter)--(fold);
 \end{tikzpicture}
 
 % PERF-1 2026-09-09T18:54:44+02:00: released course control -> measured optimization integration -> native/WASM parity -> GitHub/LAN publication.
@@ -60,3 +101,222 @@
 \node (apply) [below=of row] {Shared serial traversal / disjoint Rayon outputs};
 \draw[->] (coeff)--(row); \draw[->] (row)--(apply);
 \end{tikzpicture}
+
+% Tensor existing pool: budgeted epoch checks -> fairness and consumer gates
+
+% Validation closure: short dispatch reproducer -> extracted binding checks -> oracle gates
+
+% Test-only closure: same assertions in named helpers; all-target complexity gate
+
+\begin{tikzpicture}[node distance=5mm, every node/.style={draw,rounded corners,font=\small},>=Stealth]
+\node (basehash) {Shared declaration hashes in 256-entry pages};
+\node (editpage) [below=of basehash] {Checked values: detach only dirty hash pages};
+\node (foldhash) [below=of editpage] {Same canonical encoder and complete fold};
+\draw[->] (basehash)--(editpage); \draw[->] (editpage)--(foldhash);
+\end{tikzpicture}
+
+\begin{tikzpicture}[node distance=5mm,every node/.style={draw,rounded corners,font=\small},>=Stealth]
+\node (matched) {Identical harness and pinned CPU: before / after};
+\node (repeat) [below=of matched] {Five repetitions per version and size};
+\node (evidence) [below=of repeat] {Raw samples + parity + bounded resources + PDF};
+\draw[->] (matched)--(repeat);\draw[->] (repeat)--(evidence);
+\end{tikzpicture}
+
+\begin{tikzpicture}[node distance=5mm,every node/.style={draw,rounded corners,font=\small},>=Stealth]
+\node (virtual) {Canonical byte ranges without a full concatenated buffer};
+\node (tree) [below=of virtual] {Dirty intervals + shared BLAKE3 subtrees};
+\node (materialize) [below=of tree] {OnceLock evaluation at the existing identity boundary};
+\draw[->] (virtual)--(tree);\draw[->] (tree)--(materialize);
+\end{tikzpicture}
+
+\begin{tikzpicture}[node distance=5mm,every node/.style={draw,rounded corners,font=\small},>=Stealth]
+\node (checked) {Input checks then Keep / Replace staging};
+\node (commit) [below=of checked] {Check every leaf binding; write replacements only};
+\node (symbols) [below=of commit] {All-target symbol bookkeeping; actual-change hash delta};
+\draw[->] (checked)--(commit);\draw[->] (commit)--(symbols);
+\end{tikzpicture}
+
+\par\begin{tikzpicture}[node distance=11mm,every node/.style={draw,align=center}]
+\node(a){IrBuilder: lowering / synthetic / editor};\node(b)[below of=a]{Optional lazy load then IrConstruction + capacity hints};\node(c)[below of=b]{Compact references + IR-owned payload tables};\node(d)[below of=c]{Existing wire and digest contracts};\draw[->](a)--(b);\draw[->](b)--(c);\draw[->](c)--(d);\end{tikzpicture}
+
+\par\begin{tikzpicture}[node distance=7mm,every node/.style={draw,rounded corners,align=center,font=\small}]
+\node(a){Identical membership and mathematical contract};
+\node(b)[below=of a]{Existing native APIs and full result parity};
+\node(c)[below=of b]{Shared sampler: five processes, nine samples};
+\node(d)[below=of c]{Default-path audit and archived PDF evidence};
+\draw[->](a)--(b);\draw[->](b)--(c);\draw[->](c)--(d);\end{tikzpicture}
+
+\par\begin{tikzpicture}[node distance=6mm,every node/.style={draw,rounded corners,align=center,font=\small}]
+\node(a){Canonical Ir + existing incidence owner};
+\node(b)[below=of a]{Shared lazy projection: declaration / node domain};
+\node(c)[below=of b]{One gather / scatter implementation};
+\node(d)[below left=8mm and 2mm of c]{Prepared signed operator\\ordinary sum};
+\node(e)[below right=8mm and 2mm of c]{PageRank policies\\compensated sum};
+\draw[->](a)--(b);\draw[->](b)--(c);\draw[->](c)--(d);\draw[->](c)--(e);\end{tikzpicture}
+
+\par\begin{tikzpicture}[node distance=6mm,every node/.style={draw,rounded corners,align=center,font=\small}]
+\node(a){Shared canonical incidence projection};
+\node(b)[below=of a]{Exact unit counts + seeded ordered fold};
+\node(c)[below=of b]{Numeric parity + allocation gates};
+\node(d)[below=of c]{Existing selected comparison + PDF};
+\draw[->](a)--(b);\draw[->](b)--(c);\draw[->](c)--(d);\end{tikzpicture}
+
+\par\begin{tikzpicture}[node distance=6mm,every node/.style={draw,rounded corners,align=center,font=\small}]
+\node(a){Canonical incidence rows};
+\node(b)[below=of a]{Two-slot gather and sequential scatter};
+\node(c)[below=of b]{Same accumulator contract and result checks};
+\node(d)[below=of c]{Existing native comparison: 2 / 32 / 1000};
+\draw[->](a)--(b);\draw[->](b)--(c);\draw[->](c)--(d);\end{tikzpicture}
+
+\par\begin{tikzpicture}[node distance=6mm,every node/.style={draw,rounded corners,align=center,font=\small}]
+\node(a){Existing fixtures and canonical Core construction};
+\node(b)[below=of a]{Mixed widths / hub / components / chain / scales};
+\node(c)[below=of b]{Small correctness gates and frozen release binaries};
+\node(d)[below=of c]{User quiet-host signal, then existing measurement runners};
+\node(e)[below=of d]{Full parity, distributions, PDF and verified archive};
+\draw[->](a)--(b);\draw[->](b)--(c);\draw[->](c)--(d);\draw[->](d)--(e);\end{tikzpicture}
+
+% 2026-10-19: existing IR -> shared virtual incidence rows -> existing graph algorithms -> matched evidence
+
+% 2026-10-19: Tensor numeric visitor -> Core IR projection -> Graph algorithms; entropy orders, bounds prune.
+
+\par\begin{tikzpicture}[node distance=6mm,every node/.style={draw,rounded corners,align=center,font=\small}]
+\node(a){Tensor: ordered sparse row contracts and contraction planner};
+\node(b)[below=of a]{Core: two borrowed IR projections and explicit alignment};
+\node(c)[below=of b]{Graph: shared PageRank contraction and existing Berge A*};
+\node(d)[below=of c]{Integer bounds prune; entropy orders; independent correctness gates};
+\draw[->](a)--(b);\draw[->](b)--(c);\draw[->](c)--(d);\end{tikzpicture}
+
+\par\begin{tikzpicture}[node distance=6mm,every node/.style={draw,rounded corners,align=center,font=\small}]
+\node(a){Existing contraction planner + serial CSR SpMM};
+\node(b)[below=of a]{Five-process runtime comparison; plan / prepare / execute / once};
+\node(c)[below=of b]{Canonical IR or graded cells -> shared Levi source / session / DSU};
+\node(d)[below=of c]{Incidence connectivity certificate + PDF + verified archive};
+\draw[->](a)--(b);\draw[->](b)--(d);\draw[->](c)--(d);\end{tikzpicture}
+
+\par\begin{tikzpicture}[node distance=6mm,every node/.style={draw,rounded corners,align=center,font=\small}]
+\node(a){Tensor accumulator consume/reset};
+\node(b)[below=of a]{Graph existing PageRank workspace: one fused state sweep};
+\node(c)[below=of b]{Bitwise numerical gates and approved before/after/native control};
+\node(d)[below=of c]{Four workloads, five processes, CPU 2, PDF and archive};
+\draw[->](a)--(b);\draw[->](b)--(c);\draw[->](c)--(d);\end{tikzpicture}
+
+\par\begin{tikzpicture}[node distance=6mm,every node/.style={draw,rounded corners,align=center,font=\small}]
+\node(a){Canonical IR: lossless range metadata and component certificate};
+\node(b)[below=of a]{Shared bounded planner: direct or range execution};
+\node(c)[below=of b]{Tensor prefix/difference contraction; no incidence expansion};
+\node(d)[below=of c]{Canonical numerical certification and bounded fallback};
+\draw[->](a)--(b);\draw[->](b)--(c);\draw[->](c)--(d);\end{tikzpicture}
+
+\par\begin{tikzpicture}[node distance=6mm,every node/.style={draw,rounded corners,align=center,font=\small}]
+\node(a){Resolved names and lazy reference input};
+\node(b)[below=of a]{Existing checked IrConstruction owner};
+\node(c)[below=of b]{Single final publication; append or indexed slot};
+\node(d)[below=of c]{Same canonical IR, payload meaning and serialization};
+\draw[->](a)--(b);\draw[->](b)--(c);\draw[->](c)--(d);\end{tikzpicture}
+
+\par\begin{tikzpicture}[node distance=6mm,every node/.style={draw,rounded corners,align=center,font=\small}]
+\node(a){Owned input through IrConstruction};
+\node(b)[below=of a]{Compact records: annotation and base-list IDs};
+\node(c)[below=of b]{IR-owned COW payload tables};
+\node(d)[below=of c]{Borrowed consumers; existing wire and identity};
+\draw[->](a)--(b);\draw[->](b)--(c);\draw[->](c)--(d);\end{tikzpicture}
+
+\par\begin{tikzpicture}[node distance=6mm,every node/.style={draw,rounded corners,align=center,font=\small}]
+\node(a){Frozen before and live after: same benchmark client};
+\node(b)[below=of a]{Canonical IrConstruction; empty / sparse / dense payloads};
+\node(c)[below=of b]{Build / drop / scan / checked updates, five processes};
+\node(d)[below=of c]{Native shared topology, raw samples, PDF and verified archive};
+\draw[->](a)--(b);\draw[->](b)--(c);\draw[->](c)--(d);\end{tikzpicture}
+
+\par\begin{tikzpicture}[node distance=6mm,every node/.style={draw,rounded corners,align=center,font=\small}]
+\node(a){Owned bases: checked canonical construction or wire input};
+\node(b)[below=of a]{Compare latest immutable list, including float bits};
+\node(c)[below=of b]{Reuse ID on match; existing payload storage on miss};
+\node(d)[below=of c]{Separate editable annotations; unchanged wire and snapshots};
+\draw[->](a)--(b);\draw[->](b)--(c);\draw[->](c)--(d);\end{tikzpicture}
+
+\par\begin{tikzpicture}[node distance=6mm,every node/.style={draw,rounded corners,align=center,font=\small}]
+\node(a){Verified before / after binaries and 308 source files};
+\node(b)[below=of a]{Empty / dense metadata, five repetitions, same CPU and fixture};
+\node(c)[below=of b]{Separate dense profiles, matching PDB, offline attribution};
+\node(d)[below=of c]{Raw samples, medians and spread, PDF and byte-verified archive};
+\draw[->](a)--(b);\draw[->](b)--(c);\draw[->](c)--(d);\end{tikzpicture}
+
+\par\begin{tikzpicture}[node distance=6mm,every node/.style={draw,rounded corners,align=center,font=\small}]
+\node(a){Existing scalar / compensated scatter buffers};
+\node(b)[below=of a]{Shared generic vertex finish; no intermediate Sum array pass};
+\node(c)[below=of b]{Same float operations, invariants and reusable state};
+\node(d)[below=of c]{Matched four-workload controls, full parity, PDF and archive};
+\draw[->](a)--(b);\draw[->](b)--(c);\draw[->](c)--(d);\end{tikzpicture}
+
+\par\begin{tikzpicture}[node distance=6mm,every node/.style={draw,rounded corners,align=center,font=\small}]
+\node(a){Reject unhelpful fusion using completed matched controls};
+\node(b)[below=of a]{Share existing exact halving between both normalization sites};
+\node(c)[below=of b]{Same float contract; IEEE tests and matched before/after/native};
+\draw[->](a)--(b);\draw[->](b)--(c);\end{tikzpicture}
+
+\par\begin{tikzpicture}[node distance=6mm,every node/.style={draw,rounded corners,align=center,font=\small}]
+\node(a){Verified Core/Graph/Tensor snapshot and pinned offline dependencies};
+\node(b)[below=of a]{Existing comparison client: Linux loader and telemetry};
+\node(c)[below=of b]{kato21 local scratch, nice 10, one core, quiet-host guard};
+\node(d)[below=of c]{Native parity, matched controls, source hashes, PDF};
+\draw[->](a)--(b);\draw[->](b)--(c);\draw[->](c)--(d);\end{tikzpicture}
+
+\par\begin{tikzpicture}[node distance=6mm,every node/.style={draw,rounded corners,align=center,font=\small}]
+\node(a){Reject duplicate-binary A/B labels; retain initial evidence};
+\node(b)[below=of a]{Isolated target baseline, fresh artifact and distinct hashes};
+\node(c)[below=of b]{Repeat approved quiet control; production source unchanged};
+\draw[->](a)--(b);\draw[->](b)--(c);\end{tikzpicture}
+
+\par\begin{tikzpicture}[node distance=6mm,every node/.style={draw,rounded corners,align=center,font=\small}]
+\node(a){Distinct binaries: corrected control favors baseline};
+\node(b)[below=of a]{Restore only three owned normalization files};
+\node(c)[below=of b]{Targeted checks; one selected variant; verified PDF archive};
+\draw[->](a)--(b);\draw[->](b)--(c);\end{tikzpicture}
+
+\par\begin{tikzpicture}[node distance=6mm,every node/.style={draw,rounded corners,align=center,font=\small}]
+\node(a){One Core construction: original or permuted vertex labels};
+\node(b)[below=of a]{Exact topology and inverse-mapped rank proof};
+\node(c)[below=of b]{160 quiet-host cells; same binary, two libraries};
+\node(d)[below=of c]{Range/plan diagnostics, full raw samples, PDF archive};
+\draw[->](a)--(b);\draw[->](b)--(c);\draw[->](c)--(d);\end{tikzpicture}
+
+\par\begin{tikzpicture}[node distance=6mm,every node/.style={draw,rounded corners,align=center,font=\small}]
+\node(a){Canonical IR IDs, shared Core incidence view};
+\node(b)[below=of a]{First-encounter coordinates; same Tensor range operator};
+\node(c)[below=of b]{Graph cost selection and canonical convergence certificate};
+\node(d)[below=of c]{Then bounded parallelism and compiled Hymeko policy};
+\draw[->](a)--(b);\draw[->](b)--(c);\draw[->](c)--(d);\end{tikzpicture}
+
+\par\begin{tikzpicture}[node distance=6mm,every node/.style={draw,rounded corners,align=center,font=\small}]
+\node(a){One immutable Core projection and existing reverse index};
+\node(b)[below=of a]{Shared gather: independent arc outputs};
+\node(c)[below=of b]{Shared ordered transpose: independent node outputs};
+\node(d)[below=of c]{One PageRank sweep; caller-owned 1/2/4-worker pool};
+\draw[->](a)--(b);\draw[->](b)--(c);\draw[->](c)--(d);\end{tikzpicture}
+
+\par\begin{tikzpicture}[node distance=6mm,every node/.style={draw,rounded corners,align=center,font=\small}]
+\node(a){Compiled profile, inherited defaults and graph-resource reference};
+\node(b)[below=of a]{Core file compiler and Query typed field interpretation};
+\node(c)[below=of b]{Separate canonical graph IR, one Graph solver};
+\node(d)[below=of c]{Authored ordering/worker policy; canonical named output};
+\draw[->](a)--(b);\draw[->](b)--(c);\draw[->](c)--(d);\end{tikzpicture}
+
+\par\begin{tikzpicture}[node distance=6mm,every node/.style={draw,align=center,font=\small}]
+\node(a){Tensor IndexedRow: one borrowed indexed kernel};
+\node(b)[below=of a]{Core projection and literal Tensor test fixtures};
+\node(c)[below=of b]{Independent oracles; real Core compressed-range checks};
+\draw[->](a)--(b);\draw[->](b)--(c);\end{tikzpicture}
+
+\par\begin{tikzpicture}[node distance=6mm,every node/.style={draw,align=center,font=\small}]
+\node(a){Core designs and existing canonical construction};
+\node(b)[below=of a]{Graph algorithms on the same IR};
+\node(c)[below=of b]{Independent oracles and seeded relabeling checks};
+\draw[->](a)--(b);\draw[->](b)--(c);\end{tikzpicture}
+
+\par\begin{tikzpicture}[node distance=6mm,every node/.style={draw,align=center,font=\small}]
+\node(a){Core-generated fixtures and existing canonical construction};
+\node(b)[below=of a]{Separate build, index and graph algorithm measurements};
+\node(c)[below=of b]{Quiet kato21, fixed budgets, verified numerical evidence};
+\draw[->](a)--(b);\draw[->](b)--(c);\end{tikzpicture}

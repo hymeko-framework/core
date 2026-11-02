@@ -1,11 +1,11 @@
 // Criterion harness entry; keep clippy permissive for micro-benchmark noise.
 #![allow(warnings)]
 
-use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_main};
+use criterion::{BatchSize, Criterion, Throughput, criterion_group};
 use hymeko::{
     ir::{
         canonical_hash::{Canon, CanonHashCfg, CanonicalIdentity, validate_namespace_roots},
-        lower::lower_to_ir,
+        lower::{IrBuilder, IrLowering},
     },
     module_store::{module_store::ModuleStore, source_provider::MemProvider},
     resolution::{
@@ -108,7 +108,7 @@ fn bench_compiler_phases(c: &mut Criterion) {
     let (mut ast, mut it) = intern();
     resolve_consts(&mut ast, &it).unwrap();
     let idx = build_index_sym(&ast, &it).unwrap();
-    let ir = lower_to_ir(&ast, &idx, &mut it).unwrap();
+    let ir = IrLowering::new(&ast, &idx, &mut it).build().unwrap();
     let path = Path::new("benchmark.hymeko");
     let make_store = || {
         ModuleStore::new(
@@ -179,7 +179,11 @@ fn bench_compiler_phases(c: &mut Criterion) {
     group.bench_function("lower", |b| {
         b.iter_batched(
             || (),
-            |()| lower_to_ir(black_box(&ast), &idx, &mut it).unwrap(),
+            |()| {
+                IrLowering::new(black_box(&ast), &idx, &mut it)
+                    .build()
+                    .unwrap()
+            },
             BatchSize::PerIteration,
         )
     });
@@ -222,7 +226,18 @@ fn bench_semantic_digest(c: &mut Criterion) {
     use hymeko::ir::ir::ValueR;
     use hymeko::module_store::execution::{CompiledModel, ValueUpdate};
 
-    let input: Arc<str> = generate_large_hypergraph(1_000, "[0.5]")
+    let nodes = std::env::var("HYMEKO_DIGEST_NODES")
+        .map(|value| {
+            value
+                .parse::<usize>()
+                .expect("HYMEKO_DIGEST_NODES must be an integer")
+        })
+        .unwrap_or(1_000);
+    assert!(
+        nodes > 0 && nodes <= 500_000,
+        "supported digest fixture size: 1..=500000"
+    );
+    let input: Arc<str> = generate_large_hypergraph(nodes, "[0.5]")
         .replacen(
             "Benchmark_Graph {",
             "Benchmark_Graph { benchmark_value 0;",
@@ -249,10 +264,31 @@ fn bench_semantic_digest(c: &mut Criterion) {
         declaration,
         value: ValueR::Num(1.0),
     }];
+    // Capture a template before either model has initialized its semantic cache.
+    // Cloning its already-paged storage is untimed setup for initial-state cost.
+    let cold_paged = model.with_declaration_pages(256).unwrap();
     let before = model.semantic_digest();
     assert_eq!(
         before,
         Canon::new(&model.program().ir, model.interner()).hash()
+    );
+    assert_eq!(
+        cold_paged
+            .with_declaration_pages(256)
+            .unwrap()
+            .semantic_digest(),
+        before
+    );
+    let unchanged_updates = [ValueUpdate::Set {
+        declaration,
+        value: ValueR::Num(0.0),
+    }];
+    assert_eq!(
+        model
+            .with_value_updates(&unchanged_updates)
+            .unwrap()
+            .semantic_digest(),
+        before
     );
     let changed = model.with_value_updates(&updates).unwrap();
     assert_ne!(before, changed.semantic_digest());
@@ -261,13 +297,38 @@ fn bench_semantic_digest(c: &mut Criterion) {
         Canon::new(&changed.program().ir, changed.interner()).hash()
     );
     eprintln!(
-        "DIGEST_FIXTURE nodes=1000 bytes={} blake3={} decls={}",
+        "DIGEST_FIXTURE nodes={nodes} bytes={} blake3={} decls={}",
         input.len(),
         blake3::hash(input.as_bytes()),
         model.program().ir.decl_nodes.len()
     );
 
-    let mut group = c.benchmark_group("semantic_digest_1k");
+    let text_updates = [ValueUpdate::Text {
+        declaration,
+        value: "new observation",
+    }];
+    let text_changed = model.with_value_updates(&text_updates).unwrap();
+    assert_ne!(before, text_changed.semantic_digest());
+    assert_eq!(
+        text_changed.semantic_digest(),
+        Canon::new(&text_changed.program().ir, text_changed.interner()).hash()
+    );
+    let paged = model.with_declaration_pages(256).unwrap();
+    assert_eq!(paged.semantic_digest(), before);
+    eprintln!(
+        "DIGEST_PARITY before={before:?} numeric={:?} text={:?}",
+        changed.semantic_digest(),
+        text_changed.semantic_digest()
+    );
+    if std::env::args().any(|arg| arg == "--verify-digest") {
+        return;
+    }
+    let scale = if nodes % 1_000 == 0 {
+        format!("{}k", nodes / 1_000)
+    } else {
+        nodes.to_string()
+    };
+    let mut group = c.benchmark_group(format!("semantic_digest_{scale}"));
     group
         .sample_size(20)
         .warm_up_time(Duration::from_secs(1))
@@ -276,19 +337,52 @@ fn bench_semantic_digest(c: &mut Criterion) {
         b.iter(|| Canon::new(black_box(&model.program().ir), black_box(model.interner())).hash())
     });
     group.bench_function("cached", |b| b.iter(|| black_box(&model).semantic_digest()));
-    group.bench_function("checked_leaf_update", |b| {
+    group.bench_function("initial_state_paged_256", |b| {
         b.iter_batched(
-            || (),
-            |()| {
-                let next = black_box(&model)
-                    .with_value_updates(black_box(&updates))
-                    .unwrap();
-                black_box(next.semantic_digest());
-                next
+            || cold_paged.with_declaration_pages(256).unwrap(),
+            |fresh| {
+                black_box(fresh.semantic_digest());
+                fresh
             },
             BatchSize::PerIteration,
         )
     });
+    for (name, updates) in [
+        ("checked_leaf_update", updates.as_slice()),
+        ("checked_text_update", text_updates.as_slice()),
+        ("checked_unchanged_update", unchanged_updates.as_slice()),
+    ] {
+        for (suffix, model) in [("", &model), ("_paged_256", &paged)] {
+            group.bench_function(format!("{name}{suffix}"), |b| {
+                b.iter_batched(
+                    || (),
+                    |()| {
+                        let next = black_box(&model)
+                            .with_value_updates(black_box(&updates))
+                            .unwrap();
+                        black_box(next.semantic_digest());
+                        next
+                    },
+                    BatchSize::PerIteration,
+                )
+            });
+        }
+    }
+    for (name, model) in [
+        ("declaration_scan", &model),
+        ("declaration_scan_paged_256", &paged),
+    ] {
+        group.bench_function(name, |b| {
+            b.iter(|| {
+                let mut count = 0usize;
+                for node in &black_box(model).program().ir.decl_nodes {
+                    black_box(node);
+                    count += 1;
+                }
+                black_box(count)
+            })
+        });
+    }
     group.finish();
 }
 
@@ -298,4 +392,19 @@ criterion_group!(
     bench_compiler_phases,
     bench_semantic_digest
 );
-criterion_main!(benches);
+fn main() {
+    if std::env::args().any(|arg| arg == "--verify-digest") {
+        bench_semantic_digest(&mut Criterion::default());
+        return;
+    }
+    if std::env::var("HYMEKO_DIGEST_ONLY").as_deref() == Ok("1") {
+        assert!(
+            std::env::args().any(|arg| arg == "--bench"),
+            "digest measurement requires --bench"
+        );
+        bench_semantic_digest(&mut Criterion::default().configure_from_args());
+    } else {
+        benches();
+    }
+    Criterion::default().configure_from_args().final_summary();
+}

@@ -2,7 +2,7 @@ use super::{CBOR_SCHEMA_VERSION, CborError, CborPayload, DecodedCborPayload};
 use crate::common::ids::DeclId;
 use crate::ir::canonical_hash::{Canon, CanonHashCfg, build_path_index};
 use crate::ir::coherence::{CoherenceLimits, validate_hierarchy_index_coherence};
-use crate::ir::ir::{AnnoR, SignedRefR, ValueR};
+use crate::ir::ir::{AnnoR, Ir, ReferenceError, SignedRefR, ValueR};
 use crate::ir_stream::DecodeLimits;
 use crate::resolution::interner::Interner;
 use crate::resolution::resolve::Index;
@@ -207,18 +207,38 @@ fn validate_declaration_ids(payload: &CborPayload) -> Result<(), CborError> {
         optional_decl(decl.first_child, decl_count, "declaration first_child")?;
         optional_decl(decl.last_child, decl_count, "declaration last_child")?;
         optional_decl(decl.next_sibling, decl_count, "declaration next_sibling")?;
-        anno(&decl.anno, decl_count)?;
+        anno(
+            ir.annotation(decl.anno).ok_or(CborError::IdOutOfRange {
+                field: "declaration annotation",
+                id: decl.anno.raw(),
+            })?,
+            decl_count,
+        )?;
     }
     for (root, _) in &ir.namespace_roots {
         required_decl(*root, decl_count, "namespace root")?;
     }
     for node in &ir.nodes {
         required_decl(node.decl, decl_count, "node declaration")?;
-        refs(&node.bases, decl_count)?;
+        refs(
+            ir,
+            ir.bases(node.bases).ok_or(CborError::IdOutOfRange {
+                field: "base list",
+                id: node.bases.raw(),
+            })?,
+            decl_count,
+        )?;
     }
     for edge in &ir.edges {
         required_decl(edge.decl, decl_count, "edge declaration")?;
-        refs(&edge.bases, decl_count)?;
+        refs(
+            ir,
+            ir.bases(edge.bases).ok_or(CborError::IdOutOfRange {
+                field: "base list",
+                id: edge.bases.raw(),
+            })?,
+            decl_count,
+        )?;
         for arc in &edge.arcs {
             if arc.is_none() || arc.raw() >= ir.arcs.len() {
                 return Err(CborError::IdOutOfRange {
@@ -230,8 +250,14 @@ fn validate_declaration_ids(payload: &CborPayload) -> Result<(), CborError> {
     }
     for arc in &ir.arcs {
         required_decl(arc.in_edge, decl_count, "arc owner")?;
-        anno(&arc.anno, decl_count)?;
-        refs(&arc.refs, decl_count)?;
+        anno(
+            ir.annotation(arc.anno).ok_or(CborError::IdOutOfRange {
+                field: "arc annotation",
+                id: arc.anno.raw(),
+            })?,
+            decl_count,
+        )?;
+        refs(ir, &arc.refs, decl_count)?;
     }
     for decl in payload.index.by_path.values() {
         required_decl(*decl, decl_count, "path-index declaration")?;
@@ -239,12 +265,21 @@ fn validate_declaration_ids(payload: &CborPayload) -> Result<(), CborError> {
     Ok(())
 }
 
-fn refs(refs: &[SignedRefR], decl_count: usize) -> Result<(), CborError> {
+fn refs(ir: &Ir, refs: &[SignedRefR], decl_count: usize) -> Result<(), CborError> {
     for reference in refs {
-        let atom = reference.atom();
+        let atom = ir.reference_atom(reference).map_err(|error| match error {
+            ReferenceError::Annotation(id) => CborError::IdOutOfRange {
+                field: "reference annotation",
+                id: id.raw(),
+            },
+            ReferenceError::Weights(id) => CborError::IdOutOfRange {
+                field: "reference weights",
+                id: id.raw(),
+            },
+        })?;
         required_decl(atom.target, decl_count, "reference target")?;
-        anno(&atom.anno, decl_count)?;
-        if let Some(weights) = &atom.weights {
+        anno(atom.anno, decl_count)?;
+        if let Some(weights) = atom.weights {
             for weight in weights {
                 value(weight, decl_count)?;
             }

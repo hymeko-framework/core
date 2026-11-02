@@ -9,6 +9,9 @@
     Compilation is outside the measured span. VAS is recorded, never capped.
     LogPrefix saves stdout, stderr and metrics; otherwise output is inherited.
     Rayon configuration applies only to the child.
+.PARAMETER ProcessorAffinity
+    Optional process-local logical-processor bitmask, applied before warm-up.
+    Zero keeps OS scheduling. The requested nonzero mask is read back and checked.
 .EXAMPLE
     .\measure_peak_memory.ps1 -Bench csr_bench -Filter csr_spmv -Threads 24
 .EXAMPLE
@@ -23,6 +26,7 @@ param(
     [Parameter(ParameterSetName = 'Program')][string]$ArgumentString = '',
     [string]$WorkingDirectory = (Get-Location).Path,
     [int]$Threads = 0,
+    [ValidateRange(0, [long]::MaxValue)][long]$ProcessorAffinity = 0,
     [string]$LogPrefix = '',
     [ValidateRange(1, 16384)][int]$MaxWorkingSetMiB = 16384
 )
@@ -36,15 +40,19 @@ if ($PSCmdlet.ParameterSetName -eq 'Bench') {
         Write-Host "Building bench target '$Bench' ..."
         $previousPreference = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
-        & cargo build --locked --offline --profile $CargoProfile --bench $Bench --workspace *>&1 | Out-Null
+        $buildMessages = @(& cargo build --locked --offline --profile $CargoProfile --bench $Bench --workspace --message-format=json-render-diagnostics |
+            ForEach-Object { $_ | ConvertFrom-Json })
         $buildCode = $LASTEXITCODE
         $ErrorActionPreference = $previousPreference
         if ($buildCode -ne 0) { throw "cargo build failed: $buildCode" }
-        $profileDirectory = if ($CargoProfile -eq 'dev') { 'debug' } elseif ($CargoProfile -eq 'bench') { 'release' } else { $CargoProfile }
-        $benchDirectory = Join-Path $repoRoot "target\$profileDirectory\deps"
-        $exe = Get-ChildItem -LiteralPath $benchDirectory -Filter "$Bench-*.exe" |
-            Sort-Object LastWriteTime -Descending | Select-Object -First 1
-        if (-not $exe) { throw "No executable for '$Bench'" }
+        # Cargo may keep executables in a shared build-dir. Select this build's
+        # artifact instead of guessing a target path or picking an older binary.
+        $artifacts = @($buildMessages | Where-Object {
+            $_.reason -eq 'compiler-artifact' -and $_.target.name -eq $Bench -and
+            $_.target.kind -contains 'bench' -and $_.executable
+        })
+        if ($artifacts.Count -ne 1) { throw "Expected one executable for '$Bench'; got $($artifacts.Count)" }
+        $exe = Get-Item -LiteralPath $artifacts[0].executable
         $ArgumentString = '--bench'
         if ($Filter) { $ArgumentString += ' "' + ($Filter -replace '(\\*)"', '$1$1\"' -replace '(\\+)$', '$1$1') + '"' }
         $runDirectory = $repoRoot
@@ -68,6 +76,14 @@ $peakWs = 0L; $peakPaged = 0L; $peakVm = 0L
 $terminatedForCap = $false
 $nextProgress = 10.0
 try {
+    # Optional process-local scheduling control; zero preserves the OS default.
+    # Set it before fixture preparation/warm-up, and retain cleanup if it fails.
+    if ($ProcessorAffinity -gt 0) {
+        $proc.ProcessorAffinity = [IntPtr]$ProcessorAffinity
+        if ($proc.ProcessorAffinity.ToInt64() -ne $ProcessorAffinity) {
+            throw "Requested processor affinity was not applied."
+        }
+    }
     if ($LogPrefix) {
         # Drain both pipes concurrently; large diagnostics cannot deadlock the child.
         $stdout = $proc.StandardOutput.ReadToEndAsync()
@@ -100,6 +116,7 @@ try {
         working_directory = $runDirectory
         filter = $(if ($Filter) { $Filter } else { '(all)' })
         rayon_threads = $(if ($Threads -gt 0) { $Threads } else { 'inherited' })
+        processor_affinity_mask = $(if ($ProcessorAffinity -gt 0) { $ProcessorAffinity } else { 'OS-managed' })
         exit_code = $proc.ExitCode
         wall_seconds = [math]::Round($watch.Elapsed.TotalSeconds, 3)
         peak_working_set_mib = [math]::Round($peakWs / 1MB, 3)

@@ -27,9 +27,23 @@
 //! methods hand back `IncidenceRef<'ir>` directly. Lossless (sign / weight /
 //! duplicate incidence / order preserved), canonical IDs in and out. Derived and
 //! read-only; never a second source of truth. No `unsafe`, no pointer identity.
+//!
+//! Repeated numerical consumers may request an [`IncidenceProjection`]: shared,
+//! lazily prepared arc-major offsets and targets in canonical declaration or node
+//! coordinates. Its row operations apply factored operators without a matrix
+//! product. The index caches structure only; coefficients stay with each operator.
 
 use crate::common::ids::{DeclId, EdgeId, HyperArcId};
 use crate::ir::ir::{AnnoR, Ir, SignedRefR, ValueR};
+use std::sync::OnceLock;
+
+mod contraction;
+mod projection;
+pub use contraction::{IncidenceContraction, RowAlignmentError};
+pub use projection::{
+    IncidenceAccumulator, IncidenceDomain, IncidenceLayout, IncidenceOrder, IncidenceProjection,
+    IncidenceProjectionError, IncidenceRow, IncidenceRowOperator, IncidenceRowVisitor,
+};
 
 /// One incidence, resolved from its `(arc, slot)` coordinate. Canonical IDs; the
 /// weights and annotation borrow the `Ir`.
@@ -166,6 +180,8 @@ pub struct IncidenceIndexData {
     row: Vec<u32>,
     arcs: Vec<HyperArcId>,
     slots: Vec<u32>,
+    // Only structural coordinates are shared across topology-preserving IR updates.
+    projections: [projection::ProjectionCache; 2],
 }
 
 /// Reverse-incidence index **borrowing** the `Ir` it indexes: the `&'ir Ir` paired
@@ -190,34 +206,41 @@ impl core::fmt::Debug for IncidenceIndex<'_> {
     }
 }
 
-/// Scalar-weight policy (explicit, testable): no weights → `1.0`; otherwise the
-/// **product** of the `ValueR::Num` components (a `List` is flattened one level);
-/// non-numeric components are ignored, an all-non-numeric weight is `1.0`.
-#[must_use]
-pub fn scalar_weight(sref: &SignedRefR) -> f64 {
-    match &sref.atom().weights {
-        None => 1.0,
-        Some(ws) => {
-            let mut prod = 1.0;
-            let mut any = false;
-            for w in ws {
-                match w {
-                    ValueR::Num(x) => {
-                        prod *= *x;
-                        any = true;
-                    }
-                    ValueR::List(inner) => {
-                        for v in inner {
-                            if let ValueR::Num(x) = v {
-                                prod *= *x;
-                                any = true;
+impl SignedRefR {
+    /// Scalar-weight policy (explicit, testable): no weights → `1.0`; otherwise the
+    /// **product** of the `ValueR::Num` components (a `List` is flattened one level);
+    /// non-numeric components are ignored, an all-non-numeric weight is `1.0`.
+    #[must_use]
+    /// # Panics
+    /// The reference must belong to this IR's payload-ID domain.
+    pub fn scalar_weight(&self, ir: &Ir) -> f64 {
+        let atom = ir
+            .reference_atom(self)
+            .expect("scalar weight requires model-local reference payloads");
+        match atom.weights {
+            None => 1.0,
+            Some(ws) => {
+                let mut prod = 1.0;
+                let mut any = false;
+                for w in ws {
+                    match w {
+                        ValueR::Num(x) => {
+                            prod *= *x;
+                            any = true;
+                        }
+                        ValueR::List(inner) => {
+                            for v in inner {
+                                if let ValueR::Num(x) = v {
+                                    prod *= *x;
+                                    any = true;
+                                }
                             }
                         }
+                        _ => {}
                     }
-                    _ => {}
                 }
+                if any { prod } else { 1.0 }
             }
-            if any { prod } else { 1.0 }
         }
     }
 }
@@ -279,7 +302,12 @@ fn build_arrays(ir: &Ir) -> Result<IncidenceIndexData, IncidenceError> {
         }
     }
 
-    Ok(IncidenceIndexData { row, arcs, slots })
+    Ok(IncidenceIndexData {
+        row,
+        arcs,
+        slots,
+        projections: Default::default(),
+    })
 }
 
 /// Build the reverse-incidence index for `ir`, **borrowing** it. Thin wrapper
@@ -340,13 +368,21 @@ impl IncidenceIndexData {
         self.arcs.len()
     }
 
-    /// Bytes retained by the index arrays (capacity-accurate; real `HyperArcId`).
+    /// Bytes retained by index arrays and initialized shared projections. Does not
+    /// count absent lazy projections or claim exclusive ownership of shared buffers.
     #[must_use]
     pub fn retained_bytes(&self) -> usize {
         use std::mem::size_of;
         self.row.capacity() * size_of::<u32>()
             + self.arcs.capacity() * size_of::<HyperArcId>()
             + self.slots.capacity() * size_of::<u32>()
+            + self
+                .projections
+                .iter()
+                .filter_map(OnceLock::get)
+                .filter_map(|result| result.as_ref().ok())
+                .map(|data| data.retained_bytes())
+                .sum::<usize>()
     }
 
     /// Resolve one coordinate to a full [`IncidenceRef`] against `ir`. `O(1)`.
@@ -360,6 +396,9 @@ impl IncidenceIndexData {
     pub fn resolve<'ir>(&self, ir: &'ir Ir, arc: HyperArcId, slot: u32) -> IncidenceRef<'ir> {
         let arc_rec = &ir.arcs[arc.raw()];
         let sref = &arc_rec.refs[slot as usize];
+        let atom = ir
+            .reference_atom(sref)
+            .expect("incidence index requires model-local reference payloads");
         let edge = ir
             .edge_for_decl(arc_rec.in_edge)
             .map_or(EdgeId::NONE, |(e, _)| e);
@@ -369,8 +408,8 @@ impl IncidenceIndexData {
             slot,
             target: sref.target(),
             sign: sref.sign(),
-            weights: sref.atom().weights.as_deref(),
-            anno: &sref.atom().anno,
+            weights: atom.weights,
+            anno: atom.anno,
         }
     }
 
@@ -461,11 +500,9 @@ impl IncidenceIndexData {
     /// `y = B·x` (arc-major). See [`IncidenceIndex::node_to_arc`] for the contract.
     pub fn node_to_arc(&self, ir: &Ir, x: &[f64], y: &mut [f64]) {
         for (ai, arc) in ir.arcs.iter().enumerate() {
-            let mut acc = 0.0;
-            for sref in &arc.refs {
-                acc += f64::from(sref.sign()) * scalar_weight(sref) * x[sref.target().raw()];
-            }
-            y[ai] = acc;
+            y[ai] = <f64 as IncidenceAccumulator>::sum(arc.refs.iter().map(|sref| {
+                f64::from(sref.sign()) * sref.scalar_weight(ir) * x[sref.target().raw()]
+            }));
         }
     }
 
@@ -488,25 +525,23 @@ impl IncidenceIndexData {
             *zi = 0.0;
         }
         for d in 0..n {
-            z[d] = self.transpose_row(coefficients, DeclId::new(d), y);
+            z[d] = self.transpose_row::<f64>(coefficients, DeclId::new(d), y);
         }
     }
 
     /// One left-to-right fold for serial and parallel applies. Do not reassociate.
     #[inline]
-    fn transpose_row(
+    fn transpose_row<A: IncidenceAccumulator>(
         &self,
         coefficients: &impl IncidenceCoefficients,
         node: DeclId,
         y: &[f64],
     ) -> f64 {
         let (lo, hi) = self.range(node);
-        let mut acc = 0.0;
-        for k in lo..hi {
+        A::sum((lo..hi).map(|k| {
             let arc = self.arcs[k];
-            acc += coefficients.coefficient(k, arc) * y[arc.raw()];
-        }
-        acc
+            coefficients.coefficient(k, arc) * y[arc.raw()]
+        }))
     }
 
     /// `z = Bᵀ·B·x`. See [`IncidenceIndex::star_operator`]. `y_scratch` caller-owned.
@@ -546,11 +581,18 @@ trait IncidenceCoefficients {
     fn coefficient(&self, position: usize, arc: HyperArcId) -> f64;
 }
 
+impl<F: Fn(usize, HyperArcId) -> f64> IncidenceCoefficients for F {
+    #[inline]
+    fn coefficient(&self, position: usize, arc: HyperArcId) -> f64 {
+        self(position, arc)
+    }
+}
+
 impl IncidenceCoefficients for IncidenceView<'_, '_> {
     #[inline]
     fn coefficient(&self, position: usize, arc: HyperArcId) -> f64 {
         let sref = &self.ir.arcs[arc.raw()].refs[self.data.slots[position] as usize];
-        f64::from(sref.sign()) * scalar_weight(sref)
+        f64::from(sref.sign()) * sref.scalar_weight(self.ir)
     }
 }
 
@@ -588,6 +630,26 @@ macro_rules! incidence_accessors {
         #[must_use]
         pub fn incident_slots(&self, node: DeclId) -> &$data [u32] {
             self.data().incident_slots(node)
+        }
+
+        /// One transpose row using caller-selected coefficients and accumulator.
+        /// The coefficient receives the ordinal within this node's incidence
+        /// slice and its canonical hyperarc ID. `incident_slots(node)[ordinal]`
+        /// supplies the original reference slot if needed. Duplicates and the
+        /// ascending arc/ref order are preserved, including empty rows.
+        /// # Panics
+        /// If a referenced arc is outside `input`, or the coefficient panics.
+        #[inline]
+        pub fn transpose_row<A: IncidenceAccumulator>(
+            &self,
+            node: DeclId,
+            input: &[f64],
+            coefficient: impl Fn(usize, HyperArcId) -> f64,
+        ) -> f64 {
+            let (first, _) = self.data().range(node);
+            self.data().transpose_row::<A>(
+                &|position, arc| coefficient(position - first, arc), node, input,
+            )
         }
 
         /// Fully-resolved incidences of `node` — each an `O(1)` [`IncidenceRef`].
@@ -667,7 +729,18 @@ macro_rules! incidence_accessors {
                 ir: self.ir,
                 data: self.data(),
                 coeff,
+                forward: OnceLock::new(),
             })
+        }
+
+        /// Lazily prepare and share numeric incidence coordinates for this model.
+        /// Clones share structural storage; coefficient policies remain caller-owned.
+        /// # Errors
+        /// Rejects invalid bindings or targets in the selected canonical domain.
+        pub fn prepare_projection(&self, domain: IncidenceDomain)
+            -> Result<IncidenceProjection<'ir>, IncidenceProjectionError>
+        {
+            IncidenceProjection::cached(self.ir, self.data(), domain)
         }
 
     };
@@ -824,15 +897,16 @@ impl std::error::Error for OperatorPlanError {}
 /// operator. **Borrows** the `Ir` + the derived [`IncidenceIndexData`] (so it works identically whether the
 /// source is an [`IncidenceIndex`], an [`IncidenceView`] or a [`PreparedIr`]); it is not part of the
 /// canonical `Ir`, does not serialize, and cannot pair with a different index (the borrows enforce it at
-/// compile time). Stores exactly **one `f64` per incidence** in node-major order and **copies no topology or
-/// `(arc,slot)` coordinate** — the arc index for each incidence is read from the borrowed index. A warm apply
-/// allocates nothing. For finite weights the results are **bitwise-identical** to the un-prepared operator
-/// (the same `(sign·weight)·y` expression and fold order).
+/// compile time). The transpose stores one `f64` per incidence in node-major order.
+/// First forward use lazily adds arc-major coefficients and requests a shared Core
+/// projection; transpose-only consumers retain the original footprint. Warm applies
+/// allocate nothing. Finite-weight expressions and fold order match the live operator.
 pub struct IncidenceOperatorPlan<'a, 'ir> {
     ir: &'ir Ir,
     data: &'a IncidenceIndexData,
     /// Node-major, one per incidence; `coeff.len() == data.incidence_count()`.
     coeff: Vec<f64>,
+    forward: OnceLock<projection::ForwardOperator<'ir>>,
 }
 
 impl<'a, 'ir> IncidenceOperatorPlan<'a, 'ir> {
@@ -848,10 +922,44 @@ impl<'a, 'ir> IncidenceOperatorPlan<'a, 'ir> {
         self.data
     }
 
-    /// Bytes retained by the plan (capacity-accurate): 8 per incidence.
+    /// Coefficient-buffer bytes: 8 per incidence, plus 8 after the first forward
+    /// apply. Shared projection coordinates are accounted for by `data()`.
     #[must_use]
     pub fn retained_bytes(&self) -> usize {
-        self.coeff.capacity() * std::mem::size_of::<f64>()
+        (self.coeff.capacity()
+            + self
+                .forward
+                .get()
+                .map_or(0, |forward| forward.coefficients.len()))
+            * std::mem::size_of::<f64>()
+    }
+
+    fn forward(&self) -> &projection::ForwardOperator<'ir> {
+        self.forward.get_or_init(|| {
+            // The borrowed reverse index checked all declaration targets; the IR
+            // cannot mutate while this plan lives, so this domain cannot fail.
+            let projection =
+                IncidenceProjection::cached(self.ir, self.data, IncidenceDomain::Declarations)
+                    .expect("validated immutable incidence targets");
+            let mut coefficients = vec![0.0; self.coeff.len()];
+            for (position, (&arc, &slot)) in self.data.arcs.iter().zip(&self.data.slots).enumerate()
+            {
+                coefficients[projection.row(arc).offset() + slot as usize] = self.coeff[position];
+            }
+            projection::ForwardOperator {
+                projection,
+                coefficients: coefficients.into_boxed_slice(),
+            }
+        })
+    }
+
+    /// `y = Bx` using the same shared row operator as other numerical consumers.
+    /// Coordinates and forward coefficients are cached on first use. Subsequent
+    /// calls allocate nothing and preserve the original per-row fold order.
+    /// # Panics
+    /// If `x` or `y` is too short for its declaration or arc domain.
+    pub fn node_to_arc(&self, x: &[f64], y: &mut [f64]) {
+        self.forward().apply(x, y);
     }
 
     /// `z = Bᵀ·y` using the prepared coefficients. Node-major, output-partitioned, allocation-free;
@@ -867,15 +975,15 @@ impl<'a, 'ir> IncidenceOperatorPlan<'a, 'ir> {
         use rayon::prelude::*;
         let n = self.ir.decl_nodes.len();
         z[..n].par_iter_mut().enumerate().for_each(|(d, zi)| {
-            *zi = self.data.transpose_row(self, DeclId::new(d), y);
+            *zi = self.data.transpose_row::<f64>(self, DeclId::new(d), y);
         });
     }
 
-    /// `z = Bᵀ·B·x` — the signed star operator with the prepared `Bᵀ`. `Bx` (`node_to_arc`, arc-major) is
-    /// the un-prepared fast path (deliberately not slowed); only the expensive `Bᵀ` half is prepared.
-    /// `y_scratch` is caller-owned (len ≥ arcs); allocation-free.
+    /// `z = Bᵀ·B·x` without materializing the product. The forward preparation is
+    /// lazy; warm applies use shared numeric rows and allocate nothing.
+    /// `y_scratch` is caller-owned (len >= arcs).
     pub fn star_operator(&self, x: &[f64], z: &mut [f64], y_scratch: &mut [f64]) {
-        self.data.node_to_arc(self.ir, x, y_scratch);
+        self.node_to_arc(x, y_scratch);
         self.arc_to_node(y_scratch, z);
     }
 }
@@ -884,41 +992,72 @@ impl<'a, 'ir> IncidenceOperatorPlan<'a, 'ir> {
 mod fault_tests {
     use super::*;
     use crate::common::ids::{EdgeId, NodeId, SymId};
-    use crate::ir::ir::{AnnoR, ArcRec, DeclKind, DeclNode, EdgeRec, NodeRec, RefAtomR};
+    use crate::ir::ir::{AnnoR, ArcRec, DeclKind, DeclNode, EdgeRec, IncidenceSign, NodeRec};
 
     /// Minimal Ir: nodes a(0), b(1), edge e(2), one arc with refs [a, a, b].
     fn tiny() -> Ir {
         let mut ir = Ir::default();
         for kind in [DeclKind::Node, DeclKind::Node, DeclKind::Edge] {
-            ir.push_decl(DeclNode {
-                kind,
-                name: SymId::new(0),
-                parent: DeclId::NONE,
-                first_child: DeclId::NONE,
-                last_child: DeclId::NONE,
-                next_sibling: DeclId::NONE,
-                anno: AnnoR::default(),
-            });
+            ir.push_decl(DeclNode::root(kind, SymId::new(0), AnnoR::default()));
         }
-        ir.nodes.push(NodeRec::new(DeclId::new(0), Vec::new()));
-        ir.nodes.push(NodeRec::new(DeclId::new(1), Vec::new()));
+        ir.nodes.push(NodeRec::new(
+            DeclId::new(0),
+            crate::common::ids::BaseListId::NONE,
+        ));
+        ir.nodes.push(NodeRec::new(
+            DeclId::new(1),
+            crate::common::ids::BaseListId::NONE,
+        ));
         ir.bind_node_decl(DeclId::new(0), NodeId::new(0)).unwrap();
         ir.bind_node_decl(DeclId::new(1), NodeId::new(1)).unwrap();
-        ir.edges.push(EdgeRec::new(DeclId::new(2), Vec::new()));
+        ir.edges.push(EdgeRec::new(
+            DeclId::new(2),
+            crate::common::ids::BaseListId::NONE,
+        ));
         ir.bind_edge_decl(DeclId::new(2), EdgeId::new(0)).unwrap();
         let arc_decl = ir.push_anonymous_arc();
-        let atom = |t: usize| RefAtomR::plain(DeclId::new(t));
         ir.arcs.push(ArcRec {
-            anno: AnnoR::default(),
+            anno: crate::common::ids::AnnotationId::NONE,
             in_edge: DeclId::new(2),
             refs: vec![
-                SignedRefR::Plus(atom(0)),
-                SignedRefR::Minus(atom(0)),
-                SignedRefR::Neutral(atom(1)),
+                SignedRefR::plain(DeclId::new(0), IncidenceSign::Plus),
+                SignedRefR::plain(DeclId::new(0), IncidenceSign::Minus),
+                SignedRefR::plain(DeclId::new(1), IncidenceSign::Neutral),
             ],
         });
         ir.bind_arc_decl(arc_decl, HyperArcId::new(0)).unwrap();
         ir
+    }
+
+    #[test]
+    fn shared_projection_cache_never_reuses_a_previous_models_coefficients() {
+        let ir = tiny();
+        let index = build_incidence_index(&ir).unwrap();
+        let original = index.prepare_projection(IncidenceDomain::Nodes).unwrap();
+        let old_plan = index.prepare_operator().unwrap();
+        let input = vec![1.0; ir.decl_count()];
+        let mut old_output = vec![0.0; ir.arcs.len()];
+        old_plan.node_to_arc(&input, &mut old_output);
+        // Model updates may share structural coordinates, never numeric payloads.
+        let mut updated = ir.clone();
+        let mut draft = updated.reference_draft(&updated.arcs[0].refs[0]).unwrap();
+        draft.atom.weights = Some(vec![ValueR::Num(2.0)]);
+        updated.arcs[0].refs[0] = updated.store_reference(draft);
+        let view = IncidenceView::pair(&updated, index.data());
+        let next = view.prepare_projection(IncidenceDomain::Nodes).unwrap();
+        assert_eq!(
+            original.row(HyperArcId::new(0)).targets().as_ptr(),
+            next.row(HyperArcId::new(0)).targets().as_ptr()
+        );
+        assert!(std::ptr::eq(next.ir(), &updated));
+        let new_plan = view.prepare_operator().unwrap();
+        let mut new_output = old_output.clone();
+        new_plan.node_to_arc(&input, &mut new_output);
+        // tiny() has signs +1, -1, 0: old Bx = 1 - 1 + 0; new Bx = 2 - 1 + 0.
+        assert_eq!(old_output, [0.0]);
+        assert_eq!(new_output, [1.0]);
+        old_plan.node_to_arc(&input, &mut old_output);
+        assert_eq!(old_output, [0.0]);
     }
 
     #[test]

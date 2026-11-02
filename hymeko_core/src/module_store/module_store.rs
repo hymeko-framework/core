@@ -1,7 +1,7 @@
 use crate::common::ids::SymId;
 use crate::ir::canonical_hash::{Canon, CanonicalIdentity};
 use crate::ir::ir::Ir;
-use crate::ir::lower::lower_program_to_ir;
+use crate::ir::lower::{IrBuilder, IrLowering};
 use crate::module_store::source_provider::SourceProvider;
 use crate::resolution::const_resolve::resolve_consts;
 use crate::resolution::intern_pass::intern_ast_into;
@@ -33,13 +33,12 @@ pub struct CompiledProgram {
     /// identity and all post-lowering path consumers read the `Ir`
     /// (`canonical_hash::Canon`, `canonical_hash::build_path_index`).
     /// This is a resolution-time artifact retained for external/test consumers;
-    /// its removal is planned for a breaking release once they migrate to the
-    /// derived path index. It is NOT re-validated against the `Ir` after the
-    /// one-time lowering-boundary check in `compile`.
-    pub idx: Index,
+    /// immutable snapshots share it until symbol-ID remapping requires a copy.
+    /// Checked value updates retain hierarchy/index coherence validation.
+    pub idx: Arc<Index>,
     pub ir: Ir,
     // extra debug/teszt kényelmesség:
-    pub imports: Vec<(SymId, ModuleKey)>, // (namespace, module key)
+    pub imports: Arc<Vec<(SymId, ModuleKey)>>, // (namespace, module key)
     /// The program's canonical identity, computed once here: `canon.hash()` is its semantic
     /// digest, `canon.structure()` its structural hash.
     pub canon: CanonicalIdentity,
@@ -264,14 +263,16 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
             .collect();
 
         // 7) Lower the canonical program IR.
-        let mut ir = lower_program_to_ir(root_ast, &imported, &idx, &mut self.it)
+        let mut ir = IrLowering::new(root_ast, &idx, &mut self.it)
+            .with_imports(&imported)
+            .build()
             .map_err(|e| ModuleLoadError::Parse(format!("lower failed: {e:?}")))?;
 
         ir.files = modules
             .iter()
             .map(|(key, _)| key.0.to_string_lossy().replace('\\', "/"))
             .collect();
-        ir.decl_file = vec![u32::MAX; ir.decl_nodes.len()];
+        ir.decl_file = vec![u32::MAX; ir.decl_nodes.len()].into();
         for (file, range) in ranges.iter().enumerate() {
             ir.decl_file[range.clone()].fill(file as u32);
         }
@@ -303,9 +304,9 @@ impl<'a, P: SourceProvider, R: HymekoParser> ModuleStore<P, R> {
         // 9) bundle + cache
         let compiled = Arc::new(CompiledProgram {
             root: root.clone(),
-            idx,
-            ir,
-            imports: imports_map,
+            idx: Arc::new(idx),
+            ir: ir.into_shared(),
+            imports: Arc::new(imports_map),
             canon,
         });
 

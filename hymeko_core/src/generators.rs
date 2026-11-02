@@ -14,10 +14,49 @@
 //! * Complete `r`-uniform K_n^(r) — every size-`r` subset of `n` vertices.
 //! * The Mycielskian of a hypergraph — shadows and an apex; on graphs it keeps
 //!   triangle-freeness and raises the chromatic number by one.
+//! * The lines of a Hamming graph over mixed radices ([`HammingLines`]) — the vertices differing
+//!   in one digit, grouped by digit; each group is a partition of the vertices. Over radix 2 they
+//!   are the hypercube's edges grouped by direction, its 1-factorisation (the butterfly's levels).
+//!
+//! * The pyramid of a lattice ([`LatticePyramid`], module `pyramid`) — level after level of coarser
+//!   cells, each the hyperedge of the finer cells its window reads: orthants (laminar), overlapped
+//!   windows, or a same-resolution stencil, as each level's stencil, stride and anchor say.
+//!
+//! A family whose edges come in parallel classes is a [`ResolvableDesign`]: a consumer that applies
+//! the classes in turn reads them as classes, not as a flat edge list regrouped by its order.
 //!
 //! The mirror of these generators in the web editor
 //! (`docs/editor/views/generators.js`) is validated by the same "every pair
 //! covered once" / "C(n,r) distinct edges" properties.
+
+/// Representation-independent graph construction.
+/// A generator's representation is selected by its associated output type.
+pub trait GraphGenerator {
+    /// Graph representation owned by the implementing layer.
+    type Output;
+    /// Invalid request or construction failure.
+    type Error;
+
+    /// Generate a fresh graph without modifying this generator.
+    ///
+    /// # Errors
+    /// The implementation's documented domain or construction errors.
+    fn generate(&self) -> Result<Self::Output, Self::Error>;
+}
+
+/// Reproducible synthetic generation with an explicitly controlled seed.
+/// Repeated generation with the same configuration and seed must agree.
+pub trait SyntheticGenerator: GraphGenerator {
+    /// Seed representation; no implicit entropy source is permitted.
+    type Seed: Copy;
+    /// Return the seed used by the next generation.
+    fn seed(&self) -> Self::Seed;
+    /// Replace the seed; all other configuration remains unchanged.
+    fn reseed(&mut self, seed: Self::Seed);
+}
+
+mod pyramid;
+pub use pyramid::{LatticePyramid, PyramidCover, PyramidLevel};
 
 /// An index-level hypergraph: `n_vertices` vertices labelled `0..n_vertices`,
 /// and `edges`, each a list of member-vertex indices.
@@ -54,6 +93,22 @@ pub enum GeneratorError {
     },
     /// Complete-uniform arity out of range (`2 ≤ r ≤ n`).
     InvalidComplete { n: usize, r: usize },
+    /// Hamming radices out of range: none, one below 2, or a vertex count beyond `usize`.
+    InvalidHamming { radices: Vec<usize> },
+    /// A pyramid's lattice out of range: no axis, an empty axis, an offset of another length, no
+    /// level, or a size beyond `usize`.
+    InvalidPyramid {
+        extent: Vec<usize>,
+        offset: Vec<usize>,
+    },
+    /// A pyramid level that is not a cover (`stride >= 1`, `stencil >= stride + anchor`), or whose
+    /// window's places pass `usize`.
+    InvalidPyramidLevel {
+        level: usize,
+        stencil: usize,
+        stride: usize,
+        anchor: usize,
+    },
 }
 
 impl std::fmt::Display for GeneratorError {
@@ -79,6 +134,25 @@ impl std::fmt::Display for GeneratorError {
                 f,
                 "complete r-uniform K_n^(r) needs 2 <= r <= n; got n={n}, r={r}"
             ),
+            Self::InvalidHamming { radices } => write!(
+                f,
+                "Hamming lines need at least one radix, each >= 2, with a product that fits usize; got {radices:?}"
+            ),
+            Self::InvalidPyramid { extent, offset } => write!(
+                f,
+                "a lattice pyramid needs at least one axis, none empty, an offset of the same length or none, \
+                 at least one level and a size within usize; got extent {extent:?}, offset {offset:?}"
+            ),
+            Self::InvalidPyramidLevel {
+                level,
+                stencil,
+                stride,
+                anchor,
+            } => write!(
+                f,
+                "pyramid level {level} is not a cover: it needs stride >= 1 and stencil >= stride + anchor \
+                 (and stencil^dim within usize); got stencil {stencil}, stride {stride}, anchor {anchor}"
+            ),
         }
     }
 }
@@ -100,6 +174,9 @@ pub enum HypergraphGenerator {
     },
     /// Complete `r`-uniform hypergraph K_n^(r): every size-`r` subset of `n`.
     CompleteUniform { n: usize, r: usize },
+    /// The hypercube Q_`dimension`: its edges grouped by direction, the lines of the Hamming
+    /// graph over `dimension` radices of 2 ([`HammingLines::hypercube`]).
+    Hypercube { dimension: usize },
 }
 
 impl HypergraphGenerator {
@@ -117,7 +194,19 @@ impl HypergraphGenerator {
                 petal,
             } => sunflower_design(petals, core, petal),
             Self::CompleteUniform { n, r } => complete_uniform_design(n, r),
+            Self::Hypercube { dimension } => {
+                HammingLines::hypercube(dimension).map(|lines| lines.design())
+            }
         }
+    }
+}
+
+impl GraphGenerator for HypergraphGenerator {
+    type Output = HypergraphDesign;
+    type Error = GeneratorError;
+
+    fn generate(&self) -> Result<Self::Output, Self::Error> {
+        self.design()
     }
 }
 
@@ -418,6 +507,121 @@ pub fn complete_uniform_design(n: usize, r: usize) -> Result<HypergraphDesign, G
 }
 
 // ---------------------------------------------------------------------------
+// Hamming lines
+// ---------------------------------------------------------------------------
+
+/// A design whose edges come in parallel classes, every class a partition of the vertices: a
+/// resolution of the design.
+///
+/// A consumer that applies the classes in turn -- a butterfly's levels, the factors of a Kronecker
+/// product -- reads them through this trait.
+pub trait ResolvableDesign {
+    /// Vertices, labelled `0..n_vertices`.
+    fn n_vertices(&self) -> usize;
+
+    /// Parallel classes.
+    fn n_classes(&self) -> usize;
+
+    /// The edges of class `class`.
+    ///
+    /// # Postconditions
+    /// The edges partition `0..n_vertices`.
+    ///
+    /// # Panics
+    /// When `class >= n_classes()`.
+    fn class(&self, class: usize) -> Vec<Vec<usize>>;
+
+    /// Every class, in order.
+    fn classes(&self) -> Vec<Vec<Vec<usize>>> {
+        (0..self.n_classes())
+            .map(|class| self.class(class))
+            .collect()
+    }
+
+    /// The design: every class's edges, class by class.
+    fn design(&self) -> HypergraphDesign {
+        HypergraphDesign {
+            n_vertices: self.n_vertices(),
+            edges: self.classes().into_iter().flatten().collect(),
+        }
+    }
+}
+
+/// The lines of the Hamming graph over mixed radices: the vertices are the mixed-radix numbers
+/// `v = Σ_l d_l Π_{m<l} r_m` (digit `l` in `0..r_l`, digit 0 the least significant), and a line of
+/// digit `l` is the `r_l` vertices that differ in digit `l` alone.
+///
+/// The lines of one digit partition the vertices, so the digits are the parallel classes of a
+/// [`ResolvableDesign`]. Over `[2; d]` the lines are the hypercube Q_d's edges `{v, v ⊕ 2^l}`, and
+/// the classes are its 1-factorisation, the levels of a butterfly. Over mixed radices, the classes
+/// are the factors of a Kronecker product.
+///
+/// # Invariants
+/// At least one radix, each at least 2, with a product that fits `usize`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HammingLines {
+    radices: Vec<usize>,
+    n_vertices: usize,
+}
+
+impl HammingLines {
+    /// The lines over `radices`, digit 0 first.
+    ///
+    /// # Errors
+    /// [`GeneratorError::InvalidHamming`] for no radix, a radix below 2, or a vertex count beyond
+    /// `usize`.
+    pub fn new(radices: Vec<usize>) -> Result<Self, GeneratorError> {
+        let n_vertices = radices
+            .iter()
+            .try_fold(1usize, |n, &r| n.checked_mul(r))
+            .filter(|_| !radices.is_empty() && radices.iter().all(|&r| r >= 2));
+        match n_vertices {
+            Some(n_vertices) => Ok(Self {
+                radices,
+                n_vertices,
+            }),
+            None => Err(GeneratorError::InvalidHamming { radices }),
+        }
+    }
+
+    /// The hypercube Q_`dimension`: radix 2 on every digit.
+    ///
+    /// # Errors
+    /// [`GeneratorError::InvalidHamming`] for dimension 0, or one whose vertex count overflows.
+    pub fn hypercube(dimension: usize) -> Result<Self, GeneratorError> {
+        Self::new(vec![2; dimension])
+    }
+
+    /// The radices, digit 0 first.
+    #[must_use]
+    pub fn radices(&self) -> &[usize] {
+        &self.radices
+    }
+}
+
+impl ResolvableDesign for HammingLines {
+    fn n_vertices(&self) -> usize {
+        self.n_vertices
+    }
+
+    fn n_classes(&self) -> usize {
+        self.radices.len()
+    }
+
+    /// Digit `digit`'s `n / r` lines of `r` members each, ordered by their smallest member; within
+    /// a line, members ascend with the digit.
+    fn class(&self, digit: usize) -> Vec<Vec<usize>> {
+        let radix = self.radices[digit];
+        let place: usize = self.radices[..digit].iter().product();
+        // A vertex starts a line of this digit exactly when its digit is zero.
+        (0..self.n_vertices)
+            .filter(|v| (v / place).is_multiple_of(radix))
+            .map(|first| (0..radix).map(|d| first + d * place).collect())
+            .collect()
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Combinatorial helpers
 // ---------------------------------------------------------------------------
 
@@ -490,6 +694,75 @@ fn every_pair_covered_once(n: usize, edges: &[Vec<usize>]) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_hypercube_is_grouped_into_its_perfect_matchings() {
+        let design = super::HypergraphGenerator::Hypercube { dimension: 3 }
+            .design()
+            .unwrap();
+        assert_eq!((design.n_vertices, design.n_edges()), (8, 12));
+        for (direction, class) in design.edges.chunks_exact(4).enumerate() {
+            let mut seen = [false; 8];
+            for edge in class {
+                assert_eq!(edge.len(), 2);
+                assert_eq!(edge[1], edge[0] ^ (1 << direction), "{edge:?}");
+                for &v in edge {
+                    assert!(!seen[v], "class {direction} repeats vertex {v}");
+                    seen[v] = true;
+                }
+            }
+            assert!(
+                seen.iter().all(|&s| s),
+                "class {direction} is a perfect matching"
+            );
+        }
+    }
+
+    /// Every class of `design` partitions its vertices, and its design lists the classes' edges
+    /// class by class.
+    fn assert_resolution(design: &impl super::ResolvableDesign) {
+        let n = design.n_vertices();
+        let classes = design.classes();
+        assert_eq!(classes.len(), design.n_classes());
+        for class in &classes {
+            let mut members: Vec<usize> = class.iter().flatten().copied().collect();
+            members.sort_unstable();
+            assert_eq!(members, (0..n).collect::<Vec<_>>());
+        }
+        let flat = design.design();
+        assert_eq!(flat.n_vertices, n);
+        assert_eq!(flat.edges, classes.concat());
+    }
+
+    #[test]
+    fn mixed_radix_lines_partition_the_vertices_class_by_class() {
+        let lines = super::HammingLines::new(vec![4, 3]).unwrap();
+        assert_eq!(lines.radices(), [4, 3]);
+        assert_resolution(&lines);
+        // Digit 0: 3 lines of 4; digit 1: 4 lines of 3.
+        let [first, second] = [0, 1].map(|digit| super::ResolvableDesign::class(&lines, digit));
+        assert_eq!((first.len(), second.len()), (3, 4));
+        assert_eq!(first[0], vec![0, 1, 2, 3]);
+        assert_eq!(first[2], vec![8, 9, 10, 11]);
+        assert_eq!(second[0], vec![0, 4, 8]);
+        assert_eq!(second[3], vec![3, 7, 11]);
+        assert_resolution(&super::HammingLines::hypercube(4).unwrap());
+    }
+
+    #[test]
+    fn hamming_radices_out_of_range_are_refused() {
+        for radices in [vec![], vec![2, 1], vec![usize::MAX, 2]] {
+            assert_eq!(
+                super::HammingLines::new(radices.clone()),
+                Err(super::GeneratorError::InvalidHamming { radices })
+            );
+        }
+        assert!(
+            super::HypergraphGenerator::Hypercube { dimension: 0 }
+                .design()
+                .is_err()
+        );
+    }
+
     use super::*;
 
     fn edge_set(design: &HypergraphDesign) -> std::collections::BTreeSet<Vec<usize>> {
@@ -695,6 +968,10 @@ mod tests {
 
     #[test]
     fn generator_enum_dispatches_to_the_free_functions() {
+        let generator = HypergraphGenerator::CompleteUniform { n: 5, r: 3 };
+        assert_eq!(GraphGenerator::generate(&generator), generator.design());
+        let invalid = HypergraphGenerator::CompleteUniform { n: 3, r: 5 };
+        assert_eq!(GraphGenerator::generate(&invalid), invalid.design());
         assert_eq!(
             HypergraphGenerator::SteinerTriple { n: 13 }
                 .design()

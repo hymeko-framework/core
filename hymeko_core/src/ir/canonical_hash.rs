@@ -5,7 +5,7 @@ use crate::common::ids::DeclId;
 use crate::common::pathkey::PathKey;
 use crate::ir::hash::HashId;
 use crate::ir::ir::{DeclKind, DeclNode, EdgeRec, Ir, SignedRefR};
-use crate::ir::semantic_digest::{ProgramStructureHashV1, SemanticModelDigestV2};
+use crate::ir::semantic_digest::{ProgramStructureHash, SemanticModelDigest};
 use crate::resolution::interner::Interner;
 use crate::resolution::resolve::Index;
 
@@ -49,7 +49,7 @@ impl CanonHashCfg {
 
 /// The canonical view of one [`Ir`]: the IR, its interner, and every named declaration's canonical
 /// path, derived once. Every identity of the IR is a method of this view --
-/// [`Self::structure`] (V1), `Self::hash` (the semantic V2 digest, in `ir::semantic_digest`) and
+/// [`Self::structure`] (structural), `Self::hash` (semantic, in `ir::semantic_digest`) and
 /// `Self::declaration_hashes` -- so the paths are derived once however many are asked for.
 ///
 /// Borrowing the IR prevents changes that would invalidate the derived paths.
@@ -108,15 +108,15 @@ impl<'ir> Canon<'ir> {
         self.duplicate.map_or(Ok(()), Err)
     }
 
-    /// Canonical program hash V1: `H( header || H(skeleton_prufer) || H(incidence_bytes) )`.
+    /// Canonical structural hash: `H( header || H(skeleton_prufer) || H(incidence_bytes) )`.
     /// Structural only: annotation values and incidence weights are not covered; `Self::hash` is
     /// the identity that covers them. See [`CanonicalPaths::hash`] for its preconditions.
     ///
     /// # Postconditions
     /// Deterministic; independent of dense `DeclId` assignment (name/path-based).
     #[must_use]
-    pub fn structure(&self, cfg: CanonHashCfg) -> ProgramStructureHashV1 {
-        ProgramStructureHashV1(self.paths.hash(cfg, self.it))
+    pub fn structure(&self, cfg: CanonHashCfg) -> ProgramStructureHash {
+        ProgramStructureHash(self.paths.hash(cfg, self.it))
     }
 
     /// The lowering-boundary check: the IR's links reproduce the resolution `Index` hierarchy.
@@ -134,8 +134,8 @@ impl<'ir> Canon<'ir> {
 /// hash, computed once, through one [`Canon`], where the IR is built.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct CanonicalIdentity {
-    hash: SemanticModelDigestV2,
-    structure: ProgramStructureHashV1,
+    hash: SemanticModelDigest,
+    structure: ProgramStructureHash,
 }
 
 impl CanonicalIdentity {
@@ -151,21 +151,21 @@ impl CanonicalIdentity {
     /// An identity whose parts were computed elsewhere: a checked value update keeps the
     /// structural hash (values are not structure) and supplies its incremental semantic digest.
     pub(crate) const fn from_parts(
-        hash: SemanticModelDigestV2,
-        structure: ProgramStructureHashV1,
+        hash: SemanticModelDigest,
+        structure: ProgramStructureHash,
     ) -> Self {
         Self { hash, structure }
     }
 
     /// The semantic identity: every declaration, annotation value, record and arc.
     #[must_use]
-    pub const fn hash(&self) -> SemanticModelDigestV2 {
+    pub const fn hash(&self) -> SemanticModelDigest {
         self.hash
     }
 
     /// The structural identity, blind to annotation values and incidence weights.
     #[must_use]
-    pub const fn structure(&self) -> ProgramStructureHashV1 {
+    pub const fn structure(&self) -> ProgramStructureHash {
         self.structure
     }
 }
@@ -263,10 +263,11 @@ impl<'ir> CanonicalPaths<'ir> {
 
 /// Named declaration topology, shared by labeling and leaf elimination.
 struct SkeletonForest<'ir> {
-    nodes: &'ir [DeclNode],
+    nodes: &'ir crate::ir::table::IrTable<DeclNode>,
     vertices: Vec<DeclId>,
     parent: Vec<Option<DeclId>>,
-    children: Vec<Vec<DeclId>>,
+    child_offsets: Vec<usize>,
+    children: Vec<DeclId>,
     roots: Vec<DeclId>,
 }
 
@@ -292,7 +293,8 @@ impl<'ir> SkeletonForest<'ir> {
             nodes: &ir.decl_nodes,
             vertices,
             parent: vec![None; n],
-            children: vec![Vec::new(); n],
+            child_offsets: vec![0; n + 1],
+            children: Vec::new(),
             roots: Vec::new(),
         };
         for &did in &forest.vertices {
@@ -305,12 +307,31 @@ impl<'ir> SkeletonForest<'ir> {
                 );
             if named_parent {
                 forest.parent[did.raw()] = Some(parent);
-                forest.children[parent.raw()].push(did);
+                forest.child_offsets[parent.raw()] += 1;
             } else {
                 forest.roots.push(did);
             }
         }
+        // Inclusive prefix sums turn counts into row ends. Reverse scatter
+        // decrements those ends into row starts while preserving declaration
+        // order within each row; no per-parent allocation or cursor copy.
+        for i in 1..=n {
+            forest.child_offsets[i] += forest.child_offsets[i - 1];
+        }
+        forest.children = vec![DeclId::NONE; forest.child_offsets[n]];
+        for &did in forest.vertices.iter().rev() {
+            if let Some(parent) = forest.parent[did.raw()] {
+                let offset = &mut forest.child_offsets[parent.raw()];
+                *offset -= 1;
+                forest.children[*offset] = did;
+            }
+        }
         forest
+    }
+
+    fn children(&self, vertex: DeclId) -> &[DeclId] {
+        let i = vertex.raw();
+        &self.children[self.child_offsets[i]..self.child_offsets[i + 1]]
     }
 
     // Each named vertex has at most one parent, so reversing root-first order
@@ -322,7 +343,7 @@ impl<'ir> SkeletonForest<'ir> {
         let mut cursor = 0;
         let mut max_fanout = 0;
         while cursor < order.len() {
-            let children = &self.children[order[cursor].raw()];
+            let children = self.children(order[cursor]);
             max_fanout = max_fanout.max(children.len());
             order.extend_from_slice(children);
             cursor += 1;
@@ -334,7 +355,7 @@ impl<'ir> SkeletonForest<'ir> {
         let mut sorted = Vec::with_capacity(if max_fanout > 1 { max_fanout } else { 0 });
         for vertex in order.into_iter().rev() {
             let index = vertex.raw();
-            let children = &self.children[index];
+            let children = self.children(vertex);
             let kind = self.nodes[index].kind;
             if children.is_empty() {
                 // SkeletonForest contains only Node/Edge vertices. Equal-kind
@@ -346,7 +367,7 @@ impl<'ir> SkeletonForest<'ir> {
             }
 
             let mut hash = cfg.hasher(Self::node_domain(kind));
-            if let [child] = children.as_slice() {
+            if let [child] = children {
                 hash.update(&hashes[child.raw()].0);
             } else {
                 sorted.clear();
@@ -385,6 +406,118 @@ impl<'ir> SkeletonForest<'ir> {
             }
         }
         tb
+    }
+}
+
+#[cfg(test)]
+mod skeleton_tests {
+    use super::*;
+    use crate::common::ids::SymId;
+
+    fn check_children(nodes: &[(DeclKind, DeclId)]) {
+        let ir = Ir {
+            decl_nodes: nodes
+                .iter()
+                .map(|&(kind, parent)| DeclNode {
+                    kind,
+                    parent,
+                    name: SymId::new(0),
+                    first_child: DeclId::NONE,
+                    last_child: DeclId::NONE,
+                    next_sibling: DeclId::NONE,
+                    anno: crate::common::ids::AnnotationId::NONE,
+                })
+                .collect(),
+            ..Ir::default()
+        };
+        let forest = SkeletonForest::new(&ir);
+        // An independent, direct parent scan is the oracle. It needs no row
+        // counts, prefix sums or scatter positions from the packed builder.
+        for (parent, &(kind, _)) in nodes.iter().enumerate() {
+            let expected: Vec<_> = nodes
+                .iter()
+                .enumerate()
+                .filter(|(_, child)| {
+                    kind != DeclKind::HyperArc
+                        && child.0 != DeclKind::HyperArc
+                        && child.1 == DeclId::new(parent)
+                })
+                .map(|(child, _)| DeclId::new(child))
+                .collect();
+            assert_eq!(forest.children(DeclId::new(parent)), expected);
+        }
+        assert_eq!(forest.child_offsets.len(), nodes.len() + 1);
+        assert_eq!(forest.child_offsets[0], 0);
+        assert_eq!(forest.child_offsets[nodes.len()], forest.children.len());
+        assert!(
+            forest
+                .child_offsets
+                .windows(2)
+                .all(|pair| pair[0] <= pair[1])
+        );
+        let expected_roots: Vec<_> = nodes
+            .iter()
+            .enumerate()
+            .filter(|(_, node)| {
+                node.0 != DeclKind::HyperArc
+                    && (node.1.is_none()
+                        || nodes
+                            .get(node.1.raw())
+                            .is_none_or(|parent| parent.0 == DeclKind::HyperArc))
+            })
+            .map(|(id, _)| DeclId::new(id))
+            .collect();
+        assert_eq!(forest.roots, expected_roots);
+    }
+
+    #[test]
+    fn packed_children_match_all_small_parent_and_kind_maps() {
+        // Includes empty forests, self-links, cycles, anonymous parents/children,
+        // NONE and out-of-range parents. Construction does not validate cycles.
+        for n in 0..=3_u32 {
+            let choices = 3 * (n as usize + 2);
+            for mut encoding in 0..choices.pow(n) {
+                let mut nodes = Vec::new();
+                for _ in 0..n {
+                    let choice = encoding % choices;
+                    encoding /= choices;
+                    let kind = [DeclKind::Node, DeclKind::Edge, DeclKind::HyperArc][choice % 3];
+                    let parent = choice / 3;
+                    nodes.push((
+                        kind,
+                        if parent == n as usize + 1 {
+                            DeclId::NONE
+                        } else {
+                            DeclId::new(parent)
+                        },
+                    ));
+                }
+                check_children(&nodes);
+            }
+        }
+    }
+
+    #[test]
+    fn packed_children_preserve_chain_star_and_branching_rows() {
+        for branching in [1, 2, 256] {
+            let nodes: Vec<_> = (0..257)
+                .map(|i| {
+                    (
+                        if i % 3 == 0 {
+                            DeclKind::Edge
+                        } else {
+                            DeclKind::Node
+                        },
+                        if i == 0 {
+                            DeclId::NONE
+                        } else {
+                            DeclId::new((i - 1) / branching)
+                        },
+                    )
+                })
+                .collect();
+            check_children(&nodes);
+        }
     }
 }
 
@@ -715,11 +848,7 @@ struct IncidenceRecord<'ir> {
 
 impl IncidenceRecord<'_> {
     fn encode(self, paths: &[String], sink: &mut impl CanonicalSink) {
-        let (sign, target) = match self.reference {
-            SignedRefR::Plus(atom) => (1i8, atom.target),
-            SignedRefR::Minus(atom) => (-1i8, atom.target),
-            SignedRefR::Neutral(atom) => (0i8, atom.target),
-        };
+        let (sign, target) = (self.reference.sign(), self.reference.target());
         sink.string(&paths[self.edge.raw()]);
         sink.write(&self.arc.to_le_bytes());
         sink.write(&self.slot.to_le_bytes());

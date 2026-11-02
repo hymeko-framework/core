@@ -10,6 +10,12 @@ pub struct EdgeTag;
 pub struct HyperArcTag;
 /// Marker for interned symbol IDs (indexes the `Interner` string table).
 pub struct SymTag;
+/// Model-local annotation payload.
+pub struct AnnotationTag;
+/// Model-local ordered list of base references.
+pub struct BaseListTag;
+/// Model-local vector-valued incidence weights.
+pub struct WeightVectorTag;
 
 /// Index into `Ir::decl_nodes` — the unified declaration table.
 pub type DeclId = Id<DeclTag>;
@@ -25,6 +31,9 @@ pub type HyperArcId = Id<HyperArcTag>;
 
 /// Index into the `Interner` / `StringTable` symbol table.
 pub type SymId = Id<SymTag>;
+pub type AnnotationId = Id<AnnotationTag>;
+pub type BaseListId = Id<BaseListTag>;
+pub type WeightVectorId = Id<WeightVectorTag>;
 
 /// A phantom-typed index into one of the canonical `Ir` tables.
 ///

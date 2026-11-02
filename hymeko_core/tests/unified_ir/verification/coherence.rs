@@ -10,7 +10,8 @@
 
 use std::path::{Path, PathBuf};
 
-use hymeko::common::ids::DeclId;
+use hymeko::common::ids::{DeclId, SymId};
+use hymeko::common::pathkey::PathKey;
 use hymeko::ir::coherence::{CoherenceLimits, Finding, validate_hierarchy_index_coherence};
 use hymeko::ir::ir::DeclKind;
 
@@ -18,6 +19,7 @@ use crate::unified_ir::support::builder::{S, TestIr};
 
 pub fn label(f: &Finding) -> &'static str {
     match f {
+        Finding::InvalidPayload { .. } => "InvalidPayload",
         Finding::InvalidSourceProvenance => "InvalidSourceProvenance",
         Finding::IndexedDeclOutOfRange { .. } => "IndexedDeclOutOfRange",
         Finding::DeclHasMultiplePaths { .. } => "DeclHasMultiplePaths",
@@ -216,5 +218,98 @@ fn findings_are_bounded_and_deterministic() {
     assert_eq!(
         ra.findings, rb.findings,
         "finding order is not deterministic"
+    );
+}
+
+#[test]
+fn index_findings_keep_exact_order_and_caps_across_insertion_orders() {
+    let mut t = good();
+    let m = t.it.get_id("m").unwrap();
+    let x = t.it.get_id("x").unwrap();
+    let extra = t.it.intern("extra");
+    let other = t.it.intern("other");
+    let mut entries: Vec<_> = t.idx.by_path.iter().map(|(p, d)| (p.clone(), *d)).collect();
+    entries.extend([
+        (PathKey(vec![m, x, extra]), DeclId::new(1)),
+        (PathKey(vec![other, x]), DeclId::new(1)),
+        (PathKey(vec![extra]), DeclId::new(900)),
+        (PathKey(vec![other]), DeclId::new(800)),
+    ]);
+    let expected = vec![
+        Finding::DeclHasMultiplePaths {
+            decl: DeclId::new(1),
+        },
+        Finding::DeclHasMultiplePaths {
+            decl: DeclId::new(1),
+        },
+        Finding::IndexedDeclOutOfRange {
+            decl: DeclId::new(800),
+            decl_count: t.ir.decl_nodes.len(),
+        },
+        Finding::IndexedDeclOutOfRange {
+            decl: DeclId::new(900),
+            decl_count: t.ir.decl_nodes.len(),
+        },
+    ];
+    for _ in 0..2 {
+        t.idx.by_path.clear();
+        t.idx.by_path.extend(entries.iter().cloned());
+        for max_findings in [0, 2, 64] {
+            let report = validate_hierarchy_index_coherence(
+                &t.ir,
+                &t.idx,
+                &t.it,
+                CoherenceLimits {
+                    max_findings,
+                    max_walk: 16,
+                },
+            )
+            .unwrap_err();
+            assert_eq!(report.total, expected.len());
+            assert_eq!(report.truncated, max_findings < expected.len());
+            assert_eq!(
+                report.findings,
+                expected[..max_findings.min(expected.len())]
+            );
+        }
+        entries.reverse();
+    }
+}
+
+#[test]
+fn parent_lookup_uses_nearest_indexed_prefix_including_empty_root() {
+    let mut t = good();
+    let m = t.it.get_id("m").unwrap();
+    let x = t.it.get_id("x").unwrap();
+    let gap = t.it.intern("unindexed");
+    t.idx.by_path.remove(&[m][..]);
+    t.idx.by_path.insert(PathKey(vec![]), DeclId::new(0));
+    t.idx.by_path.remove(&[m, x][..]);
+    t.idx
+        .by_path
+        .insert(PathKey(vec![gap, gap, x]), DeclId::new(1));
+    assert!(findings(&t).is_empty());
+}
+
+#[test]
+#[cfg(target_pointer_width = "64")]
+fn distinct_wide_symbols_do_not_alias_during_parent_lookup() {
+    let mut t = good();
+    let m = t.it.get_id("m").unwrap();
+    let x = t.it.get_id("x").unwrap();
+    t.idx.by_path.remove(&[m, x][..]);
+    t.idx.by_path.insert(
+        PathKey(vec![SymId::new(m.raw() + (1usize << 32)), x]),
+        DeclId::new(1),
+    );
+    // This validator compares hierarchy with paths, not interner membership.
+    // The fabricated prefix must not match `m` through integer truncation.
+    assert_eq!(
+        findings(&t),
+        vec![Finding::ParentMismatch {
+            decl: DeclId::new(1),
+            by_path: DeclId::NONE,
+            by_link: DeclId::new(0),
+        }]
     );
 }

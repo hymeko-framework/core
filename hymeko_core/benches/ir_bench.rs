@@ -28,106 +28,210 @@
 use std::hint::black_box;
 use std::time::Duration;
 
-use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group};
 
-use hymeko::common::ids::{DeclId, EdgeId, HyperArcId, NodeId, SymId};
+#[cfg(windows)]
+mod ir_comparison;
+
+#[path = "ir_bench/metadata.rs"]
+mod metadata;
+use metadata::{MetadataCase, MetadataDensity};
+
+use hymeko::common::ids::{DeclId, NodeId, SymId};
 use hymeko::common::pathkey::PathKey;
 use hymeko::ir::canonical_hash::{Canon, CanonHashCfg};
 use hymeko::ir::ir::{
-    AnnoR, ArcRec, DeclKind, DeclNode, EdgeRec, Ir, NodeRec, RefAtomR, SignedRefR,
+    AnnoR, ArcPlacement, ArcRec, DeclKind, DeclNode, EdgeRec, IncidenceSign, Ir, IrBuilder,
+    IrCapacities, IrConstruction, NodeRec, RefAtomR, ReferenceDraft, dispatch,
 };
 use hymeko::resolution::interner::Interner;
 use hymeko::resolution::resolve::Index;
 
-/// Append one declaration, keeping every parallel array in lockstep.
-///
-/// That this is the caller's duty, in five places, is itself an audit finding:
-/// `decl_to_node`, `decl_to_edge` and `decl_to_arc`, so a mutable IR would have
-/// five independent chances to desynchronise on every insertion.
-fn push_decl(ir: &mut Ir, root: DeclId, kind: DeclKind, name: usize) -> DeclId {
-    let id = ir.push_decl(DeclNode {
-        kind,
-        name: SymId::new(name),
-        parent: root,
-        first_child: DeclId::NONE,
-        last_child: DeclId::NONE,
-        next_sibling: DeclId::NONE,
-        anno: AnnoR::default(),
-    });
-
-    // Maintain the intrusive sibling list.
-    let prev = ir.decl_nodes[root.raw()].last_child;
-    if prev.is_none() {
-        ir.decl_nodes[root.raw()].first_child = id;
-    } else {
-        ir.decl_nodes[prev.raw()].next_sibling = id;
-    }
-    ir.decl_nodes[root.raw()].last_child = id;
-    id
+/// Synthetic input adapter. All canonical mutation belongs to IrConstruction.
+#[derive(Clone, Copy)]
+enum FixtureNames {
+    Numeric,
+    Indexed,
 }
 
-/// Build a synthetic but structurally realistic IR.
-///
-/// `nodes` node declarations, `edges` hyperedge declarations, each edge holding
-/// `arity` arcs' worth of signed references. The declaration hierarchy is
-/// populated (a single root with every declaration as a child) so the
-/// intrusive-list fields are not left in an unrepresentative empty state.
-fn build_ir(nodes: usize, edges: usize, arity: usize) -> Ir {
-    let mut ir = Ir::default();
+struct SyntheticIrBuilder {
+    nodes: usize,
+    edges: usize,
+    arity: usize,
+    names: FixtureNames,
+    index: Index,
+    interner: Interner,
+    metadata: MetadataDensity,
+}
 
-    // Root declaration, so parent/first_child/next_sibling are exercised.
-    ir.push_decl(DeclNode {
-        kind: DeclKind::Node,
-        name: SymId::new(0),
-        parent: DeclId::NONE,
-        first_child: DeclId::NONE,
-        last_child: DeclId::NONE,
-        next_sibling: DeclId::NONE,
-        anno: AnnoR::default(),
-    });
-    let root = DeclId::new(0);
-
-    let node_decls: Vec<DeclId> = (0..nodes)
-        .map(|i| push_decl(&mut ir, root, DeclKind::Node, i + 1))
-        .collect();
-    for &d in &node_decls {
-        let nid = NodeId::new(ir.nodes.len());
-        ir.nodes.push(NodeRec::new(d, Vec::new()));
-        ir.bind_node_decl(d, nid)
-            .expect("bench: node index representable");
+struct SyntheticIr {
+    ir: Ir,
+    index: Index,
+    interner: Interner,
+}
+impl SyntheticIr {
+    fn into_parts(self) -> (Ir, Index, Interner) {
+        (self.ir, self.index, self.interner)
     }
+}
 
-    for e in 0..edges {
-        let ed = push_decl(&mut ir, root, DeclKind::Edge, nodes + e + 1);
-        let eid = EdgeId::new(ir.edges.len());
-        ir.edges.push(EdgeRec::new(ed, Vec::new()));
-        ir.bind_edge_decl(ed, eid)
-            .expect("bench: edge index representable");
-
-        let ad = push_decl(&mut ir, root, DeclKind::HyperArc, nodes + edges + e + 1);
-        let aid = HyperArcId::new(ir.arcs.len());
-        let refs: Vec<SignedRefR> = (0..arity)
-            .map(|k| {
-                let target = node_decls[(e * arity + k) % node_decls.len().max(1)];
-                let atom = RefAtomR::plain(target);
-                match k % 3 {
-                    0 => SignedRefR::Plus(atom),
-                    1 => SignedRefR::Minus(atom),
-                    _ => SignedRefR::Neutral(atom),
+impl SyntheticIrBuilder {
+    /// Small non-timing contract cases exercise both naming adapters and the
+    /// shared construction owner before any optional benchmark starts.
+    fn verify_contracts() {
+        eprintln!(
+            "CONSTRUCTION_LAYOUT decl={} node={} edge={} arc={} annotation={} draft={} reference={} dispatch={}",
+            size_of::<DeclNode>(),
+            size_of::<NodeRec>(),
+            size_of::<EdgeRec>(),
+            size_of::<ArcRec>(),
+            size_of::<AnnoR>(),
+            size_of::<ReferenceDraft>(),
+            size_of::<hymeko::ir::ir::SignedRefR>(),
+            size_of::<u64>()
+        );
+        for (nodes, edges, arity) in [(0, 0, 0), (0, 3, 0), (3, 2, 3), (11, 4, 5)] {
+            for names in [FixtureNames::Numeric, FixtureNames::Indexed] {
+                let mut input = Self::new(nodes, edges, arity);
+                input.names = names;
+                let built = input.build().expect("synthetic fixture contract");
+                assert_eq!(built.ir.nodes.len(), nodes + 1);
+                assert_eq!(built.ir.decl_count(), 1 + nodes + 2 * edges);
+                assert_eq!(
+                    built.ir.decl_children(DeclId::new(0)).count(),
+                    nodes + edges
+                );
+                for (edge, arc) in built.ir.arcs.iter().enumerate() {
+                    assert_eq!(arc.refs.len(), arity);
+                    for (slot, reference) in arc.refs.iter().enumerate() {
+                        assert_eq!(reference.target().raw(), 1 + (edge * arity + slot) % nodes);
+                    }
                 }
-            })
-            .collect();
-        ir.arcs.push(ArcRec {
-            anno: AnnoR::default(),
-            in_edge: ed,
-            refs,
-        });
-        ir.bind_arc_decl(ad, aid)
-            .expect("bench: arc index representable");
-        ir.edges[eid.raw()].arcs.push(aid);
+                if matches!(names, FixtureNames::Indexed) {
+                    hymeko::ir::coherence::validate_hierarchy_index_coherence(
+                        &built.ir,
+                        &built.index,
+                        &built.interner,
+                        Default::default(),
+                    )
+                    .expect("canonical indexed fixture");
+                }
+            }
+        }
     }
 
-    ir
+    fn new(nodes: usize, edges: usize, arity: usize) -> Self {
+        Self {
+            nodes,
+            edges,
+            arity,
+            names: FixtureNames::Numeric,
+            index: Index::new(),
+            interner: Interner::new(),
+            metadata: MetadataDensity::Empty,
+        }
+    }
+    fn with_metadata(mut self, metadata: MetadataDensity) -> Self {
+        self.metadata = metadata;
+        self
+    }
+    fn indexed(mut self) -> Self {
+        self.names = FixtureNames::Indexed;
+        self
+    }
+    fn name(&mut self, kind: DeclKind, ordinal: usize) -> SymId {
+        match self.names {
+            FixtureNames::Numeric => SymId::new(match kind {
+                DeclKind::Node => ordinal + 1,
+                DeclKind::Edge => self.nodes + ordinal + 1,
+                DeclKind::HyperArc => unreachable!("anonymous arcs are owned by construction"),
+            }),
+            FixtureNames::Indexed => {
+                let prefix = match kind {
+                    DeclKind::Node => "n",
+                    DeclKind::Edge => "e",
+                    DeclKind::HyperArc => unreachable!(),
+                };
+                self.interner.intern(&format!("{prefix}{ordinal}"))
+            }
+        }
+    }
+    fn named(
+        &mut self,
+        construction: &mut IrConstruction<'_>,
+        root: DeclId,
+        root_name: SymId,
+        kind: DeclKind,
+        ordinal: usize,
+    ) -> Result<DeclId, dispatch::DispatchError> {
+        let name = self.name(kind, ordinal);
+        let (anno, bases) = if kind == DeclKind::Node {
+            self.metadata.payload(ordinal, root)
+        } else {
+            (AnnoR::default(), Vec::new())
+        };
+        let mut declaration = DeclNode::root(kind, name, anno);
+        declaration.parent = root;
+        let id = construction.append_named(declaration, bases, &[])?;
+        if matches!(self.names, FixtureNames::Indexed) {
+            self.index
+                .by_path
+                .insert(PathKey(vec![root_name, name]), id);
+        }
+        Ok(id)
+    }
+}
+
+impl IrBuilder for SyntheticIrBuilder {
+    type Output = SyntheticIr;
+    type Error = dispatch::DispatchError;
+    fn capacities(&self) -> IrCapacities {
+        IrCapacities {
+            declarations: 1 + self.nodes + 2 * self.edges,
+            nodes: self.nodes + 1,
+            edges: self.edges,
+            arcs: self.edges,
+        }
+    }
+    fn populate(&mut self, construction: &mut IrConstruction<'_>) -> Result<(), Self::Error> {
+        let root_name = match self.names {
+            FixtureNames::Numeric => SymId::new(0),
+            FixtureNames::Indexed => self.interner.intern("m"),
+        };
+        let root = construction.append_node(root_name, AnnoR::default(), Vec::new())?;
+        if matches!(self.names, FixtureNames::Indexed) {
+            self.index.by_path.insert(PathKey(vec![root_name]), root);
+        }
+        let mut vertices = Vec::with_capacity(self.nodes);
+        for ordinal in 0..self.nodes {
+            vertices.push(self.named(construction, root, root_name, DeclKind::Node, ordinal)?);
+        }
+        for edge in 0..self.edges {
+            let owner = self.named(construction, root, root_name, DeclKind::Edge, edge)?;
+            let refs = (0..self.arity).map(|slot| {
+                let target = vertices[(edge * self.arity + slot) % vertices.len().max(1)];
+                let atom = RefAtomR::plain(target);
+                match slot % 3 {
+                    0 => ReferenceDraft::new(IncidenceSign::Plus, atom),
+                    1 => ReferenceDraft::new(IncidenceSign::Minus, atom),
+                    _ => ReferenceDraft::new(IncidenceSign::Neutral, atom),
+                }
+            });
+            construction.append_arc_iter(
+                ArcPlacement::under_owner(owner),
+                AnnoR::default(),
+                refs,
+            )?;
+        }
+        Ok(())
+    }
+    fn finish(self, ir: Ir) -> SyntheticIr {
+        SyntheticIr {
+            ir,
+            index: self.index,
+            interner: self.interner,
+        }
+    }
 }
 
 /// Incidences the IR describes: the quantity every downstream view is sized by.
@@ -143,7 +247,10 @@ fn bench_ir_construction(c: &mut Criterion) {
         (100_000, 50_000, 4),
         (10_000, 5_000, 32),
     ] {
-        let probe = build_ir(nodes, edges, arity);
+        let probe = SyntheticIrBuilder::new(nodes, edges, arity)
+            .build()
+            .expect("synthetic IR construction")
+            .ir;
         let inc = incidences(&probe);
         let label = format!("n{nodes}_e{edges}_a{arity}");
         eprintln!(
@@ -167,11 +274,12 @@ fn bench_ir_construction(c: &mut Criterion) {
         }
         group.bench_function(BenchmarkId::from_parameter(&label), |b| {
             b.iter(|| {
-                black_box(build_ir(
-                    black_box(nodes),
-                    black_box(edges),
-                    black_box(arity),
-                ))
+                black_box(
+                    SyntheticIrBuilder::new(black_box(nodes), black_box(edges), black_box(arity))
+                        .build()
+                        .expect("synthetic IR construction")
+                        .ir,
+                )
             });
         });
     }
@@ -187,7 +295,10 @@ fn bench_ir_construction(c: &mut Criterion) {
 fn bench_ir_state_identity(c: &mut Criterion) {
     let mut group = c.benchmark_group("ir_state_identity");
     for &(nodes, edges, arity) in &[(1_000usize, 500usize, 4usize), (10_000, 5_000, 4)] {
-        let ir = build_ir(nodes, edges, arity);
+        let ir = SyntheticIrBuilder::new(nodes, edges, arity)
+            .build()
+            .expect("synthetic IR construction")
+            .ir;
         let inc = incidences(&ir);
         let json = serde_json::to_vec(&ir).map_or(0, |v| v.len());
         eprintln!("[ir_state_identity n{nodes}] incidences={inc} serialized_json_bytes={json}");
@@ -234,7 +345,10 @@ fn bench_ir_redundancy_footprint(c: &mut Criterion) {
 
     {
         let (nodes, edges, arity) = (10_000usize, 5_000usize, 4usize);
-        let ir = build_ir(nodes, edges, arity);
+        let ir = SyntheticIrBuilder::new(nodes, edges, arity)
+            .build()
+            .expect("synthetic IR construction")
+            .ir;
         let d = ir.decl_nodes.len();
         let a = ir.arcs.len();
         let opt_id = core::mem::size_of::<Option<NodeId>>();
@@ -287,7 +401,35 @@ criterion_group!(
     bench_m2a1_decl_to_record,
     bench_m2a1_end_to_end
 );
-criterion_main!(benches);
+fn main() {
+    SyntheticIrBuilder::verify_contracts();
+    MetadataCase::verify_contracts();
+    if std::env::args().any(|argument| argument == "--verify-builders") {
+        return;
+    }
+    if let Ok(density) = std::env::var("HYM_CORE_METADATA") {
+        assert!(
+            std::env::args().any(|arg| arg == "--bench"),
+            "metadata measurement requires --bench"
+        );
+        MetadataCase::benchmark(MetadataDensity::from_name(&density)).run(
+            &mut Criterion::default().configure_from_args(),
+            std::env::var_os("HYM_METADATA_CORRUPT_EXPECTATION").is_some(),
+        );
+    } else if std::env::var("HYM_CORE_CONSTRUCTION_COMPARISON").as_deref() == Ok("1") {
+        assert!(
+            std::env::args().any(|arg| arg == "--bench"),
+            "construction comparison requires explicit --bench opt-in"
+        );
+        #[cfg(windows)]
+        ir_comparison::run(&mut Criterion::default().configure_from_args());
+        #[cfg(not(windows))]
+        panic!("the external comparison adapter currently supports Windows only");
+    } else {
+        benches();
+    }
+    Criterion::default().configure_from_args().final_summary();
+}
 
 // ---------------------------------------------------------------------------
 // M0.5 Part F additions.
@@ -311,79 +453,17 @@ criterion_main!(benches);
 // benchmarking them from here would invert the dependency.
 // ---------------------------------------------------------------------------
 
-/// Build an IR together with the `Index` and `Interner` the canonical hash
-/// needs. Paths are two segments deep, matching the real-corpus median of 3
-/// measured in M0.5 Part E rather than a synthetic extreme.
-fn build_indexed(nodes: usize, edges: usize, arity: usize) -> (Ir, Index, Interner) {
-    let mut it = Interner::new();
-    let mut idx = Index::new();
-    let mut ir = Ir::default();
-    let root_sym = it.intern("m");
-
-    fn push(ir: &mut Ir, idx: &mut Index, root: SymId, leaf: SymId, kind: DeclKind) -> DeclId {
-        let id = ir.push_decl(DeclNode {
-            kind,
-            name: leaf,
-            parent: DeclId::NONE,
-            first_child: DeclId::NONE,
-            last_child: DeclId::NONE,
-            next_sibling: DeclId::NONE,
-            anno: AnnoR::default(),
-        });
-        idx.by_path.insert(PathKey(vec![root, leaf]), id);
-        id
-    }
-
-    let node_decls: Vec<DeclId> = (0..nodes)
-        .map(|i| {
-            let s = it.intern(&format!("n{i}"));
-            let d = push(&mut ir, &mut idx, root_sym, s, DeclKind::Node);
-            let nid = NodeId::new(ir.nodes.len());
-            ir.nodes.push(NodeRec::new(d, Vec::new()));
-            ir.bind_node_decl(d, nid)
-                .expect("bench: node index representable");
-            d
-        })
-        .collect();
-
-    for e in 0..edges {
-        let s = it.intern(&format!("e{e}"));
-        let ed = push(&mut ir, &mut idx, root_sym, s, DeclKind::Edge);
-        let eid = EdgeId::new(ir.edges.len());
-        ir.edges.push(EdgeRec::new(ed, Vec::new()));
-        ir.bind_edge_decl(ed, eid)
-            .expect("bench: edge index representable");
-
-        let aid = HyperArcId::new(ir.arcs.len());
-        let refs: Vec<SignedRefR> = (0..arity)
-            .map(|k| {
-                let target = node_decls[(e * arity + k) % node_decls.len().max(1)];
-                let atom = RefAtomR::plain(target);
-                match k % 3 {
-                    0 => SignedRefR::Plus(atom),
-                    1 => SignedRefR::Minus(atom),
-                    _ => SignedRefR::Neutral(atom),
-                }
-            })
-            .collect();
-        ir.arcs.push(ArcRec {
-            anno: AnnoR::default(),
-            in_edge: ed,
-            refs,
-        });
-        ir.edges[eid.raw()].arcs.push(aid);
-    }
-
-    (ir, idx, it)
-}
-
 /// Lookup: the axis M2d could regress when the stored `decl_to_*` maps become a
 /// derived index. Measures the current dense path so a later change has a
 /// baseline to be compared against.
 fn bench_ir_lookup(c: &mut Criterion) {
     let mut group = c.benchmark_group("ir_lookup");
     for &(nodes, edges) in &[(1_000usize, 500usize), (10_000, 5_000)] {
-        let (ir, _, _) = build_indexed(nodes, edges, 4);
+        let (ir, _, _) = SyntheticIrBuilder::new(nodes, edges, 4)
+            .indexed()
+            .build()
+            .expect("synthetic IR construction")
+            .into_parts();
         let ids: Vec<DeclId> = (0..ir.decl_nodes.len()).map(DeclId::new).collect();
         group.throughput(Throughput::Elements(ids.len() as u64));
         group
@@ -418,7 +498,11 @@ fn bench_ir_lookup(c: &mut Criterion) {
 fn bench_ir_clone(c: &mut Criterion) {
     let mut group = c.benchmark_group("ir_clone");
     for &(nodes, edges) in &[(1_000usize, 500usize), (10_000, 5_000)] {
-        let (ir, _, _) = build_indexed(nodes, edges, 4);
+        let (ir, _, _) = SyntheticIrBuilder::new(nodes, edges, 4)
+            .indexed()
+            .build()
+            .expect("synthetic IR construction")
+            .into_parts();
         group.throughput(Throughput::Elements(ir.decl_nodes.len() as u64));
         group
             .sample_size(30)
@@ -443,7 +527,11 @@ fn bench_ir_canonical_hash(c: &mut Criterion) {
         (10_000, 5_000, 4),
         (10_000, 5_000, 32),
     ] {
-        let (ir, _idx, it) = build_indexed(nodes, edges, arity);
+        let (ir, _idx, it) = SyntheticIrBuilder::new(nodes, edges, arity)
+            .indexed()
+            .build()
+            .expect("synthetic IR construction")
+            .into_parts();
         let incidences: usize = ir.arcs.iter().map(|a| a.refs.len()).sum();
         eprintln!(
             "[ir_canonical_hash n{nodes}_a{arity}] decls={} incidences={incidences}",
@@ -473,7 +561,11 @@ fn bench_ir_canonical_hash(c: &mut Criterion) {
 fn bench_ir_serde(c: &mut Criterion) {
     let mut group = c.benchmark_group("ir_serde");
     for &(nodes, edges) in &[(1_000usize, 500usize), (10_000, 5_000)] {
-        let (ir, _, _) = build_indexed(nodes, edges, 4);
+        let (ir, _, _) = SyntheticIrBuilder::new(nodes, edges, 4)
+            .indexed()
+            .build()
+            .expect("synthetic IR construction")
+            .into_parts();
         let json = serde_json::to_vec(&ir).expect("serialize");
         eprintln!("[ir_serde n{nodes}] json_bytes={}", json.len());
         group.throughput(Throughput::Bytes(json.len() as u64));
@@ -515,7 +607,11 @@ fn bench_m2a_decl_lookup(c: &mut Criterion) {
         .measurement_time(Duration::from_secs(3));
 
     for &(nodes, edges) in &[(1_000usize, 500usize), (10_000, 5_000)] {
-        let (ir, _, _) = build_indexed(nodes, edges, 4);
+        let (ir, _, _) = SyntheticIrBuilder::new(nodes, edges, 4)
+            .indexed()
+            .build()
+            .expect("synthetic IR construction")
+            .into_parts();
         let ids: Vec<DeclId> = (0..ir.decl_nodes.len()).map(DeclId::new).collect();
         group.throughput(Throughput::Elements(ids.len() as u64));
 
@@ -573,7 +669,11 @@ fn bench_m2a_record_lookup(c: &mut Criterion) {
         .measurement_time(Duration::from_secs(3));
 
     for &(nodes, edges) in &[(10_000usize, 5_000usize)] {
-        let (ir, _, _) = build_indexed(nodes, edges, 4);
+        let (ir, _, _) = SyntheticIrBuilder::new(nodes, edges, 4)
+            .indexed()
+            .build()
+            .expect("synthetic IR construction")
+            .into_parts();
         let ids: Vec<NodeId> = (0..ir.nodes.len()).map(NodeId::new).collect();
         group.throughput(Throughput::Elements(ids.len() as u64));
 
@@ -612,7 +712,11 @@ fn bench_m2a_map_lookup(c: &mut Criterion) {
         .measurement_time(Duration::from_secs(3));
 
     for &(nodes, edges) in &[(10_000usize, 5_000usize)] {
-        let (ir, _, _) = build_indexed(nodes, edges, 4);
+        let (ir, _, _) = SyntheticIrBuilder::new(nodes, edges, 4)
+            .indexed()
+            .build()
+            .expect("synthetic IR construction")
+            .into_parts();
         let ids: Vec<DeclId> = (0..ir.decl_nodes.len()).map(DeclId::new).collect();
         group.throughput(Throughput::Elements(ids.len() as u64));
 
@@ -666,7 +770,11 @@ fn bench_m2a_iteration(c: &mut Criterion) {
         .measurement_time(Duration::from_secs(3));
 
     for &(nodes, edges) in &[(1_000usize, 500usize), (10_000, 5_000)] {
-        let (ir, _, _) = build_indexed(nodes, edges, 4);
+        let (ir, _, _) = SyntheticIrBuilder::new(nodes, edges, 4)
+            .indexed()
+            .build()
+            .expect("synthetic IR construction")
+            .into_parts();
         group.throughput(Throughput::Elements(ir.decl_nodes.len() as u64));
 
         for round in 0..M2A_ROUNDS {
@@ -701,7 +809,11 @@ fn bench_m2a_hierarchy(c: &mut Criterion) {
         .measurement_time(Duration::from_secs(3));
 
     for &(nodes, edges) in &[(10_000usize, 5_000usize)] {
-        let (ir, _, _) = build_indexed(nodes, edges, 4);
+        let (ir, _, _) = SyntheticIrBuilder::new(nodes, edges, 4)
+            .indexed()
+            .build()
+            .expect("synthetic IR construction")
+            .into_parts();
         let ids: Vec<DeclId> = (0..ir.decl_nodes.len()).map(DeclId::new).collect();
         group.throughput(Throughput::Elements(ids.len() as u64));
 
@@ -796,7 +908,11 @@ fn bench_m2a1_random_point(c: &mut Criterion) {
         .measurement_time(Duration::from_secs(3));
 
     for &(nodes, edges) in &[(1_000usize, 500usize), (10_000, 5_000)] {
-        let (ir, _, _) = build_indexed(nodes, edges, 4);
+        let (ir, _, _) = SyntheticIrBuilder::new(nodes, edges, 4)
+            .indexed()
+            .build()
+            .expect("synthetic IR construction")
+            .into_parts();
         let ids = shuffled_decl_ids(ir.decl_nodes.len(), 0xC0FFEE);
         group.throughput(Throughput::Elements(ids.len() as u64));
 
@@ -841,7 +957,11 @@ fn bench_m2a1_dependent_chain(c: &mut Criterion) {
         .measurement_time(Duration::from_secs(3));
 
     for &(nodes, edges) in &[(10_000usize, 5_000usize)] {
-        let (ir, _, _) = build_indexed(nodes, edges, 4);
+        let (ir, _, _) = SyntheticIrBuilder::new(nodes, edges, 4)
+            .indexed()
+            .build()
+            .expect("synthetic IR construction")
+            .into_parts();
         let n = ir.decl_nodes.len();
         let steps = 20_000usize;
 
@@ -895,7 +1015,11 @@ fn bench_m2a1_mixed_validity(c: &mut Criterion) {
         .sample_size(30)
         .measurement_time(Duration::from_secs(3));
 
-    let (ir, _, _) = build_indexed(10_000, 5_000, 4);
+    let (ir, _, _) = SyntheticIrBuilder::new(10_000, 5_000, 4)
+        .indexed()
+        .build()
+        .expect("synthetic IR construction")
+        .into_parts();
     let n = ir.decl_nodes.len();
 
     for &pct in &[1u64, 10, 50] {
@@ -943,7 +1067,11 @@ fn bench_m2a1_decl_to_record(c: &mut Criterion) {
         .sample_size(30)
         .measurement_time(Duration::from_secs(3));
 
-    let (ir, _, _) = build_indexed(10_000, 5_000, 4);
+    let (ir, _, _) = SyntheticIrBuilder::new(10_000, 5_000, 4)
+        .indexed()
+        .build()
+        .expect("synthetic IR construction")
+        .into_parts();
     let ids = shuffled_decl_ids(ir.decl_nodes.len(), 0x5EED);
     group.throughput(Throughput::Elements(ids.len() as u64));
 
@@ -1029,7 +1157,11 @@ fn bench_m2a1_end_to_end(c: &mut Criterion) {
         .sample_size(20)
         .measurement_time(Duration::from_secs(4));
 
-    let (ir, _, _) = build_indexed(10_000, 5_000, 4);
+    let (ir, _, _) = SyntheticIrBuilder::new(10_000, 5_000, 4)
+        .indexed()
+        .build()
+        .expect("synthetic IR construction")
+        .into_parts();
 
     for round in 0..2 {
         // Walk every edge, every arc, every reference, resolving each target.

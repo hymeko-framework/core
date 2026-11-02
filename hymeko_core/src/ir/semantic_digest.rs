@@ -24,8 +24,11 @@
 //! Invalid symbol or bound-record indices may panic. Bounded path construction
 //! does not make an arbitrary malformed IR valid.
 
-use std::borrow::Cow;
+mod fold;
+
+use fold::{ModelHashInput, SemanticFold};
 use std::sync::Arc;
+use std::{borrow::Cow, ops::Range};
 
 use crate::common::ids::{DeclId, HyperArcId};
 use crate::common::pathkey::PathKey;
@@ -34,6 +37,7 @@ use crate::ir::hash::HashId;
 use crate::ir::ir::{
     AnnoR, DType, DeclKind, Extent, Ir, ModelFacet, PortDirection, SignedRefR, TensorRole, ValueR,
 };
+use crate::ir::table::IrTable;
 use crate::resolution::interner::Interner;
 
 const MAGIC: &[u8; 8] = b"HYMEKOCN";
@@ -49,12 +53,16 @@ pub const SEMANTIC_DIGEST_SCHEMA_VERSION: u16 = 2;
 pub const SEMANTIC_DIGEST_ALGO_VERSION: u16 = 3;
 
 /// Structural identity: excludes annotation values and incidence weights.
+///
+/// This and [`SemanticModelDigest`] identify different aspects of the same model.
+/// Encoding versions belong to the hash header, not the Rust type name.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct ProgramStructureHashV1(pub HashId);
+pub struct ProgramStructureHash(pub HashId);
 
 /// Semantic identity under the canonical/raw-ID domains documented by this module.
+/// Includes annotation values and incidence weights omitted by [`ProgramStructureHash`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct SemanticModelDigestV2(pub HashId);
+pub struct SemanticModelDigest(pub HashId);
 
 impl Canon<'_> {
     /// Return one contribution per declaration, in DeclId order.
@@ -91,7 +99,7 @@ impl Canon<'_> {
     /// # Panics
     /// Invalid symbol or bound-record indices may panic.
     #[must_use]
-    pub fn hash(&self) -> SemanticModelDigestV2 {
+    pub fn hash(&self) -> SemanticModelDigest {
         let layout = SemanticLayout::borrowed(self);
         let context = SemanticContext {
             ir: self.ir(),
@@ -112,13 +120,92 @@ impl Canon<'_> {
 pub(crate) struct SemanticDigestState {
     layout: Arc<SemanticLayout<'static>>,
     records: Arc<RecordHashes>,
-    sorted_records: Arc<RecordHashes>,
-    declarations: Vec<HashId>,
-    sorted_declarations: Vec<HashId>,
-    digest: SemanticModelDigestV2,
+    // Point edits detach only affected pages, using the canonical table owner.
+    // Sorted aggregation stays contiguous; its virtual byte stream retains subtrees.
+    declarations: IrTable<HashId>,
+    sorted_declarations: Arc<Vec<HashId>>,
+    fold: Arc<SemanticFold>,
+}
+
+/// Reusable hash-delta scratch. The returned digest state never borrows it.
+#[derive(Debug, Default)]
+pub(crate) struct SemanticDelta {
+    removed: Vec<HashId>,
+    added: Vec<HashId>,
+}
+
+impl SemanticDelta {
+    pub(crate) fn with_capacity(
+        capacity: usize,
+    ) -> Result<Self, std::collections::TryReserveError> {
+        let mut delta = Self::default();
+        delta.removed.try_reserve_exact(capacity)?;
+        delta.added.try_reserve_exact(capacity)?;
+        Ok(delta)
+    }
+
+    pub(crate) fn clear(&mut self) {
+        self.removed.clear();
+        self.added.clear();
+    }
+
+    /// Merge the exact multiset delta and locate changed output ranks. Comparing
+    /// while writing avoids a separate full scan solely for cache invalidation.
+    fn merge_sorted(&mut self, base: &[HashId]) -> (Vec<HashId>, Option<Range<usize>>) {
+        self.removed.sort_unstable_by_key(|hash| hash.0);
+        self.added.sort_unstable_by_key(|hash| hash.0);
+        let mut removed = self.removed.iter().copied().peekable();
+        let mut added = self.added.iter().copied().peekable();
+        let mut sorted = Vec::with_capacity(base.len());
+        let mut dirty: Option<Range<usize>> = None;
+        let mut push = |hash| {
+            let index = sorted.len();
+            if hash != base[index] {
+                dirty.get_or_insert(index..index + 1).end = index + 1;
+            }
+            sorted.push(hash);
+        };
+        for &hash in base {
+            if removed.peek() == Some(&hash) {
+                removed.next();
+                continue;
+            }
+            while added.peek().is_some_and(|next| next.0 <= hash.0) {
+                push(added.next().expect("peeked contribution"));
+            }
+            push(hash);
+        }
+        for hash in added {
+            push(hash);
+        }
+        debug_assert_eq!(sorted.len(), base.len());
+        debug_assert!(removed.next().is_none());
+        (sorted, dirty)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn storage(&self) -> [(*const HashId, usize, usize); 2] {
+        [
+            (
+                self.removed.as_ptr(),
+                self.removed.capacity(),
+                self.removed.len(),
+            ),
+            (self.added.as_ptr(), self.added.capacity(), self.added.len()),
+        ]
+    }
 }
 
 impl SemanticDigestState {
+    // 8 KiB of hash payload per page. This is a storage granularity, not a
+    // measured optimum or a change to canonical identity.
+    const HASHES_PER_PAGE: usize = 256;
+
+    #[cfg(test)]
+    pub(crate) fn shares_layout(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.layout, &other.layout)
+    }
+
     pub(crate) fn new(ir: &Ir, it: &Interner) -> Self {
         let layout = Arc::new(SemanticLayout::owned(&Canon::new(ir, it)));
         let context = SemanticContext {
@@ -132,24 +219,34 @@ impl SemanticDigestState {
         sorted_declarations.sort_unstable_by_key(|hash| hash.0);
         let mut sorted_records = (*records).clone();
         sorted_records.sort();
-        let digest = model_digest(&context, &sorted_declarations, &sorted_records);
+        let sorted_declarations = Arc::new(sorted_declarations);
+        let fold = Arc::new(SemanticFold::new(
+            layout.scheme,
+            Arc::clone(&sorted_declarations),
+            Arc::new(sorted_records),
+        ));
+        let mut declarations = IrTable::from(declarations);
+        // The fixed page size is a nonzero power of two, so conversion cannot fail.
+        declarations
+            .share_pages(Self::HASHES_PER_PAGE)
+            .expect("fixed hash page size is a nonzero power of two");
         Self {
             layout,
             records,
-            sorted_records: Arc::new(sorted_records),
             declarations,
             sorted_declarations,
-            digest,
+            fold,
         }
     }
 
-    pub(crate) fn digest(&self) -> SemanticModelDigestV2 {
-        self.digest
+    pub(crate) fn digest(&self) -> SemanticModelDigest {
+        self.fold.digest()
     }
 
     /// The caller guarantees that only these declaration values changed, all IDs and
     /// existing symbol meanings are stable, and each declaration occurs at most once.
-    /// A dense symbol remap rebuilds only the derived path layout, not record hashes.
+    /// A remap of path symbols rebuilds only the derived path layout, not record
+    /// hashes. Annotation-only symbol remaps leave the path layout valid.
     /// References encode target identities, not their values: changing a target's
     /// value does not dirty its referring records or its containment ancestors.
     pub(crate) fn with_values(
@@ -157,9 +254,10 @@ impl SemanticDigestState {
         ir: &Ir,
         it: &Interner,
         changed: &[DeclId],
-        symbols_renumbered: bool,
+        path_symbols_changed: bool,
+        delta: &mut SemanticDelta,
     ) -> Self {
-        let layout = if symbols_renumbered {
+        let layout = if path_symbols_changed {
             Arc::new(SemanticLayout::owned(&Canon::new(ir, it)))
         } else {
             Arc::clone(&self.layout)
@@ -170,8 +268,13 @@ impl SemanticDigestState {
             layout: &layout,
         };
         let mut declarations = self.declarations.clone();
-        let mut removed = Vec::with_capacity(changed.len());
-        let mut added = Vec::with_capacity(changed.len());
+        delta.clear();
+        // A bounded update workspace already has this capacity. The convenience
+        // entry point reserves once here instead of growing on each hash push.
+        delta.removed.reserve(changed.len());
+        delta.added.reserve(changed.len());
+        let removed = &mut delta.removed;
+        let added = &mut delta.added;
         for &id in changed {
             let hash = context.declaration_hash(id, &self.records);
             if hash != declarations[id.raw()] {
@@ -180,62 +283,45 @@ impl SemanticDigestState {
                 declarations[id.raw()] = hash;
             }
         }
-        // Merge a sorted delta, retaining duplicate contributions. This avoids
-        // re-sorting N entries or shifting the entire list once per edit.
-        let digest_changed = !removed.is_empty();
-        removed.sort_unstable_by_key(|hash| hash.0);
-        added.sort_unstable_by_key(|hash| hash.0);
-        let mut removed = removed.into_iter().peekable();
-        let mut added = added.into_iter().peekable();
-        let mut sorted_declarations = Vec::with_capacity(declarations.len());
-        for &hash in &self.sorted_declarations {
-            if removed.peek() == Some(&hash) {
-                removed.next();
-                continue;
-            }
-            while added.peek().is_some_and(|next| next.0 <= hash.0) {
-                sorted_declarations.push(added.next().expect("peeked contribution"));
-            }
-            sorted_declarations.push(hash);
-        }
-        sorted_declarations.extend(added);
-        let digest = if !digest_changed {
-            self.digest
+        let (sorted_declarations, fold) = if removed.is_empty() {
+            // An unchanged value must not copy or scan either hash table.
+            (
+                Arc::clone(&self.sorted_declarations),
+                Arc::clone(&self.fold),
+            )
         } else {
-            model_digest(&context, &sorted_declarations, &self.sorted_records)
+            // Merge a sorted delta, retaining duplicate contributions. This avoids
+            // re-sorting N entries or shifting the entire list once per edit.
+            let (sorted, dirty) = delta.merge_sorted(&self.sorted_declarations);
+            if let Some(dirty) = dirty {
+                let sorted = Arc::new(sorted);
+                let fold = Arc::new(self.fold.with_declarations(Arc::clone(&sorted), dirty));
+                (sorted, fold)
+            } else {
+                (
+                    Arc::clone(&self.sorted_declarations),
+                    Arc::clone(&self.fold),
+                )
+            }
         };
         Self {
             layout,
             records: Arc::clone(&self.records),
-            sorted_records: Arc::clone(&self.sorted_records),
             declarations,
             sorted_declarations,
-            digest,
+            fold,
         }
     }
 }
 
-/// Preserve the existing digest bytes: the final fold visits sorted 32-byte
-/// contributions, while incremental updates avoid walking unchanged IR payloads.
+/// Full reference fold over the same virtual byte stream used by the cache.
+/// Incremental states retain BLAKE3 subtrees; no alternate encoding is introduced.
 fn model_digest(
     context: &SemanticContext<'_>,
     declarations: &[HashId],
     records: &RecordHashes,
-) -> SemanticModelDigestV2 {
-    let mut h = context.header(DOMAIN_MODEL);
-    for (domain, hashes) in [
-        (DOMAIN_DECL, declarations),
-        (DOMAIN_NODE, records.nodes.as_slice()),
-        (DOMAIN_EDGE, records.edges.as_slice()),
-        (DOMAIN_ARC, records.arcs.as_slice()),
-    ] {
-        h.update(domain);
-        write_len(&mut h, hashes.len());
-        for hash in hashes {
-            h.update(&hash.0);
-        }
-    }
-    SemanticModelDigestV2(HashId(*h.finalize().as_bytes()))
+) -> SemanticModelDigest {
+    ModelHashInput::new(context.layout.scheme, declarations, records).digest()
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -367,7 +453,7 @@ impl SemanticContext<'_> {
                 let mut h = self.header(DOMAIN_ARC);
                 self.write_arc_identity(&mut h, HyperArcId::new(ai));
                 self.write_target(&mut h, arc.in_edge);
-                self.write_anno(&mut h, &arc.anno);
+                self.write_anno(&mut h, &self.ir[arc.anno]);
                 self.write_signed_refs(&mut h, &arc.refs);
                 HashId(*h.finalize().as_bytes())
             })
@@ -377,7 +463,7 @@ impl SemanticContext<'_> {
             .nodes
             .iter()
             .map(|node| {
-                let h = self.record_header(DOMAIN_NODE, node.decl, &node.bases);
+                let h = self.record_header(DOMAIN_NODE, node.decl, &self.ir[node.bases]);
                 HashId(*h.finalize().as_bytes())
             })
             .collect();
@@ -386,7 +472,7 @@ impl SemanticContext<'_> {
             .edges
             .iter()
             .map(|edge| {
-                let mut h = self.record_header(DOMAIN_EDGE, edge.decl, &edge.bases);
+                let mut h = self.record_header(DOMAIN_EDGE, edge.decl, &self.ir[edge.bases]);
                 write_len(&mut h, edge.arcs.len());
                 for aid in &edge.arcs {
                     // Each arc hash includes its identity, so identical payloads do
@@ -435,7 +521,7 @@ impl SemanticContext<'_> {
         }
         self.write_target(&mut h, d);
         self.write_target(&mut h, declaration.parent);
-        self.write_anno(&mut h, &declaration.anno);
+        self.write_anno(&mut h, &self.ir[declaration.anno]);
         // APPROVED-CORE-EDIT: executable-model-contract (2026-09-06). The typed facet is
         // part of the meaning, so it is part of the identity. Absence is folded as an
         // explicit tag rather than as nothing, so "no facet" and "a facet that happens to
@@ -597,13 +683,16 @@ impl SemanticContext<'_> {
         write_len(h, refs.len());
         for (slot, reference) in refs.iter().enumerate() {
             h.update(&(slot as u64).to_le_bytes());
-            let sign = match reference {
-                SignedRefR::Plus(_) => 1,
-                SignedRefR::Minus(_) => 2,
-                SignedRefR::Neutral(_) => 3,
+            let sign = match reference.sign_kind() {
+                crate::ir::ir::IncidenceSign::Plus => 1,
+                crate::ir::ir::IncidenceSign::Minus => 2,
+                crate::ir::ir::IncidenceSign::Neutral => 3,
             };
             h.update(&[sign]);
-            let atom = reference.atom();
+            let atom = self
+                .ir
+                .reference_atom(reference)
+                .expect("semantic hash requires model-local reference payloads");
             // APPROVED-CORE-EDIT: executable-model-contract (2026-09-06). Direction is folded under
             // its OWN tag, immediately after the sign and never merged with it, so a sign change
             // and a direction change are two distinct mutations of the digest.
@@ -614,8 +703,8 @@ impl SemanticContext<'_> {
                 PortDirection::Out => 2,
             }]);
             self.write_target(h, atom.target);
-            self.write_anno(h, &atom.anno);
-            match &atom.weights {
+            self.write_anno(h, atom.anno);
+            match atom.weights {
                 Some(weights) => {
                     h.update(&[1]);
                     write_len(h, weights.len());
@@ -705,6 +794,277 @@ fn write_len(h: &mut DigestWriter, len: usize) {
 fn write_str(h: &mut DigestWriter, value: &str) {
     write_len(h, value.len());
     h.update(value.as_bytes());
+}
+
+#[cfg(test)]
+mod incremental_storage_tests {
+    use super::*;
+    use crate::ir::ir::{IrConstruction, LeafValueEdit};
+
+    struct DigestFixture {
+        ir: Ir,
+        interner: Interner,
+    }
+
+    impl DigestFixture {
+        fn new(declarations: usize) -> Self {
+            let mut fixture = Self {
+                ir: Ir::default(),
+                interner: Interner::default(),
+            };
+            for index in 0..declarations {
+                let name = fixture.interner.intern(&format!("value_{index}"));
+                IrConstruction::new(&mut fixture.ir)
+                    .append_node(
+                        name,
+                        AnnoR {
+                            value: Some(ValueR::Num(0.0)),
+                            ..AnnoR::default()
+                        },
+                        Vec::new(),
+                    )
+                    .unwrap();
+            }
+            fixture
+        }
+
+        fn update(
+            &mut self,
+            previous: &SemanticDigestState,
+            values: &[(usize, f64)],
+            delta: &mut SemanticDelta,
+        ) -> SemanticDigestState {
+            let mut edits = values
+                .iter()
+                .map(|&(id, value)| LeafValueEdit::Replace {
+                    declaration: DeclId::new(id),
+                    value: Some(ValueR::Num(value)),
+                })
+                .collect();
+            self.ir.set_leaf_values(&mut edits).unwrap();
+            let changed: Vec<_> = values.iter().map(|&(id, _)| DeclId::new(id)).collect();
+            let next = previous.with_values(&self.ir, &self.interner, &changed, false, delta);
+            assert_eq!(next.digest(), Canon::new(&self.ir, &self.interner).hash());
+            next
+        }
+    }
+
+    #[test]
+    fn sorted_delta_preserves_multiplicity_and_reports_exact_changed_interval() {
+        let hash = |value: u8| HashId([value; 32]);
+        for base in [vec![], vec![1, 2, 2, 4], vec![1, 2, 3, 4]] {
+            for mask in 0..1usize << base.len() {
+                if mask.count_ones() > 2 {
+                    continue;
+                }
+                let removed: Vec<_> = base
+                    .iter()
+                    .copied()
+                    .enumerate()
+                    .filter(|(index, _)| mask & (1 << index) != 0)
+                    .map(|(_, value)| value)
+                    .collect();
+                // Exhaust every replacement over a small alphabet, including
+                // repeated contributions, cancellations and both end shifts.
+                for code in 0..6usize.pow(removed.len() as u32) {
+                    let added: Vec<_> = (0..removed.len())
+                        .map(|position| ((code / 6usize.pow(position as u32)) % 6) as u8)
+                        .collect();
+                    let mut expected: Vec<_> = base
+                        .iter()
+                        .copied()
+                        .enumerate()
+                        .filter(|(index, _)| mask & (1 << index) == 0)
+                        .map(|(_, value)| value)
+                        .chain(added.iter().copied())
+                        .collect();
+                    expected.sort_unstable();
+                    let mismatches: Vec<_> = base
+                        .iter()
+                        .zip(&expected)
+                        .map(|(old, new)| old != new)
+                        .collect();
+                    let dirty = mismatches.iter().position(|&changed| changed).map(|first| {
+                        first..mismatches.iter().rposition(|&changed| changed).unwrap() + 1
+                    });
+                    let mut delta = SemanticDelta::with_capacity(removed.len()).unwrap();
+                    delta.removed.extend(removed.iter().copied().map(hash));
+                    delta.added.extend(added.iter().copied().map(hash));
+                    let hashes: Vec<_> = base.iter().copied().map(hash).collect();
+                    let (actual, changed) = delta.merge_sorted(&hashes);
+                    assert_eq!(actual, expected.into_iter().map(hash).collect::<Vec<_>>());
+                    assert_eq!(changed, dirty);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn retained_states_defer_fold_and_keep_old_identity_after_pending_updates() {
+        let mut fixture = DigestFixture::new(1025);
+        let original = Canon::new(&fixture.ir, &fixture.interner).hash();
+        let base = SemanticDigestState::new(&fixture.ir, &fixture.interner);
+        let mut delta = SemanticDelta::with_capacity(1).unwrap();
+        let mut edits = vec![LeafValueEdit::Replace {
+            declaration: DeclId::new(512),
+            value: Some(ValueR::Num(7.0)),
+        }];
+        fixture.ir.set_leaf_values(&mut edits).unwrap();
+        let next = base.with_values(
+            &fixture.ir,
+            &fixture.interner,
+            &[DeclId::new(512)],
+            false,
+            &mut delta,
+        );
+        assert!(!base.fold.is_materialized());
+        assert!(!next.fold.is_materialized());
+        assert_eq!(
+            next.digest(),
+            Canon::new(&fixture.ir, &fixture.interner).hash()
+        );
+        assert!(!base.fold.is_materialized());
+        assert_eq!(base.digest(), original);
+    }
+
+    #[test]
+    fn model_encoding_known_answers() {
+        for (count, expected) in [
+            (
+                0,
+                "c848e56f5f4cf6d10ecce85c967a79af8a0ca723712bb5ddd551b1b1bc4ffd4c",
+            ),
+            (
+                1,
+                "daa9c2f52d32dfe50a7563b8b321ed3f7db65b37d7b4e08a85850480fbf7999e",
+            ),
+            (
+                15,
+                "245ce7bcae47d186f9d8b87b2578fc84be9ad65e50f48dadd8d74a4f09edebab",
+            ),
+            (
+                16,
+                "88dc5896edc26abdbc6bf2682ffeff5810c8d09d51877ebda40222fdf25575a8",
+            ),
+            (
+                255,
+                "4ff97f932723faeba4c779d47ac4c13d8b1f1c34db95d4fe9ee19f52ad8cda93",
+            ),
+            (
+                256,
+                "1bc498d2191519b2f607ac7cbdd2e053f5ef70567d04b47640def7a327e511ec",
+            ),
+            (
+                511,
+                "32c8834821d158466627f8b38d18fdecc1e0e29b668995a38b540b661ebcfb75",
+            ),
+            (
+                512,
+                "f14fcf13761cbb229be754e3321eca7813735b398b641cbfab10005eb4c14dfc",
+            ),
+            (
+                1025,
+                "bd4115c3f4683cbc0b80f6b9aed685b5bca121195e8f109a3b07b6a64d51466e",
+            ),
+        ] {
+            let fixture = DigestFixture::new(count);
+            let hash = Canon::new(&fixture.ir, &fixture.interner).hash();
+            let hex: String = hash.0.0.iter().map(|b| format!("{b:02x}")).collect();
+            assert_eq!(hex, expected, "model size {count}");
+            let retained = SemanticDigestState::new(&fixture.ir, &fixture.interner);
+            assert!(!retained.fold.is_materialized());
+            assert_eq!(retained.digest(), hash);
+            assert!(retained.fold.is_materialized());
+        }
+    }
+
+    #[test]
+    fn updates_share_untouched_hash_pages_and_preserve_old_snapshots() {
+        let mut fixture = DigestFixture::new(769);
+        let base = SemanticDigestState::new(&fixture.ir, &fixture.interner);
+        let original_hashes = base.declarations.to_vec();
+        let original_digest = base.digest();
+        let mut delta = SemanticDelta::with_capacity(4).unwrap();
+        let storage = delta.storage();
+        let next = fixture.update(
+            &base,
+            &[(0, 1.0), (255, 2.0), (256, 3.0), (768, 4.0)],
+            &mut delta,
+        );
+        for index in 0..769 {
+            assert_eq!(
+                std::ptr::eq(&base.declarations[index], &next.declarations[index]),
+                (512..768).contains(&index),
+                "only pages 0, 1 and 3 may detach; declaration {index}"
+            );
+        }
+        let next_digest = next.digest();
+        let branch = fixture.update(&next, &[(256, -0.0)], &mut delta);
+        for index in 0..769 {
+            assert_eq!(
+                std::ptr::eq(&next.declarations[index], &branch.declarations[index]),
+                !(256..512).contains(&index),
+                "second snapshot detaches only page 1; declaration {index}"
+            );
+        }
+        assert_eq!(base.digest(), original_digest);
+        assert_eq!(base.declarations.to_vec(), original_hashes);
+        assert_eq!(next.digest(), next_digest);
+        delta.clear();
+        assert_eq!(delta.storage(), storage);
+    }
+
+    #[test]
+    fn unchanged_values_share_all_hash_storage_at_page_boundaries() {
+        for count in [0, 1, 255, 256, 257, 769] {
+            let mut fixture = DigestFixture::new(count);
+            let base = SemanticDigestState::new(&fixture.ir, &fixture.interner);
+            let edits: Vec<_> = (0..count).map(|index| (index, 0.0)).collect();
+            let mut delta = SemanticDelta::with_capacity(count).unwrap();
+            let next = fixture.update(&base, &edits, &mut delta);
+            assert_eq!(base.digest(), next.digest());
+            assert_eq!(
+                base.sorted_declarations.as_ptr(),
+                next.sorted_declarations.as_ptr(),
+                "unchanged sorted contributions must be shared at size {count}"
+            );
+            for index in 0..count {
+                assert!(std::ptr::eq(
+                    &base.declarations[index],
+                    &next.declarations[index]
+                ));
+            }
+            let rebuilt_layout =
+                next.with_values(&fixture.ir, &fixture.interner, &[], true, &mut delta);
+            assert!(!base.shares_layout(&rebuilt_layout));
+            assert_eq!(base.digest(), rebuilt_layout.digest());
+            assert_eq!(
+                base.sorted_declarations.as_ptr(),
+                rebuilt_layout.sorted_declarations.as_ptr()
+            );
+        }
+    }
+
+    #[test]
+    fn paged_hash_updates_match_full_digest_for_repeated_and_bulk_changes() {
+        let mut fixture = DigestFixture::new(513);
+        let mut state = SemanticDigestState::new(&fixture.ir, &fixture.interner);
+        let mut delta = SemanticDelta::with_capacity(513).unwrap();
+        let positive_zero = state.digest();
+        state = fixture.update(&state, &[(256, -0.0)], &mut delta);
+        assert_ne!(state.digest(), positive_zero);
+        for step in 0..12 {
+            // Dense and sparse edits, repeated values, and both sides of a page boundary.
+            let edits: Vec<_> = (0..513)
+                .filter(|index| step % 3 == 0 || index % 256 == step % 2)
+                .map(|index| (index, (step / 2 + index % 7) as f64))
+                .collect();
+            state = fixture.update(&state, &edits, &mut delta);
+        }
+        let reset: Vec<_> = (0..513).map(|index| (index, 0.0)).collect();
+        state = fixture.update(&state, &reset, &mut delta);
+        assert_eq!(state.digest(), positive_zero);
+    }
 }
 
 #[cfg(test)]

@@ -1,4 +1,4 @@
-// Wall-clock helpers used by `lower_to_ir` / `lower_program_to_ir` to
+// Wall-clock helpers used by the `IrLowering` builder to
 // stamp `Meta::created_at_unix_ns`. On wasm32 the std::time module is
 // `not implemented` and panics with "time not implemented on this
 // platform" — that bubbles up to the browser as a wasm-trap
