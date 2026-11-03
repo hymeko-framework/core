@@ -13,7 +13,7 @@ Extracted by grammar -- tree-sitter for Rust and C++, `ast` for Python -- so tha
 `pub(crate)`, a `pub fn` inside a private `mod`, and a `def` written inside a
 docstring are all excluded for a stated reason rather than by luck.
 
-**5 package(s), 817 public symbol(s).**
+**5 package(s), 828 public symbol(s).**
 
 ## hymeko-core-dev (rust)
 
@@ -128,10 +128,12 @@ _No public symbols._
 - `NodeRec` — `hymeko_core/src/ir/ir.rs`
 - `NodeTag` — `hymeko_core/src/common/ids.rs`
 - `OperatorContract` — `hymeko_core/src/ir/ir.rs`
+- `OverlayProvider` — `hymeko_core/src/module_store/source_provider.rs`
 - `PathKey` — `hymeko_core/src/common/pathkey.rs`
 - `PreparedCompilation` — `hymeko_core/src/module_store/execution.rs`
 - `PreparedIr` — `hymeko_core/src/ir/incidence.rs`
 - `ProgramStructureHash` — `hymeko_core/src/ir/semantic_digest.rs`
+- `ProjectProvider` — `hymeko_core/src/module_store/source_provider.rs`
 - `PyramidCover` — `hymeko_core/src/generators/pyramid.rs`
 - `PyramidLevel` — `hymeko_core/src/generators/pyramid.rs`
 - `RealParser` — `hymeko_core/src/util/real_parser.rs`
@@ -145,6 +147,7 @@ _No public symbols._
 - `SnapshotMessageDraft` — `hymeko_core/src/writers/cbor_writer/stream.rs`
 - `SnapshotRetirement` — `hymeko_core/src/module_store/execution.rs`
 - `SnapshotVersion` — `hymeko_core/src/ir_stream/version.rs`
+- `SourceLimits` — `hymeko_core/src/module_store/source_provider.rs`
 - `StagedSection` — `hymeko_core/src/ir_stream/assembler.rs`
 - `StarOperator` — `hymeko_core/src/ir/incidence.rs`
 - `StdFsProvider` — `hymeko_core/src/module_store/source_provider.rs`
@@ -228,6 +231,7 @@ _No public symbols._
 - `as_node` — `hymeko_core/src/lib.rs`
 - `as_slice` — `hymeko_core/src/ir/table.rs`
 - `atom` — `hymeko_core/src/ir/reference.rs`
+- `base` — `hymeko_core/src/module_store/source_provider.rs`
 - `base_version` — `hymeko_core/src/ir_stream/assembler.rs`
 - `base_version` — `hymeko_core/src/ir_stream/envelope.rs`
 - `bases` — `hymeko_core/src/ir/reference.rs`
@@ -246,6 +250,7 @@ _No public symbols._
 - `bytes` — `hymeko_core/src/ir/canonical_hash.rs`
 - `bytes` — `hymeko_core/src/ir_stream/assembler.rs`
 - `bytes` — `hymeko_core/src/ir_stream/section.rs`
+- `bytes` — `hymeko_core/src/module_store/source_provider.rs`
 - `canonical_hash` — `hymeko_core/src/writers/cbor_writer.rs`
 - `canonical_index` — `hymeko_core/src/ir/incidence/projection/layout.rs`
 - `canonical_indices` — `hymeko_core/src/ir/incidence/projection/layout.rs`
@@ -349,6 +354,7 @@ _No public symbols._
 - `into_ir` — `hymeko_core/src/ir/incidence.rs`
 - `into_parts` — `hymeko_core/src/writers/cbor_writer.rs`
 - `into_shared` — `hymeko_core/src/ir/ir.rs`
+- `into_sources` — `hymeko_core/src/module_store/source_provider.rs`
 - `ir` — `hymeko_core/src/ir/canonical_hash.rs`
 - `ir` — `hymeko_core/src/ir/incidence.rs`
 - `ir` — `hymeko_core/src/ir/incidence/projection.rs`
@@ -387,6 +393,7 @@ _No public symbols._
 - `level` — `hymeko_core/src/generators/pyramid.rs`
 - `load` — `hymeko_core/src/ir/ir.rs`
 - `load_recursive` — `hymeko_core/src/module_store/module_store.rs`
+- `memory` — `hymeko_core/src/module_store/source_provider.rs`
 - `model` — `hymeko_core/src/module_store/execution.rs`
 - `model_facet` — `hymeko_core/src/ir/ir.rs`
 - `model_facet_table_len` — `hymeko_core/src/ir/ir.rs`
@@ -431,6 +438,7 @@ _No public symbols._
 - `parent` — `hymeko_core/src/ir/ir.rs`
 - `parent_of` — `hymeko_core/src/ir/access.rs`
 - `path_of` — `hymeko_core/src/ir/canonical_hash.rs`
+- `paths` — `hymeko_core/src/module_store/source_provider.rs`
 - `payload` — `hymeko_core/src/ir_stream/codec.rs`
 - `payload` — `hymeko_core/src/writers/cbor_writer.rs`
 - `payload_digest` — `hymeko_core/src/ir_stream/assembler.rs`
@@ -456,6 +464,7 @@ _No public symbols._
 - `reclaim` — `hymeko_core/src/module_store/execution.rs`
 - `reference_atom` — `hymeko_core/src/ir/reference.rs`
 - `reference_draft` — `hymeko_core/src/ir/reference.rs`
+- `relative` — `hymeko_core/src/module_store/source_provider.rs`
 - `replay_memory_bytes` — `hymeko_core/src/ir_stream/assembler.rs`
 - `reset_for_resync` — `hymeko_core/src/ir_stream/assembler.rs`
 - `resolve` — `hymeko_core/src/ir/incidence.rs`
@@ -471,6 +480,7 @@ _No public symbols._
 - `retained_bytes` — `hymeko_core/src/ir/incidence/projection.rs`
 - `revision` — `hymeko_core/src/module_store/execution.rs`
 - `root` — `hymeko_core/src/ir/ir.rs`
+- `root` — `hymeko_core/src/module_store/source_provider.rs`
 - `row` — `hymeko_core/src/ir/incidence/projection.rs`
 - `rows` — `hymeko_core/src/ir/incidence/projection.rs`
 - `rows` — `hymeko_core/src/ir/incidence/projection/layout.rs`
@@ -496,6 +506,7 @@ _No public symbols._
 - `size` — `hymeko_core/src/ir_stream/section.rs`
 - `size_usize` — `hymeko_core/src/ir_stream/section.rs`
 - `snapshot` — `hymeko_core/src/module_store/execution.rs`
+- `sources` — `hymeko_core/src/module_store/source_provider.rs`
 - `staged_bytes` — `hymeko_core/src/ir_stream/assembler.rs`
 - `star` — `hymeko_core/src/ir/incidence.rs`
 - `star_operator` — `hymeko_core/src/ir/incidence.rs`
