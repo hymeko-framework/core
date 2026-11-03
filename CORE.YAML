@@ -56,6 +56,26 @@ crates:
       propagates to every downstream crate and invalidates published
       benchmarks.
     approved_edits:
+      # APPROVED-CORE-EDIT: source-provider-combinators (2026-11-03, user chat)
+      - slug: source-provider-combinators
+        date: 2026-11-03
+        authority: >
+          User, 2026-11-03: "rendben mehet az átemelés", approving the proposal to lift the
+          general source providers consumers had written for themselves into Core (an overlay for
+          the vscode-plugin SnapshotProvider, a rooted and bounded capture for middleware
+          hotaru_l0's RoomProject), after "ez mindez egy core funkcionalitás".
+        scope: >
+          OverlayProvider<B> (in-memory sources over a base, keyed by the base's canonical path,
+          unsaved sources by their logical path); ProjectProvider<P> with SourceLimits (sources
+          admitted only under a root, captured as read, repeats served from the capture, file and
+          byte bounds, oversized sources refused before reading when the length is known);
+          SourceProvider::byte_len with a None default; SourceProvider for &mut P, so a provider
+          can be lent to a compilation; MemProvider's logical spelling drops the Windows
+          extended-length prefix. Tests for each.
+        constraints:
+          - additive only; existing SourceProvider implementors compile unchanged (byte_len has a default)
+          - StdFsProvider's and MemProvider's existing behaviour is unchanged apart from byte_len and the prefix
+          - consumers move to these types in their own repositories afterwards
       # APPROVED-CORE-EDIT: one-memory-provider (2026-11-03, user chat)
       - slug: one-memory-provider
         date: 2026-11-03
