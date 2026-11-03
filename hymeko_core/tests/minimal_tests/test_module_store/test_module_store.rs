@@ -178,6 +178,72 @@ mod mod_test_module_store {
     }
 
     #[test]
+    fn memory_provider_spells_a_path_one_way_on_every_target() {
+        use hymeko::module_store::source_provider::SourceProvider;
+        let memory = MemProvider::default()
+            .with_file("concepts\\subject.hymeko", "description{} subject{}")
+            .with_file("/models/./room.hymeko", "description{} room{}");
+        let canonical = |p: &str| memory.canonicalize(Path::new(p)).unwrap();
+        assert_eq!(
+            canonical("lectures\\..\\concepts/subject.hymeko").to_str(),
+            Some("concepts/subject.hymeko")
+        );
+        assert_eq!(
+            canonical("/models/room.hymeko").to_str(),
+            Some("/models/room.hymeko")
+        );
+        assert_eq!(
+            memory.paths(),
+            ["/models/room.hymeko", "concepts/subject.hymeko"]
+        );
+        assert!(
+            memory
+                .canonicalize(Path::new("lectures\\..\\..\\secret.hymeko"))
+                .is_err()
+        );
+
+        // A relative import across directories reaches the key inserted with backslashes.
+        let provider = MemProvider::default()
+            .with_file(
+                "dynamics\\model.hymeko",
+                "model_description { @\"../optimization/vocab.hymeko\"; } model {}",
+            )
+            .with_file("optimization/vocab.hymeko", "vocab_description {} vocab {}");
+        let mut store = ModuleStore::new(provider, hymeko::util::real_parser::RealParser);
+        let compiled = store.compile(Path::new("dynamics/model.hymeko")).unwrap();
+        for file in ["dynamics/model.hymeko", "optimization/vocab.hymeko"] {
+            assert!(compiled.ir.files.iter().any(|f| f == file), "{file}");
+        }
+    }
+
+    #[test]
+    fn memory_provider_names_the_provided_paths_when_a_source_is_missing() {
+        use hymeko::module_store::source_provider::SourceProvider;
+        let mut memory = MemProvider::default()
+            .with_file("b/x.hymeko", "description{} x{}")
+            .with_file("a.hymeko", "description{} a{}");
+        let error = memory.read(Path::new("c.hymeko")).unwrap_err();
+        assert!(error.contains("file not found: c.hymeko"), "{error}");
+        assert!(error.contains("provided: a.hymeko, b/x.hymeko"), "{error}");
+        let error = MemProvider::default()
+            .read(Path::new("c.hymeko"))
+            .unwrap_err();
+        assert!(error.contains("no sources were provided"), "{error}");
+    }
+
+    #[test]
+    fn memory_provider_versions_follow_the_content() {
+        use hymeko::module_store::source_provider::SourceProvider;
+        let path = Path::new("a.hymeko");
+        let mut memory = MemProvider::default().with_file(path, "description{} a{}");
+        let first = memory.version(path).unwrap();
+        memory.insert_file(path, "description{} a{}");
+        assert_eq!(memory.version(path).unwrap(), first);
+        memory.insert_file(path, "description{} b{}");
+        assert_ne!(memory.version(path).unwrap(), first);
+    }
+
+    #[test]
     fn course_failed_load_can_be_retried_without_a_spurious_cycle() {
         let provider = MemProvider::default().with_file(
             "lecture.hymeko",

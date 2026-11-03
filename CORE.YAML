@@ -56,6 +56,23 @@ crates:
       propagates to every downstream crate and invalidates published
       benchmarks.
     approved_edits:
+      # APPROVED-CORE-EDIT: one-memory-provider (2026-11-03, user chat)
+      - slug: one-memory-provider
+        date: 2026-11-03
+        authority: >
+          User, 2026-11-03: "de végülis ez mindez egy core funkcionalitás, nem?" and "Vagy az
+          egyik vagy a másik, miközben mindkettő funkcionalitása megmaradjon": one in-memory
+          provider, in Core, carrying the functionality of both Core's MemProvider and
+          transformation's retired hymeko_sources::MemoryProvider (transformation 074cded).
+        scope: >
+          MemProvider keys by a target-independent logical path (`\` separates on every target,
+          a rooted key stays rooted, leaving the root stays an error), gains paths() and a
+          missing-source diagnostic that lists the provided paths, and derives Debug. Content-hash
+          versions and read_count stay. A test for each.
+        constraints:
+          - MemProvider's existing signatures are unchanged; the public API only grows (paths, Debug)
+          - SourceProvider, StdFsProvider and the module store are unchanged
+          - ir.files was already slash-spelled, so compiled IR does not change
       - slug: native-dev-dll
         date: 2026-10-28
         authority: user requests shared dynamic libraries and explicitly selects Core/Graph tests and tools

@@ -83,17 +83,29 @@ impl SourceProvider for StdFsProvider {
     }
 }
 
-#[derive(Clone, Default)]
+/// Sources held in memory, keyed by their logical path, for targets and tests without a disk.
+///
+/// A logical path is spelled the same on every target: `/` between segments, `\` read as a
+/// separator too, `.` and empty segments dropped, `a/../b` collapsed, and a leading root or drive
+/// kept. A `..` that would leave the root is an error, as in [`StdFsProvider`]. A browser page, a
+/// Windows test and a Linux service therefore name one file one way, and a relative import that
+/// the module store resolves as `dir/../other/x.hymeko` reaches the key inserted as
+/// `other/x.hymeko`.
+///
+/// Versions are content hashes, so replacing a source invalidates what was compiled from it. A
+/// missing source is reported with the paths that were provided, and `read_count` counts reads
+/// per key for tests of the store's caching.
+#[derive(Debug, Clone, Default)]
 pub struct MemProvider {
-    files: HashMap<PathBuf, Arc<str>>,
-    reads: Arc<Mutex<HashMap<PathBuf, usize>>>,
+    files: HashMap<String, Arc<str>>,
+    reads: Arc<Mutex<HashMap<String, usize>>>,
 }
 
 impl MemProvider {
     pub fn insert_file(&mut self, path: impl Into<PathBuf>, content: impl Into<Arc<str>>) {
         let path = path.into();
-        self.files
-            .insert(normalize_path(&path).unwrap_or(path), content.into());
+        let key = logical_path(&path).unwrap_or_else(|_| slashed(&path));
+        self.files.insert(key, content.into());
     }
 
     pub fn with_file(mut self, path: impl Into<PathBuf>, content: impl Into<Arc<str>>) -> Self {
@@ -101,38 +113,51 @@ impl MemProvider {
         self
     }
 
+    /// The logical paths this provider serves, sorted.
+    pub fn paths(&self) -> Vec<&str> {
+        let mut out: Vec<&str> = self.files.keys().map(String::as_str).collect();
+        out.sort_unstable();
+        out
+    }
+
     pub fn read_count(&self, p: impl AsRef<Path>) -> usize {
         let m = self.reads.lock().unwrap();
-        normalize_path(p.as_ref())
+        logical_path(p.as_ref())
             .ok()
-            .and_then(|path| m.get(&path).copied())
+            .and_then(|key| m.get(&key).copied())
             .unwrap_or(0)
+    }
+
+    fn missing(&self, key: &str) -> String {
+        let provided = self.paths();
+        if provided.is_empty() {
+            format!("file not found: {key}; no sources were provided")
+        } else {
+            format!("file not found: {key}; provided: {}", provided.join(", "))
+        }
     }
 }
 
 impl SourceProvider for MemProvider {
     fn canonicalize(&self, p: &Path) -> Result<PathBuf, String> {
-        normalize_path(p)
+        logical_path(p).map(PathBuf::from)
     }
 
     fn read(&mut self, p: &Path) -> Result<Arc<str>, String> {
-        let p = self.canonicalize(p)?;
+        let key = logical_path(p)?;
         {
             let mut m = self.reads.lock().unwrap();
-            *m.entry(p.clone()).or_insert(0) += 1;
+            *m.entry(key.clone()).or_insert(0) += 1;
         }
         self.files
-            .get(&p)
+            .get(&key)
             .cloned()
-            .ok_or_else(|| format!("file not found: {}", p.display()))
+            .ok_or_else(|| self.missing(&key))
     }
 
     fn version(&self, path: &Path) -> Result<u64, String> {
-        let path = self.canonicalize(path)?;
-        let s = self
-            .files
-            .get(&path)
-            .ok_or_else(|| format!("file not found: {}", path.display()))?;
+        let key = logical_path(path)?;
+        let s = self.files.get(&key).ok_or_else(|| self.missing(&key))?;
 
         // content-hash → u64 version
         let h = blake3::hash(s.as_bytes());
@@ -141,6 +166,16 @@ impl SourceProvider for MemProvider {
             b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
         ]))
     }
+}
+
+/// The logical spelling [`MemProvider`] keys by. `\` becomes `/` before the components are read,
+/// so a backslash separates on every target rather than only on Windows.
+fn logical_path(path: &Path) -> Result<String, String> {
+    normalize_path(Path::new(&slashed(path))).map(|normalized| slashed(&normalized))
+}
+
+fn slashed(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
 }
 
 fn normalize_path(path: &Path) -> Result<PathBuf, String> {
