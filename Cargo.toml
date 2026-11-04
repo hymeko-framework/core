@@ -18,6 +18,5 @@ blake3 = "1.8.3"
 rayon = "1.11.0"
 log = "0.4.22"
 parser = { git = "https://github.com/hymeko-framework/parser.git", rev = "a7b50743fe9f55a8c122f27b3986478919f29345" }
-# Virtual-operator provider, published on tensor feat/virtual-operators; ledger in
-# docs/hymeko-kernel-ownership.md (tensor extraction, 2026-09-23).
+# The public Tensor provider, pinned to its publication commit.
 hymeko_tensor = { git = "https://github.com/hymeko-framework/tensor.git", rev = "ad09422ea42ed9e6aea9178212f3d2d1397d9cc7" }
