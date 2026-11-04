@@ -1,10 +1,26 @@
 {
   "_comment": "Duplication baseline. The gate fails on an INCREASE only. Lowering these numbers is welcome and needs no ceremony; raising them needs the written justification a core edit needs. Detectors are not interchangeable and are never compared against each other -- 'tokens' is the built-in type-2 detector, 'jscpd' is the npm one.",
+  "accepted_increases": [
+    {
+      "after": {
+        "cloned_lines": 12921,
+        "clones": 553,
+        "files": 201
+      },
+      "before": {
+        "cloned_lines": 10411,
+        "clones": 484,
+        "files": 214
+      },
+      "detector": "tokens",
+      "reason": "2026-11-01 contract adoption: provider 8823c90 fixes whole-literal erasure for type-2 Rust clones. Identical 201 source files produce 460 clones/8736 lines with 8871abe and 553 clones/12921 lines with e6d8397; Core production/test/benchmark sources are unchanged from main 7664d55. Migrate detector baseline, not a source-duplication waiver."
+    }
+  ],
   "detectors": {
     "tokens": {
-      "cloned_lines": 10411,
-      "clones": 484,
-      "files": 214
+      "cloned_lines": 11916,
+      "clones": 552,
+      "files": 204
     }
   },
   "params": {

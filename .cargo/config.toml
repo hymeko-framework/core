@@ -1,0 +1,4 @@
+# Keep local packages from different workspace roots out of the same artifact namespace.
+[alias]
+dev-test = ["test", "--locked", "--profile", "dev-dll", "--config", "build.build-dir=\"{cargo-cache-home}/hymeko-dev-build/{workspace-path-hash}\"", "-p", "hymeko-core-dev"]
+dev-run = ["run", "--locked", "--profile", "dev-dll", "--config", "build.build-dir=\"{cargo-cache-home}/hymeko-dev-build/{workspace-path-hash}\"", "-p", "hymeko-core-dev", "--bin", "hymeko-core-dev"]

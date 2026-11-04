@@ -19,10 +19,10 @@
 
 set -u
 
-SPEC="git+ssh://git@192.168.1.228:2222/hymeko/hymeko.git@8871abe7ecc830965b97af1e0a0838fc688b27fc"
+SPEC="git+ssh://git@192.168.1.228:2222/hymeko/hymeko.git@e6d83977978f198f509d448ac8121deed3af0aee"
 
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
-cd "$ROOT" || exit 0
+cd "$ROOT" || exit 1
 
 export PYTHONIOENCODING=utf-8
 
@@ -31,21 +31,14 @@ export PYTHONIOENCODING=utf-8
 # -- on the workstation this was written for, `command -v python3` finds a
 # Microsoft Store shim that answers and then exits 49.
 if ! command -v uv >/dev/null 2>&1; then
-    echo "contract hooks: uv not found — checks skipped, not failed." >&2
+    echo "contract hooks: uv not found — required checks cannot run." >&2
     echo "  install: https://docs.astral.sh/uv/" >&2
-    exit 0
+    exit 1
 fi
 
-# Prefer an installed entry point; fall back to resolving from git each call.
-# Measured: `uv tool run --from <git spec>` costs ~785 ms per invocation against
-# ~320 ms for an installed entry point, and this hook makes three calls. 2.7 s
-# versus 1.0 s decides whether a hook survives its first week.
-#   one-time:  sh tools/hooks/install.sh   (which runs `uv tool install`)
-if command -v contract-symbols >/dev/null 2>&1; then
-    gate() { "$@"; }
-else
-    gate() { uv tool run --quiet --from "$SPEC" "$@"; }
-fi
+# Resolve the declared revision; another repository's global tool installation
+# must not silently replace this checkout's verification contract.
+gate() { uv tool run --quiet --from "$SPEC" "$@"; }
 
 fail=0
 

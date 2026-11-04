@@ -12,7 +12,7 @@
               "run",
               "--quiet",
               "--from",
-              "git+ssh://git@192.168.1.228:2222/hymeko/hymeko.git@8871abe7ecc830965b97af1e0a0838fc688b27fc",
+              "git+ssh://git@192.168.1.228:2222/hymeko/hymeko.git@e6d83977978f198f509d448ac8121deed3af0aee",
               "contract-persona"
             ],
             "timeout": 10,

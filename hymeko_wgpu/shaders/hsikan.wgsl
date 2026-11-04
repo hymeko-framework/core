@@ -25,48 +25,22 @@ struct Params {
 @group(0) @binding(7) var<storage, read_write> output:  array<f32>;
 @group(0) @binding(8) var<uniform> params: Params;
 
+// Both splines read the shared stencil (`catmull_rom_formulas.wgsl`, prepended) and form the same
+// left-to-right sum the former inline bodies did.
 fn cr(control_base: u32, raw: f32) -> f32 {
-    let xc = clamp(raw, -1.0, 1.0);
-    let span = 0.5 * f32(params.grid - 1u);
-    let u = (xc + 1.0) * span;
-    let i = min(u32(floor(u)), params.grid - 2u);
-    let t = u - f32(i);
-    let t2 = t * t;
-    let t3 = t2 * t;
-    let w0 = 0.5 * (-t3 + 2.0 * t2 - t);
-    let w1 = 0.5 * (3.0 * t3 - 5.0 * t2 + 2.0);
-    let w2 = 0.5 * (-3.0 * t3 + 4.0 * t2 + t);
-    let w3 = 0.5 * (t3 - t2);
-    let c0 = max(i, 1u) - 1u;
-    let c1 = i;
-    let c2 = min(i + 1u, params.grid - 1u);
-    let c3 = min(i + 2u, params.grid - 1u);
-    return w0 * inner_control[control_base + c0]
-         + w1 * inner_control[control_base + c1]
-         + w2 * inner_control[control_base + c2]
-         + w3 * inner_control[control_base + c3];
+    let s = cr_stencil(raw, params.grid);
+    return s.w.x * inner_control[control_base + s.idx.x]
+         + s.w.y * inner_control[control_base + s.idx.y]
+         + s.w.z * inner_control[control_base + s.idx.z]
+         + s.w.w * inner_control[control_base + s.idx.w];
 }
 
 fn cr_outer(control_base: u32, raw: f32) -> f32 {
-    let xc = clamp(raw, -1.0, 1.0);
-    let span = 0.5 * f32(params.grid - 1u);
-    let u = (xc + 1.0) * span;
-    let i = min(u32(floor(u)), params.grid - 2u);
-    let t = u - f32(i);
-    let t2 = t * t;
-    let t3 = t2 * t;
-    let w0 = 0.5 * (-t3 + 2.0 * t2 - t);
-    let w1 = 0.5 * (3.0 * t3 - 5.0 * t2 + 2.0);
-    let w2 = 0.5 * (-3.0 * t3 + 4.0 * t2 + t);
-    let w3 = 0.5 * (t3 - t2);
-    let c0 = max(i, 1u) - 1u;
-    let c1 = i;
-    let c2 = min(i + 1u, params.grid - 1u);
-    let c3 = min(i + 2u, params.grid - 1u);
-    return w0 * outer_control[control_base + c0]
-         + w1 * outer_control[control_base + c1]
-         + w2 * outer_control[control_base + c2]
-         + w3 * outer_control[control_base + c3];
+    let s = cr_stencil(raw, params.grid);
+    return s.w.x * outer_control[control_base + s.idx.x]
+         + s.w.y * outer_control[control_base + s.idx.y]
+         + s.w.z * outer_control[control_base + s.idx.z]
+         + s.w.w * outer_control[control_base + s.idx.w];
 }
 
 @compute @workgroup_size({{WORKGROUP_X}}, {{WORKGROUP_Y}})

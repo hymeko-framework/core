@@ -18,7 +18,9 @@ use std::process::Command;
 /// of a crate that has a `[[bin]]`/`src/main.rs`). Using it avoids a recursive
 /// `cargo run` inside the test.
 fn hymeko_bin() -> &'static str {
-    env!("CARGO_BIN_EXE_hymeko_core")
+    option_env!("CARGO_BIN_EXE_hymeko_core")
+        .or(option_env!("CARGO_BIN_EXE_hymeko-core-dev"))
+        .expect("Cargo must build the canonical CLI source for this test target")
 }
 
 /// A unique temp path for this test process; no fixture under the locked

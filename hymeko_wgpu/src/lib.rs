@@ -7,6 +7,7 @@
 //! | CSR SpMM (`spmm.wgsl`), optionally fused with an activation | implemented, tested |
 //! | elementwise activation, out-of-place and in-place | implemented, tested |
 //! | signed HSiKAN Chebyshev--Catmull-Rom inference | implemented, tested |
+//! | Catmull-Rom membership, forward and pullback (shared stencil, deterministic coefficient sums) | implemented, tested |
 //! | spatial global-entropy pooling inference | implemented, tested |
 //! | pipeline cache keyed on [`KernelId`], explicit encode / submit / readback | implemented, tested |
 //! | `TensorArena` buffer reuse + non-blocking completion tracking | implemented, tested |
@@ -136,11 +137,15 @@ pub use backend::{DeviceCapabilities, WgpuBackend, WgpuBackendBuilder};
 pub use completion::{CompletionTracker, SubmissionEpoch};
 pub use operations::{
     ACTIVATION_INPLACE_SHADER, ACTIVATION_SHADER, ACTIVATION_WORKGROUP_SWEEP, ActivationBuilder,
-    ActivationKind, DEFAULT_ACTIVATION_WORKGROUP, DEFAULT_GLOBAL_ENTROPY_POOL_WORKGROUP,
-    DEFAULT_HIGHWAY_WORKGROUP, DEFAULT_HSIKAN_WORKGROUP, DEFAULT_ROTOR_ATTENTION_WORKGROUP,
-    DEFAULT_SCATTER_MEAN_WORKGROUP, DEFAULT_STAR_ROTOR_SPIKE_WORKGROUP, GLOBAL_ENTROPY_POOL_SHADER,
-    GlobalEntropyPoolBuilder, HIGHWAY_IDENTITY_SHADER, HSIKAN_SHADER, HighwayIdentityBuilder,
-    HsikanBuilder, OperationFactory, PreparedActivation, PreparedGlobalEntropyPool,
+    ActivationKind, CATMULL_ROM_FORWARD_SHADER, CATMULL_ROM_PULLBACK_SHADER,
+    CATMULL_ROM_REDUCE_SHADER, CatmullRomForwardBuilder, CatmullRomPullbackBuilder,
+    DEFAULT_ACTIVATION_WORKGROUP, DEFAULT_CATMULL_ROM_CHUNK_ROWS, DEFAULT_CATMULL_ROM_WORKGROUP,
+    DEFAULT_GLOBAL_ENTROPY_POOL_WORKGROUP, DEFAULT_HIGHWAY_WORKGROUP, DEFAULT_HSIKAN_WORKGROUP,
+    DEFAULT_ROTOR_ATTENTION_WORKGROUP, DEFAULT_SCATTER_MEAN_WORKGROUP,
+    DEFAULT_STAR_ROTOR_SPIKE_WORKGROUP, GLOBAL_ENTROPY_POOL_SHADER, GlobalEntropyPoolBuilder,
+    HIGHWAY_IDENTITY_SHADER, HSIKAN_SHADER, HighwayIdentityBuilder, HsikanBuilder,
+    MAX_CATMULL_ROM_GRID, MIN_CATMULL_ROM_GRID, OperationFactory, PreparedActivation,
+    PreparedCatmullRomForward, PreparedCatmullRomPullback, PreparedGlobalEntropyPool,
     PreparedHighwayIdentity, PreparedHsikan, PreparedRotorAttention, PreparedScatterMean,
     PreparedSpmm, PreparedStarRotorSpike, ROTOR_ATTENTION_SHADER, RotorAttentionBuilder,
     SCATTER_MEAN_CSR_SHADER, SPMM_SHADER, STAR_ROTOR_SPIKE_SHADER, ScatterMeanBuilder, SpmmBuilder,

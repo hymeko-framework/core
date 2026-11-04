@@ -56,6 +56,48 @@ crates:
       propagates to every downstream crate and invalidates published
       benchmarks.
     approved_edits:
+      # APPROVED-CORE-EDIT: source-provider-combinators (2026-11-03, user chat)
+      - slug: source-provider-combinators
+        date: 2026-11-03
+        authority: >
+          User, 2026-11-03: "rendben mehet az átemelés", approving the proposal to lift the
+          general source providers consumers had written for themselves into Core (an overlay for
+          the vscode-plugin SnapshotProvider, a rooted and bounded capture for middleware
+          hotaru_l0's RoomProject), after "ez mindez egy core funkcionalitás".
+        scope: >
+          OverlayProvider<B> (in-memory sources over a base, keyed by the base's canonical path,
+          unsaved sources by their logical path); ProjectProvider<P> with SourceLimits (sources
+          admitted only under a root, captured as read, repeats served from the capture, file and
+          byte bounds, oversized sources refused before reading when the length is known);
+          SourceProvider::byte_len with a None default; SourceProvider for &mut P, so a provider
+          can be lent to a compilation; MemProvider's logical spelling drops the Windows
+          extended-length prefix. Tests for each.
+        constraints:
+          - additive only; existing SourceProvider implementors compile unchanged (byte_len has a default)
+          - StdFsProvider's and MemProvider's existing behaviour is unchanged apart from byte_len and the prefix
+          - consumers move to these types in their own repositories afterwards
+      # APPROVED-CORE-EDIT: one-memory-provider (2026-11-03, user chat)
+      - slug: one-memory-provider
+        date: 2026-11-03
+        authority: >
+          User, 2026-11-03: "de végülis ez mindez egy core funkcionalitás, nem?" and "Vagy az
+          egyik vagy a másik, miközben mindkettő funkcionalitása megmaradjon": one in-memory
+          provider, in Core, carrying the functionality of both Core's MemProvider and
+          transformation's retired hymeko_sources::MemoryProvider (transformation 074cded).
+        scope: >
+          MemProvider keys by a target-independent logical path (`\` separates on every target,
+          a rooted key stays rooted, leaving the root stays an error), gains paths() and a
+          missing-source diagnostic that lists the provided paths, and derives Debug. Content-hash
+          versions and read_count stay. A test for each.
+        constraints:
+          - MemProvider's existing signatures are unchanged; the public API only grows (paths, Debug)
+          - SourceProvider, StdFsProvider and the module store are unchanged
+          - ir.files was already slash-spelled, so compiled IR does not change
+      - slug: native-dev-dll
+        date: 2026-10-28
+        authority: user requests shared dynamic libraries and explicitly selects Core/Graph tests and tools
+        scope: downstream development DLL re-export and original-source clients, workspace/profile/aliases, CLI-test artifact selection; no production semantics or external dependency revision changes
+        plan: dev/README.txt
       - slug: ordered-parallel-source-pagerank
         date: 2026-10-20
         authority: user requests fixing vertex-number dependence, then parallel execution and Hymeko-based model/execution handling
