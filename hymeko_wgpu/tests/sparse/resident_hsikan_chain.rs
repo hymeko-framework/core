@@ -33,36 +33,12 @@ use crate::support::assert_parity;
 
 const N_NODES: usize = 4;
 const N_EDGES: usize = 2;
+use crate::support::cr;
+
 const ARITY: usize = 3;
 const HIDDEN: usize = 3;
 const GRID: usize = 5;
 const BRANCHES: usize = 2;
-
-/// Catmull-Rom evaluation, transcribed from the existing HSiKAN gate's reference.
-fn cr(control: &[f32], grid: usize, raw: f32) -> f32 {
-    let x = raw.clamp(-1.0, 1.0);
-    let u = (x + 1.0) * (0.5 * (grid - 1) as f32);
-    let i = (u.floor() as usize).min(grid - 2);
-    let t = u - i as f32;
-    let t2 = t * t;
-    let t3 = t2 * t;
-    let w = [
-        0.5 * (-t3 + 2.0 * t2 - t),
-        0.5 * (3.0 * t3 - 5.0 * t2 + 2.0),
-        0.5 * (-3.0 * t3 + 4.0 * t2 + t),
-        0.5 * (t3 - t2),
-    ];
-    let c = [
-        i.saturating_sub(1).min(grid - 1),
-        i,
-        (i + 1).min(grid - 1),
-        (i + 2).min(grid - 1),
-    ];
-    w.iter()
-        .zip(c)
-        .map(|(weight, index)| weight * control[index])
-        .sum()
-}
 
 struct Layer {
     inner: Vec<f32>,

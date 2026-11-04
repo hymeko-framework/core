@@ -45,3 +45,7 @@ harness = false
 [[bench]]
 name = "arena_bench"
 harness = false
+
+[[bench]]
+name = "catmull_rom_bench"
+harness = false

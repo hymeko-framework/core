@@ -13,7 +13,7 @@ Extracted by grammar -- tree-sitter for Rust and C++, `ast` for Python -- so tha
 `pub(crate)`, a `pub fn` inside a private `mod`, and a `def` written inside a
 docstring are all excluded for a stated reason rather than by luck.
 
-**5 package(s), 807 public symbol(s).**
+**5 package(s), 828 public symbol(s).**
 
 ## hymeko-core-dev (rust)
 
@@ -587,6 +587,8 @@ _No public symbols._
 - `ActivationBuilder` — `hymeko_wgpu/src/operations/activation.rs`
 - `ArenaTensor` — `hymeko_wgpu/src/arena.rs`
 - `BackendCell` — `hymeko_wgpu/src/testing.rs`
+- `CatmullRomForwardBuilder` — `hymeko_wgpu/src/operations/catmull_rom.rs`
+- `CatmullRomPullbackBuilder` — `hymeko_wgpu/src/operations/catmull_rom.rs`
 - `CompletionTracker` — `hymeko_wgpu/src/completion.rs`
 - `DeviceCapabilities` — `hymeko_wgpu/src/backend.rs`
 - `ElapsedTicks` — `hymeko_wgpu/src/profiling.rs`
@@ -608,6 +610,8 @@ _No public symbols._
 - `PooledOperandNeedsSession` — `hymeko_wgpu/src/scope.rs`
 - `PreparedActivation` — `hymeko_wgpu/src/operations/activation.rs`
 - `PreparedCannotOutliveOperands` — `hymeko_wgpu/src/scope.rs`
+- `PreparedCatmullRomForward` — `hymeko_wgpu/src/operations/catmull_rom.rs`
+- `PreparedCatmullRomPullback` — `hymeko_wgpu/src/operations/catmull_rom.rs`
 - `PreparedGlobalEntropyPool` — `hymeko_wgpu/src/operations/global_entropy_pool.rs`
 - `PreparedHighwayIdentity` — `hymeko_wgpu/src/operations/highway.rs`
 - `PreparedHsikan` — `hymeko_wgpu/src/operations/hsikan.rs`
@@ -669,11 +673,16 @@ _No public symbols._
 - `capacity` — `hymeko_wgpu/src/profiling.rs`
 - `capacity` — `hymeko_wgpu/src/readback.rs`
 - `carry` — `hymeko_wgpu/src/operations/highway.rs`
+- `catmull_rom_forward` — `hymeko_wgpu/src/operations/mod.rs`
+- `catmull_rom_pullback` — `hymeko_wgpu/src/operations/mod.rs`
 - `centres` — `hymeko_wgpu/src/operations/star_rotor_spike.rs`
 - `chain_output` — `hymeko_wgpu/src/testing.rs`
+- `chunk_rows` — `hymeko_wgpu/src/operations/catmull_rom.rs`
+- `chunks` — `hymeko_wgpu/src/operations/catmull_rom.rs`
 - `col_ind` — `hymeko_wgpu/src/resources.rs`
 - `completed` — `hymeko_wgpu/src/completion.rs`
 - `config` — `hymeko_wgpu/src/arena.rs`
+- `control` — `hymeko_wgpu/src/operations/catmull_rom.rs`
 - `counts` — `hymeko_wgpu/src/operations/scatter_mean.rs`
 - `create_readback_workspace` — `hymeko_wgpu/src/backend.rs`
 - `destination_capacity` — `hymeko_wgpu/src/readback.rs`
@@ -686,6 +695,7 @@ _No public symbols._
 - `edge_state` — `hymeko_wgpu/src/operations/scatter_mean.rs`
 - `elapsed` — `hymeko_wgpu/src/profiling.rs`
 - `elements` — `hymeko_wgpu/src/operations/activation.rs`
+- `elements` — `hymeko_wgpu/src/operations/catmull_rom.rs`
 - `elements` — `hymeko_wgpu/src/operations/global_entropy_pool.rs`
 - `elements` — `hymeko_wgpu/src/operations/highway.rs`
 - `elements` — `hymeko_wgpu/src/operations/hsikan.rs`
@@ -693,6 +703,7 @@ _No public symbols._
 - `elements` — `hymeko_wgpu/src/operations/scatter_mean.rs`
 - `elements` — `hymeko_wgpu/src/operations/star_rotor_spike.rs`
 - `encode` — `hymeko_wgpu/src/operations/activation.rs`
+- `encode` — `hymeko_wgpu/src/operations/catmull_rom.rs`
 - `encode` — `hymeko_wgpu/src/operations/global_entropy_pool.rs`
 - `encode` — `hymeko_wgpu/src/operations/highway.rs`
 - `encode` — `hymeko_wgpu/src/operations/hsikan.rs`
@@ -723,12 +734,16 @@ _No public symbols._
 - `get` — `hymeko_wgpu/src/completion.rs`
 - `get_or_init` — `hymeko_wgpu/src/testing.rs`
 - `global_entropy_pool` — `hymeko_wgpu/src/operations/mod.rs`
+- `grad_control` — `hymeko_wgpu/src/operations/catmull_rom.rs`
+- `grad_input` — `hymeko_wgpu/src/operations/catmull_rom.rs`
+- `grad_output` — `hymeko_wgpu/src/operations/catmull_rom.rs`
 - `highway_identity` — `hymeko_wgpu/src/operations/mod.rs`
 - `hsikan` — `hymeko_wgpu/src/operations/mod.rs`
 - `in_place` — `hymeko_wgpu/src/operations/activation.rs`
 - `incidence` — `hymeko_wgpu/src/operations/scatter_mean.rs`
 - `inner_control` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `input` — `hymeko_wgpu/src/operations/activation.rs`
+- `input` — `hymeko_wgpu/src/operations/catmull_rom.rs`
 - `input` — `hymeko_wgpu/src/operations/spmm.rs`
 - `into_buffer` — `hymeko_wgpu/src/resources.rs`
 - `invocations` — `hymeko_wgpu/src/operations/spmm.rs`
@@ -740,6 +755,7 @@ _No public symbols._
 - `kappa` — `hymeko_wgpu/src/operations/rotor_attention.rs`
 - `kappa` — `hymeko_wgpu/src/operations/star_rotor_spike.rs`
 - `kernel` — `hymeko_wgpu/src/operations/activation.rs`
+- `kernel` — `hymeko_wgpu/src/operations/catmull_rom.rs`
 - `kernel` — `hymeko_wgpu/src/operations/global_entropy_pool.rs`
 - `kernel` — `hymeko_wgpu/src/operations/highway.rs`
 - `kernel` — `hymeko_wgpu/src/operations/hsikan.rs`
@@ -747,11 +763,13 @@ _No public symbols._
 - `kernel` — `hymeko_wgpu/src/operations/scatter_mean.rs`
 - `kernel` — `hymeko_wgpu/src/operations/spmm.rs`
 - `kernel` — `hymeko_wgpu/src/operations/star_rotor_spike.rs`
+- `kernels` — `hymeko_wgpu/src/operations/catmull_rom.rs`
 - `keys` — `hymeko_wgpu/src/operations/rotor_attention.rs`
 - `kind` — `hymeko_wgpu/src/backend.rs`
 - `kind` — `hymeko_wgpu/src/operations/activation.rs`
 - `label` — `hymeko_wgpu/src/backend.rs`
 - `label` — `hymeko_wgpu/src/operations/activation.rs`
+- `label` — `hymeko_wgpu/src/operations/catmull_rom.rs`
 - `label` — `hymeko_wgpu/src/operations/global_entropy_pool.rs`
 - `label` — `hymeko_wgpu/src/operations/highway.rs`
 - `label` — `hymeko_wgpu/src/operations/hsikan.rs`
@@ -783,6 +801,7 @@ _No public symbols._
 - `operations_encoded` — `hymeko_wgpu/src/arena.rs`
 - `outer_control` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `output` — `hymeko_wgpu/src/operations/activation.rs`
+- `output` — `hymeko_wgpu/src/operations/catmull_rom.rs`
 - `output` — `hymeko_wgpu/src/operations/global_entropy_pool.rs`
 - `output` — `hymeko_wgpu/src/operations/hsikan.rs`
 - `output` — `hymeko_wgpu/src/operations/rotor_attention.rs`
@@ -800,6 +819,7 @@ _No public symbols._
 - `power_preference` — `hymeko_wgpu/src/backend.rs`
 - `preferred` — `hymeko_wgpu/src/operations/rotor_attention.rs`
 - `prepare` — `hymeko_wgpu/src/operations/activation.rs`
+- `prepare` — `hymeko_wgpu/src/operations/catmull_rom.rs`
 - `prepare` — `hymeko_wgpu/src/operations/global_entropy_pool.rs`
 - `prepare` — `hymeko_wgpu/src/operations/highway.rs`
 - `prepare` — `hymeko_wgpu/src/operations/hsikan.rs`
@@ -871,6 +891,7 @@ _No public symbols._
 - `wait_for` — `hymeko_wgpu/src/completion.rs`
 - `with_capacity` — `hymeko_wgpu/src/readback.rs`
 - `workgroup` — `hymeko_wgpu/src/operations/activation.rs`
+- `workgroup` — `hymeko_wgpu/src/operations/catmull_rom.rs`
 - `workgroup` — `hymeko_wgpu/src/operations/global_entropy_pool.rs`
 - `workgroup` — `hymeko_wgpu/src/operations/highway.rs`
 - `workgroup` — `hymeko_wgpu/src/operations/hsikan.rs`
