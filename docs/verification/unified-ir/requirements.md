@@ -247,9 +247,8 @@ This update is scoped to the existing Core `ir_stream` admission boundary.
 It does not change the historical matrix-wide totals above or promote the
 `UIR-DYN-*` native mutation/publication requirements to PASS. The distinct
 [Lean specification](distributed-semantics.lean) is a normative abstraction,
-not a translation of Rust. The [audit report](../../../reports/2026-09-05-distributed-semantics.md)
-and [baseline mapping](../../../reports/distributed-semantics/traceability.tsv)
-keep **model proof**, **runtime observation** and **missing implementation** separate.
+not a translation of Rust. The audit report and baseline mapping in the project's
+report archive keep **model proof**, **runtime observation** and **missing implementation** separate.
 
 | Requirement | Lean model | Actual Core correction `8a0c49d` |
 |---|---|---|
@@ -282,14 +281,13 @@ are separate obligations, with no new algebra or grammar approved by this update
 
 The user approved `APPROVED-CORE-EDIT: distributed-admission-monotone-resume`.
 Correction `8a0c49d` changes the existing assembler, with no public-signature,
-wire, dependency or fixture change. All nine regression cases pass on Amaterasu;
+wire, dependency or fixture change. All nine regression cases pass on Linux;
 the original seven retain their expected outcomes. The test source moved from
 the audit directory into `hymeko_core/tests/ir_stream_admission.rs` and is
 registered in the existing harness. The old source and FAIL evidence remain
 available at audit commit `1befefb`; they are not rewritten as historical PASS.
-[Current report](../../../reports/2026-09-05-distributed-admission-fix.md) and
-[current mapping](../../../reports/distributed-admission-fix/traceability.tsv)
-record observed conformance. Rust PASS here means the named checks passed; it
+The current report and mapping in the same archive record observed
+conformance. Rust PASS here means the named checks passed; it
 does not turn the abstract Lean proof into a whole-implementation refinement proof.
 
 ### Extended admission evidence - 2026-09-06
@@ -307,7 +305,7 @@ This extends bounded runtime evidence for `DIST-MONOTONE`, `DIST-RESUME`,
 refinement nor complete semantic-state installation is claimed. `DIST-BINDING`,
 `DIST-INSTALL`, `DIST-LIVE` and the UIR-DYN matrix statuses remain as above.
 
-The [three-platform campaign](../../../reports/2026-09-06-distributed-verification-benchmarks.md)
+The three-platform campaign in the report archive
 records theorem axioms, a false resumed-zero negative control, exact generated
 bytes, platform correctness and Criterion samples. Model and implementation
 remain independent owners; the Rust test consumes expected data rather than

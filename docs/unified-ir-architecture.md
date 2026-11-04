@@ -453,10 +453,10 @@ only a version. **Reproduced on 2026-09-05:** equal-version traffic after resume
 is accepted as a new commit, including restored ZERO. A second defect accepts
 incomparable targets such as `(2,2,2,0) → (1,3,3,0)` for snapshots and
 `(2,2,2,0) → (2,1,3,0)` for deltas. Four public-API assertions fail against the
-Amaterasu Core image. The [audit](../reports/2026-09-05-distributed-semantics.md)
-retains the pre-fix traces. The approved correction `8a0c49d` is implemented and
+Linux Core image. The audit, in the project's report archive, retains the
+pre-fix traces. The approved correction `8a0c49d` is implemented and
 the same four failures now pass, alongside five compatibility/retention checks.
-See the [correction report](../reports/2026-09-05-distributed-admission-fix.md).
+The correction report is in the same archive.
 
 The compatible immediate rule is conservative: retain whether a version has
 been established, independently of whether its identity is known. Equal-version
@@ -554,7 +554,7 @@ requires a stable job identity bound to input state, parameters and seed, plus
 an idempotent result-acceptance policy. These are consumer integration work,
 not reasons to duplicate the Core model in a worker.
 
-The first Amaterasu experiment should compare fixed independent work locally,
+The first two-host experiment should compare fixed independent work locally,
 remotely and across both workers, including transfer, serialization, memory,
 correctness and interrupted-worker recovery. Hyperedge partitioning and halo
 exchange need separate measurements (§11 of
