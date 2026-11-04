@@ -18,9 +18,9 @@
   ],
   "detectors": {
     "tokens": {
-      "cloned_lines": 12921,
-      "clones": 553,
-      "files": 201
+      "cloned_lines": 11916,
+      "clones": 552,
+      "files": 204
     }
   },
   "params": {

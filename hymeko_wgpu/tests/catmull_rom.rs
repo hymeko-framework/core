@@ -16,20 +16,9 @@
 #[path = "support/mod.rs"]
 mod support;
 
-use hymeko_wgpu::testing::shared_backend;
-use hymeko_wgpu::{KernelId, TensorShape, WgpuBackend};
+use hymeko_wgpu::testing::{field, shared_backend};
+use hymeko_wgpu::{GpuTensor, KernelId, TensorShape, WgpuBackend};
 use support::{cr, cr_forward_bound, cr_input_gradient_bound, cr_masses, cr_pullback, gamma};
-
-/// `n` values across `[-scale, scale]`, a fixed sequence of `seed`.
-fn field(n: usize, seed: u32, scale: f32) -> Vec<f32> {
-    let mut state = seed.wrapping_mul(2_654_435_761).wrapping_add(1);
-    (0..n)
-        .map(|_| {
-            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
-            scale * ((state >> 8) as f32 / (1u32 << 24) as f32 * 2.0 - 1.0)
-        })
-        .collect()
-}
 
 struct Case {
     rows: usize,
@@ -60,15 +49,33 @@ impl Case {
     fn control_shape(&self) -> TensorShape {
         TensorShape::new(self.channels, self.grid)
     }
+
+    /// The control points of element `e`'s channel.
+    fn channel_control(&self, e: usize) -> &[f32] {
+        let channel = e % self.channels;
+        &self.control[channel * self.grid..(channel + 1) * self.grid]
+    }
+
+    /// `x` and the control points on the device.
+    fn upload(&self, backend: &WgpuBackend) -> (GpuTensor<f32>, GpuTensor<f32>) {
+        let resources = backend.resources();
+        let x = resources.upload_tensor("x", self.shape(), &self.x).unwrap();
+        let control = resources
+            .upload_tensor("control", self.control_shape(), &self.control)
+            .unwrap();
+        (x, control)
+    }
+}
+
+/// Bit patterns, for results that must repeat exactly.
+fn bits(values: &[f32]) -> Vec<u32> {
+    values.iter().map(|v| v.to_bits()).collect()
 }
 
 /// The device forward of `case`.
 fn forward(backend: &WgpuBackend, case: &Case) -> Vec<f32> {
     let resources = backend.resources();
-    let x = resources.upload_tensor("x", case.shape(), &case.x).unwrap();
-    let control = resources
-        .upload_tensor("control", case.control_shape(), &case.control)
-        .unwrap();
+    let (x, control) = case.upload(backend);
     let output = resources.zeroed_tensor("y", case.shape()).unwrap();
     let op = backend
         .operations()
@@ -95,10 +102,7 @@ fn pullback(
     repeats: usize,
 ) -> (Vec<f32>, Vec<f32>) {
     let resources = backend.resources();
-    let x = resources.upload_tensor("x", case.shape(), &case.x).unwrap();
-    let control = resources
-        .upload_tensor("control", case.control_shape(), &case.control)
-        .unwrap();
+    let (x, control) = case.upload(backend);
     let grad_y = resources
         .upload_tensor("grad_y", case.shape(), &case.grad_y)
         .unwrap();
@@ -148,8 +152,7 @@ fn the_forward_matches_the_reference() {
         let case = Case::new(333, 5, grid);
         let actual = forward(backend, &case);
         for (e, (&got, &raw)) in actual.iter().zip(&case.x).enumerate() {
-            let channel = e % case.channels;
-            let control = &case.control[channel * grid..(channel + 1) * grid];
+            let control = case.channel_control(e);
             let want = cr(control, grid, raw);
             let bound = cr_forward_bound(control, grid, raw);
             assert!(
@@ -176,8 +179,7 @@ fn the_pullback_matches_the_reference_and_is_deterministic() {
         for chunk_rows in [64, 7] {
             let (grad_x, grad_control) = pullback(backend, &case, chunk_rows, 1);
             for (e, (&got, &reference)) in grad_x.iter().zip(&want.grad_x).enumerate() {
-                let channel = e % case.channels;
-                let control = &case.control[channel * grid..(channel + 1) * grid];
+                let control = case.channel_control(e);
                 let bound = cr_input_gradient_bound(control, grid, case.x[e], case.grad_y[e]);
                 assert!(
                     f64::from((got - reference).abs()) <= bound,
@@ -202,17 +204,8 @@ fn the_pullback_matches_the_reference_and_is_deterministic() {
                 );
             }
             let (again_x, again_control) = pullback(backend, &case, chunk_rows, 2);
-            assert_eq!(
-                again_x.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
-                grad_x.iter().map(|v| v.to_bits()).collect::<Vec<_>>()
-            );
-            assert_eq!(
-                again_control
-                    .iter()
-                    .map(|v| v.to_bits())
-                    .collect::<Vec<_>>(),
-                grad_control.iter().map(|v| v.to_bits()).collect::<Vec<_>>()
-            );
+            assert_eq!(bits(&again_x), bits(&grad_x));
+            assert_eq!(bits(&again_control), bits(&grad_control));
         }
     }
 }

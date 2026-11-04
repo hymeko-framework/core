@@ -102,97 +102,39 @@ pub enum LayoutId {
 }
 
 impl LayoutId {
-    fn label(self) -> &'static str {
+    /// The layout's debug label: its variant name.
+    fn label(self) -> String {
+        format!("{self:?}.layout")
+    }
+
+    /// The storage buffers this layout binds: the read-only ones first, then the read-write ones,
+    /// each at the next binding. The params uniform follows them.
+    const fn storage(self) -> (u32, u32) {
         match self {
-            Self::Spmm => "spmm.layout",
-            Self::ActivationOutOfPlace => "activation.layout",
-            Self::ActivationInPlace => "activation.layout.in_place",
-            Self::Hsikan => "hsikan.layout",
-            Self::RotorAttention => "rotor_attention.layout",
-            Self::StarRotorSpike => "star_rotor_spike.layout",
-            Self::Fill => "fill.layout",
-            Self::ScatterMeanCsr => "scatter_mean_csr.layout",
-            Self::HighwayIdentity => "highway_identity.layout",
-            Self::CatmullRomForward => "catmull_rom_forward.layout",
-            Self::CatmullRomPullback => "catmull_rom_pullback.layout",
-            Self::CatmullRomReduce => "catmull_rom_reduce.layout",
+            Self::Spmm | Self::ScatterMeanCsr => (4, 1),
+            Self::ActivationOutOfPlace | Self::CatmullRomReduce => (1, 1),
+            Self::ActivationInPlace | Self::Fill => (0, 1),
+            Self::Hsikan => (7, 1),
+            Self::RotorAttention => (6, 1),
+            Self::StarRotorSpike | Self::HighwayIdentity => (3, 1),
+            Self::CatmullRomForward => (2, 1),
+            Self::CatmullRomPullback => (3, 2),
         }
     }
 
+    /// Storage buffers a dispatch of this layout binds, checked against the device's limit.
+    pub(crate) const fn storage_buffers(self) -> u32 {
+        let (read, write) = self.storage();
+        read + write
+    }
+
     fn entries(self) -> Vec<wgpu::BindGroupLayoutEntry> {
-        match self {
-            Self::Spmm => vec![
-                storage_entry(0, true),
-                storage_entry(1, true),
-                storage_entry(2, true),
-                storage_entry(3, true),
-                storage_entry(4, false),
-                uniform_entry(5),
-            ],
-            Self::ActivationOutOfPlace => vec![
-                storage_entry(0, true),
-                storage_entry(1, false),
-                uniform_entry(2),
-            ],
-            Self::ActivationInPlace | Self::Fill => {
-                vec![storage_entry(0, false), uniform_entry(1)]
-            }
-            Self::Hsikan => vec![
-                storage_entry(0, true),
-                storage_entry(1, true),
-                storage_entry(2, true),
-                storage_entry(3, true),
-                storage_entry(4, true),
-                storage_entry(5, true),
-                storage_entry(6, true),
-                storage_entry(7, false),
-                uniform_entry(8),
-            ],
-            Self::RotorAttention => vec![
-                storage_entry(0, true),
-                storage_entry(1, true),
-                storage_entry(2, true),
-                storage_entry(3, true),
-                storage_entry(4, true),
-                storage_entry(5, true),
-                storage_entry(6, false),
-                uniform_entry(7),
-            ],
-            Self::StarRotorSpike | Self::HighwayIdentity => vec![
-                storage_entry(0, true),
-                storage_entry(1, true),
-                storage_entry(2, true),
-                storage_entry(3, false),
-                uniform_entry(4),
-            ],
-            Self::ScatterMeanCsr => vec![
-                storage_entry(0, true),
-                storage_entry(1, true),
-                storage_entry(2, true),
-                storage_entry(3, true),
-                storage_entry(4, false),
-                uniform_entry(5),
-            ],
-            Self::CatmullRomForward => vec![
-                storage_entry(0, true),
-                storage_entry(1, true),
-                storage_entry(2, false),
-                uniform_entry(3),
-            ],
-            Self::CatmullRomPullback => vec![
-                storage_entry(0, true),
-                storage_entry(1, true),
-                storage_entry(2, true),
-                storage_entry(3, false),
-                storage_entry(4, false),
-                uniform_entry(5),
-            ],
-            Self::CatmullRomReduce => vec![
-                storage_entry(0, true),
-                storage_entry(1, false),
-                uniform_entry(2),
-            ],
-        }
+        let (read, _) = self.storage();
+        let uniform = self.storage_buffers();
+        (0..uniform)
+            .map(|binding| storage_entry(binding, binding < read))
+            .chain(std::iter::once(uniform_entry(uniform)))
+            .collect()
     }
 }
 
@@ -313,14 +255,16 @@ impl KernelId {
             Self::SpmmActivation(a)
             | Self::ActivationOutOfPlace(a)
             | Self::ActivationInPlace(a) => a.entry_point(),
-            Self::Fill => "main",
-            Self::Hsikan => "main",
-            Self::GlobalEntropyPool => "main",
-            Self::RotorAttention => "main",
-            Self::StarRotorSpike => "main",
-            Self::ScatterMeanCsr => "main",
-            Self::HighwayIdentity => "main",
-            Self::CatmullRomForward | Self::CatmullRomPullback | Self::CatmullRomReduce => "main",
+            Self::Fill
+            | Self::Hsikan
+            | Self::GlobalEntropyPool
+            | Self::RotorAttention
+            | Self::StarRotorSpike
+            | Self::ScatterMeanCsr
+            | Self::HighwayIdentity
+            | Self::CatmullRomForward
+            | Self::CatmullRomPullback
+            | Self::CatmullRomReduce => "main",
         }
     }
 
@@ -511,7 +455,7 @@ impl PipelineCache {
         }
         let layout = Arc::new(
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some(id.label()),
+                label: Some(&id.label()),
                 entries: &id.entries(),
             }),
         );
@@ -541,7 +485,7 @@ impl PipelineCache {
         }
         let layout = Arc::new(
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some(id.label()),
+                label: Some(&id.label()),
                 bind_group_layouts: &[Some(bind_group_layout)],
                 immediate_size: 0,
             }),

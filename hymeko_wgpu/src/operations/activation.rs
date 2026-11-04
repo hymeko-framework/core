@@ -144,25 +144,23 @@ impl core::fmt::Display for ActivationKind {
     }
 }
 
-/// Uniform parameter block. Mirrors `struct Params` in both activation shaders.
-///
-/// 16 bytes with explicit tail padding, matching the uniform address space's
-/// alignment rule. No `usize` field; `count` arrives through checked
-/// [`try_u32`].
-#[repr(C)]
-#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct ActivationParams {
-    count: u32,
-    alpha: f32,
-    /// Total invocations in the dispatch (`groups * workgroup`).
+uniform_params! {
+    /// Uniform parameter block. Mirrors `struct Params` in both activation shaders.
     ///
-    /// The kernel strides by this, so a grid smaller than `count` still covers
-    /// every element. See the `groups` computation in `prepare`.
-    stride: u32,
-    _pad1: u32,
+    /// 16 bytes with explicit tail padding, matching the uniform address space's
+    /// alignment rule. No `usize` field; `count` arrives through checked
+    /// [`try_u32`].
+    ActivationParams(16) {
+        count: u32,
+        alpha: f32,
+        /// Total invocations in the dispatch (`groups * workgroup`).
+        ///
+        /// The kernel strides by this, so a grid smaller than `count` still covers
+        /// every element. See the `groups` computation in `prepare`.
+        stride: u32,
+        _pad1: u32,
+    }
 }
-
-const _: () = assert!(std::mem::size_of::<ActivationParams>() == 16);
 
 /// Builds and validates a [`PreparedActivation`].
 pub struct ActivationBuilder<'a, S: EncodeScope = Untracked> {

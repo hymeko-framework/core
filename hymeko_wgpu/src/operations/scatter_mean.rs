@@ -35,13 +35,9 @@
 //! atomic and no nondeterministic accumulation order. See `shaders/scatter_mean_csr.wgsl` for why
 //! the atomics-based push alternative is rejected rather than merely unused.
 
-use std::sync::Arc;
-
-use hymeko_tensor::compute::{BackendKind, ComputeError, TensorShape, try_u32};
+use hymeko_tensor::compute::{ComputeError, TensorShape, try_u32};
 
 use super::OperandCheck;
-use super::OperationFactory;
-use crate::operations::dispatch::PreparedDispatch;
 use crate::pipeline::KernelId;
 use crate::{GpuCsrMatrix, GpuTensor};
 
@@ -51,84 +47,36 @@ pub const SCATTER_MEAN_CSR_SHADER: &str = include_str!("../../shaders/scatter_me
 /// Default one-dimensional workgroup for the scatter gather.
 pub const DEFAULT_SCATTER_MEAN_WORKGROUP: u32 = 128;
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct ScatterMeanParams {
-    n_nodes: u32,
-    n_edges: u32,
-    hidden: u32,
-    nnz: u32,
-    count: u32,
-    stride: u32,
+uniform_params! {
+    ScatterMeanParams(24) {
+        n_nodes: u32,
+        n_edges: u32,
+        hidden: u32,
+        nnz: u32,
+        count: u32,
+        stride: u32,
+    }
 }
 
-const _: () = assert!(std::mem::size_of::<ScatterMeanParams>() == 24);
-
 /// Builds one validated edge-to-node mean scatter dispatch.
-pub struct ScatterMeanBuilder<'a> {
-    factory: OperationFactory<'a>,
-    incidence: Option<&'a GpuCsrMatrix<f32>>,
-    counts: Option<&'a GpuTensor<f32>>,
-    edge_state: Option<&'a GpuTensor<f32>>,
-    node_state: Option<&'a GpuTensor<f32>>,
-    workgroup: u32,
-    label: Option<String>,
+pub struct ScatterMeanBuilder<'a>(ScatterMeanFields<'a>);
+
+operation_builder! {
+    ScatterMeanBuilder(ScatterMeanFields, "scatter_mean") {
+        /// The inverse incidence, as a CSR the canonical owner already validated.
+        ///
+        /// `rows = n_nodes`, `cols = n_edges`, `col_ind` = the incident hyperedge. Its `values`
+        /// buffer is not consumed by this unweighted mean; see the module documentation.
+        incidence: GpuCsrMatrix<f32>,
+        /// The host owner's per-node incidence count. Not recomputed on device.
+        counts: GpuTensor<f32>,
+        edge_state: GpuTensor<f32>,
+        node_state: GpuTensor<f32>,
+    }
+    workgroup: DEFAULT_SCATTER_MEAN_WORKGROUP;
 }
 
 impl<'a> ScatterMeanBuilder<'a> {
-    pub(crate) fn new(factory: OperationFactory<'a>) -> Self {
-        Self {
-            factory,
-            incidence: None,
-            counts: None,
-            edge_state: None,
-            node_state: None,
-            workgroup: DEFAULT_SCATTER_MEAN_WORKGROUP,
-            label: None,
-        }
-    }
-
-    /// The inverse incidence, as a CSR the canonical owner already validated.
-    ///
-    /// `rows = n_nodes`, `cols = n_edges`, `col_ind` = the incident hyperedge. Its `values` buffer
-    /// is not consumed by this unweighted mean; see the module documentation.
-    #[must_use]
-    pub fn incidence(mut self, incidence: &'a GpuCsrMatrix<f32>) -> Self {
-        self.incidence = Some(incidence);
-        self
-    }
-
-    /// The host owner's per-node incidence count. Not recomputed on device.
-    #[must_use]
-    pub fn counts(mut self, counts: &'a GpuTensor<f32>) -> Self {
-        self.counts = Some(counts);
-        self
-    }
-
-    #[must_use]
-    pub fn edge_state(mut self, state: &'a GpuTensor<f32>) -> Self {
-        self.edge_state = Some(state);
-        self
-    }
-
-    #[must_use]
-    pub fn node_state(mut self, state: &'a GpuTensor<f32>) -> Self {
-        self.node_state = Some(state);
-        self
-    }
-
-    #[must_use]
-    pub fn workgroup(mut self, workgroup: u32) -> Self {
-        self.workgroup = workgroup;
-        self
-    }
-
-    #[must_use]
-    pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.label = Some(label.into());
-        self
-    }
-
     /// Validate every operand and prepare a repeatedly encodable dispatch.
     ///
     /// # Errors
@@ -136,10 +84,7 @@ impl<'a> ScatterMeanBuilder<'a> {
     /// others describe; [`ComputeError::IndexOverflow`] for a count that does not fit `u32`;
     /// [`ComputeError::Backend`] for a device that cannot satisfy the layout or workgroup.
     pub fn prepare(self) -> Result<PreparedScatterMean<'a>, ComputeError> {
-        let incidence = OperandCheck("scatter_mean incidence").supplied(self.incidence)?;
-        let counts = OperandCheck("scatter_mean counts").supplied(self.counts)?;
-        let edge_state = OperandCheck("scatter_mean edge state").supplied(self.edge_state)?;
-        let node_state = OperandCheck("scatter_mean node state").supplied(self.node_state)?;
+        let (incidence, counts, edge_state, node_state) = self.operands()?;
 
         let n_nodes = node_state.shape().rows;
         let hidden = node_state.shape().cols;
@@ -147,12 +92,8 @@ impl<'a> ScatterMeanBuilder<'a> {
         if n_nodes == 0 || hidden == 0 {
             return OperandCheck("scatter_mean node state must be non-empty").mismatch(1, 0);
         }
-        if edge_state.shape() != TensorShape::new(n_edges, hidden) {
-            return OperandCheck("scatter_mean edge state shape").mismatch(
-                n_edges.saturating_mul(hidden),
-                edge_state.shape().checked_elements().unwrap_or(usize::MAX),
-            );
-        }
+        OperandCheck("scatter_mean edge state shape")
+            .shape(edge_state, TensorShape::new(n_edges, hidden))?;
         // The CSR's own structural properties were proved by `upload_csr`; what remains is that this
         // CSR describes THIS pooling — its rows are the nodes being written and its columns are the
         // edges being read.
@@ -163,140 +104,48 @@ impl<'a> ScatterMeanBuilder<'a> {
         if csr.cols != n_edges {
             return OperandCheck("scatter_mean incidence columns").mismatch(n_edges, csr.cols);
         }
-        let counts_len = counts
-            .shape()
-            .checked_elements()
-            .ok_or(ComputeError::IndexOverflow {
-                what: "scatter_mean count length",
-                value: usize::MAX,
-            })?;
+        let (counts_len, _) = OperandCheck("scatter_mean count length").elements(counts)?;
         if counts_len != n_nodes {
             return OperandCheck("scatter_mean counts length").mismatch(n_nodes, counts_len);
         }
-        if self.factory.limits.max_storage_buffers_per_stage < 5 {
-            return Err(ComputeError::Backend {
-                backend: BackendKind::Wgpu,
-                message: format!(
-                    "scatter_mean requires 5 storage buffers, device exposes {}",
-                    self.factory.limits.max_storage_buffers_per_stage
-                ),
-            });
-        }
-        if self.workgroup == 0 || self.workgroup > self.factory.limits.max_invocations_per_workgroup
-        {
-            return Err(ComputeError::Backend {
-                backend: BackendKind::Wgpu,
-                message: format!(
-                    "scatter_mean workgroup {} outside 1..={}",
-                    self.workgroup, self.factory.limits.max_invocations_per_workgroup
-                ),
-            });
-        }
-
-        let elements =
-            node_state
-                .shape()
-                .checked_elements()
-                .ok_or(ComputeError::IndexOverflow {
-                    what: "scatter_mean output element count",
-                    value: usize::MAX,
-                })?;
-        let count = try_u32("scatter_mean output element count", elements)?;
-        let ideal_groups = count.div_ceil(self.workgroup);
-        let groups = ideal_groups.min(self.factory.limits.max_workgroups_per_dimension);
-        let stride = groups
-            .checked_mul(self.workgroup)
-            .ok_or(ComputeError::IndexOverflow {
-                what: "scatter_mean dispatch stride",
-                value: groups as usize,
-            })?;
-        let params = ScatterMeanParams {
-            n_nodes: try_u32("scatter_mean node count", n_nodes)?,
-            n_edges: try_u32("scatter_mean edge count", n_edges)?,
-            hidden: try_u32("scatter_mean hidden", hidden)?,
-            nnz: try_u32("scatter_mean incidence count", csr.nnz)?,
-            count,
-            stride,
-        };
-
         let kernel = KernelId::ScatterMeanCsr;
-        let bundle = self
-            .factory
-            .cache
-            .bundle(self.factory.device, kernel, self.workgroup, 1)?;
-        let params_buffer = self.factory.uniform("scatter_mean_csr.params", &params);
-        let bind_group = self
-            .factory
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("scatter_mean_csr.bind_group"),
-                layout: bundle.bind_group_layout(),
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: incidence.row_ptr().as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: incidence.col_ind().as_entire_binding(),
-                    },
-                    counts.binding(2),
-                    edge_state.binding(3),
-                    node_state.binding(4),
-                    wgpu::BindGroupEntry {
-                        binding: 5,
-                        resource: params_buffer.as_entire_binding(),
-                    },
-                ],
-            });
-        Ok(PreparedScatterMean {
-            _operands: core::marker::PhantomData,
-            dispatch: PreparedDispatch::new(
-                Arc::clone(bundle.pipeline()),
-                bind_group,
-                params_buffer,
-                [groups, 1, 1],
-                count == 0,
-                self.label.unwrap_or_else(|| "scatter_mean_csr".to_owned()),
-            ),
+        let (elements, count) =
+            OperandCheck("scatter_mean output element count").elements(node_state)?;
+        let dispatch = self.0.factory.grid_dispatch(
             kernel,
-            elements,
-        })
+            self.0.workgroup,
+            count,
+            |stride| {
+                Ok(ScatterMeanParams {
+                    n_nodes: try_u32("scatter_mean node count", n_nodes)?,
+                    n_edges: try_u32("scatter_mean edge count", n_edges)?,
+                    hidden: try_u32("scatter_mean hidden", hidden)?,
+                    nnz: try_u32("scatter_mean incidence count", csr.nnz)?,
+                    count,
+                    stride,
+                })
+            },
+            &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: incidence.row_ptr().as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: incidence.col_ind().as_entire_binding(),
+                },
+                counts.binding(2),
+                edge_state.binding(3),
+                node_state.binding(4),
+            ],
+            self.0.label,
+        )?;
+        Ok(PreparedScatterMean::new(dispatch, kernel, elements))
     }
 }
 
 /// A validated, repeatedly dispatchable edge-to-node mean scatter.
 #[derive(Debug)]
-pub struct PreparedScatterMean<'a> {
-    _operands: core::marker::PhantomData<&'a ()>,
-    dispatch: PreparedDispatch,
-    kernel: KernelId,
-    elements: usize,
-}
+pub struct PreparedScatterMean<'a>(super::PreparedOne<'a>);
 
-impl PreparedScatterMean<'_> {
-    /// Record the dispatch without submitting it.
-    ///
-    /// # Errors
-    /// Whatever the underlying dispatch reports; a zero-element operation records nothing.
-    pub fn encode(&self, encoder: &mut wgpu::CommandEncoder) -> Result<(), ComputeError> {
-        self.dispatch.encode_into(encoder, None)
-    }
-
-    /// The kernel this operation dispatches.
-    #[must_use]
-    pub const fn kernel(&self) -> KernelId {
-        self.kernel
-    }
-
-    /// Output element count, `n_nodes * hidden`.
-    #[must_use]
-    pub const fn elements(&self) -> usize {
-        self.elements
-    }
-
-    #[must_use]
-    pub const fn dispatch_groups(&self) -> u32 {
-        self.dispatch.groups()[0]
-    }
-}
+prepared_operation!(PreparedScatterMean);

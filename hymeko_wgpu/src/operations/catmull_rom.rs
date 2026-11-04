@@ -9,12 +9,9 @@
 //! chunks in order: deterministic, with one writer per partial and no float atomics, but in another
 //! order than the CPU's per-segment sums, so parity is under a declared bound, not bit for bit.
 
-use std::sync::Arc;
-
 use hymeko_tensor::compute::{BackendKind, ComputeError, TensorShape, try_u32};
 
 use super::OperandCheck;
-use super::OperationFactory;
 use crate::GpuTensor;
 use crate::operations::dispatch::PreparedDispatch;
 use crate::pipeline::KernelId;
@@ -49,41 +46,37 @@ pub const MAX_CATMULL_ROM_GRID: usize = 32;
 /// Lanes of the reduction's workgroup (`LANES` in `catmull_rom_reduce.wgsl`): one workgroup a slot.
 const REDUCE_LANES: u32 = 128;
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct ForwardParams {
-    count: u32,
-    channels: u32,
-    grid: u32,
-    stride: u32,
+uniform_params! {
+    ForwardParams(16) {
+        count: u32,
+        channels: u32,
+        grid: u32,
+        stride: u32,
+    }
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct PullbackParams {
-    rows: u32,
-    channels: u32,
-    grid: u32,
-    chunk_rows: u32,
-    count: u32,
-    stride: u32,
-    pad: [u32; 2],
+uniform_params! {
+    PullbackParams(32) {
+        rows: u32,
+        channels: u32,
+        grid: u32,
+        chunk_rows: u32,
+        count: u32,
+        stride: u32,
+        pad: [u32; 2],
+    }
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct ReduceParams {
-    channels: u32,
-    grid: u32,
-    chunks: u32,
-    count: u32,
-    stride: u32,
-    pad: [u32; 3],
+uniform_params! {
+    ReduceParams(32) {
+        channels: u32,
+        grid: u32,
+        chunks: u32,
+        count: u32,
+        stride: u32,
+        pad: [u32; 3],
+    }
 }
-
-const _: () = assert!(std::mem::size_of::<ForwardParams>() == 16);
-const _: () = assert!(std::mem::size_of::<PullbackParams>() == 32);
-const _: () = assert!(std::mem::size_of::<ReduceParams>() == 32);
 
 /// The shape every membership pass validates: `x [rows, channels]`, control points
 /// `[channels, grid]`.
@@ -142,14 +135,7 @@ impl MembershipShape {
         tensor: &GpuTensor<f32>,
         shape: TensorShape,
     ) -> Result<(), ComputeError> {
-        if tensor.shape() == shape {
-            Ok(())
-        } else {
-            OperandCheck(operand).mismatch(
-                shape.checked_elements().unwrap_or(usize::MAX),
-                tensor.shape().checked_elements().unwrap_or(usize::MAX),
-            )
-        }
+        OperandCheck(operand).shape(tensor, shape)
     }
 
     /// Elements of `x`, `rows · channels`.
@@ -165,132 +151,22 @@ impl MembershipShape {
     }
 }
 
-impl OperationFactory<'_> {
-    /// The workgroup and storage-buffer limits a membership pass needs, checked against the device.
-    fn membership_device(&self, workgroup: u32, storage: u32) -> Result<(), ComputeError> {
-        if self.limits.max_storage_buffers_per_stage < storage {
-            return Err(ComputeError::Backend {
-                backend: BackendKind::Wgpu,
-                message: format!(
-                    "catmull_rom requires {storage} storage buffers, device exposes {}",
-                    self.limits.max_storage_buffers_per_stage
-                ),
-            });
-        }
-        if workgroup == 0 || workgroup > self.limits.max_invocations_per_workgroup {
-            return Err(ComputeError::Backend {
-                backend: BackendKind::Wgpu,
-                message: format!(
-                    "catmull_rom workgroup {workgroup} outside 1..={}",
-                    self.limits.max_invocations_per_workgroup
-                ),
-            });
-        }
-        Ok(())
-    }
-
-    /// The groups and the grid stride covering `count` invocations at `workgroup`.
-    fn grid_stride(&self, workgroup: u32, count: u32) -> Result<(u32, u32), ComputeError> {
-        let groups = count
-            .div_ceil(workgroup)
-            .min(self.limits.max_workgroups_per_dimension);
-        let stride = groups
-            .checked_mul(workgroup)
-            .ok_or(ComputeError::IndexOverflow {
-                what: "catmull_rom dispatch stride",
-                value: groups as usize,
-            })?;
-        Ok((groups, stride))
-    }
-
-    /// A dispatch of `kernel` over `entries` (the params uniform bound last, at `entries.len()`).
-    fn membership_dispatch<P: bytemuck::Pod>(
-        &self,
-        kernel: KernelId,
-        workgroup: u32,
-        groups: u32,
-        params: &P,
-        entries: &[wgpu::BindGroupEntry<'_>],
-        label: String,
-    ) -> Result<PreparedDispatch, ComputeError> {
-        let bundle = self.cache.bundle(self.device, kernel, workgroup, 1)?;
-        let params_buffer = self.uniform(&format!("{label}.params"), params);
-        let mut bound = entries.to_vec();
-        bound.push(wgpu::BindGroupEntry {
-            binding: entries.len() as u32,
-            resource: params_buffer.as_entire_binding(),
-        });
-        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some(&label),
-            layout: bundle.bind_group_layout(),
-            entries: &bound,
-        });
-        Ok(PreparedDispatch::new(
-            Arc::clone(bundle.pipeline()),
-            bind_group,
-            params_buffer,
-            [groups, 1, 1],
-            groups == 0,
-            label,
-        ))
-    }
-}
-
 /// Builds one validated Catmull-Rom membership forward: `output[e] = S_c(input[e])`.
-pub struct CatmullRomForwardBuilder<'a> {
-    factory: OperationFactory<'a>,
-    input: Option<&'a GpuTensor<f32>>,
-    control: Option<&'a GpuTensor<f32>>,
-    output: Option<&'a GpuTensor<f32>>,
-    workgroup: u32,
-    label: Option<String>,
+pub struct CatmullRomForwardBuilder<'a>(CatmullRomForwardFields<'a>);
+
+operation_builder! {
+    CatmullRomForwardBuilder(CatmullRomForwardFields, "catmull_rom") {
+        /// The membership's input, `[rows, channels]`.
+        input: GpuTensor<f32>,
+        /// Each channel's control points, `[channels, grid]`.
+        control: GpuTensor<f32>,
+        /// The output, the input's shape.
+        output: GpuTensor<f32>,
+    }
+    workgroup: DEFAULT_CATMULL_ROM_WORKGROUP;
 }
 
 impl<'a> CatmullRomForwardBuilder<'a> {
-    pub(crate) fn new(factory: OperationFactory<'a>) -> Self {
-        Self {
-            factory,
-            input: None,
-            control: None,
-            output: None,
-            workgroup: DEFAULT_CATMULL_ROM_WORKGROUP,
-            label: None,
-        }
-    }
-
-    /// The membership's input, `[rows, channels]`.
-    #[must_use]
-    pub fn input(mut self, input: &'a GpuTensor<f32>) -> Self {
-        self.input = Some(input);
-        self
-    }
-
-    /// Each channel's control points, `[channels, grid]`.
-    #[must_use]
-    pub fn control(mut self, control: &'a GpuTensor<f32>) -> Self {
-        self.control = Some(control);
-        self
-    }
-
-    /// The output, the input's shape.
-    #[must_use]
-    pub fn output(mut self, output: &'a GpuTensor<f32>) -> Self {
-        self.output = Some(output);
-        self
-    }
-
-    #[must_use]
-    pub fn workgroup(mut self, workgroup: u32) -> Self {
-        self.workgroup = workgroup;
-        self
-    }
-
-    #[must_use]
-    pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.label = Some(label.into());
-        self
-    }
-
     /// Validate every operand and prepare a repeatedly encodable dispatch.
     ///
     /// # Errors
@@ -299,147 +175,67 @@ impl<'a> CatmullRomForwardBuilder<'a> {
     /// that does not fit `u32`; [`ComputeError::Backend`] for a device that cannot satisfy the
     /// layout or the workgroup.
     pub fn prepare(self) -> Result<PreparedCatmullRomForward<'a>, ComputeError> {
-        let input = OperandCheck("catmull_rom input").supplied(self.input)?;
-        let control = OperandCheck("catmull_rom control").supplied(self.control)?;
-        let output = OperandCheck("catmull_rom output").supplied(self.output)?;
+        let (input, control, output) = self.operands()?;
         let shape = MembershipShape::of(input, control)?;
         shape.require_input_shape("catmull_rom output shape", output)?;
-        self.factory.membership_device(self.workgroup, 3)?;
         let count = shape.elements()?;
-        let (groups, stride) = self.factory.grid_stride(self.workgroup, count)?;
-        let params = ForwardParams {
-            count,
-            channels: try_u32("catmull_rom channels", shape.channels)?,
-            grid: try_u32("catmull_rom grid", shape.grid)?,
-            stride,
-        };
-        let dispatch = self.factory.membership_dispatch(
+        let dispatch = self.0.factory.grid_dispatch(
             KernelId::CatmullRomForward,
-            self.workgroup,
-            groups,
-            &params,
+            self.0.workgroup,
+            count,
+            |stride| {
+                Ok(ForwardParams {
+                    count,
+                    channels: try_u32("catmull_rom channels", shape.channels)?,
+                    grid: try_u32("catmull_rom grid", shape.grid)?,
+                    stride,
+                })
+            },
             &[input.binding(0), control.binding(1), output.binding(2)],
-            self.label
-                .unwrap_or_else(|| "catmull_rom_forward".to_owned()),
+            self.0.label,
         )?;
-        Ok(PreparedCatmullRomForward {
-            _operands: core::marker::PhantomData,
+        Ok(PreparedCatmullRomForward::new(
             dispatch,
-            elements: count as usize,
-        })
+            KernelId::CatmullRomForward,
+            count as usize,
+        ))
     }
 }
 
 /// A validated, repeatedly dispatchable Catmull-Rom membership forward.
 #[derive(Debug)]
-pub struct PreparedCatmullRomForward<'a> {
-    _operands: core::marker::PhantomData<&'a ()>,
-    dispatch: PreparedDispatch,
-    elements: usize,
-}
+pub struct PreparedCatmullRomForward<'a>(super::PreparedOne<'a>);
 
-impl PreparedCatmullRomForward<'_> {
-    /// Record the dispatch without submitting it.
-    ///
-    /// # Errors
-    /// Whatever the underlying dispatch reports.
-    pub fn encode(&self, encoder: &mut wgpu::CommandEncoder) -> Result<(), ComputeError> {
-        self.dispatch.encode_into(encoder, None)
+prepared_operation!(PreparedCatmullRomForward);
+
+/// Builds one validated Catmull-Rom membership pullback: the input gradient and the
+/// control-point gradient under the output's cotangent.
+pub struct CatmullRomPullbackBuilder<'a>(CatmullRomPullbackFields<'a>);
+
+operation_builder! {
+    CatmullRomPullbackBuilder(CatmullRomPullbackFields, "catmull_rom") {
+        /// The forward's input, `[rows, channels]`.
+        input: GpuTensor<f32>,
+        /// Each channel's control points, `[channels, grid]`.
+        control: GpuTensor<f32>,
+        /// The output's cotangent, the input's shape.
+        grad_output: GpuTensor<f32>,
+        /// The input gradient, the input's shape; every element is written.
+        grad_input: GpuTensor<f32>,
+        /// The control-point gradient, `[channels, grid]`; every element is written.
+        grad_control: GpuTensor<f32>,
     }
-
-    /// The kernel this operation dispatches.
-    #[must_use]
-    pub const fn kernel(&self) -> KernelId {
-        KernelId::CatmullRomForward
+    settings {
+        chunk_rows: u32 = DEFAULT_CATMULL_ROM_CHUNK_ROWS,
     }
-
-    /// Output element count, `rows · channels`.
-    #[must_use]
-    pub const fn elements(&self) -> usize {
-        self.elements
-    }
-}
-
-/// Builds one validated Catmull-Rom membership pullback: the input gradient and the control-point
-/// gradient under the output's cotangent.
-pub struct CatmullRomPullbackBuilder<'a> {
-    factory: OperationFactory<'a>,
-    input: Option<&'a GpuTensor<f32>>,
-    control: Option<&'a GpuTensor<f32>>,
-    grad_output: Option<&'a GpuTensor<f32>>,
-    grad_input: Option<&'a GpuTensor<f32>>,
-    grad_control: Option<&'a GpuTensor<f32>>,
-    workgroup: u32,
-    chunk_rows: u32,
-    label: Option<String>,
+    workgroup: DEFAULT_CATMULL_ROM_WORKGROUP;
 }
 
 impl<'a> CatmullRomPullbackBuilder<'a> {
-    pub(crate) fn new(factory: OperationFactory<'a>) -> Self {
-        Self {
-            factory,
-            input: None,
-            control: None,
-            grad_output: None,
-            grad_input: None,
-            grad_control: None,
-            workgroup: DEFAULT_CATMULL_ROM_WORKGROUP,
-            chunk_rows: DEFAULT_CATMULL_ROM_CHUNK_ROWS,
-            label: None,
-        }
-    }
-
-    /// The forward's input, `[rows, channels]`.
-    #[must_use]
-    pub fn input(mut self, input: &'a GpuTensor<f32>) -> Self {
-        self.input = Some(input);
-        self
-    }
-
-    /// Each channel's control points, `[channels, grid]`.
-    #[must_use]
-    pub fn control(mut self, control: &'a GpuTensor<f32>) -> Self {
-        self.control = Some(control);
-        self
-    }
-
-    /// The output's cotangent, the input's shape.
-    #[must_use]
-    pub fn grad_output(mut self, grad_output: &'a GpuTensor<f32>) -> Self {
-        self.grad_output = Some(grad_output);
-        self
-    }
-
-    /// The input gradient, the input's shape; every element is written.
-    #[must_use]
-    pub fn grad_input(mut self, grad_input: &'a GpuTensor<f32>) -> Self {
-        self.grad_input = Some(grad_input);
-        self
-    }
-
-    /// The control-point gradient, `[channels, grid]`; every element is written.
-    #[must_use]
-    pub fn grad_control(mut self, grad_control: &'a GpuTensor<f32>) -> Self {
-        self.grad_control = Some(grad_control);
-        self
-    }
-
-    #[must_use]
-    pub fn workgroup(mut self, workgroup: u32) -> Self {
-        self.workgroup = workgroup;
-        self
-    }
-
     /// Rows each pullback invocation sums for one channel; at least one.
     #[must_use]
     pub fn chunk_rows(mut self, chunk_rows: u32) -> Self {
-        self.chunk_rows = chunk_rows;
-        self
-    }
-
-    #[must_use]
-    pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.label = Some(label.into());
+        self.0.chunk_rows = chunk_rows;
         self
     }
 
@@ -450,11 +246,7 @@ impl<'a> CatmullRomPullbackBuilder<'a> {
     /// As [`CatmullRomForwardBuilder::prepare`], and [`ComputeError::ShapeMismatch`] for a chunk of
     /// zero rows.
     pub fn prepare(self) -> Result<PreparedCatmullRomPullback<'a>, ComputeError> {
-        let input = OperandCheck("catmull_rom input").supplied(self.input)?;
-        let control = OperandCheck("catmull_rom control").supplied(self.control)?;
-        let grad_output = OperandCheck("catmull_rom grad_output").supplied(self.grad_output)?;
-        let grad_input = OperandCheck("catmull_rom grad_input").supplied(self.grad_input)?;
-        let grad_control = OperandCheck("catmull_rom grad_control").supplied(self.grad_control)?;
+        let (input, control, grad_output, grad_input, grad_control) = self.operands()?;
         let shape = MembershipShape::of(input, control)?;
         shape.require_input_shape("catmull_rom grad_output shape", grad_output)?;
         shape.require_input_shape("catmull_rom grad_input shape", grad_input)?;
@@ -463,15 +255,17 @@ impl<'a> CatmullRomPullbackBuilder<'a> {
             grad_control,
             control.shape(),
         )?;
-        if self.chunk_rows == 0 {
+        if self.0.chunk_rows == 0 {
             return OperandCheck("catmull_rom chunk rows").mismatch(1, 0);
         }
-        self.factory.membership_device(self.workgroup, 5)?;
+        self.0
+            .factory
+            .require_device(KernelId::CatmullRomPullback, self.0.workgroup)?;
 
         let rows = try_u32("catmull_rom rows", shape.rows)?;
         let channels = try_u32("catmull_rom channels", shape.channels)?;
         let grid = try_u32("catmull_rom grid", shape.grid)?;
-        let chunks = rows.div_ceil(self.chunk_rows);
+        let chunks = rows.div_ceil(self.0.chunk_rows);
         let units = chunks
             .checked_mul(channels)
             .ok_or(ComputeError::IndexOverflow {
@@ -479,24 +273,28 @@ impl<'a> CatmullRomPullbackBuilder<'a> {
                 value: usize::MAX,
             })?;
         let slots = channels * grid;
-        let partials = self.factory.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("catmull_rom.partials"),
-            size: u64::from(units) * u64::from(grid) * 4,
-            usage: wgpu::BufferUsages::STORAGE,
-            mapped_at_creation: false,
-        });
-        let label = self.label.unwrap_or_else(|| "catmull_rom".to_owned());
+        let partials = self
+            .0
+            .factory
+            .device
+            .create_buffer(&wgpu::BufferDescriptor {
+                label: Some("catmull_rom.partials"),
+                size: u64::from(units) * u64::from(grid) * 4,
+                usage: wgpu::BufferUsages::STORAGE,
+                mapped_at_creation: false,
+            });
+        let label = self.0.label.unwrap_or_else(|| "catmull_rom".to_owned());
 
-        let (groups, stride) = self.factory.grid_stride(self.workgroup, units)?;
-        let pullback = self.factory.membership_dispatch(
+        let (groups, stride) = self.0.factory.grid_stride(self.0.workgroup, units)?;
+        let pullback = self.0.factory.dispatch(
             KernelId::CatmullRomPullback,
-            self.workgroup,
+            self.0.workgroup,
             groups,
             &PullbackParams {
                 rows,
                 channels,
                 grid,
-                chunk_rows: self.chunk_rows,
+                chunk_rows: self.0.chunk_rows,
                 count: units,
                 stride,
                 pad: [0; 2],
@@ -514,19 +312,19 @@ impl<'a> CatmullRomPullbackBuilder<'a> {
             format!("{label}.pullback"),
         )?;
         // One workgroup a slot, its stride counted in workgroups.
-        let groups = slots.min(self.factory.limits.max_workgroups_per_dimension);
+        let groups = slots.min(self.0.factory.limits.max_workgroups_per_dimension);
         let stride = groups;
-        if self.factory.limits.max_invocations_per_workgroup < REDUCE_LANES {
+        if self.0.factory.limits.max_invocations_per_workgroup < REDUCE_LANES {
             return Err(ComputeError::Backend {
                 backend: BackendKind::Wgpu,
                 message: format!(
                     "catmull_rom reduction needs {REDUCE_LANES} invocations a workgroup, device \
                      exposes {}",
-                    self.factory.limits.max_invocations_per_workgroup
+                    self.0.factory.limits.max_invocations_per_workgroup
                 ),
             });
         }
-        let reduce = self.factory.membership_dispatch(
+        let reduce = self.0.factory.dispatch(
             KernelId::CatmullRomReduce,
             REDUCE_LANES,
             groups,

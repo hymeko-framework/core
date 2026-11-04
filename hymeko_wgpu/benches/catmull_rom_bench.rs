@@ -21,7 +21,8 @@ use std::time::Duration;
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 
 use hymeko_tensor::compute::TensorShape;
-use hymeko_wgpu::{ComputeError, WgpuBackend};
+use hymeko_wgpu::WgpuBackend;
+use hymeko_wgpu::testing::{bench_backend, field};
 
 const GRID: usize = 6;
 const SHAPES: [(&str, usize, usize); 3] = [
@@ -30,36 +31,15 @@ const SHAPES: [(&str, usize, usize); 3] = [
     ("cifar_level_65536x32", 65_536, 32),
 ];
 
-fn backend() -> Option<WgpuBackend> {
-    match WgpuBackend::builder()
-        .label("hymeko-catmull-rom-bench")
-        .build()
-    {
-        Ok(b) => {
-            eprintln!("GPU: {}", b.capabilities().summary());
-            Some(b)
-        }
-        Err(ComputeError::BackendUnavailable { reason, .. }) => {
-            eprintln!("GPU cells SKIPPED - no adapter: {reason}");
-            None
-        }
-        Err(e) => panic!("backend init failed: {e}"),
-    }
-}
-
-/// `n` values across `[-scale, scale]`, a fixed sequence of `seed`.
-fn field(n: usize, seed: u32, scale: f32) -> Vec<f32> {
-    let mut state = seed.wrapping_mul(2_654_435_761).wrapping_add(1);
-    (0..n)
-        .map(|_| {
-            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
-            scale * ((state >> 8) as f32 / (1u32 << 24) as f32 * 2.0 - 1.0)
-        })
-        .collect()
+/// Encode with `encode`, submit and wait: one resident cell iteration.
+fn submit_wait(backend: &WgpuBackend, label: &str, encode: impl FnOnce(&mut wgpu::CommandEncoder)) {
+    let mut encoder = backend.encoder(Some(label));
+    encode(&mut encoder);
+    backend.wait(backend.submit(encoder)).unwrap();
 }
 
 fn catmull_rom(c: &mut Criterion) {
-    let Some(backend) = backend() else {
+    let Some(backend) = bench_backend("hymeko-catmull-rom-bench") else {
         return;
     };
     let mut group = c.benchmark_group("catmull_rom");
@@ -90,11 +70,7 @@ fn catmull_rom(c: &mut Criterion) {
             .prepare()
             .unwrap();
         group.bench_function(BenchmarkId::new("resident_forward", name), |b| {
-            b.iter(|| {
-                let mut encoder = backend.encoder(Some("bench-forward"));
-                forward.encode(&mut encoder).unwrap();
-                backend.wait(backend.submit(encoder)).unwrap();
-            });
+            b.iter(|| submit_wait(&backend, "bench-forward", |e| forward.encode(e).unwrap()));
         });
         for chunk_rows in [16, 32, 64, 128] {
             let pullback = backend
@@ -110,11 +86,7 @@ fn catmull_rom(c: &mut Criterion) {
                 .unwrap();
             let id = format!("resident_pullback_chunk{chunk_rows}");
             group.bench_function(BenchmarkId::new(id, name), |b| {
-                b.iter(|| {
-                    let mut encoder = backend.encoder(Some("bench-pullback"));
-                    pullback.encode(&mut encoder).unwrap();
-                    backend.wait(backend.submit(encoder)).unwrap();
-                });
+                b.iter(|| submit_wait(&backend, "bench-pullback", |e| pullback.encode(e).unwrap()));
             });
         }
         group.bench_function(BenchmarkId::new("roundtrip_forward", name), |b| {
@@ -129,9 +101,7 @@ fn catmull_rom(c: &mut Criterion) {
                     .output(&y_device)
                     .prepare()
                     .unwrap();
-                let mut encoder = backend.encoder(Some("bench-roundtrip"));
-                op.encode(&mut encoder).unwrap();
-                backend.wait(backend.submit(encoder)).unwrap();
+                submit_wait(&backend, "bench-roundtrip", |e| op.encode(e).unwrap());
                 black_box(backend.read_tensor(&y_device).unwrap())
             });
         });
