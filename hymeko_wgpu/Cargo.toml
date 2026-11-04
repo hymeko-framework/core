@@ -3,7 +3,7 @@ name = "hymeko_wgpu"
 version = "0.1.0"
 edition = "2024"
 description = "WGPU compute backend for the HyMeKo tensor / hypergraph kernels"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 
 [lib]
 name = "hymeko_wgpu"
