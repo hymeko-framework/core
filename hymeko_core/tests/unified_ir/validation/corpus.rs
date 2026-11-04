@@ -181,8 +181,13 @@ fn corpus_digest(include_course_regressions: bool) -> (usize, String) {
 // already isolated this exact f9ab7da8... -> 8938b37b... change before integration.
 // Previous revision: 2026-09-04 WebXR owner relocation, 105 -> 102 fixtures,
 // digest f9ab7da8b5d823fa9d55c28e78fd63bc37660a97f67852ad587a145f951cb3b5.
+// Fixture-set revision 2026-10-26: approved mount, hydraulic_muscle and braided_sleeve
+// concepts in robotics/meta_kinematics.hymeko. A controlled MemProvider substitution
+// of that file's c578a1d contents reproduces both preceding known answers, with the
+// same compiler and unchanged 102/103 fixture counts; only the model input changed.
+// Previous 102-file digest: 8938b37b221ba015f1a52f318f8b9d9ac9aab65777ee07026916bf2b1d13dd12.
 const KAT_CORPUS_COUNT: usize = 102;
-const KAT_CORPUS_DIGEST: &str = "8938b37b221ba015f1a52f318f8b9d9ac9aab65777ee07026916bf2b1d13dd12";
+const KAT_CORPUS_DIGEST: &str = "889f44301588df78df9c2465a99194a48e3e268ded36e598b38bba0f868fd557";
 
 #[test]
 fn print_corpus_digest_for_capture() {
@@ -231,9 +236,11 @@ fn v1_corpus_digest_is_unchanged() {
 fn course_transitive_imports_extend_the_frozen_corpus() {
     let (count, digest) = corpus_digest(true);
     assert_eq!(count, 103);
+    // Same 2026-10-26 fixture revision; prior value was
+    // 9fc05f39100d67ea259655b4f53630caf93d542827f27cbfc3e9e57ab114b3b6.
     assert_eq!(
         digest,
-        "9fc05f39100d67ea259655b4f53630caf93d542827f27cbfc3e9e57ab114b3b6"
+        "aafc307d008b19956d29072af00c38177f04909a458a8d03ce59037076fdfac8"
     );
 }
 fn assert_decl_accessors(ir: &hymeko::ir::ir::Ir, d: DeclId) {

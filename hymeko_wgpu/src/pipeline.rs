@@ -93,78 +93,48 @@ pub enum LayoutId {
     ScatterMeanCsr,
     /// step (read), carry (read), gate (read), next (read_write), params.
     HighwayIdentity,
+    /// x (read), control (read), output (read_write), params.
+    CatmullRomForward,
+    /// x (read), control (read), grad_y (read), grad_x (read_write), partials (read_write), params.
+    CatmullRomPullback,
+    /// partials (read), grad_control (read_write), params.
+    CatmullRomReduce,
 }
 
 impl LayoutId {
-    fn label(self) -> &'static str {
+    /// The layout's debug label: its variant name.
+    fn label(self) -> String {
+        format!("{self:?}.layout")
+    }
+
+    /// The storage buffers this layout binds: the read-only ones first, then the read-write ones,
+    /// each at the next binding. The params uniform follows them.
+    const fn storage(self) -> (u32, u32) {
         match self {
-            Self::Spmm => "spmm.layout",
-            Self::ActivationOutOfPlace => "activation.layout",
-            Self::ActivationInPlace => "activation.layout.in_place",
-            Self::Hsikan => "hsikan.layout",
-            Self::RotorAttention => "rotor_attention.layout",
-            Self::StarRotorSpike => "star_rotor_spike.layout",
-            Self::Fill => "fill.layout",
-            Self::ScatterMeanCsr => "scatter_mean_csr.layout",
-            Self::HighwayIdentity => "highway_identity.layout",
+            Self::Spmm | Self::ScatterMeanCsr => (4, 1),
+            Self::ActivationOutOfPlace | Self::CatmullRomReduce => (1, 1),
+            Self::ActivationInPlace | Self::Fill => (0, 1),
+            Self::Hsikan => (7, 1),
+            Self::RotorAttention => (6, 1),
+            Self::StarRotorSpike | Self::HighwayIdentity => (3, 1),
+            Self::CatmullRomForward => (2, 1),
+            Self::CatmullRomPullback => (3, 2),
         }
     }
 
+    /// Storage buffers a dispatch of this layout binds, checked against the device's limit.
+    pub(crate) const fn storage_buffers(self) -> u32 {
+        let (read, write) = self.storage();
+        read + write
+    }
+
     fn entries(self) -> Vec<wgpu::BindGroupLayoutEntry> {
-        match self {
-            Self::Spmm => vec![
-                storage_entry(0, true),
-                storage_entry(1, true),
-                storage_entry(2, true),
-                storage_entry(3, true),
-                storage_entry(4, false),
-                uniform_entry(5),
-            ],
-            Self::ActivationOutOfPlace => vec![
-                storage_entry(0, true),
-                storage_entry(1, false),
-                uniform_entry(2),
-            ],
-            Self::ActivationInPlace | Self::Fill => {
-                vec![storage_entry(0, false), uniform_entry(1)]
-            }
-            Self::Hsikan => vec![
-                storage_entry(0, true),
-                storage_entry(1, true),
-                storage_entry(2, true),
-                storage_entry(3, true),
-                storage_entry(4, true),
-                storage_entry(5, true),
-                storage_entry(6, true),
-                storage_entry(7, false),
-                uniform_entry(8),
-            ],
-            Self::RotorAttention => vec![
-                storage_entry(0, true),
-                storage_entry(1, true),
-                storage_entry(2, true),
-                storage_entry(3, true),
-                storage_entry(4, true),
-                storage_entry(5, true),
-                storage_entry(6, false),
-                uniform_entry(7),
-            ],
-            Self::StarRotorSpike | Self::HighwayIdentity => vec![
-                storage_entry(0, true),
-                storage_entry(1, true),
-                storage_entry(2, true),
-                storage_entry(3, false),
-                uniform_entry(4),
-            ],
-            Self::ScatterMeanCsr => vec![
-                storage_entry(0, true),
-                storage_entry(1, true),
-                storage_entry(2, true),
-                storage_entry(3, true),
-                storage_entry(4, false),
-                uniform_entry(5),
-            ],
-        }
+        let (read, _) = self.storage();
+        let uniform = self.storage_buffers();
+        (0..uniform)
+            .map(|binding| storage_entry(binding, binding < read))
+            .chain(std::iter::once(uniform_entry(uniform)))
+            .collect()
     }
 }
 
@@ -219,6 +189,12 @@ pub enum KernelId {
     ScatterMeanCsr,
     /// Per-channel identity-transport highway transition.
     HighwayIdentity,
+    /// Catmull-Rom membership over `[rows, channels]`, per channel's control points.
+    CatmullRomForward,
+    /// The membership's input gradient and per-chunk coefficient partials.
+    CatmullRomPullback,
+    /// The membership's coefficient gradient: the partials summed in chunk order.
+    CatmullRomReduce,
     /// Star-centred rotor-spike orientation population code.
     StarRotorSpike,
     /// Skeleton validation kernel. Not an operation; retained because
@@ -246,6 +222,9 @@ impl KernelId {
             Self::Fill => "fill",
             Self::ScatterMeanCsr => "scatter_mean_csr",
             Self::HighwayIdentity => "highway_identity",
+            Self::CatmullRomForward => "catmull_rom_forward",
+            Self::CatmullRomPullback => "catmull_rom_pullback",
+            Self::CatmullRomReduce => "catmull_rom_reduce",
         }
     }
 
@@ -263,6 +242,9 @@ impl KernelId {
             Self::Fill => crate::FILL_SHADER,
             Self::ScatterMeanCsr => crate::operations::SCATTER_MEAN_CSR_SHADER,
             Self::HighwayIdentity => crate::operations::HIGHWAY_IDENTITY_SHADER,
+            Self::CatmullRomForward => crate::operations::CATMULL_ROM_FORWARD_SHADER,
+            Self::CatmullRomPullback => crate::operations::CATMULL_ROM_PULLBACK_SHADER,
+            Self::CatmullRomReduce => crate::operations::CATMULL_ROM_REDUCE_SHADER,
         }
     }
 
@@ -273,13 +255,16 @@ impl KernelId {
             Self::SpmmActivation(a)
             | Self::ActivationOutOfPlace(a)
             | Self::ActivationInPlace(a) => a.entry_point(),
-            Self::Fill => "main",
-            Self::Hsikan => "main",
-            Self::GlobalEntropyPool => "main",
-            Self::RotorAttention => "main",
-            Self::StarRotorSpike => "main",
-            Self::ScatterMeanCsr => "main",
-            Self::HighwayIdentity => "main",
+            Self::Fill
+            | Self::Hsikan
+            | Self::GlobalEntropyPool
+            | Self::RotorAttention
+            | Self::StarRotorSpike
+            | Self::ScatterMeanCsr
+            | Self::HighwayIdentity
+            | Self::CatmullRomForward
+            | Self::CatmullRomPullback
+            | Self::CatmullRomReduce => "main",
         }
     }
 
@@ -296,6 +281,9 @@ impl KernelId {
             Self::Fill => LayoutId::Fill,
             Self::ScatterMeanCsr => LayoutId::ScatterMeanCsr,
             Self::HighwayIdentity => LayoutId::HighwayIdentity,
+            Self::CatmullRomForward => LayoutId::CatmullRomForward,
+            Self::CatmullRomPullback => LayoutId::CatmullRomPullback,
+            Self::CatmullRomReduce => LayoutId::CatmullRomReduce,
         }
     }
 }
@@ -467,7 +455,7 @@ impl PipelineCache {
         }
         let layout = Arc::new(
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some(id.label()),
+                label: Some(&id.label()),
                 entries: &id.entries(),
             }),
         );
@@ -497,7 +485,7 @@ impl PipelineCache {
         }
         let layout = Arc::new(
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some(id.label()),
+                label: Some(&id.label()),
                 bind_group_layouts: &[Some(bind_group_layout)],
                 immediate_size: 0,
             }),
@@ -602,6 +590,9 @@ mod tests {
             KernelId::RotorAttention,
             KernelId::StarRotorSpike,
             KernelId::Fill,
+            KernelId::CatmullRomForward,
+            KernelId::CatmullRomPullback,
+            KernelId::CatmullRomReduce,
         ];
         for (i, a) in all.iter().enumerate() {
             for (j, b) in all.iter().enumerate() {

@@ -1,9 +1,0 @@
-\begin{center}
-\begin{tikzpicture}[node distance=12mm, every node/.style={draw,rounded corners,align=center,font=\small}, >={Stealth}]
-\node (p) {Shared provider 5517e6b\\rules and tool implementation};
-\node (e) [below=of p] {Core AGENTS / CLAUDE\\imports and explicit reads};
-\node (g) [below=of e] {Existing consumer hooks and CI pin\\symbols, duplication, preflight};
-\node (r) [below=of g] {Recorded verification\\local activation and limits};
-\draw[->] (p)--(e); \draw[->] (e)--(g); \draw[->] (g)--(r);
-\end{tikzpicture}
-\end{center}

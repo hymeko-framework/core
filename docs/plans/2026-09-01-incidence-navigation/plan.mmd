@@ -1,8 +1,0 @@
-%% Canonical reverse-incidence navigation
-flowchart TD
-    BENCH["Stage 3 benchmark: REV vs DENSE vs SCAN"] --> DEC{"reverse index justified?"}
-    DEC -- "yes: build 1.5-7x, memory 2-13x less, lossless, e2e 1.0-2.3x; scan 650x slower" --> IDX["IncidenceIndex (CSR DeclId->HyperArcIds), build_incidence_index, incident_arcs"]
-    IDX --> DERIVED["derived + caller-owned (append-only Ir); no serde/stored state; transaction form = Stage 14"]
-    DERIVED --> VV["V&V: golden shapes + independent scan oracle + metamorphic reachability + dangling-target fault"]
-    VV --> CORE["push core feat/core-incidence-navigation"]
-    CORE --> GRAPH["NEXT (separate repo): hymeko_graph direct-Ir algorithms on incident_arcs"]

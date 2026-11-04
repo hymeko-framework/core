@@ -1,2 +1,0 @@
-﻿"benchmark","median","ci","throughput","median_ns","q1_ns","q3_ns","worst_batch_mean_ns","samples"
-"ir_stream_replay/exact_duplicate","73.3 ns","[67.3 ns .. 76.5 ns]","","73.2575691547831","57.909934870879","81.8437196146027","157.945978709702","100"

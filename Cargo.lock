@@ -587,6 +587,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "hymeko-core-dev"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "ciborium",
+ "criterion",
+ "env_logger",
+ "hymeko-core-dylib",
+ "hymeko_tensor",
+ "log",
+ "parser",
+ "rayon",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "hymeko-core-dylib"
+version = "0.1.0"
+dependencies = [
+ "hymeko_core",
+]
+
+[[package]]
 name = "hymeko_core"
 version = "0.1.0"
 dependencies = [
@@ -607,7 +631,7 @@ dependencies = [
 [[package]]
 name = "hymeko_tensor"
 version = "0.1.0"
-source = "git+https://github.com/hymeko-framework/tensor.git?rev=2d5c64347c4e75c6a520a1d1ee26e0895e127680#2d5c64347c4e75c6a520a1d1ee26e0895e127680"
+source = "git+https://github.com/hymeko-framework/tensor.git?rev=2b0c18523e977d36691af2738bb8f4feabd8dc4b#2b0c18523e977d36691af2738bb8f4feabd8dc4b"
 dependencies = [
  "rayon",
 ]
@@ -940,7 +964,7 @@ dependencies = [
 [[package]]
 name = "parser"
 version = "0.1.0"
-source = "git+https://github.com/hymeko-framework/parser.git?rev=f11628591a8183586492807ecdf43c64e6d31c5f#f11628591a8183586492807ecdf43c64e6d31c5f"
+source = "git+https://github.com/hymeko-framework/parser.git?rev=a7b50743fe9f55a8c122f27b3986478919f29345#a7b50743fe9f55a8c122f27b3986478919f29345"
 dependencies = [
  "lalrpop",
  "lalrpop-util",

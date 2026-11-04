@@ -27,21 +27,11 @@ use std::time::Duration;
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
 use hymeko_tensor::compute::TensorShape;
-use hymeko_wgpu::testing::{DegreeShape, SparseSpec};
-use hymeko_wgpu::{ActivationKind, ComputeError, WgpuBackend, WorkgroupShape};
+use hymeko_wgpu::testing::{DegreeShape, SparseSpec, bench_backend};
+use hymeko_wgpu::{ActivationKind, WgpuBackend, WorkgroupShape};
 
 fn backend() -> Option<WgpuBackend> {
-    match WgpuBackend::builder().label("hymeko-chain-bench").build() {
-        Ok(b) => {
-            eprintln!("GPU: {}", b.capabilities().summary());
-            Some(b)
-        }
-        Err(ComputeError::BackendUnavailable { reason, .. }) => {
-            eprintln!("GPU cells SKIPPED - no adapter: {reason}");
-            None
-        }
-        Err(e) => panic!("backend init failed: {e}"),
-    }
+    bench_backend("hymeko-chain-bench")
 }
 
 fn scales() -> [(&'static str, SparseSpec); 3] {

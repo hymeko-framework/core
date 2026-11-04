@@ -1,0 +1,37 @@
+[package]
+name = "hymeko-core-dev"
+version = "0.1.0"
+edition = "2024"
+publish = false
+autotests = false
+autobenches = false
+autoexamples = false
+description = "Existing Core tests and compiler CLI linked through a shared Rust library"
+
+[dependencies]
+hymeko = { package = "hymeko-core-dylib", path = "dylib" }
+
+[dev-dependencies]
+parser = { workspace = true }
+hymeko_tensor = { workspace = true, features = ["sparse"] }
+serde = { workspace = true }
+blake3 = { workspace = true }
+rayon = { workspace = true }
+log = { workspace = true }
+env_logger = { version = "0.11.5", default-features = false, features = ["auto-color"] }
+serde_json = "1.0.149"
+ciborium = "=0.2.2"
+criterion = { version = "0.8.2", default-features = false }
+
+[[bin]]
+name = "hymeko-core-dev"
+path = "../hymeko_core/src/main.rs"
+test = false
+
+[[test]]
+name = "mod"
+path = "../hymeko_core/tests/mod.rs"
+
+[[test]]
+name = "circular_buffer"
+path = "../hymeko_core/tests/circular_buffer.rs"

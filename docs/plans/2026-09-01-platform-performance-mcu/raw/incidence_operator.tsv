@@ -1,5 +1,0 @@
-# Incidence operator — core-perfmcu fb6b783, release, single-host ambient~8.7% (QUIET; not provisional)
-# nnz=1e6. Bx=node_to_arc, BTy=arc_to_node(node-major), BTBx=star_operator. clique = O(sum k^2) control.
-workload	nnz	index_build_us	bytes_per_inc	Bx_us	BTy_us	BTBx_us	BTy_over_Bx	clique_build_us	clique_bytes_per_inc
-arity5_200karcs_500knodes	1000000	20396	14.8	5907	28894	35323	4.9	29990	18.0
-arity20_50karcs_50knodes	1000000	15613	12.4	5158	17649	22842	3.4	57588	76.2

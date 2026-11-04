@@ -66,6 +66,27 @@ fn classify(context: &str, built: Result<WgpuBackend, ComputeError>) -> Option<W
     }
 }
 
+/// A benchmark's own backend for the whole run, or `None` without an adapter. The adapter is
+/// printed, so a reported number names the device it was measured on.
+#[must_use]
+pub fn bench_backend(label: &str) -> Option<WgpuBackend> {
+    let backend = classify(label, WgpuBackend::builder().label(label).build())?;
+    eprintln!("GPU: {}", backend.capabilities().summary());
+    Some(backend)
+}
+
+/// `n` values across `[-scale, scale]`, a fixed sequence of `seed`.
+#[must_use]
+pub fn field(n: usize, seed: u32, scale: f32) -> Vec<f32> {
+    let mut state = seed.wrapping_mul(2_654_435_761).wrapping_add(1);
+    (0..n)
+        .map(|_| {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            scale * ((state >> 8) as f32 / (1u32 << 24) as f32 * 2.0 - 1.0)
+        })
+        .collect()
+}
+
 /// A suite-wide backend slot: built at most once, however many tests ask for it.
 ///
 /// # Why a cell and not another function

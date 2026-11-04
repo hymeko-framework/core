@@ -1,6 +1,0 @@
-# WebXR validator — core-perfmcu fb6b783, release, median-of-3, single-host, ambient~14% (PROVISIONAL)
-n_entities	parse_lower_ms	validate_ms	validate_us_per_entity	phase
-100	1.8	0.01	0.09	end_to_end+resident
-1000	14.5	0.07	0.07	end_to_end+resident
-10000	171.0	3.59	0.36	end_to_end+resident
-100000	2285.9	31.18	0.31	end_to_end+resident

@@ -1,9 +1,0 @@
-flowchart LR
-  IR[canonical Ir: NodeId/EdgeId 8B] -->|try_from_ir checked u32| V[HyperGraphView]
-  V --> FE[flat_edge_nodes: DenseNodeIndex 4B]
-  V --> FN[flat_node_edges: DenseEdgeIndex 4B]
-  V --> ND[node_decl/edge_decl: DeclId provenance]
-  FE --> K[kernels: array[dense.as_usize()]]
-  V --> SEAM[core seam compute_degree_by_index I,P]
-  SEAM --> K
-  V --> MAP[dense->NodeId/DeclId mapping, 1:1 documented]

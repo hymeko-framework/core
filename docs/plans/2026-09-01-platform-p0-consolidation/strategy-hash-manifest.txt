@@ -1,6 +1,0 @@
-# Strategy artifacts copied byte-identically from the dirty user checkout (sha256), P0.
-b40866b9739279c7d8feeaf13d6a27a2e714643741e0725bd776c78c68a9a3bd  docs/hymeko-platform-strategy.md
-857293731404feaf79b9c4d95738b0f7de75ef9137c613d3d15ce216ce9f7ad7  docs/plans/2026-09-01-hymeko-platform-strategy/plan.tex
-3194b7b760a8b9b019875ca69958b7529dbfef2027359e16dd9c200f28a818cd  docs/plans/2026-09-01-hymeko-platform-strategy/plan.tikz
-c5996308b785fb4b738a54ce54f769c5b8aa0db12a43c151378d0a7290f79fb8  docs/plans/2026-09-01-hymeko-platform-strategy/plan.mmd
-08d85883c2d182b6df546e9eeb424492b07f15d7dc310006b9489893414f6525  reports/2026-09-01-hymeko-platform-strategy.md

@@ -178,6 +178,247 @@ mod mod_test_module_store {
     }
 
     #[test]
+    fn memory_provider_spells_a_path_one_way_on_every_target() {
+        use hymeko::module_store::source_provider::SourceProvider;
+        let memory = MemProvider::default()
+            .with_file("concepts\\subject.hymeko", "description{} subject{}")
+            .with_file("/models/./room.hymeko", "description{} room{}");
+        let canonical = |p: &str| memory.canonicalize(Path::new(p)).unwrap();
+        assert_eq!(
+            canonical("lectures\\..\\concepts/subject.hymeko").to_str(),
+            Some("concepts/subject.hymeko")
+        );
+        assert_eq!(
+            canonical("/models/room.hymeko").to_str(),
+            Some("/models/room.hymeko")
+        );
+        assert_eq!(
+            memory.paths(),
+            ["/models/room.hymeko", "concepts/subject.hymeko"]
+        );
+        assert!(
+            memory
+                .canonicalize(Path::new("lectures\\..\\..\\secret.hymeko"))
+                .is_err()
+        );
+
+        // A relative import across directories reaches the key inserted with backslashes.
+        let provider = MemProvider::default()
+            .with_file(
+                "dynamics\\model.hymeko",
+                "model_description { @\"../optimization/vocab.hymeko\"; } model {}",
+            )
+            .with_file("optimization/vocab.hymeko", "vocab_description {} vocab {}");
+        let mut store = ModuleStore::new(provider, hymeko::util::real_parser::RealParser);
+        let compiled = store.compile(Path::new("dynamics/model.hymeko")).unwrap();
+        for file in ["dynamics/model.hymeko", "optimization/vocab.hymeko"] {
+            assert!(compiled.ir.files.iter().any(|f| f == file), "{file}");
+        }
+    }
+
+    #[test]
+    fn memory_provider_names_the_provided_paths_when_a_source_is_missing() {
+        use hymeko::module_store::source_provider::SourceProvider;
+        let mut memory = MemProvider::default()
+            .with_file("b/x.hymeko", "description{} x{}")
+            .with_file("a.hymeko", "description{} a{}");
+        let error = memory.read(Path::new("c.hymeko")).unwrap_err();
+        assert!(error.contains("file not found: c.hymeko"), "{error}");
+        assert!(error.contains("provided: a.hymeko, b/x.hymeko"), "{error}");
+        let error = MemProvider::default()
+            .read(Path::new("c.hymeko"))
+            .unwrap_err();
+        assert!(error.contains("no sources were provided"), "{error}");
+    }
+
+    #[test]
+    fn memory_provider_versions_follow_the_content() {
+        use hymeko::module_store::source_provider::SourceProvider;
+        let path = Path::new("a.hymeko");
+        let mut memory = MemProvider::default().with_file(path, "description{} a{}");
+        let first = memory.version(path).unwrap();
+        memory.insert_file(path, "description{} a{}");
+        assert_eq!(memory.version(path).unwrap(), first);
+        memory.insert_file(path, "description{} b{}");
+        assert_ne!(memory.version(path).unwrap(), first);
+        assert_eq!(
+            memory.byte_len(path),
+            Some("description{} b{}".len() as u64)
+        );
+        assert_eq!(
+            memory.canonicalize(Path::new(r"\\?\C:\x\a.hymeko")),
+            memory.canonicalize(Path::new(r"C:\x\a.hymeko"))
+        );
+    }
+
+    /// A directory under the system temp dir, removed when dropped.
+    struct Scratch(std::path::PathBuf);
+
+    impl Scratch {
+        fn new(tag: &str) -> Self {
+            let nonce = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let path = std::env::temp_dir()
+                .join(format!("hymeko-core-{tag}-{}-{nonce}", std::process::id()));
+            std::fs::create_dir(&path).unwrap();
+            Self(std::fs::canonicalize(&path).unwrap())
+        }
+
+        fn write(&self, name: &str, text: &str) -> std::path::PathBuf {
+            let path = self.0.join(name);
+            std::fs::write(&path, text).unwrap();
+            path
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn overlay_provider_shadows_the_file_system_and_serves_unsaved_sources() {
+        use hymeko::module_store::source_provider::{
+            OverlayProvider, SourceProvider, StdFsProvider,
+        };
+        let dir = Scratch::new("overlay");
+        // On disk the vocabulary does not parse; only its unsaved buffer does.
+        let types = dir.write("types.hymeko", "this is not hymeko {{{");
+        let room = dir.write(
+            "room.hymeko",
+            "room_description { @\"draft.hymeko\"; } room {}",
+        );
+        let draft = dir.0.join("draft.hymeko");
+        let overlay = OverlayProvider::new(StdFsProvider::new())
+            .with_file(&types, "types_description {} types { body {} }")
+            .with_file(&draft, "draft_description { @\"types.hymeko\"; } draft {}");
+
+        // A saved file importing an unsaved one, which imports a shadowed one.
+        let mut store = ModuleStore::new(overlay, hymeko::util::real_parser::RealParser);
+        let compiled = store.compile(&room).unwrap();
+        assert_eq!(compiled.ir.files.len(), 3);
+
+        // An unsaved root importing a shadowed file.
+        let mut unsaved_root = ModuleStore::new(
+            OverlayProvider::new(StdFsProvider::new())
+                .with_file(&types, "types_description {} types { body {} }")
+                .with_file(&draft, "draft_description { @\"types.hymeko\"; } draft {}"),
+            hymeko::util::real_parser::RealParser,
+        );
+        assert!(unsaved_root.compile(&draft).is_ok());
+
+        let overlay = store.provider_mut();
+        assert_eq!(
+            overlay.read(&types).unwrap().as_ref(),
+            "types_description {} types { body {} }"
+        );
+        assert_eq!(
+            overlay.version(&types).unwrap(),
+            overlay.memory().version(&types).unwrap()
+        );
+        assert_eq!(
+            overlay.read(&room).unwrap().as_ref(),
+            std::fs::read_to_string(&room).unwrap()
+        );
+        assert!(overlay.read(&dir.0.join("absent.hymeko")).is_err());
+    }
+
+    #[test]
+    fn project_provider_captures_the_sources_one_compilation_read() {
+        use hymeko::module_store::execution::CompiledModel;
+        use hymeko::module_store::source_provider::{
+            ProjectProvider, SourceLimits, SourceProvider, StdFsProvider,
+        };
+        let dir = Scratch::new("project");
+        let root = dir.0.join("room");
+        std::fs::create_dir(&root).unwrap();
+        let entry = dir.write(
+            "room/room.hymeko",
+            "room_description { @\"parts/types.hymeko\"; } room {}",
+        );
+        std::fs::create_dir(root.join("parts")).unwrap();
+        dir.write(
+            "room/parts/types.hymeko",
+            "types_description {} types { body {} }",
+        );
+        let outside = dir.write("outside.hymeko", "outside_description {} outside {}");
+        let limits = SourceLimits {
+            files: 8,
+            bytes: 1_048_576,
+        };
+
+        let mut project = ProjectProvider::new(StdFsProvider::new(), &root, limits).unwrap();
+        let model =
+            CompiledModel::compile(&mut project, hymeko::util::real_parser::RealParser, &entry)
+                .unwrap();
+        let sources = project.sources();
+        assert_eq!(
+            sources.keys().map(String::as_str).collect::<Vec<_>>(),
+            ["parts/types.hymeko", "room.hymeko"]
+        );
+        assert_eq!(
+            project.bytes(),
+            sources.values().map(|text| text.len()).sum::<usize>()
+        );
+
+        // The capture recompiles anywhere through memory.
+        let mut memory = MemProvider::default();
+        for (path, text) in sources {
+            memory.insert_file(path, text.clone());
+        }
+        let rebuilt = CompiledModel::compile(
+            memory,
+            hymeko::util::real_parser::RealParser,
+            Path::new("room.hymeko"),
+        )
+        .unwrap();
+        assert_eq!(model.semantic_digest(), rebuilt.semantic_digest());
+
+        // Repeated reads serve the captured bytes; the root admits nothing outside it.
+        let captured = project.read(&entry).unwrap();
+        std::fs::write(&entry, "changed").unwrap();
+        assert_eq!(project.read(&entry).unwrap(), captured);
+        assert!(
+            project
+                .canonicalize(&outside)
+                .unwrap_err()
+                .contains("outside the project root")
+        );
+
+        // Bounds: file count, and total bytes refused before the oversized source is read.
+        let one = SourceLimits {
+            files: 1,
+            bytes: 1_048_576,
+        };
+        let mut project = ProjectProvider::new(StdFsProvider::new(), &root, one).unwrap();
+        project.read(&entry).unwrap();
+        assert!(
+            project
+                .read(&root.join("parts/types.hymeko"))
+                .unwrap_err()
+                .contains("exceeds 1 files")
+        );
+        let large = dir.write("room/large.hymeko", &" ".repeat(1_048_577));
+        let mut project = ProjectProvider::new(StdFsProvider::new(), &root, limits).unwrap();
+        assert!(project.read(&large).unwrap_err().contains("exceeds 1 MiB"));
+        assert_eq!(project.bytes(), 0);
+        let tight = SourceLimits {
+            files: 8,
+            bytes: 10,
+        };
+        let mut project = ProjectProvider::new(StdFsProvider::new(), &root, tight).unwrap();
+        assert!(
+            project
+                .read(&root.join("parts/types.hymeko"))
+                .unwrap_err()
+                .contains("exceeds 10 bytes")
+        );
+    }
+
+    #[test]
     fn course_failed_load_can_be_retried_without_a_spurious_cycle() {
         let provider = MemProvider::default().with_file(
             "lecture.hymeko",

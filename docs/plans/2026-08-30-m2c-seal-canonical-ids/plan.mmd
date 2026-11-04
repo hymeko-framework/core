@@ -1,8 +1,0 @@
-flowchart TD
-  A[Id<T>(pub usize) + From<usize> + From<Id>] --> B[seal .0 -> pub(crate); drop both From impls]
-  B --> C[keep new/raw explicit; serde stays bare usize]
-  C --> D[compile workspace -> compiler flags external .0 sites]
-  D --> E[migrate hnn .0 -> raw(); wgpu none; core-internal unaffected]
-  E --> F[compile_fail doctests: .0/from/into rejected + compiling twins]
-  F --> G[serde round-trip unchanged; full gates; known 58/57 visible]
-  G --> H[commit refactor: seal canonical entity ids]
