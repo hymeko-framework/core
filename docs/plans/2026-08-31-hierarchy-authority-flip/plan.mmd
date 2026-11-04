@@ -1,9 +1,0 @@
-%% U2.2 remove post-lowering Index authority
-flowchart TD
-    A["Part A: repair vec_dense_permuted -> genuine DeclId permutation; redesign c6 + intrusive-links tests"] --> B["Part B: CompiledProgram.idx consumer audit (hash + pretty_print production; rest test-only)"]
-    B --> C["Part C: build_path_index(&Ir) -> DerivedPathIndex (path_of/decl_of/iter, DuplicatePath, no cache)"]
-    C --> D["Part D: collapse to canonical_program_hash(cfg, ir, it); delete index twin + _ir"]
-    D --> E["Part E: compile lowers, validates namespace boundary ONCE, hashes from Ir; idx retained non-authoritative (compat)"]
-    E --> F["migrate pretty_print + tests + example + bench off the Index"]
-    F --> G["Part H: hash -14..-26% (Index prefix-HashMap eliminated); compile no regression; bit-identical"]
-    G --> PUSH["commits; push feat/core-hierarchy-authority-flip; never merge main"]

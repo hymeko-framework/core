@@ -1,7 +1,0 @@
-flowchart TD
-  A[baseline: 523 pass / 1 known-fail / fmt+clippy clean] --> B[audit cebc254: CborPayload schema-only, ir_stream no-IDs, CLI inventory]
-  B --> C[new tests: product_cli x3 + writer skeleton-limitation]
-  C --> D[extend matrix +11 rows: UIR-CLI/CBOR/EMIT]
-  D --> E[docs: architecture layering, single-cli, duplication+profile audit]
-  E --> F[report: 10 questions, coverage 84.93%]
-  F --> G[commit test-ir: establish canonical platform conformance gate]

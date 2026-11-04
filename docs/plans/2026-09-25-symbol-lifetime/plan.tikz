@@ -1,9 +1,0 @@
-\begin{tikzpicture}[every node/.style={draw,align=center}]
-\node (base) at (0,0) {Immutable base};
-\node (edit) at (4,0) {Checked value updates};
-\node (compact) at (4,-2) {Shared symbol visitor\\mark / dense remap};
-\node (next) at (0,-2) {Current graph\\bounded symbols};
-\node (wire) at (4,-4) {Canonical CBOR\\existing admission};
-\draw[->] (base)--(edit);\draw[->] (edit)--(compact);
-\draw[->] (compact)--(next);\draw[->] (compact)--(wire);
-\end{tikzpicture}

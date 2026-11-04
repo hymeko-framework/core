@@ -1,9 +1,0 @@
-\begin{tikzpicture}[node distance=8mm, every node/.style={draw,rounded corners,align=center,font=\small,text width=10cm}, >=Stealth]
-\node (source) {SourceProvider: canonical source files and reachable imports};
-\node[below=of source] (parse) {Parser: UTF-8 preserved in borrowed and escaped strings};
-\node[below=of parse] (resolve) {Core: per-module imports and aliases; declaration references};
-\node[below=of resolve] (ir) {IR: nodes, hyperedges and arcs; optional file provenance};
-\node[below=of ir] (sdk) {Same compiled program through native, Node WASM and browser SDK};
-\draw[->] (source)--(parse); \draw[->] (parse)--(resolve);
-\draw[->] (resolve)--(ir); \draw[->] (ir)--(sdk);
-\end{tikzpicture}

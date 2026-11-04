@@ -1,3 +1,0 @@
-
-open HyMeKo.Distributed
-example : decision (resume zero 0) { kind := .snapshot, base := zero, target := zero, identity := 1, payload := 1 } = .install := by decide

@@ -631,7 +631,7 @@ dependencies = [
 [[package]]
 name = "hymeko_tensor"
 version = "0.1.0"
-source = "git+ssh://git@192.168.1.228:2222/hymeko/tensor.git?rev=9317ecf773d55a0e7968273a63bc2f4e8dbcc7c7#9317ecf773d55a0e7968273a63bc2f4e8dbcc7c7"
+source = "git+https://github.com/hymeko-framework/tensor.git?rev=ad09422ea42ed9e6aea9178212f3d2d1397d9cc7#ad09422ea42ed9e6aea9178212f3d2d1397d9cc7"
 dependencies = [
  "rayon",
 ]
@@ -964,7 +964,7 @@ dependencies = [
 [[package]]
 name = "parser"
 version = "0.1.0"
-source = "git+ssh://git@192.168.1.228:2222/hymeko/parser.git?rev=f11628591a8183586492807ecdf43c64e6d31c5f#f11628591a8183586492807ecdf43c64e6d31c5f"
+source = "git+https://github.com/hymeko-framework/parser.git?rev=a7b50743fe9f55a8c122f27b3986478919f29345#a7b50743fe9f55a8c122f27b3986478919f29345"
 dependencies = [
  "lalrpop",
  "lalrpop-util",
