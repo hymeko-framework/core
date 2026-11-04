@@ -28,11 +28,10 @@ synchronization as hypothetical extensions.
 **2026-09-05 update:** the existing [Core specification, Part G](unified-ir-architecture.md#part-g--distributed-updates)
 and [Lean admission model](verification/unified-ir/distributed-semantics.lean)
 now separate normative safety from Rust conformance. The model passes kernel
-checking. The pre-fix Amaterasu baseline passed three of seven admission probes
+checking. The pre-fix Linux baseline passed three of seven admission probes
 and failed four. Approved correction `8a0c49d` makes all seven pass and adds two
-reset/identity-retention regressions, also passing.
-[Baseline](../reports/2026-09-05-distributed-semantics.md) and
-[correction evidence](../reports/2026-09-05-distributed-admission-fix.md).
+reset/identity-retention regressions, also passing. The baseline and the
+correction evidence are recorded in the project's report archive.
 
 ---
 
@@ -688,7 +687,7 @@ partition protocol. It does not preclude one — a partition worker is a consume
 but no claim is made that distribution helps until B6/B7 (§12) produce numbers.
 
 **Independent jobs are an earlier, separate experiment**, authorized on
-Amaterasu. Compare the same fixed work locally, remotely and across both workers.
+a second Linux host. Compare the same fixed work locally, remotely and across both workers.
 Measure end-to-end time, serialization/transfer bytes, queue/compute time, peak
 memory, result equivalence and interrupted-worker recovery. Bind job identity to
 the exact input snapshot, parameters, algorithm revision and seed; accept retries
@@ -753,7 +752,7 @@ mutates a `HyperGraphView`; the requirement removes that premise. Still not
 implemented in Phase 9 — the deliverable is this protocol plus C1–C14.
 
 **S3 — distributed execution.** Independent-job and single-writer replica
-experiments can proceed on Amaterasu after admission and consumer installation
+experiments can proceed on a second host after admission and consumer installation
 checks. Tightly coupled partition synchronization remains deferred pending B6/B7.
 The protocol and formal admission model alone establish no distributed speedup.
 
